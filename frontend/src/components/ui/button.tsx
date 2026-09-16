@@ -48,13 +48,19 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600",
           variant === "outline" &&
             !className?.includes("bg-") &&
-            "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700",
+            // hover:text-* 是必要的：cva 那邊的 hover:text-accent-foreground
+            // 過去因為 tailwind 沒有 colors 而是死 class，#1046 接上 token 後
+            // 會真的生效。它沒有 dark 變體，深色模式 hover 會變成近黑字疊在
+            // dark:hover:bg-gray-700 上，對比不足。這裡明確蓋掉，維持原本行為。
+            "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 dark:hover:text-gray-200",
           variant === "secondary" &&
             !className?.includes("bg-") &&
             "bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600",
           variant === "ghost" &&
             !className?.includes("bg-") &&
-            "hover:bg-gray-100 dark:hover:bg-gray-800",
+            // 同上：ghost 沒有指定文字色（繼承父層），用 hover:text-inherit
+            // 蓋掉 cva 的 hover:text-accent-foreground，hover 時文字不變色。
+            "hover:bg-gray-100 hover:text-inherit dark:hover:bg-gray-800",
           variant === "destructive" &&
             !className?.includes("bg-") &&
             "bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600",

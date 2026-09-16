@@ -13,6 +13,7 @@ import type {
   ScenarioItemBlock,
   ScenarioSettingsPayload,
 } from "./scenarioDialogue";
+import type { StudentGroup, StudentGroupPayload } from "./studentGroup";
 
 // 🔐 Security: Only enable debug logs in development
 const DEBUG = false; // 暫時關閉以便追蹤其他問題
@@ -857,6 +858,47 @@ class ApiClient {
     return this.request(`/api/teachers/classrooms/${classroomId}/students`);
   }
 
+  // ===== 班級學生分組（issue #1046）=====
+
+  async getClassroomGroups(classroomId: number): Promise<StudentGroup[]> {
+    return this.get<StudentGroup[]>(
+      `/api/teachers/classrooms/${classroomId}/groups`,
+    );
+  }
+
+  async createClassroomGroup(
+    classroomId: number,
+    payload: StudentGroupPayload,
+  ): Promise<StudentGroup> {
+    return this.post<StudentGroup>(
+      `/api/teachers/classrooms/${classroomId}/groups`,
+      payload,
+    );
+  }
+
+  /** 整包更新：名稱／顏色／成員（有序）／組長一次寫完。 */
+  async updateClassroomGroup(
+    groupId: number,
+    payload: StudentGroupPayload,
+  ): Promise<StudentGroup> {
+    return this.put<StudentGroup>(`/api/teachers/groups/${groupId}`, payload);
+  }
+
+  async deleteClassroomGroup(groupId: number): Promise<void> {
+    return this.delete<void>(`/api/teachers/groups/${groupId}`);
+  }
+
+  /** groupIds 必須是該班現有組別的完整排列，後端會拒絕半套的順序。 */
+  async reorderClassroomGroups(
+    classroomId: number,
+    groupIds: number[],
+  ): Promise<StudentGroup[]> {
+    return this.put<StudentGroup[]>(
+      `/api/teachers/classrooms/${classroomId}/groups/order`,
+      { group_ids: groupIds },
+    );
+  }
+
   async batchAddStudentsToClassroom(
     schoolId: string,
     classroomId: number,
@@ -1486,6 +1528,8 @@ class ApiClient {
     translate_to?: string;
     parts_of_speech?: string[][];
     audio_settings?: { accent?: string; gender?: string; speed?: string };
+    /** Issue #1051: false = 只生成例句＋翻譯，不跑 TTS（預設 true） */
+    generate_audio?: boolean;
   }): Promise<{
     sentences: Array<{
       sentence: string;

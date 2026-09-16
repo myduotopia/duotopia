@@ -9,7 +9,8 @@
 import { useEffect, useState, useRef } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
 import type { Team, VocabItem } from "./types";
-import { TEAM_A_KEYS, TEAM_B_KEYS, OPTION_LABELS } from "./types";
+import { TEAM_A_KEYS, TEAM_B_KEYS } from "./types";
+import { OPTION_LABELS } from "../shared/optionLabels";
 import { useShrinkToFit } from "../shared/useShrinkToFit";
 
 /**

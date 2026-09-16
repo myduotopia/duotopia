@@ -93,6 +93,7 @@ import {
   BatchTTSSettings,
   type TTSSettingsState,
 } from "@/components/shared/BatchTTSSettings";
+import { TTSSettingsDialog } from "@/components/shared/TTSSettingsDialog";
 import {
   DndContext,
   closestCenter,
@@ -838,6 +839,12 @@ const ScenarioDialoguePanel = forwardRef<
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   /** 逐題 TTS 同理（#1021） */
   const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
+  /** Issue #1051：正在設定語音的題目 id（設定視窗開啟中） */
+  const [audioDialogRowId, setAudioDialogRowId] = useState<string | null>(null);
+  /** 每題上次選的語音設定（含 Random）；沒設定過的題目沿用面板設定 */
+  const [rowTTSSettings, setRowTTSSettings] = useState<
+    Record<string, TTSSettingsState>
+  >({});
   /** 逐題 AI 生圖是一題一題觸發的，要記住是哪一題在跑（#1024） */
   const [imageLoadingId, setImageLoadingId] = useState<string | null>(null);
   /** 目前正在播的題目語音；換一題要先停掉舊的，不然會疊音 */
@@ -1319,19 +1326,21 @@ const ScenarioDialoguePanel = forwardRef<
   /**
    * 逐題題目語音（Issue #1021 起改為真的呼叫 TTS）。
    *
-   * 用面板上的 TTS 設定（口音／性別／語速）算出 voice 與 rate，與單字集、例句集
-   * 走同一支 `getVoiceAndRate`，避免同一份設定在不同面板產出不同聲音。
+   * Issue #1051 起先開設定視窗，用老師這次選定的口音／性別／語速算出 voice 與 rate，
+   * 與單字集、例句集走同一支 `getVoiceAndRate`，避免同一份設定在不同面板產出不同聲音。
+   * 選定值記在 rowTTSSettings，下次打開同一題就帶上次的設定。
    */
-  const generateRowAudio = async (id: string) => {
+  const generateRowAudio = async (id: string, settings: TTSSettingsState) => {
     const row = rows.find((r) => r.id === id);
     if (!row || !row.question.trim()) return;
 
+    setRowTTSSettings((prev) => ({ ...prev, [id]: settings }));
     setAudioLoadingId(id);
     try {
       const { voice, rate } = getVoiceAndRate(
-        ttsSettings.accent,
-        ttsSettings.gender,
-        ttsSettings.speed,
+        settings.accent,
+        settings.gender,
+        settings.speed,
       );
       const result = await apiClient.generateTTS(
         row.question.trim(),
@@ -1996,7 +2005,7 @@ const ScenarioDialoguePanel = forwardRef<
                       onPickImage={(file) => pickRowImage(row.id, file)}
                       onRemoveImage={() => removeRowImage(row.id)}
                       onGenerateImage={() => generateRowImage(row.id)}
-                      onGenerateAudio={() => generateRowAudio(row.id)}
+                      onGenerateAudio={() => setAudioDialogRowId(row.id)}
                       onPlayAudio={() => playRowAudio(row.id)}
                       audioLoading={audioLoadingId === row.id}
                     />
@@ -2051,6 +2060,23 @@ const ScenarioDialoguePanel = forwardRef<
           </div>
         </div>
       )}
+
+      {/* 單題語音設定（Issue #1051） */}
+      <TTSSettingsDialog
+        open={audioDialogRowId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAudioDialogRowId(null);
+        }}
+        initialSettings={
+          (audioDialogRowId !== null && rowTTSSettings[audioDialogRowId]) ||
+          ttsSettings
+        }
+        onConfirm={(settings) => {
+          const id = audioDialogRowId;
+          setAudioDialogRowId(null);
+          if (id !== null) void generateRowAudio(id, settings);
+        }}
+      />
     </div>
   );
 });

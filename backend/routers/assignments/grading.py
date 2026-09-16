@@ -437,6 +437,10 @@ def _build_quiz_submission(
 
     成績紀錄＝第一次作答（最早 completed PracticeSession），與凍結的 sa.score 一致。
     逐題回傳學生答案 / 正解 / 對錯，供老師端 QuizGradingPanel 顯示錯題清單與答對率。
+    同題重複列（#1045 並發殘留）取最新一筆；只迭代本作業題目，故 correct ≤ total。
+    #1045 題目區：每題附 image_url、blanked_sentence、options（選擇題：優先學生作答時
+    存下的 answer_data.options_shown，舊資料以同 seed 重建）、deduction（已存扣分）；
+    頂層附 quiz_settings 供前端依派發設定呈現。
     """
     source = (
         db.query(PracticeSession)
@@ -453,6 +457,8 @@ def _build_quiz_submission(
         for ans in (
             db.query(PracticeAnswer)
             .filter(PracticeAnswer.practice_session_id == source.id)
+            # #1045: id 升冪讓後寫入者覆蓋 → 同題重複列時取最新答案
+            .order_by(PracticeAnswer.id.asc())
             .all()
         ):
             answers_by_item[ans.content_item_id] = ans
@@ -477,11 +483,48 @@ def _build_quiz_submission(
             return item.cloze_answer or item.text or ""
         return item.text or ""
 
+    # #1045 題目區：函式內 import 避免 students.quiz_assignments ↔ assignments 循環
+    from routers.students.quiz_assignments import (
+        _build_selection_options,
+        _example_cloze_fields,
+        _load_quiz_items,
+    )
+
+    parent = (
+        db.query(Assignment)
+        .filter(Assignment.id == student_assignment.assignment_id)
+        .first()
+    )
+    # 舊資料（無 options_shown）fallback：以與 start 相同的 seed 重建選項
+    fallback_options: Dict[int, List[Dict[str, Any]]] = {}
+    if practice_mode == "word_selection_quiz" and parent is not None:
+        pool_items = _load_quiz_items(
+            db,
+            parent,
+            bool(parent.shuffle_questions),
+            seed=source.id if source else student_assignment.id,
+        )
+        fallback_options = _build_selection_options(pool_items, parent)
+
+    # #1045 每題扣分：已存於 StudentItemProgress.teacher_review_score（以 content_item_id 對題）
+    deductions: Dict[int, float] = {
+        ip.content_item_id: float(ip.teacher_review_score)
+        for ip in db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == student_assignment.id,
+            StudentItemProgress.teacher_review_score.isnot(None),
+        )
+        .all()
+    }
+
     questions = []
     correct_count = 0
     for idx, item in enumerate(items, start=1):
         ans = answers_by_item.get(item.id)
         data = (ans.answer_data if ans and ans.answer_data else {}) or {}
+        options = None
+        if practice_mode == "word_selection_quiz":
+            options = data.get("options_shown") or fallback_options.get(item.id, [])
         student_answer = data.get("typed_answer") or data.get("selected_answer") or ""
         correct_answer = (
             data.get("correct_answer")
@@ -503,6 +546,11 @@ def _build_quiz_submission(
                 "is_correct": is_correct,
                 "passed": is_correct,  # 沿用右欄逐題燈號（pass/fail）
                 "time_spent_seconds": ans.time_spent_seconds if ans else 0,
+                # #1045 題目區
+                "image_url": item.image_url,
+                "blanked_sentence": _example_cloze_fields(item)["blanked_sentence"],
+                "options": options,
+                "deduction": deductions.get(item.id),
             }
         )
 
@@ -530,6 +578,28 @@ def _build_quiz_submission(
         "accuracy": accuracy,
         "current_score": student_assignment.score,
         "current_feedback": student_assignment.feedback,
+        # #1045 批改頁題目區依派發設定呈現
+        "quiz_settings": {
+            "show_example_sentence": bool(
+                getattr(parent, "show_example_sentence", False)
+            ),
+            "show_image": (
+                parent.show_image
+                if parent is not None and parent.show_image is not None
+                else True
+            ),
+            "show_option_images": bool(getattr(parent, "show_option_images", False)),
+            "show_translation": (
+                parent.show_translation
+                if parent is not None and parent.show_translation is not None
+                else True
+            ),
+            "show_word": (
+                parent.show_word
+                if parent is not None and parent.show_word is not None
+                else True
+            ),
+        },
     }
 
 
@@ -871,6 +941,61 @@ def _is_quiz_assignment(
     )
 
 
+def _save_quiz_deductions(
+    db: Session,
+    student_assignment: StudentAssignment,
+    deductions: List[Dict[str, Any]],
+    teacher_id: int,
+) -> None:
+    """#1045 小考每題扣分 → StudentItemProgress.teacher_review_score（以 content_item_id 對題）。
+
+    不經 item_results 的 item_index / StudentContentProgress 映射，所以多題組或
+    沒有 StudentContentProgress 的小考也能正確對題。content_item_id 不屬於本作業 → 400。
+    """
+    valid_ids = {
+        row[0]
+        for row in db.query(ContentItem.id)
+        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
+        .filter(AssignmentContent.assignment_id == student_assignment.assignment_id)
+        .all()
+    }
+    unknown = sorted(
+        {d["content_item_id"] for d in deductions} - valid_ids,
+    )
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"content_item_id not in this assignment: {unknown}",
+        )
+
+    ids = {d["content_item_id"] for d in deductions}
+    progress_by_item = {
+        ip.content_item_id: ip
+        for ip in db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.student_assignment_id == student_assignment.id,
+            StudentItemProgress.content_item_id.in_(ids),
+        )
+        .all()
+    }
+    now = datetime.now(timezone.utc)
+    for entry in deductions:
+        item_id = entry["content_item_id"]
+        progress = progress_by_item.get(item_id)
+        if progress is None:
+            progress = StudentItemProgress(
+                student_assignment_id=student_assignment.id,
+                content_item_id=item_id,
+                status="NOT_SUBMITTED",
+                review_status="PENDING",
+            )
+            db.add(progress)
+            progress_by_item[item_id] = progress
+        progress.teacher_review_score = entry["deduction"]
+        progress.teacher_id = teacher_id
+        progress.teacher_reviewed_at = now
+
+
 @router.post("/{assignment_id}/grade")
 async def grade_student_assignment(
     assignment_id: int,
@@ -920,8 +1045,10 @@ async def grade_student_assignment(
     # 小考自動判分：預設不覆寫系統算的分數（避免送 null 歸零）；但老師在批改頁
     # 明確調整分數時（score 有值）允許寫入，作為老師最終裁量（#861 c-2）。
     # 非小考一律沿用送來的 score。
+    is_quiz = _is_quiz_assignment(db, assignment)
     incoming_score = grade_data.get("score")
-    if not _is_quiz_assignment(db, assignment) or incoming_score is not None:
+    # #1045：老師直接改總分時以送出的 score 為準，扣分不反向改寫總分
+    if not is_quiz or incoming_score is not None:
         assignment.score = incoming_score
     assignment.feedback = grade_data.get("feedback")
 
@@ -930,8 +1057,15 @@ async def grade_student_assignment(
         assignment.status = AssignmentStatus.GRADED
         assignment.graded_at = datetime.now(timezone.utc)
 
+    # #1045 小考每題扣分（以 content_item_id upsert teacher_review_score）
+    if is_quiz and grade_data.get("quiz_deductions"):
+        _save_quiz_deductions(
+            db, assignment, grade_data["quiz_deductions"], current_teacher.id
+        )
+
     # 更新個別題目的評分和回饋
-    if "item_results" in grade_data:
+    # #1045：小考不走 item_results —— 其 100/60 映射會覆寫存在 teacher_review_score 的扣分
+    if "item_results" in grade_data and not is_quiz:
         # 獲取所有內容進度記錄
         progress_records = (
             db.query(StudentContentProgress)

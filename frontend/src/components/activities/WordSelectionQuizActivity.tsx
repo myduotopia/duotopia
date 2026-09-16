@@ -13,6 +13,17 @@
  *     字級用 fit-to-box（撐大／縮／不裁字）
  *   - #967 例句挖空模式（show_example_sentence）：題目改為挖空例句、不顯示單字/翻譯（單字圖仍可顯示）；
  *     選項一律英文（後端強制）；播放音檔改播例句音檔；與選項圖片互斥；版面固定直式（例句是長文）。
+ *   - #1045 選項 A/B/C/D 左上角標：作答用 WordSelectionOptionButton label、檢討用 shared/QuizOptionChip
+ *
+ * #1045 階段 4（老師預覽頁）：revealAnswersOnSubmit=false（考前說明）提交後只顯示「示範結束」＋
+ * 「重新示範」，不顯示分數/✓✗/正解；true（考後檢討）顯示 QuizReviewView ＋「重新示範」；
+ * undefined（學生作答、demo、派發 dialog 即時預覽）行為不變。
+ *
+ * #1045 階段 4b：考後檢討預覽（isLivePreview && revealAnswersOnSubmit===true）每題作答當下判斷，
+ * 答對播 ScoreOverlay（不自動跳題）、答錯揭示正解並鎖定該題；考前說明／學生作答／訂正流程不變。
+ * #1045 階段 4c：回饋對齊艾賓浩斯練習版 WordSelectionActivity — 答對所選綠＋score=100 動畫；
+ * 答錯所選紅＋score=0 isError 動畫，動畫結束後才揭示正解綠並打勾（animateReveal）。
+ * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
  */
 
 import {
@@ -37,9 +48,15 @@ import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
 import CardNavArrow from "./shared/CardNavArrow";
 import WordSelectionOptionButton from "./shared/WordSelectionOptionButton";
+import QuizOptionChip from "./shared/QuizOptionChip";
+import { optionLabelAt } from "./shared/optionLabels";
 import ClozeBlankText from "./shared/ClozeBlankText";
 import { buildBlankedSentence } from "@/lib/cloze";
 import { useShortLandscape } from "./shared/useShortLandscape";
+import ScoreOverlay from "./shared/ScoreOverlay";
+import PreviewDemoDoneView, {
+  RestartDemoButton,
+} from "./shared/PreviewDemoDoneView";
 import QuizReviewView, {
   type QuizReviewPayload,
   type QuizReviewWord,
@@ -105,6 +122,11 @@ interface Props {
   previewSettings?: Partial<StartResponse>;
   // #830: 老師預覽時注入每張卡底部的「該題班級表現」%條（學生端不傳）。
   renderCardFooter?: (contentItemId: number) => ReactNode;
+  // #1045 階段 4：老師預覽頁模式。false＝考前說明（提交後不對答案）、true＝考後檢討；
+  // undefined＝維持原行為（學生作答、demo、派發 dialog 即時預覽）。僅 previewWords 路徑生效。
+  revealAnswersOnSubmit?: boolean;
+  // #1045 階段 4：「重新示範」— 父層遞增 key 重掛載，回到第一題並清空作答
+  onRestartDemo?: () => void;
 }
 
 export default function WordSelectionQuizActivity({
@@ -115,10 +137,37 @@ export default function WordSelectionQuizActivity({
   previewWords,
   previewSettings,
   renderCardFooter,
+  revealAnswersOnSubmit,
+  onRestartDemo,
 }: Props) {
   void _isPreviewMode;
   const { t } = useTranslation();
   const isLivePreview = !!previewWords;
+  // #1045 階段 4：考前說明模式提交後的「示範結束」狀態
+  const [demoDone, setDemoDone] = useState(false);
+  const revealAnswersRef = useRef(revealAnswersOnSubmit);
+  revealAnswersRef.current = revealAnswersOnSubmit;
+  // #1045 階段 4b：考後檢討預覽 → 每題作答當下判斷、答對播 ScoreOverlay、答錯揭示正解。
+  // 只在老師預覽頁（previewWords）且明確選「考後檢討」時生效；學生作答、訂正、考前說明不受影響。
+  const isReviewDemo = isLivePreview && revealAnswersOnSubmit === true;
+  const [previewResultByItem, setPreviewResultByItem] = useState<
+    Record<number, boolean>
+  >({});
+  const [previewOverlayOpen, setPreviewOverlayOpen] = useState(false);
+  // #1045 階段 4c：對齊艾賓浩斯練習版 — 答對 score=100、答錯 score=0 isError；
+  // 答錯時動畫結束（onComplete）才揭示正解綠（animateReveal）。不自動跳題。
+  const [previewLastCorrect, setPreviewLastCorrect] = useState(true);
+  const [previewRevealedByItem, setPreviewRevealedByItem] = useState<
+    Record<number, boolean>
+  >({});
+  const previewOverlayItemRef = useRef<number | null>(null);
+  const closePreviewOverlay = useCallback(() => {
+    setPreviewOverlayOpen(false);
+    const itemId = previewOverlayItemRef.current;
+    if (itemId != null) {
+      setPreviewRevealedByItem((m) => ({ ...m, [itemId]: true }));
+    }
+  }, []);
 
   const [loading, setLoading] = useState(!isLivePreview);
   const [words, setWords] = useState<QuizWord[]>([]);
@@ -320,6 +369,11 @@ export default function WordSelectionQuizActivity({
 
   const handleSubmitAll = useCallback(async () => {
     if (isLivePreview) {
+      // #1045 階段 4：考前說明 → 不組複盤資料，不揭示分數/對錯/正解
+      if (revealAnswersRef.current === false) {
+        setDemoDone(true);
+        return;
+      }
       // #861 D: 預覽提交 → 前端用目前作答組複盤資料，重用學生端 QuizReviewView，
       // 樣式與學生小考後的正解畫面完全一致（不打學生 API）。
       const norm = (s: string | null | undefined) =>
@@ -391,6 +445,20 @@ export default function WordSelectionQuizActivity({
     async (text: string) => {
       if (!currentWord) return;
       const itemId = currentWord.content_item_id;
+      // #1045 階段 4b／4c：考後檢討預覽 → 點選即本地判斷並鎖定該題；
+      // 答對／答錯都播 ScoreOverlay（與艾賓浩斯練習版同款），不自動跳題
+      if (isReviewDemo) {
+        if (previewResultByItem[itemId] !== undefined) return;
+        const isCorrect =
+          text.trim().toLowerCase() ===
+          currentWord.correct_text.trim().toLowerCase();
+        setSelectedByItem((m) => ({ ...m, [itemId]: text }));
+        setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
+        setPreviewLastCorrect(isCorrect);
+        previewOverlayItemRef.current = itemId;
+        setPreviewOverlayOpen(true);
+        return;
+      }
       // 訂正模式：已答對的題目鎖定，不可改選
       if (isRevision && correctByItem[itemId] === true) return;
       setSelectedByItem((m) => ({ ...m, [itemId]: text }));
@@ -407,6 +475,8 @@ export default function WordSelectionQuizActivity({
     },
     [
       currentWord,
+      isReviewDemo,
+      previewResultByItem,
       persistSelection,
       isRevision,
       correctByItem,
@@ -468,6 +538,10 @@ export default function WordSelectionQuizActivity({
     );
   }
 
+  if (demoDone) {
+    return <PreviewDemoDoneView onRestart={onRestartDemo} />;
+  }
+
   if (alreadySubmitted) {
     if (reviewLoading || !reviewData) {
       return (
@@ -479,6 +553,13 @@ export default function WordSelectionQuizActivity({
     return (
       <QuizReviewView
         data={reviewData}
+        // #1045 階段 4：老師預覽頁（有模式）隱藏「提交後不可重做」並附「重新示範」
+        isPreview={isLivePreview && revealAnswersOnSubmit !== undefined}
+        footer={
+          isLivePreview && revealAnswersOnSubmit !== undefined ? (
+            <RestartDemoButton onRestart={onRestartDemo} />
+          ) : undefined
+        }
         renderQuestion={(w) => (
           <div className="space-y-2">
             <div className="text-center">
@@ -497,7 +578,7 @@ export default function WordSelectionQuizActivity({
               )}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {w.options.map((opt) => {
+              {w.options.map((opt, index) => {
                 const isCorrectOption =
                   opt.text.trim().toLowerCase() ===
                   w.correct_answer.trim().toLowerCase();
@@ -506,21 +587,13 @@ export default function WordSelectionQuizActivity({
                   opt.text.trim().toLowerCase() ===
                     w.student_answer.trim().toLowerCase();
                 return (
-                  <div
+                  <QuizOptionChip
                     key={opt.text}
-                    className={cn(
-                      "p-2 rounded border text-sm",
-                      isCorrectOption
-                        ? "border-emerald-400 bg-emerald-50 text-emerald-800"
-                        : isStudentPick
-                          ? "border-rose-400 bg-rose-50 text-rose-800"
-                          : "border-gray-200 text-gray-500",
-                    )}
-                  >
-                    {opt.text}
-                    {isCorrectOption && " ✓"}
-                    {isStudentPick && !isCorrectOption && " ✗"}
-                  </div>
+                    text={opt.text}
+                    label={optionLabelAt(index)}
+                    isCorrect={isCorrectOption}
+                    isStudentPick={isStudentPick}
+                  />
                 );
               })}
             </div>
@@ -579,8 +652,21 @@ export default function WordSelectionQuizActivity({
   const currentResolved = currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   // 訂正模式下已作答（對或錯）→ 揭示選項正解（參考艾賓浩斯）
+  // #1045 階段 4b：考後檢討預覽已判斷的題 → 同樣揭示正解綠／錯選紅，並鎖定
+  const previewJudged =
+    isReviewDemo &&
+    previewResultByItem[currentWord.content_item_id] !== undefined;
   const revealCurrent =
-    isRevision && (currentCorrect === true || currentCorrect === false);
+    (isRevision && (currentCorrect === true || currentCorrect === false)) ||
+    previewJudged;
+  // #1045 階段 4c：考後檢討預覽答錯 → 先只標所選紅，動畫結束後才揭示正解綠（animateReveal）
+  const previewResultCurrent = isReviewDemo
+    ? previewResultByItem[currentWord.content_item_id]
+    : undefined;
+  const previewCorrectRevealed =
+    previewResultCurrent === true ||
+    (previewResultCurrent === false &&
+      previewRevealedByItem[currentWord.content_item_id] === true);
 
   // 題號 bar：Page 提供 slot 時 portal 上去；否則 inline render（fallback）
   const navBar = (
@@ -642,7 +728,7 @@ export default function WordSelectionQuizActivity({
   );
 
   return (
-    <div className="flex flex-col gap-4 pb-6 sm:pb-8 min-h-[calc(100dvh-14rem)] max-h-[100dvh]">
+    <div className="flex flex-col gap-4 pb-6 sm:pb-8 min-h-[calc(100dvh-14rem)]">
       {navSlot ? (
         createPortal(navBar, navSlot)
       ) : (
@@ -651,7 +737,7 @@ export default function WordSelectionQuizActivity({
         </div>
       )}
 
-      <Card className="relative flex-1 min-h-0 flex flex-col border-0 shadow-none bg-transparent">
+      <Card className="relative flex-1 flex flex-col border-0 shadow-none bg-transparent">
         {/* #830: 上一題 / 下一題改為卡片左右兩側箭頭（對齊一般單字卡 WordCard） */}
         {currentIndex > 0 && (
           <CardNavArrow
@@ -666,7 +752,7 @@ export default function WordSelectionQuizActivity({
             onClick={() => goTo(currentIndex + 1)}
           />
         )}
-        <CardContent className="flex-1 min-h-0 flex flex-col gap-3 px-10 sm:px-12 py-0">
+        <CardContent className="flex-1 flex flex-col gap-3 px-10 sm:px-12 py-0">
           <div className="text-sm text-gray-500 shrink-0">
             {t("wordQuiz.questionLabel", {
               current: currentWord.question_number,
@@ -784,13 +870,25 @@ export default function WordSelectionQuizActivity({
                       imageUrl={opt.image_url}
                       showAsImage={renderAsImage}
                       colorIndex={index}
+                      label={optionLabelAt(index)}
                       isSelected={isSelected}
                       // 已答對鎖定；答錯時仍可改選正解
-                      disabled={submittingAnswer || currentResolved}
+                      disabled={
+                        submittingAnswer || currentResolved || previewJudged
+                      }
                       showResult={revealCurrent}
-                      showCorrect={revealCurrent && isCorrectOption}
+                      showCorrect={
+                        revealCurrent &&
+                        isCorrectOption &&
+                        (!previewJudged || previewCorrectRevealed)
+                      }
                       showIncorrect={
                         revealCurrent && isSelected && !isCorrectOption
+                      }
+                      animateReveal={
+                        previewResultCurrent === false &&
+                        previewCorrectRevealed &&
+                        isCorrectOption
                       }
                       onClick={() => choose(opt.text)}
                     />
@@ -827,6 +925,15 @@ export default function WordSelectionQuizActivity({
           {renderCardFooter?.(currentWord.content_item_id)}
         </CardContent>
       </Card>
+      {/* #1045 階段 4b／4c：考後檢討預覽答對／答錯動畫（fixed 全螢幕，結束後關閉；不自動跳題） */}
+      {isReviewDemo && (
+        <ScoreOverlay
+          open={previewOverlayOpen}
+          score={previewLastCorrect ? 100 : 0}
+          isError={!previewLastCorrect}
+          onComplete={closePreviewOverlay}
+        />
+      )}
     </div>
   );
 }

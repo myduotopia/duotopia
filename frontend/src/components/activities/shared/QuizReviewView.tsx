@@ -8,6 +8,9 @@
  * 此元件負責共用骨架（summary header + 每題卡片框 + ✓/✗）；
  * 題目本身的呈現（翻譯 / 例句 / 選項）由 caller 透過 renderQuestion 注入，
  * 因為三種小考的題目展示差異夠大、不宜強塞同一個元件。
+ *
+ * #1045 階段 4：老師預覽「考後檢討」重用本元件，傳 `isPreview` 隱藏「提交後不可重做」
+ * 文案、傳 `footer` 放「重新示範」。學生正式作答與派發 dialog 即時預覽不傳，外觀不變。
  */
 
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -37,11 +40,17 @@ export interface QuizReviewPayload<W extends QuizReviewWord = QuizReviewWord> {
 interface Props<W extends QuizReviewWord> {
   data: QuizReviewPayload<W>;
   renderQuestion: (word: W) => React.ReactNode;
+  // #1045 階段 4：老師預覽頁 → 隱藏「提交後不可重做」文案（學生正式作答不傳）
+  isPreview?: boolean;
+  // #1045 階段 4：列表最下方的附加區（老師預覽「考後檢討」放「重新示範」）
+  footer?: React.ReactNode;
 }
 
 export default function QuizReviewView<W extends QuizReviewWord>({
   data,
   renderQuestion,
+  isPreview = false,
+  footer,
 }: Props<W>) {
   const { t } = useTranslation();
   const total = data.total_questions || data.words.length;
@@ -58,10 +67,12 @@ export default function QuizReviewView<W extends QuizReviewWord>({
               total,
             }) || `${data.correct_count} / ${total} 答對`}
           </div>
-          <p className="text-xs text-gray-500">
-            {t("wordQuiz.locked.desc") ||
-              "提交後不可重做；等待老師退回才能訂正錯題。"}
-          </p>
+          {!isPreview && (
+            <p className="text-xs text-gray-500">
+              {t("wordQuiz.locked.desc") ||
+                "提交後不可重做；等待老師退回才能訂正錯題。"}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -130,6 +141,7 @@ export default function QuizReviewView<W extends QuizReviewWord>({
           </CardContent>
         </Card>
       ))}
+      {footer}
     </div>
   );
 }

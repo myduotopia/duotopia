@@ -319,6 +319,8 @@ jobs:
               'social_posts',
               -- 更新公告（#804，JWT auth 業務表）
               'release_announcements',
+              -- 班級學生分組（#1046，JWT auth 業務表）
+              'student_groups', 'student_group_members',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',

@@ -814,11 +814,57 @@ export function datasetLabelKeysForMode(mode: PracticeMode): string[] {
   );
 }
 
+/**
+ * 每個資料集目前能不能派發 —— 「可派發」的**唯一開關**（Issue #1052）。
+ *
+ * #1052 的根因：可派發性原本分散兩處 —— chip 列看 `ASSIGNABLE_MODE_ORDER`（沒有任何
+ * 開關），教材卡看 `isAssignableContentType`（接 feature flag）。#1030 讓空購物車時
+ * chip 列整排消失，碰巧遮住了「開發中的情境對話按鈕沒被擋」這件事；補回 chip 列就會
+ * 露出來。
+ *
+ * 規範：**新增或暫停一個活動的派發，只改這張表**。chip 列（`listModesForDataset` /
+ * `listAllDispatchableModes`）與教材卡（`isAssignableContentType`）都由此推導，
+ * 不要在元件或其他 helper 另外加判斷。寫成 `Record` 是為了新增資料集時被 TypeScript
+ * 強制在這裡明確表態。
+ *
+ * 注意：這只管「派發」。建立教材入口由 `ENABLE_SCENARIO_DIALOGUE` 控制；既有作業的
+ * 顯示／批改仍查 `PRACTICE_MODE_REGISTRY`，不受影響。
+ */
+export const DATASET_DISPATCH_STATUS: Record<
+  PracticeDataset,
+  "released" | "in_development"
+> = {
+  example_sentences: "released",
+  vocabulary_set: "released",
+  scenario_dialogue: "in_development",
+};
+
+export function isDatasetDispatchable(dataset: PracticeDataset): boolean {
+  return DATASET_DISPATCH_STATUS[dataset] === "released";
+}
+
+/** 模式吃的資料集全部開放，才算可派發。 */
+function isModeDispatchable(mode: PracticeMode): boolean {
+  return PRACTICE_MODE_REGISTRY[mode].supportedDatasets.every(
+    isDatasetDispatchable,
+  );
+}
+
 /** 依資料集回傳可派發的模式（chip 列），重現 AssignmentDialog 既有過濾：例句集只給非 word_ 模式。 */
 export function listModesForDataset(dataset: PracticeDataset): PracticeMode[] {
-  return ASSIGNABLE_MODE_ORDER.filter((m) =>
-    PRACTICE_MODE_REGISTRY[m].supportedDatasets.includes(dataset),
+  return ASSIGNABLE_MODE_ORDER.filter(
+    (m) =>
+      isModeDispatchable(m) &&
+      PRACTICE_MODE_REGISTRY[m].supportedDatasets.includes(dataset),
   );
+}
+
+/**
+ * 全部可派發的模式（chip 順序）。給「先選方式、再選教材」的路徑（班級頁派發，
+ * 購物車還是空的）用 —— #1030 讓空車時不列模式，那條路徑就沒有按鈕可按（#1052）。
+ */
+export function listAllDispatchableModes(): PracticeMode[] {
+  return ASSIGNABLE_MODE_ORDER.filter(isModeDispatchable);
 }
 
 /** content.type（大寫 enum 或舊小寫）對應到 PracticeDataset；未知回 null。 */

@@ -52,7 +52,10 @@ export const ENABLE_GROUP_BUY =
  *
  * 關閉時：
  * * `ContentTypeDialog` 的情境對話卡片反灰、點不動，右上角 Soon 角標
- * * `isAssignableContentType()` 排除情境對話 —— 回到 #1030 的狀態，提示文案現成
+ *
+ * **派發不歸這個開關管**（Issue #1052）：能不能派發統一由 `lib/practiceMode.ts` 的
+ * `DATASET_DISPATCH_STATUS` 決定，情境對話目前 `in_development`，所有環境都不可派發。
+ * 原本這裡也接 `isAssignableContentType()`，但派發 chip 列沒接，兩邊漂移。
  *
  * **既有內容的編輯與批改不擋**，後端也不擋：功能在 prod 上活過約一小時，若那期間
  * 有老師建了教材，要讓它還讀得到、改得動，不要變成孤兒資料。

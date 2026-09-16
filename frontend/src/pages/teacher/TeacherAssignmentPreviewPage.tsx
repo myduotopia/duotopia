@@ -3,6 +3,13 @@
  *
  * 完全重用 StudentActivityPage 元件
  * 只是從老師 preview API 載入資料，不儲存進度
+ *
+ * #1045 階段 4：小考（*_quiz）預覽有兩種示範模式
+ *   - 考前說明（explain）：提交後不顯示分數/✓✗/正解，只顯示「示範結束」＋「重新示範」
+ *   - 考後檢討（review）：提交後顯示 QuizReviewView（分數＋逐題對錯＋正解）＋「重新示範」
+ * 進頁提示 Dialog 對小考改為兩個模式選項。未明確選「考後檢討」前一律視為考前說明：
+ * Dialog 開著尚未選、或用 X / Esc / 點外面直接關閉，都不揭示答案（避免投影時意外洩漏正解）；
+ * 頁面頂端常駐切換鈕，切換時遞增 quizResetKey 讓作答重置。非小考 Dialog 維持只有「關閉」。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -109,6 +116,26 @@ export default function TeacherAssignmentPreviewPage() {
   } | null>(null);
 
   const practiceMode = activityData?.practice_mode || null;
+  const isQuiz = !!practiceMode && practiceMode.endsWith("_quiz");
+  // #1045 階段 4：小考示範模式（null＝尚未在 Dialog 選）。未選（含直接關閉 Dialog）一律
+  // 視為考前說明 → revealAnswersOnSubmit 只有老師明確選「考後檢討」才會是 true。
+  const [previewRevealMode, setPreviewRevealMode] = useState<
+    "explain" | "review" | null
+  >(null);
+  const effectiveRevealMode = previewRevealMode ?? "explain";
+  // 遞增 → 重掛載小考 Activity（回第一題、作答清空）
+  const [quizResetKey, setQuizResetKey] = useState(0);
+  const chooseRevealMode = (mode: "explain" | "review") => {
+    setPreviewRevealMode(mode);
+    setQuizResetKey((k) => k + 1);
+    setShowBanner(false);
+  };
+  const toggleRevealMode = () => {
+    setPreviewRevealMode(
+      effectiveRevealMode === "explain" ? "review" : "explain",
+    );
+    setQuizResetKey((k) => k + 1);
+  };
   useEffect(() => {
     if (!practiceMode || !practiceMode.endsWith("_quiz")) {
       setQuizStats(null);
@@ -229,13 +256,78 @@ export default function TeacherAssignmentPreviewPage() {
               {t("previewPage.info.description")}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setShowBanner(false)}>
-              {t("common.close")}
-            </Button>
-          </DialogFooter>
+          {isQuiz ? (
+            // #1045 階段 4：小考 → 選擇示範方式
+            <div className="space-y-2" data-testid="quiz-mode-options">
+              <div className="text-sm font-medium text-gray-700">
+                {t("previewPage.quizMode.chooseTitle")}
+              </div>
+              <button
+                type="button"
+                data-testid="quiz-mode-explain"
+                onClick={() => chooseRevealMode("explain")}
+                className="w-full text-left rounded-lg border border-gray-200 px-4 py-3 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              >
+                <div className="font-medium text-gray-800">
+                  {t("previewPage.quizMode.explain")}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {t("previewPage.quizMode.explainDesc")}
+                </div>
+              </button>
+              <button
+                type="button"
+                data-testid="quiz-mode-review"
+                onClick={() => chooseRevealMode("review")}
+                className="w-full text-left rounded-lg border border-gray-200 px-4 py-3 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              >
+                <div className="font-medium text-gray-800">
+                  {t("previewPage.quizMode.review")}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {t("previewPage.quizMode.reviewDesc")}
+                </div>
+              </button>
+            </div>
+          ) : (
+            <DialogFooter>
+              <Button onClick={() => setShowBanner(false)}>
+                {t("common.close")}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* #1045 階段 4：小考示範模式常駐切換列（顯示目前模式，點擊切換並重置作答） */}
+      {isQuiz && (
+        <div className="flex flex-wrap items-center justify-end gap-2 px-4 pt-3">
+          <span
+            className="text-sm text-gray-600 dark:text-gray-300"
+            data-testid="quiz-mode-current"
+            data-mode={effectiveRevealMode}
+          >
+            {t("previewPage.quizMode.current", {
+              mode: t(`previewPage.quizMode.${effectiveRevealMode}Short`),
+            })}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid="quiz-mode-toggle"
+            onClick={toggleRevealMode}
+          >
+            {t("previewPage.quizMode.switchTo", {
+              mode: t(
+                `previewPage.quizMode.${
+                  effectiveRevealMode === "explain" ? "review" : "explain"
+                }Short`,
+              ),
+            })}
+          </Button>
+        </div>
+      )}
 
       {/* 使用學生的完整 Activity Page 內容 */}
       <StudentActivityPageContent
@@ -267,6 +359,14 @@ export default function TeacherAssignmentPreviewPage() {
           show_example_sentence: activityData.show_example_sentence,
         }}
         isPreviewMode={true}
+        // #1045 階段 4：只有小考帶模式；非小考不帶（undefined）→ 行為不變
+        quizPreviewRevealAnswers={
+          isQuiz ? effectiveRevealMode === "review" : undefined
+        }
+        quizPreviewResetKey={quizResetKey}
+        onQuizPreviewRestart={
+          isQuiz ? () => setQuizResetKey((k) => k + 1) : undefined
+        }
         authToken={token || undefined}
         renderCardFooter={
           quizStats

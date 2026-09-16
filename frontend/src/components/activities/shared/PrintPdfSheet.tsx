@@ -34,6 +34,7 @@ import {
   useMemo,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { OPTION_LABELS } from "./optionLabels";
 import {
   Sheet,
   SheetContent,
@@ -122,7 +123,8 @@ const CARD_ROW_GAP = 12; // 單字卡：格線間距（px）
 
 const PAPER_FONT =
   '"Noto Serif TC", "Noto Serif", "Source Han Serif TC", serif';
-const CHOICE_LABELS = ["A", "B", "C", "D"];
+// #1045：與作答／檢討／批改頁角標共用同一來源，確保列印標號一致
+const CHOICE_LABELS = OPTION_LABELS;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

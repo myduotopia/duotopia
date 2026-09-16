@@ -225,6 +225,11 @@ interface StudentActivityPageContentProps {
   // #854: 注入頂部 sticky header 右側的動作區（即刻練習用來放「⚡ 進階設定」觸發鈕）。
   // 學生作答 / demo 不傳，對其無影響。
   headerActions?: ReactNode;
+  // #1045 階段 4：老師預覽小考「考前說明（false）／考後檢討（true）」；學生作答 / demo 不傳。
+  quizPreviewRevealAnswers?: boolean;
+  // #1045 階段 4：遞增即重掛載小考 Activity（重新示範、切換模式時作答重置）
+  quizPreviewResetKey?: number;
+  onQuizPreviewRestart?: () => void;
 }
 
 // =============================================================================
@@ -334,6 +339,9 @@ export default function StudentActivityPageContent({
   previewSettings,
   renderCardFooter,
   headerActions,
+  quizPreviewRevealAnswers,
+  quizPreviewResetKey = 0,
+  onQuizPreviewRestart,
 }: StudentActivityPageContentProps) {
   const { t } = useTranslation();
 
@@ -1969,6 +1977,9 @@ export default function StudentActivityPageContent({
               show_answer: showAnswer,
             }}
             renderCardFooter={renderCardFooter}
+            revealAnswersOnSubmit={quizPreviewRevealAnswers}
+            onRestartDemo={onQuizPreviewRestart}
+            resetKey={quizPreviewResetKey}
           />
         );
       }
@@ -1997,6 +2008,9 @@ export default function StudentActivityPageContent({
               show_answer: showAnswer,
             }}
             renderCardFooter={renderCardFooter}
+            revealAnswersOnSubmit={quizPreviewRevealAnswers}
+            onRestartDemo={onQuizPreviewRestart}
+            resetKey={quizPreviewResetKey}
           />
         );
       }
@@ -2030,6 +2044,9 @@ export default function StudentActivityPageContent({
               show_answer: showAnswer,
             }}
             renderCardFooter={renderCardFooter}
+            revealAnswersOnSubmit={quizPreviewRevealAnswers}
+            onRestartDemo={onQuizPreviewRestart}
+            resetKey={quizPreviewResetKey}
           />
         );
       }

@@ -23,7 +23,6 @@ import {
   BookOpen,
   FileText,
   CheckCircle2,
-  Circle,
   Package,
   Layers,
   ChevronLeft,
@@ -72,12 +71,22 @@ import {
   reasonNothingSelectable,
 } from "@/lib/assignableContentType";
 import { cn } from "@/lib/utils";
+import { compareStudentsBySeat } from "@/lib/studentSort";
+import {
+  createScope,
+  resolveStudentScope,
+  type StudentGroup as ClassroomGroup,
+  type StudentScope,
+} from "@/lib/studentGroup";
+import { StudentScopeSelector } from "@/components/assignment/StudentScopeSelector";
 import {
   practiceModeLabelKey,
   listModesForDataset,
+  listAllDispatchableModes,
   applyModeDefaults,
   getModeConfig,
   DEFAULT_MODE_BY_DATASET,
+  isDatasetDispatchable,
   DATASET_LABEL_KEY,
   type PracticeMode,
   type PracticeDataset,
@@ -174,6 +183,30 @@ interface SelectedClassroom {
   students: Student[];
   selectedStudentIds: number[];
   assignToAll: boolean;
+  // #1046: 每一班各自有分組與選擇意圖，互不影響。
+  groups: ClassroomGroup[];
+  scope: StudentScope;
+}
+
+/**
+ * #1046: 依選擇意圖重算某一班的名單，並同步 assignToAll。
+ *
+ * assignToAll 只有在真的整班都要時才為 true —— 送出時 assignToAll 會讓後端
+ * 自己抓全班，若老師排除過任何人卻仍標成 true，被排除的人會被加回去。
+ */
+function recalcClassroom(c: SelectedClassroom): SelectedClassroom {
+  const sortedIds = [...c.students]
+    .sort(compareStudentsBySeat)
+    .map((s) => s.id);
+  const selectedStudentIds = resolveStudentScope(c.scope, sortedIds, c.groups);
+  return {
+    ...c,
+    selectedStudentIds,
+    assignToAll:
+      c.scope.mode === "all" &&
+      c.scope.excluded.length === 0 &&
+      selectedStudentIds.length === sortedIds.length,
+  };
 }
 
 interface ClassroomOption {
@@ -369,14 +402,9 @@ const getExampleSentenceErrorDetail = (
 const isExampleSentenceRequiredError = (error: unknown): boolean =>
   getExampleSentenceErrorDetail(error) !== null;
 
-const sortByStudentNumber = (a: Student, b: Student) => {
-  if (!a.student_number && !b.student_number) return 0;
-  if (!a.student_number) return 1;
-  if (!b.student_number) return -1;
-  return a.student_number.localeCompare(b.student_number, undefined, {
-    numeric: true,
-  });
-};
+// #1046: 排序規則抽到 lib/studentSort 與班級頁共用。原本兩位學生都沒有座號時
+// 回傳 0，順序就落回 API 回來的任意次序；現在會依姓名排。
+const sortByStudentNumber = compareStudentsBySeat;
 
 export function AssignmentDialog({
   open,
@@ -437,12 +465,46 @@ export function AssignmentDialog({
   >([]);
   const [activeClassroomTab, setActiveClassroomTab] = useState<number>(0);
 
+  // #1046: 單一班級派發時才載入分組，用來做組別快選 chips。機構多班分頁不支援。
+  const [classroomGroups, setClassroomGroups] = useState<ClassroomGroup[]>([]);
+  // 老師的選擇意圖（全班／依組別／依序位／逐一勾選），實際名單由此推導。
+  const [studentScope, setStudentScope] = useState<StudentScope>(
+    createScope("all"),
+  );
+
   // 學生列表：多班級模式用 selectedClassrooms，單班級模式用原有邏輯
-  const effectiveStudents = needsClassroomStep
-    ? selectedClassrooms[activeClassroomTab]?.students || []
-    : students.length > 0
-      ? students
-      : internalStudents;
+  // useMemo 是必要的：下面的排序與推導都吃它當依賴，每次 render 產生新陣列
+  // 會讓整條鏈重算。
+  const effectiveStudents = useMemo(
+    () =>
+      needsClassroomStep
+        ? selectedClassrooms[activeClassroomTab]?.students || []
+        : students.length > 0
+          ? students
+          : internalStudents,
+    [
+      needsClassroomStep,
+      selectedClassrooms,
+      activeClassroomTab,
+      students,
+      internalStudents,
+    ],
+  );
+
+  // #1046: 名冊先排好（座號小到大，無座號依姓名），推導出來的名單就跟著這個
+  // 順序，畫面與送出的 payload 不會有兩套次序。
+  const sortedStudents = useMemo(
+    () => [...effectiveStudents].sort(sortByStudentNumber),
+    [effectiveStudents],
+  );
+  const sortedStudentIds = useMemo(
+    () => sortedStudents.map((s) => s.id),
+    [sortedStudents],
+  );
+  const scopedStudentIds = useMemo(
+    () => resolveStudentScope(studentScope, sortedStudentIds, classroomGroups),
+    [studentScope, sortedStudentIds, classroomGroups],
+  );
 
   // 分別儲存公版和班級課程
   const [templatePrograms, setTemplatePrograms] = useState<Program[]>([]);
@@ -595,24 +657,30 @@ export function AssignmentDialog({
         return newList;
       });
     } else {
-      // 新增選擇，載入學生
+      // 新增選擇，載入學生與該班分組（#1046：每班各自可依組別／序位挑人）
       try {
-        const students = (await apiClient.getTeacherClassroomStudents(
-          classroom.id,
-        )) as Student[];
+        const [students, groups] = await Promise.all([
+          apiClient.getTeacherClassroomStudents(classroom.id) as Promise<
+            Student[]
+          >,
+          // 分組載不到只是少了兩個下拉選單，不該擋住整個派發流程。
+          apiClient.getClassroomGroups(classroom.id).catch(() => []),
+        ]);
         setSelectedClassrooms((prev) => {
           // Guard: skip if already added (handles rapid double-click)
           if (prev.some((c) => c.id === classroom.id)) return prev;
           return [
             ...prev,
-            {
+            recalcClassroom({
               id: classroom.id,
               name: classroom.name,
               school_id: classroom.school_id || effectiveSchoolId || "",
               students: students || [],
-              selectedStudentIds: (students || []).map((s) => s.id),
+              selectedStudentIds: [],
               assignToAll: true,
-            },
+              groups,
+              scope: createScope("all"),
+            }),
           ];
         });
       } catch {
@@ -625,35 +693,34 @@ export function AssignmentDialog({
     }
   };
 
-  // 多班級模式：切換某班的學生
+  // 多班級模式：切換某班的個別學生，記成疊在選擇器上的微調
   const toggleClassroomStudent = (classroomId: number, studentId: number) => {
     setSelectedClassrooms((prev) =>
       prev.map((c) => {
         if (c.id !== classroomId) return c;
-        const newIds = c.selectedStudentIds.includes(studentId)
-          ? c.selectedStudentIds.filter((id) => id !== studentId)
-          : [...c.selectedStudentIds, studentId];
-        return {
-          ...c,
-          selectedStudentIds: newIds,
-          assignToAll: newIds.length === c.students.length,
-        };
+        const selected = c.selectedStudentIds.includes(studentId);
+        const scope = selected
+          ? {
+              ...c.scope,
+              included: c.scope.included.filter((id) => id !== studentId),
+              excluded: [...c.scope.excluded, studentId],
+            }
+          : {
+              ...c.scope,
+              excluded: c.scope.excluded.filter((id) => id !== studentId),
+              included: [...c.scope.included, studentId],
+            };
+        return recalcClassroom({ ...c, scope });
       }),
     );
   };
 
-  // 多班級模式：全選/取消全選某班
-  const toggleClassroomAllStudents = (classroomId: number) => {
+  // 多班級模式：換掉某班的選擇方式（全班／組別／序位）
+  const setClassroomScope = (classroomId: number, scope: StudentScope) => {
     setSelectedClassrooms((prev) =>
-      prev.map((c) => {
-        if (c.id !== classroomId) return c;
-        const allSelected = c.assignToAll;
-        return {
-          ...c,
-          selectedStudentIds: allSelected ? [] : c.students.map((s) => s.id),
-          assignToAll: !allSelected,
-        };
-      }),
+      prev.map((c) =>
+        c.id === classroomId ? recalcClassroom({ ...c, scope }) : c,
+      ),
     );
   };
 
@@ -676,6 +743,15 @@ export function AssignmentDialog({
       loadTemplatePrograms();
       if (classroomId) {
         loadClassroomPrograms();
+      }
+      // #1046: 只有單一班級派發才有組別快選；多班分頁的學生來自不同班級，
+      // 一份分組套不上去。載入失敗就當作沒有分組，chips 不顯示而已，不擋派發。
+      setClassroomGroups([]);
+      if (classroomId && !needsClassroomStep) {
+        apiClient
+          .getClassroomGroups(classroomId)
+          .then(setClassroomGroups)
+          .catch(() => setClassroomGroups([]));
       }
       if (showOrgTab) {
         loadOrgPrograms();
@@ -731,6 +807,27 @@ export function AssignmentDialog({
       });
     }
   }, [formData.practice_mode]);
+
+  // Issue #1052: 選中的模式必須在 chip 列裡。開啟時 reset 一律寫 word_selection，
+  // 「先帶入內容」的路徑（教材卡派發）若是例句集，word_selection 不在清單裡 ——
+  // chip 沒有一個被選中、預覽卻顯示單字選擇，直接下一步還會派出錯的模式。
+  // 購物車資料集確定後，模式不相容就套該資料集的預設（查 registry，不另寫規則）。
+  // 空購物車（班級頁先選方式）dataset 為 null，不介入。
+  useEffect(() => {
+    const dataset = getCartContentTypeCategory();
+    if (!dataset || !isDatasetDispatchable(dataset)) return;
+    const mode = formData.practice_mode;
+    if (mode && listModesForDataset(dataset).includes(mode as PracticeMode)) {
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      ...(applyModeDefaults(DEFAULT_MODE_BY_DATASET[dataset]) as Partial<
+        typeof prev
+      >),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getCartContentTypeCategory 每次 render 重建，只依 cart 與模式觸發
+  }, [cartItems, formData.practice_mode]);
 
   const loadQuotaInfo = async () => {
     try {
@@ -1232,28 +1329,61 @@ export function AssignmentDialog({
     }
   };
 
-  const toggleStudent = (studentId: number) => {
+  /**
+   * #1046: 把推導出來的名單同步回 formData，送出與步驟驗證仍讀 formData。
+   *
+   * assign_to_all 只有在「真的整班都要」時才為 true —— handleSubmit 在
+   * assign_to_all 時會送出空的 student_ids 讓後端自己抓全班，若老師排除過
+   * 任何人卻仍標成 true，被排除的人會被後端加回去。
+   */
+  useEffect(() => {
+    if (needsClassroomStep) return; // 跨班模式各班自己算
     setFormData((prev) => {
-      const newIds = prev.student_ids.includes(studentId)
-        ? prev.student_ids.filter((id) => id !== studentId)
-        : [...prev.student_ids, studentId];
-
+      const assignToAll =
+        studentScope.mode === "all" &&
+        studentScope.excluded.length === 0 &&
+        scopedStudentIds.length === sortedStudentIds.length;
+      if (
+        prev.assign_to_all === assignToAll &&
+        prev.student_ids.length === scopedStudentIds.length &&
+        prev.student_ids.every((id, i) => id === scopedStudentIds[i])
+      ) {
+        return prev; // 沒變就別換 reference，避免多餘的 re-render
+      }
       return {
         ...prev,
-        student_ids: newIds,
-        assign_to_all: newIds.length === effectiveStudents.length,
+        student_ids: scopedStudentIds,
+        assign_to_all: assignToAll,
       };
     });
-  };
+  }, [scopedStudentIds, sortedStudentIds, studentScope, needsClassroomStep]);
 
-  const toggleAllStudents = () => {
-    setFormData((prev) => ({
-      ...prev,
-      assign_to_all: !prev.assign_to_all,
-      student_ids: !prev.assign_to_all
-        ? effectiveStudents.map((s) => s.id)
-        : [],
-    }));
+  /**
+   * #1046: 個別勾選只記錄成疊在選擇器之上的微調（included / excluded），
+   * 不直接改名單 —— 名單永遠由 studentScope 推導，才不會失去「這個人是誰
+   * 帶進來的」這個資訊。
+   */
+  const toggleStudent = (studentId: number) => {
+    setStudentScope((prev) => {
+      const currentlySelected = resolveStudentScope(
+        prev,
+        sortedStudentIds,
+        classroomGroups,
+      ).includes(studentId);
+
+      if (currentlySelected) {
+        return {
+          ...prev,
+          included: prev.included.filter((id) => id !== studentId),
+          excluded: [...prev.excluded, studentId],
+        };
+      }
+      return {
+        ...prev,
+        excluded: prev.excluded.filter((id) => id !== studentId),
+        included: [...prev.included, studentId],
+      };
+    });
   };
 
   const handleSubmit = async () => {
@@ -1624,23 +1754,9 @@ export function AssignmentDialog({
 
   // 處理下一步按鈕點擊
   const handleNextStep = () => {
-    // 從 step 1 移動到 step 2 時，根據內容類型設定預設練習模式（僅在尚未選擇時）
-    if (currentStep === 1 && !formData.practice_mode) {
-      // Issue #1031: 依資料集查表取預設模式，不再用「是不是單字集」的二分法 ——
-      // 加入情境對話之後，二分法會讓它落到 else 選到 rearrangement，那是它根本不
-      // 支援的模式（PR #1034 review round 3）。時間等預設值一併由 registry 帶出，
-      // 不在這裡硬寫秒數。
-      const contentCategory = getCartContentTypeCategory();
-      if (contentCategory) {
-        setFormData((prev) => ({
-          ...prev,
-          // 與下方 chip 切換模式同一種寫法（SettingPatch 的值型別較寬，需收斂）
-          ...(applyModeDefaults(
-            DEFAULT_MODE_BY_DATASET[contentCategory],
-          ) as Partial<typeof prev>),
-        }));
-      }
-    }
+    // Issue #1052: 「依資料集給預設模式」改由上方的相容性 effect 處理（購物車或模式
+    // 一變就校正）。原本這裡只在 practice_mode 為空時生效，但開啟時 reset 已寫入
+    // word_selection，永遠不會空 —— 是死碼，也正是例句集卡片派發時 chip 沒被選中的原因。
 
     // 進入作業詳情前，檢查音檔驗證（從 step 2 或從 step 1 跳過時都需要）
     const nextIndex = stepNumbers.indexOf(currentStep) + 1;
@@ -2798,23 +2914,19 @@ export function AssignmentDialog({
                             {/* Expanded student list */}
                             {isSelected && selected && (
                               <div className="border-t border-blue-200 px-3 pb-3">
-                                {/* Select all toggle */}
-                                <div
-                                  onClick={() =>
-                                    toggleClassroomAllStudents(classroom.id)
+                                {/* #1046 每班各自的選擇器：全班／組別／序位 */}
+                                <StudentScopeSelector
+                                  compact
+                                  scope={selected.scope}
+                                  onScopeChange={(next) =>
+                                    setClassroomScope(classroom.id, next)
                                   }
-                                  className="flex items-center gap-2 py-2 cursor-pointer"
-                                >
-                                  <Checkbox
-                                    checked={selected.assignToAll}
-                                    className="data-[state=checked]:bg-blue-600 h-4 w-4"
-                                  />
-                                  <span className="text-xs font-medium text-blue-800">
-                                    {t(
-                                      "dialogs.assignmentDialog.selectStudents.assignAll",
-                                    )}
-                                  </span>
-                                </div>
+                                  groups={selected.groups}
+                                  selectedCount={
+                                    selected.selectedStudentIds.length
+                                  }
+                                  totalCount={selected.students.length}
+                                />
 
                                 {/* Student grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
@@ -2872,9 +2984,12 @@ export function AssignmentDialog({
             (() => {
               // Issue #1030: 不要用「不是例句集就是單字集」的二分法 —— 未知型別會被
               // 默默當成單字集，然後顯示一整排單字模式（情境對話就是這樣中招的）。
-              // 購物車現在只可能有可派發的型別，null 代表空車，此時不列模式。
+              // Issue #1052: null 代表空車 ＝「先選方式、再選教材」的路徑（班級頁派發），
+              // 要列出全部可派發模式；有內容時才依資料集縮小。開放與否由 registry 決定。
               const dataset = getCartContentTypeCategory();
-              const modeList = dataset ? listModesForDataset(dataset) : [];
+              const modeList = dataset
+                ? listModesForDataset(dataset)
+                : listAllDispatchableModes();
               const currentConfig = formData.practice_mode
                 ? getModeConfig(formData.practice_mode)
                 : undefined;
@@ -3119,42 +3234,16 @@ export function AssignmentDialog({
                         value={String(idx)}
                         className="flex-1 flex flex-col overflow-hidden mt-2"
                       >
-                        {/* Quick Select All for this classroom */}
-                        <Card className="p-2 mb-2 bg-blue-50 border-blue-200">
-                          <div
-                            onClick={() =>
-                              toggleClassroomAllStudents(classroom.id)
-                            }
-                            className="flex items-center gap-3 w-full cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={classroom.assignToAll}
-                              className="data-[state=checked]:bg-blue-600 h-5 w-5"
-                            />
-                            <div className="flex-1 text-left">
-                              <p className="text-sm font-semibold text-blue-900">
-                                {t(
-                                  "dialogs.assignmentDialog.selectStudents.assignAll",
-                                )}
-                              </p>
-                              <p className="text-xs text-blue-700">
-                                {t(
-                                  "dialogs.assignmentDialog.selectStudents.totalStudents",
-                                  {
-                                    count: classroom.students.length,
-                                  },
-                                )}
-                              </p>
-                            </div>
-                            {classroom.assignToAll && (
-                              <Badge className="bg-blue-600 text-white">
-                                {t(
-                                  "dialogs.assignmentDialog.selectStudents.allSelected",
-                                )}
-                              </Badge>
-                            )}
-                          </div>
-                        </Card>
+                        {/* #1046 這一班的選擇器：全班／組別／序位 */}
+                        <StudentScopeSelector
+                          scope={classroom.scope}
+                          onScopeChange={(next) =>
+                            setClassroomScope(classroom.id, next)
+                          }
+                          groups={classroom.groups}
+                          selectedCount={classroom.selectedStudentIds.length}
+                          totalCount={classroom.students.length}
+                        />
 
                         {/* Student Grid */}
                         <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
@@ -3225,158 +3314,59 @@ export function AssignmentDialog({
               ) : (
                 /* === 單班級模式：原有邏輯 === */
                 <>
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm text-gray-600">
-                      {t("dialogs.assignmentDialog.selectStudents.description")}
-                    </p>
-                    <Badge
-                      variant="secondary"
-                      className="bg-blue-50 text-blue-700"
-                    >
-                      {t("dialogs.assignmentDialog.selectStudents.selected", {
-                        selected: formData.student_ids.length,
-                        total: effectiveStudents.length,
-                      })}
-                    </Badge>
-                  </div>
+                  {/* 人數改由選擇器右側顯示，這裡不再重複一個 Badge */}
+                  <p className="text-sm text-gray-600 mb-2">
+                    {t("dialogs.assignmentDialog.selectStudents.description")}
+                  </p>
 
-                  {/* Quick Select All */}
-                  <Card className="p-2 mb-2 bg-blue-50 border-blue-200">
-                    <div
-                      onClick={toggleAllStudents}
-                      className="flex items-center gap-3 w-full cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={formData.assign_to_all}
-                        className="data-[state=checked]:bg-blue-600 h-5 w-5"
-                      />
-                      <div className="flex-1 text-left">
-                        <p className="text-sm font-semibold text-blue-900">
-                          {t(
-                            "dialogs.assignmentDialog.selectStudents.assignAll",
-                          )}
-                        </p>
-                        <p className="text-xs text-blue-700">
-                          {t(
-                            "dialogs.assignmentDialog.selectStudents.totalStudents",
-                            { count: effectiveStudents.length },
-                          )}
-                        </p>
-                      </div>
-                      {formData.assign_to_all && (
-                        <Badge className="bg-blue-600 text-white">
-                          {t(
-                            "dialogs.assignmentDialog.selectStudents.allSelected",
-                          )}
-                        </Badge>
-                      )}
-                    </div>
-                  </Card>
+                  <StudentScopeSelector
+                    scope={studentScope}
+                    onScopeChange={setStudentScope}
+                    groups={classroomGroups}
+                    selectedCount={scopedStudentIds.length}
+                    totalCount={sortedStudents.length}
+                  />
 
                   {/* Student Grid */}
                   <div className="flex-1 border rounded-lg bg-gray-50 p-2 overflow-hidden">
                     <ScrollArea className="h-full">
                       <div className="grid grid-cols-3 gap-1.5 p-1">
-                        {[...effectiveStudents]
-                          .sort(sortByStudentNumber)
-                          .map((student) => (
-                            <div
-                              key={student.id}
-                              onClick={() => toggleStudent(student.id)}
-                              className={cn(
-                                "p-2 rounded-md border transition-all text-left relative cursor-pointer",
-                                formData.student_ids.includes(student.id)
-                                  ? "bg-blue-50 border-blue-300 shadow-sm"
-                                  : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
-                              )}
-                            >
-                              <div className="flex items-start gap-2">
-                                <Checkbox
-                                  checked={formData.student_ids.includes(
-                                    student.id,
-                                  )}
-                                  className="data-[state=checked]:bg-blue-600 mt-0.5 h-4 w-4 pointer-events-none"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-xs truncate">
-                                    {student.student_number
-                                      ? `${student.student_number}.${student.name}`
-                                      : student.name}
-                                  </p>
-                                  <p className="text-[10px] text-gray-500 truncate">
-                                    {student.email}
-                                  </p>
-                                </div>
+                        {sortedStudents.map((student) => (
+                          <div
+                            key={student.id}
+                            onClick={() => toggleStudent(student.id)}
+                            className={cn(
+                              "p-2 rounded-md border transition-all text-left relative cursor-pointer",
+                              scopedStudentIds.includes(student.id)
+                                ? "bg-blue-50 border-blue-300 shadow-sm"
+                                : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
+                            )}
+                          >
+                            <div className="flex items-start gap-2">
+                              <Checkbox
+                                checked={scopedStudentIds.includes(student.id)}
+                                className="data-[state=checked]:bg-blue-600 mt-0.5 h-4 w-4 pointer-events-none"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-xs truncate">
+                                  {student.student_number
+                                    ? `${student.student_number}.${student.name}`
+                                    : student.name}
+                                </p>
+                                <p className="text-[10px] text-gray-500 truncate">
+                                  {student.email}
+                                </p>
                               </div>
-                              {formData.student_ids.includes(student.id) && (
-                                <div className="absolute top-1 right-1">
-                                  <CheckCircle2 className="h-3 w-3 text-blue-600" />
-                                </div>
-                              )}
                             </div>
-                          ))}
+                            {scopedStudentIds.includes(student.id) && (
+                              <div className="absolute top-1 right-1">
+                                <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </ScrollArea>
-                  </div>
-
-                  {/* Action Buttons for quick selection */}
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          student_ids: effectiveStudents.map((s) => s.id),
-                          assign_to_all: true,
-                        }))
-                      }
-                      className="flex-1"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      {t(
-                        "dialogs.assignmentDialog.selectStudents.selectAllBtn",
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          student_ids: [],
-                          assign_to_all: false,
-                        }))
-                      }
-                      className="flex-1"
-                    >
-                      <Circle className="h-4 w-4 mr-1" />
-                      {t(
-                        "dialogs.assignmentDialog.selectStudents.deselectAllBtn",
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const currentIds = formData.student_ids;
-                        const allIds = effectiveStudents.map((s) => s.id);
-                        const newIds = allIds.filter(
-                          (id) => !currentIds.includes(id),
-                        );
-                        setFormData((prev) => ({
-                          ...prev,
-                          student_ids: newIds,
-                          assign_to_all: false,
-                        }));
-                      }}
-                      className="flex-1"
-                    >
-                      <ArrowRight className="h-4 w-4 mr-1" />
-                      {t(
-                        "dialogs.assignmentDialog.selectStudents.invertSelection",
-                      )}
-                    </Button>
                   </div>
                 </>
               )}

@@ -517,6 +517,169 @@ describe("批次翻譯成自訂語言（other） (#1004 round-2)", () => {
   });
 });
 
+describe("Issue #1051 單題 AI 生成例句不產生語音", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sends generate_audio: false and does not write example audio", async () => {
+    const { apiClient } = await import("@/lib/api");
+    mockGetContentDetail.mockResolvedValue({
+      id: 21,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          definition: "蘋果",
+          audio_url: "https://example.com/apple.mp3",
+          example_sentence: "",
+          example_sentence_translation: "",
+        },
+      ],
+    });
+    vi.mocked(apiClient.generateSentences).mockResolvedValue({
+      sentences: [
+        {
+          word: "apple",
+          sentence: "I like apples.",
+          translation: "我喜歡蘋果。",
+          audio_url: "https://example.com/should-not-be-used.mp3",
+        },
+      ],
+    });
+
+    render(<VocabularySetPanel content={{ id: 21 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    fireEvent.click(
+      screen.getByTitle("vocabularySet.tooltips.generateExampleSentence"),
+    );
+    fireEvent.click(await screen.findByText("vocabularySet.buttons.generate"));
+
+    await waitFor(() => {
+      expect(apiClient.generateSentences).toHaveBeenCalledWith(
+        expect.objectContaining({ generate_audio: false }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("I like apples.")).toBeTruthy();
+    });
+    // 例句沒有音檔 → 不會出現例句播放鍵以外的「重新錄製」狀態
+    expect(
+      screen.getByTitle("contentEditor.tooltips.openTTSRecording"),
+    ).toBeTruthy();
+  });
+});
+
+describe("Issue #1051 清空例句後批次補齊仍會重新造句", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("regenerates a cleared sentence even if a stale other-language translation remains", async () => {
+    const { apiClient } = await import("@/lib/api");
+    mockGetContentDetail.mockResolvedValue({
+      id: 22,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          definition: "蘋果",
+          vocabulary_translation: "蘋果",
+          vocabulary_translation_lang: "chinese",
+          audio_url: "https://example.com/apple.mp3",
+          example_sentence: "",
+          example_sentence_translation: "私はりんごを食べます。",
+          example_sentence_translation_lang: "japanese",
+        },
+      ],
+    });
+    vi.mocked(apiClient.generateSentences).mockResolvedValue({
+      sentences: [
+        {
+          word: "apple",
+          sentence: "I like apples.",
+          translation: "我喜歡蘋果。",
+          audio_url: "https://example.com/new-s.mp3",
+        },
+      ],
+    });
+
+    render(<VocabularySetPanel content={{ id: 22 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // 老師改成中文後按左側確認（貼上框留空 → 補齊模式）
+    fireEvent.change(await getSentenceLangSelect(), {
+      target: { value: "chinese" },
+    });
+    fireEvent.click(screen.getByText("contentEditor.buttons.confirmPaste"));
+
+    await waitFor(() => {
+      expect(apiClient.generateSentences).toHaveBeenCalled();
+    });
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "contentEditor.labels.exampleTranslationLanguageMismatch",
+    );
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("I like apples.")).toBeTruthy();
+    });
+  });
+});
+
+describe("Issue #1051 例句麥克風記住上次設定", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reopens the dialog with the settings used last time (including Random)", async () => {
+    const { apiClient } = await import("@/lib/api");
+    mockGetContentDetail.mockResolvedValue({
+      id: 23,
+      title: "Vocab",
+      items: [
+        {
+          text: "apple",
+          audio_url: "https://example.com/apple.mp3",
+          example_sentence: "I eat an apple.",
+          example_sentence_audio_url: "",
+        },
+      ],
+    });
+    vi.mocked(apiClient.generateTTS).mockResolvedValue({
+      audio_url: "https://example.com/new-s.mp3",
+    });
+
+    render(<VocabularySetPanel content={{ id: 23 }} />, { wrapper });
+    await waitFor(() => expect(mockGetContentDetail).toHaveBeenCalled());
+
+    // 單字已有音檔，其麥克風的 title 也是 rerecordOrGenerate；
+    // 先抓住例句麥克風本身，產生後才不會跟單字麥克風混淆
+    const exampleMic = screen.getByTitle(
+      "contentEditor.tooltips.openTTSRecording",
+    );
+    fireEvent.click(exampleMic);
+    const selects = () => screen.getByRole("dialog").querySelectorAll("select");
+    fireEvent.change(selects()[0], { target: { value: "British English" } });
+    fireEvent.change(selects()[1], { target: { value: "Random" } });
+    fireEvent.change(selects()[2], { target: { value: "Slow x0.75" } });
+    fireEvent.click(screen.getByText("contentEditor.ttsSettings.generate"));
+
+    await waitFor(() => expect(apiClient.generateTTS).toHaveBeenCalled());
+    // 產生後按鈕變成「重新錄製或生成」
+    await waitFor(() =>
+      expect(exampleMic).toHaveAttribute(
+        "title",
+        "contentEditor.tooltips.rerecordOrGenerate",
+      ),
+    );
+    fireEvent.click(exampleMic);
+
+    expect((selects()[0] as HTMLSelectElement).value).toBe("British English");
+    expect((selects()[1] as HTMLSelectElement).value).toBe("Random");
+    expect((selects()[2] as HTMLSelectElement).value).toBe("Slow x0.75");
+  });
+});
+
 describe("getInitialSentenceLang 英英模式 (#1004 round-3)", () => {
   it("returns empty for an English set with no example translations", () => {
     expect(

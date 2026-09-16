@@ -27,6 +27,12 @@
 │             │    for practice_mode =          │                       │
 │             │    scenario_dialogue            │                       │
 │             │                                 │                       │
+│             │  ↳ QuizGradingPanel             │                       │
+│             │    for practice_mode ∈          │                       │
+│             │    {word_selection_quiz,        │                       │
+│             │     word_spelling_quiz,         │                       │
+│             │     word_cloze_quiz}            │                       │
+│             │                                 │                       │
 │             │  ↳ （未來新作業類型在此增加）    │                       │
 │             │                                 │                       │
 └─────────────┴─────────────────────────────────┴───────────────────────┘
@@ -62,6 +68,17 @@ return <ReadingAssessmentPanel {...panelProps} ... />;
 | `ReadingAssessmentPanel` | ✅ 專屬 | reading / word_reading（錄音 + AI 語音評分） |
 | `SentenceRearrangementPanel` | ✅ 專屬 | rearrangement（選字歷程 + 錯誤數 + expected_score） |
 | `ScenarioDialogueGradingPanel` | ✅ 專屬 | scenario_dialogue（錄音 + 參考答案 + AI 語言特徵**建議**） |
+| `QuizGradingPanel` | ✅ 專屬 | word_*_quiz（題目區依派發設定 + A-D 選項格 + 每題扣分） |
+
+> **小考每題扣分（#1045）**。題目區資料由 `_build_quiz_submission` 回傳：每題
+> `options`（選擇題優先學生作答當下存的 `answer_data.options_shown`，舊資料以同 seed
+> 重建）、`blanked_sentence`、`image_url`、`deduction`，頂層 `quiz_settings`。
+> 扣分公式與後端 `compute_quiz_score` 一致：單題扣分 = 100 / 題數（不先捨入），
+> 總分 = round1(max(0, 100 − Σ扣分))，前端實作在 `components/grading/quizDeductions.ts`。
+> 存檔走同一支 `POST /grade`，小考改送 `quiz_deductions: [{content_item_id, deduction}]`，
+> 依 `content_item_id` upsert `StudentItemProgress.teacher_review_score`；**小考不送、
+> 後端也不處理 `item_results`**（其 passed→100/60 映射會覆寫扣分）。老師直接改總分時
+> 以送出的 `score` 為準，扣分不反向改寫。零 migration。
 
 > **情境對話的 AI 與朗讀類不是同一套**（#1035）。朗讀走 Azure 發音評測（`/reanalyze-item`，
 > 評「唸得多準」，需要 reference_text）；情境對話是開放式回答，沒有可比對的正解，走

@@ -9,6 +9,7 @@
  * - Checkbox 批次派發 / 取消派發（僅點 checkbox 本身才會 toggle）
  * - 點擊卡片/行其他區域 → gradable modes (reading / word_reading) 且狀態非 unassigned/NOT_STARTED 才開新分頁批改，不會影響 checkbox
  * - 狀態圖例說明
+ * - 小考答對數顯示夾住 min(correct, total)，防止出現 31/30（#1045）
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -391,8 +392,12 @@ function quizScoreText(
 ): string {
   if (!hasScore) return "-";
   if (hideUntilSubmitted && student.score == null) return "-";
-  const correct = student.correct_count ?? "—";
+  // #1045 保險：後端已去重，前端仍夾住 correct ≤ total，避免顯示 31/30
   const total = student.total_questions ?? "—";
+  const correct =
+    student.correct_count != null && student.total_questions != null
+      ? Math.min(student.correct_count, student.total_questions)
+      : (student.correct_count ?? "—");
   return `${correct}/${total}`;
 }
 
