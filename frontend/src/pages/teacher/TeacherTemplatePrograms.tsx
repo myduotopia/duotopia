@@ -35,7 +35,7 @@ import MaterialsPageTabs, {
   type MaterialsPageTab,
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
-import MultipleChoiceQuestionDialog from "@/components/question-bank/MultipleChoiceQuestionDialog";
+import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
 import type { Question } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
@@ -233,13 +233,17 @@ function TeacherTemplateProgramsInner() {
   // Disable sidebar when editor panels are open
   useEffect(() => {
     setSidebarDisabled(
-      showReadingEditor || showVocabularySetEditor || scenarioEditor.isOpen,
+      showReadingEditor ||
+        showVocabularySetEditor ||
+        scenarioEditor.isOpen ||
+        questionDialog.open,
     );
     return () => setSidebarDisabled(false);
   }, [
     showReadingEditor,
     showVocabularySetEditor,
     scenarioEditor.isOpen,
+    questionDialog.open,
     setSidebarDisabled,
   ]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
@@ -1489,7 +1493,7 @@ function TeacherTemplateProgramsInner() {
         )}
 
       {/* Dialogs */}
-      <MultipleChoiceQuestionDialog
+      <MultipleChoiceQuestionSheet
         open={questionDialog.open}
         question={questionDialog.question}
         programs={programs}

@@ -13,7 +13,7 @@ import MaterialsPageTabs, {
   type MaterialsPageTab,
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
-import MultipleChoiceQuestionDialog from "@/components/question-bank/MultipleChoiceQuestionDialog";
+import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
 import type { Question } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
@@ -152,13 +152,17 @@ export default function OrgMaterialsPage() {
   // Disable sidebar when editor panels are open
   useEffect(() => {
     setSidebarDisabled(
-      showReadingEditor || showVocabularySetEditor || scenarioEditor.isOpen,
+      showReadingEditor ||
+        showVocabularySetEditor ||
+        scenarioEditor.isOpen ||
+        questionDialog.open,
     );
     return () => setSidebarDisabled(false);
   }, [
     showReadingEditor,
     showVocabularySetEditor,
     scenarioEditor.isOpen,
+    questionDialog.open,
     setSidebarDisabled,
   ]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
@@ -1326,7 +1330,7 @@ export default function OrgMaterialsPage() {
 
         {/* Dialogs */}
         {/* 機構題庫：成員都可新增；編輯／刪除由後端依教材管理權限判定，前端不擋 */}
-        <MultipleChoiceQuestionDialog
+        <MultipleChoiceQuestionSheet
           open={questionDialog.open}
           question={questionDialog.question}
           programs={programs}

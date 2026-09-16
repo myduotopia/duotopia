@@ -12,6 +12,9 @@
  *
  * 工具列（語音生成／AI 作答／AI 考點分析／上傳）在 #1065，這裡不做。
  * 傳 `question` 就是編輯模式；`readOnly` 用在看別人公開的題目。
+ *
+ * 呈現方式與「新增教材內容」一致：從 sidebar 右緣滑出的全高側邊面板
+ * （不是置中 dialog），標題列放儲存／關閉，內容區自己捲動。
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -22,14 +25,6 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSidebar } from "@/contexts/SidebarContext";
 import type { Program } from "@/types";
 import type {
   ExamPoint,
@@ -67,7 +63,7 @@ interface OptionDraft {
   is_correct: boolean;
 }
 
-export interface MultipleChoiceQuestionDialogProps {
+export interface MultipleChoiceQuestionSheetProps {
   open: boolean;
   onClose: () => void;
   /** 編輯模式帶題目；新增為 null */
@@ -100,7 +96,7 @@ function optionsFromQuestion(q: Question): OptionDraft[] {
   return drafts;
 }
 
-export default function MultipleChoiceQuestionDialog({
+export default function MultipleChoiceQuestionSheet({
   open,
   onClose,
   question = null,
@@ -110,8 +106,9 @@ export default function MultipleChoiceQuestionDialog({
   canDelete = false,
   onSaved,
   onDeleted,
-}: MultipleChoiceQuestionDialogProps) {
+}: MultipleChoiceQuestionSheetProps) {
   const { t } = useTranslation();
+  const { sidebarWidth } = useSidebar();
   const isEdit = question !== null;
 
   const [stem, setStem] = useState("");
@@ -359,269 +356,35 @@ export default function MultipleChoiceQuestionDialog({
     </Select>
   );
 
+  if (!open) return null;
+
+  const title = readOnly
+    ? t("questionBank.form.titleView")
+    : isEdit
+      ? t("questionBank.form.titleEdit")
+      : t("questionBank.form.titleCreate");
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {readOnly
-              ? t("questionBank.form.titleView")
-              : isEdit
-                ? t("questionBank.form.titleEdit")
-                : t("questionBank.form.titleCreate")}
-          </DialogTitle>
-          <DialogDescription>
-            {t("questionBank.form.description")}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5">
-          {/* 題目 */}
-          <div className="space-y-1.5">
-            <Label htmlFor="qb-stem">
-              {t("questionBank.form.stem")}{" "}
-              <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="qb-stem"
-              value={stem}
-              onChange={(e) => setStem(e.target.value)}
-              placeholder={t("questionBank.form.stemPlaceholder")}
-              rows={3}
-              disabled={readOnly}
-              data-testid="qb-stem"
-            />
-            {exactDuplicate && (
-              <div
-                className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700"
-                data-testid="qb-duplicate"
-              >
-                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                <div>
-                  {t("questionBank.form.duplicateFound")}
-                  <div className="text-red-600/80 line-clamp-2">
-                    {exactDuplicate.stem}
-                  </div>
-                </div>
-              </div>
-            )}
-            {similar && !exactDuplicate && similar.similar.length > 0 && (
-              <div
-                className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800"
-                data-testid="qb-similar"
-              >
-                <div className="font-medium">
-                  {t("questionBank.form.similarFound")}
-                </div>
-                <ul className="mt-1 space-y-0.5 text-amber-700/90">
-                  {similar.similar.map((s) => (
-                    <li key={s.id} className="line-clamp-1">
-                      • {s.stem}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+    <>
+      {/* Backdrop：只遮內容區，sidebar 由頁面 setSidebarDisabled 處理 */}
+      <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
+      <div
+        className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+        style={{ left: `${sidebarWidth}px` }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        data-testid="qb-sheet"
+      >
+        {/* 標題列 */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+            <p className="text-xs text-gray-500 truncate">
+              {t("questionBank.form.description")}
+            </p>
           </div>
-
-          {/* 選項 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>
-                {t("questionBank.form.options")}{" "}
-                <span className="text-xs text-gray-500">
-                  {t("questionBank.form.optionsHint", { min: MIN_OPTIONS })}
-                </span>
-              </Label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <Switch
-                  checked={allowMultiple}
-                  onCheckedChange={handleAllowMultiple}
-                  disabled={readOnly}
-                  data-testid="qb-allow-multiple"
-                />
-                {t("questionBank.form.allowMultiple")}
-              </label>
-            </div>
-            <div className="space-y-2">
-              {options.map((o, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Checkbox
-                    checked={o.is_correct}
-                    onCheckedChange={(c) => toggleCorrect(i, c === true)}
-                    disabled={readOnly || o.text.trim() === ""}
-                    aria-label={t("questionBank.form.markCorrect", {
-                      index: i + 1,
-                    })}
-                    data-testid={`qb-option-correct-${i}`}
-                  />
-                  <span className="w-5 text-sm text-gray-500">
-                    {String.fromCharCode(65 + i)}.
-                  </span>
-                  <Input
-                    value={o.text}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      updateOption(i, {
-                        text,
-                        is_correct: text.trim() === "" ? false : o.is_correct,
-                      });
-                    }}
-                    placeholder={t("questionBank.form.optionPlaceholder", {
-                      index: i + 1,
-                    })}
-                    className="h-9"
-                    disabled={readOnly}
-                    data-testid={`qb-option-text-${i}`}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 解析 */}
-          <div className="space-y-1.5">
-            <Label htmlFor="qb-explanation">
-              {t("questionBank.form.explanation")}
-            </Label>
-            <Textarea
-              id="qb-explanation"
-              value={explanation}
-              onChange={(e) => setExplanation(e.target.value)}
-              rows={2}
-              disabled={readOnly}
-              data-testid="qb-explanation"
-            />
-          </div>
-
-          {/* 設定／關聯區 */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>{t("questionBank.form.grade")}</Label>
-              <div className="flex items-center gap-2">
-                {gradeSelect(gradeMin, setGradeMin, "qb-grade-min")}
-                <span className="text-gray-400">–</span>
-                {gradeSelect(gradeMax, setGradeMax, "qb-grade-max")}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t("questionBank.form.visibility")}</Label>
-              <Select
-                value={visibility}
-                onValueChange={(v) => setVisibility(v as QuestionVisibility)}
-                disabled={readOnly}
-              >
-                <SelectTrigger className="h-9" data-testid="qb-visibility">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VISIBILITIES.map((v) => (
-                    <SelectItem key={v} value={v}>
-                      {t(`questionBank.visibility.${v}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>{t("questionBank.form.examPoints")}</Label>
-            <ExamPointPicker
-              value={examPoints}
-              onChange={setExamPoints}
-              disabled={readOnly}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>{t("questionBank.form.programLinks")}</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {links.map((l) => (
-                <span
-                  key={`${l.program_id}-${l.lesson_id ?? "p"}`}
-                  className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
-                  data-testid="qb-program-link"
-                >
-                  {linkLabel(l)}
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      className="rounded-full hover:bg-gray-300/60 p-0.5"
-                      onClick={() => setLinks(links.filter((x) => x !== l))}
-                      aria-label={t("questionBank.form.removeLink")}
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </span>
-              ))}
-            </div>
-            {!readOnly && (
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Select
-                  value={linkProgramId}
-                  onValueChange={(v) => {
-                    setLinkProgramId(v);
-                    setLinkLessonId("");
-                  }}
-                >
-                  <SelectTrigger
-                    className="h-9 sm:flex-1"
-                    data-testid="qb-link-program"
-                  >
-                    <SelectValue
-                      placeholder={t("questionBank.form.pickProgram")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {programs.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={linkLessonId}
-                  onValueChange={setLinkLessonId}
-                  disabled={!selectedProgram?.lessons?.length}
-                >
-                  <SelectTrigger
-                    className="h-9 sm:flex-1"
-                    data-testid="qb-link-lesson"
-                  >
-                    <SelectValue
-                      placeholder={t("questionBank.form.pickLessonOptional")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(selectedProgram?.lessons ?? []).map((l) => (
-                      <SelectItem key={l.id} value={String(l.id)}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-1"
-                  disabled={!selectedProgram}
-                  onClick={addLink}
-                  data-testid="qb-link-add"
-                >
-                  <Plus size={14} />
-                  {t("questionBank.form.addLink")}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <DialogFooter className="mt-4 flex-col-reverse sm:flex-row sm:justify-between gap-2">
-          <div>
+          <div className="flex items-center gap-2 shrink-0">
             {isEdit && canDelete && !readOnly && (
               <Button
                 type="button"
@@ -635,13 +398,6 @@ export default function MultipleChoiceQuestionDialog({
                 {t("common.delete", "刪除")}
               </Button>
             )}
-          </div>
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" onClick={onClose}>
-              {readOnly
-                ? t("common.close", "關閉")
-                : t("common.cancel", "取消")}
-            </Button>
             {!readOnly && (
               <Button
                 type="button"
@@ -655,18 +411,276 @@ export default function MultipleChoiceQuestionDialog({
                   : t("common.save", "儲存")}
               </Button>
             )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label={t("common.close", "關閉")}
+              data-testid="qb-close"
+            >
+              <X className="h-5 w-5" />
+            </Button>
           </div>
-        </DialogFooter>
+        </div>
         {!readOnly && validationError && (
           <p
-            className="text-xs text-gray-500 text-right"
+            className="px-6 py-1.5 text-xs text-gray-500 bg-gray-50 border-b border-gray-100 shrink-0"
             data-testid="qb-validation"
           >
             {validationError}
           </p>
         )}
-      </DialogContent>
-    </Dialog>
+
+        {/* 內容區 */}
+        <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          <div className="space-y-5 max-w-3xl">
+            {/* 題目 */}
+            <div className="space-y-1.5">
+              <Label htmlFor="qb-stem">
+                {t("questionBank.form.stem")}{" "}
+                <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="qb-stem"
+                value={stem}
+                onChange={(e) => setStem(e.target.value)}
+                placeholder={t("questionBank.form.stemPlaceholder")}
+                rows={3}
+                disabled={readOnly}
+                data-testid="qb-stem"
+              />
+              {exactDuplicate && (
+                <div
+                  className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700"
+                  data-testid="qb-duplicate"
+                >
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <div>
+                    {t("questionBank.form.duplicateFound")}
+                    <div className="text-red-600/80 line-clamp-2">
+                      {exactDuplicate.stem}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {similar && !exactDuplicate && similar.similar.length > 0 && (
+                <div
+                  className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800"
+                  data-testid="qb-similar"
+                >
+                  <div className="font-medium">
+                    {t("questionBank.form.similarFound")}
+                  </div>
+                  <ul className="mt-1 space-y-0.5 text-amber-700/90">
+                    {similar.similar.map((s) => (
+                      <li key={s.id} className="line-clamp-1">
+                        • {s.stem}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* 選項 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>
+                  {t("questionBank.form.options")}{" "}
+                  <span className="text-xs text-gray-500">
+                    {t("questionBank.form.optionsHint", { min: MIN_OPTIONS })}
+                  </span>
+                </Label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <Switch
+                    checked={allowMultiple}
+                    onCheckedChange={handleAllowMultiple}
+                    disabled={readOnly}
+                    data-testid="qb-allow-multiple"
+                  />
+                  {t("questionBank.form.allowMultiple")}
+                </label>
+              </div>
+              <div className="space-y-2">
+                {options.map((o, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Checkbox
+                      checked={o.is_correct}
+                      onCheckedChange={(c) => toggleCorrect(i, c === true)}
+                      disabled={readOnly || o.text.trim() === ""}
+                      aria-label={t("questionBank.form.markCorrect", {
+                        index: i + 1,
+                      })}
+                      data-testid={`qb-option-correct-${i}`}
+                    />
+                    <span className="w-5 text-sm text-gray-500">
+                      {String.fromCharCode(65 + i)}.
+                    </span>
+                    <Input
+                      value={o.text}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        updateOption(i, {
+                          text,
+                          is_correct: text.trim() === "" ? false : o.is_correct,
+                        });
+                      }}
+                      placeholder={t("questionBank.form.optionPlaceholder", {
+                        index: i + 1,
+                      })}
+                      className="h-9"
+                      disabled={readOnly}
+                      data-testid={`qb-option-text-${i}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 解析 */}
+            <div className="space-y-1.5">
+              <Label htmlFor="qb-explanation">
+                {t("questionBank.form.explanation")}
+              </Label>
+              <Textarea
+                id="qb-explanation"
+                value={explanation}
+                onChange={(e) => setExplanation(e.target.value)}
+                rows={2}
+                disabled={readOnly}
+                data-testid="qb-explanation"
+              />
+            </div>
+
+            {/* 設定／關聯區 */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>{t("questionBank.form.grade")}</Label>
+                <div className="flex items-center gap-2">
+                  {gradeSelect(gradeMin, setGradeMin, "qb-grade-min")}
+                  <span className="text-gray-400">–</span>
+                  {gradeSelect(gradeMax, setGradeMax, "qb-grade-max")}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("questionBank.form.visibility")}</Label>
+                <Select
+                  value={visibility}
+                  onValueChange={(v) => setVisibility(v as QuestionVisibility)}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger className="h-9" data-testid="qb-visibility">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBILITIES.map((v) => (
+                      <SelectItem key={v} value={v}>
+                        {t(`questionBank.visibility.${v}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>{t("questionBank.form.examPoints")}</Label>
+              <ExamPointPicker
+                value={examPoints}
+                onChange={setExamPoints}
+                disabled={readOnly}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>{t("questionBank.form.programLinks")}</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {links.map((l) => (
+                  <span
+                    key={`${l.program_id}-${l.lesson_id ?? "p"}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
+                    data-testid="qb-program-link"
+                  >
+                    {linkLabel(l)}
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        className="rounded-full hover:bg-gray-300/60 p-0.5"
+                        onClick={() => setLinks(links.filter((x) => x !== l))}
+                        aria-label={t("questionBank.form.removeLink")}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+              {!readOnly && (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Select
+                    value={linkProgramId}
+                    onValueChange={(v) => {
+                      setLinkProgramId(v);
+                      setLinkLessonId("");
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-9 sm:flex-1"
+                      data-testid="qb-link-program"
+                    >
+                      <SelectValue
+                        placeholder={t("questionBank.form.pickProgram")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programs.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={linkLessonId}
+                    onValueChange={setLinkLessonId}
+                    disabled={!selectedProgram?.lessons?.length}
+                  >
+                    <SelectTrigger
+                      className="h-9 sm:flex-1"
+                      data-testid="qb-link-lesson"
+                    >
+                      <SelectValue
+                        placeholder={t("questionBank.form.pickLessonOptional")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(selectedProgram?.lessons ?? []).map((l) => (
+                        <SelectItem key={l.id} value={String(l.id)}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-1"
+                    disabled={!selectedProgram}
+                    onClick={addLink}
+                    data-testid="qb-link-add"
+                  >
+                    <Plus size={14} />
+                    {t("questionBank.form.addLink")}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 /**
- * MultipleChoiceQuestionDialog 測試（Issue #1064）。
+ * MultipleChoiceQuestionSheet 測試（Issue #1064）。
  *
  * 驗證表單規則：少於 2 選項、未勾正確答案、單選勾兩個、題幹重複 → 儲存鍵 disabled 且顯示原因；
  * 合法時送出 createQuestion 的 payload 只含填了字的選項；編輯模式走 updateQuestion。
@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import MultipleChoiceQuestionDialog from "../MultipleChoiceQuestionDialog";
+import MultipleChoiceQuestionSheet from "../MultipleChoiceQuestionSheet";
 import type { Question } from "@/types/questionBank";
 
 const createQuestion = vi.fn();
@@ -23,6 +23,10 @@ vi.mock("@/lib/api", () => ({
     findSimilarQuestions: (...a: unknown[]) => findSimilarQuestions(...a),
     listExamPoints: vi.fn().mockResolvedValue({ items: [] }),
   },
+}));
+
+vi.mock("@/contexts/SidebarContext", () => ({
+  useSidebar: () => ({ sidebarWidth: 240 }),
 }));
 
 vi.mock("sonner", () => ({
@@ -54,14 +58,12 @@ vi.mock("react-i18next", () => ({
 const noSimilar = { exact_duplicate: null, similar: [] };
 
 function renderDialog(
-  props: Partial<
-    React.ComponentProps<typeof MultipleChoiceQuestionDialog>
-  > = {},
+  props: Partial<React.ComponentProps<typeof MultipleChoiceQuestionSheet>> = {},
 ) {
   const onSaved = vi.fn();
   const onClose = vi.fn();
   render(
-    <MultipleChoiceQuestionDialog
+    <MultipleChoiceQuestionSheet
       open
       onClose={onClose}
       programs={[]}
@@ -90,7 +92,7 @@ async function fillOption(
     await user.click(screen.getByTestId(`qb-option-correct-${index}`));
 }
 
-describe("MultipleChoiceQuestionDialog", () => {
+describe("MultipleChoiceQuestionSheet", () => {
   beforeEach(() => {
     createQuestion.mockReset();
     updateQuestion.mockReset();
