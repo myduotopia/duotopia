@@ -1,67 +1,51 @@
 /**
- * 新增／編輯選擇題（Issue #1061 / #1064）。
+ * 新增／編輯選擇題側邊面板（Issue #1061 / #1064）。
  *
- * 欄位：
- * - 題目（必填）：邊打邊呼叫 similar API，下方列出相似題；有完全相同的題目就擋送出
- * - 選項 6 格，至少填 2 個；正確答案勾選，單／複選由「允許複選」開關切換，至少勾 1 個
- * - 解析（選填）
- * - 適合年級 K12（1–12，可只填一端）
- * - 考點（ExamPointPicker）
- * - 教材包／單元關聯（從呼叫端傳入的 programs 選）
- * - 公開設定
+ * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
+ * - 標題列：儲存（擋住時下方一行寫原因）、刪除（編輯模式）、關閉
+ * - 左欄（md 以上 sticky）：工具區 QuestionBankToolsPanel + 整批共用設定 QuestionBankSettingsPanel
+ * - 右欄：多張 QuestionCard +「新增題目」
  *
- * 工具列（語音生成／AI 作答／AI 考點分析／上傳）在 #1065，這裡不做。
- * 傳 `question` 就是編輯模式；`readOnly` 用在看別人公開的題目。
- *
- * 呈現方式與「新增教材內容」一致：從 sidebar 右緣滑出的全高側邊面板
- * （不是置中 dialog），標題列放儲存／關閉，內容區自己捲動。
+ * 新增：右側每題各自一筆，逐題 createQuestion，共用設定併入每題；中途失敗停在該題、
+ * 已成功的保留、該卡顯示後端訊息。編輯：單卡 + updateQuestion。
+ * 語音／儲存進行中 setEditorBusy，關閉鍵跟著 disabled；有變更時關閉前 confirm。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useSidebar } from "@/contexts/SidebarContext";
+import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
+import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
-import type {
-  ExamPoint,
-  Question,
-  QuestionCreateInput,
-  QuestionProgramLink,
-  QuestionVisibility,
-  SimilarQuestionsResponse,
-} from "@/types/questionBank";
-import ExamPointPicker from "./ExamPointPicker";
+import type { Question } from "@/types/questionBank";
+import QuestionCard from "./QuestionCard";
+import QuestionBankToolsPanel from "./QuestionBankToolsPanel";
+import QuestionBankSettingsPanel from "./QuestionBankSettingsPanel";
+import {
+  MAX_QUESTIONS_PER_BATCH,
+  defaultSharedSettings,
+  draftFromQuestion,
+  emptyDraft,
+  findBatchDuplicateKeys,
+  sharedSettingsFromQuestion,
+  toCreateInput,
+  validateDraft,
+  validateShared,
+  type QuestionDraft,
+  type SharedSettings,
+} from "./questionDraft";
 
-const OPTION_SLOTS = 6;
-const MIN_OPTIONS = 2;
-const GRADES = Array.from({ length: 12 }, (_, i) => i + 1);
-const VISIBILITIES: QuestionVisibility[] = [
-  "private",
-  "public",
-  "organization_only",
-  "individual_only",
-];
-
-interface OptionDraft {
-  text: string;
-  is_correct: boolean;
-}
+const TTS_STORAGE_KEY = "duotopia_batch_tts_settings";
+const DEFAULT_TTS: TTSSettingsState = {
+  accent: "Random",
+  gender: "Random",
+  speed: "Normal x1",
+};
 
 export interface MultipleChoiceQuestionSheetProps {
   open: boolean;
@@ -80,20 +64,36 @@ export interface MultipleChoiceQuestionSheetProps {
   onDeleted?: (questionId: number) => void;
 }
 
-function emptyOptions(): OptionDraft[] {
-  return Array.from({ length: OPTION_SLOTS }, () => ({
-    text: "",
-    is_correct: false,
-  }));
+function loadTtsSettings(): TTSSettingsState {
+  try {
+    const raw = localStorage.getItem(TTS_STORAGE_KEY);
+    if (!raw) return DEFAULT_TTS;
+    const parsed = JSON.parse(raw);
+    return {
+      accent: parsed.accent ?? DEFAULT_TTS.accent,
+      gender: parsed.gender ?? DEFAULT_TTS.gender,
+      speed: parsed.speed ?? DEFAULT_TTS.speed,
+    };
+  } catch {
+    return DEFAULT_TTS;
+  }
 }
 
-function optionsFromQuestion(q: Question): OptionDraft[] {
-  const drafts = emptyOptions();
-  q.options.forEach((o, i) => {
-    if (i < OPTION_SLOTS)
-      drafts[i] = { text: o.text, is_correct: o.is_correct };
-  });
-  return drafts;
+function absoluteAudioUrl(url: string): string {
+  return url.startsWith("http") ? url : `${import.meta.env.VITE_API_URL}${url}`;
+}
+
+/** 後端 HTTPException 的 detail 可能是字串或 {message, duplicate} */
+function extractApiMessage(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const anyErr = err as { message?: unknown; detail?: unknown };
+  const detail = anyErr.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const m = (detail as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  return typeof anyErr.message === "string" ? anyErr.message : null;
 }
 
 export default function MultipleChoiceQuestionSheet({
@@ -108,207 +108,210 @@ export default function MultipleChoiceQuestionSheet({
   onDeleted,
 }: MultipleChoiceQuestionSheetProps) {
   const { t } = useTranslation();
-  const { sidebarWidth } = useSidebar();
+  const { sidebarWidth, setEditorBusy } = useSidebar();
   const isEdit = question !== null;
 
-  const [stem, setStem] = useState("");
-  const [options, setOptions] = useState<OptionDraft[]>(emptyOptions());
-  const [allowMultiple, setAllowMultiple] = useState(false);
-  const [explanation, setExplanation] = useState("");
-  const [gradeMin, setGradeMin] = useState<number | null>(null);
-  const [gradeMax, setGradeMax] = useState<number | null>(null);
-  const [examPoints, setExamPoints] = useState<ExamPoint[]>([]);
-  const [links, setLinks] = useState<QuestionProgramLink[]>([]);
-  const [visibility, setVisibility] = useState<QuestionVisibility>("private");
-  const [similar, setSimilar] = useState<SimilarQuestionsResponse | null>(null);
+  const [drafts, setDrafts] = useState<QuestionDraft[]>([emptyDraft()]);
+  const [shared, setShared] = useState<SharedSettings>(defaultSharedSettings());
+  const [ttsSettings, setTtsSettings] = useState<TTSSettingsState>(DEFAULT_TTS);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [linkProgramId, setLinkProgramId] = useState<string>("");
-  const [linkLessonId, setLinkLessonId] = useState<string>("");
+  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const dirtyRef = useRef(false);
 
   // 開啟時依模式初始化
   useEffect(() => {
     if (!open) return;
     if (question) {
-      setStem(question.stem);
-      setOptions(optionsFromQuestion(question));
-      setAllowMultiple(question.allow_multiple_answers);
-      setExplanation(question.explanation ?? "");
-      setGradeMin(question.grade_min);
-      setGradeMax(question.grade_max);
-      setExamPoints(
-        question.exam_points.map((ep) => ({
-          id: ep.id,
-          code: ep.code,
-          names: ep.names,
-          parent_id: null,
-          status: "active",
-          order_index: 0,
-          aliases: [],
-        })),
-      );
-      setLinks(question.program_links);
-      setVisibility(question.visibility);
+      setDrafts([draftFromQuestion(question)]);
+      setShared(sharedSettingsFromQuestion(question));
     } else {
-      setStem("");
-      setOptions(emptyOptions());
-      setAllowMultiple(false);
-      setExplanation("");
-      setGradeMin(null);
-      setGradeMax(null);
-      setExamPoints([]);
-      setLinks([]);
-      setVisibility("private");
+      setDrafts([emptyDraft()]);
+      setShared(defaultSharedSettings());
     }
-    setSimilar(null);
-    setLinkProgramId("");
-    setLinkLessonId("");
+    setTtsSettings(loadTtsSettings());
+    dirtyRef.current = false;
   }, [open, question]);
 
-  // 題幹 debounce → 相似題
+  const busy = saving || deleting || generatingAudio;
   useEffect(() => {
-    if (!open || readOnly) return;
-    const trimmed = stem.trim();
-    if (!trimmed || (question && trimmed === question.stem.trim())) {
-      setSimilar(null);
+    setEditorBusy(busy);
+    return () => setEditorBusy(false);
+  }, [busy, setEditorBusy]);
+
+  const updateDraft = useCallback((key: string, next: QuestionDraft) => {
+    dirtyRef.current = true;
+    setDrafts((prev) => prev.map((d) => (d.key === key ? next : d)));
+  }, []);
+
+  const updateShared = (next: SharedSettings) => {
+    dirtyRef.current = true;
+    setShared(next);
+  };
+
+  const handleTtsSettingsChange = (s: TTSSettingsState) => {
+    setTtsSettings(s);
+    try {
+      localStorage.setItem(TTS_STORAGE_KEY, JSON.stringify(s));
+    } catch {
+      /* localStorage 不可用時忽略 */
+    }
+  };
+
+  // ---- 驗證 ----
+  const batchDupKeys = useMemo(() => findBatchDuplicateKeys(drafts), [drafts]);
+  const errorKeys = useMemo(
+    () =>
+      drafts.map((d) =>
+        validateDraft(d, { duplicateInBatch: batchDupKeys.has(d.key) }),
+      ),
+    [drafts, batchDupKeys],
+  );
+  const sharedErrorKey = validateShared(shared);
+  const firstErrorIndex = errorKeys.findIndex((k) => k !== null);
+  const validationMessage: string | null = readOnly
+    ? null
+    : sharedErrorKey
+      ? t(`questionBank.form.errors.${sharedErrorKey}`)
+      : firstErrorIndex >= 0
+        ? t("questionBank.form.errors.atQuestion", {
+            n: firstErrorIndex + 1,
+            message: t(
+              `questionBank.form.errors.${errorKeys[firstErrorIndex]}`,
+            ),
+          })
+        : null;
+
+  // ---- 題目增減 ----
+  const addQuestion = () => {
+    if (drafts.length >= MAX_QUESTIONS_PER_BATCH) {
+      toast.info(
+        t("questionBank.form.limitReached", { max: MAX_QUESTIONS_PER_BATCH }),
+      );
       return;
     }
-    let cancelled = false;
-    const h = window.setTimeout(() => {
-      apiClient
-        .findSimilarQuestions(trimmed, question?.id)
-        .then((res) => {
-          if (!cancelled) setSimilar(res);
-        })
-        .catch(() => {
-          if (!cancelled) setSimilar(null);
-        });
-    }, 400);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(h);
-    };
-  }, [stem, open, readOnly, question]);
-
-  const filledOptions = options.filter((o) => o.text.trim() !== "");
-  const correctCount = filledOptions.filter((o) => o.is_correct).length;
-  const exactDuplicate = similar?.exact_duplicate ?? null;
-
-  const validationError = useMemo<string | null>(() => {
-    if (!stem.trim()) return t("questionBank.form.errors.stemRequired");
-    if (exactDuplicate) return t("questionBank.form.errors.duplicate");
-    if (filledOptions.length < MIN_OPTIONS)
-      return t("questionBank.form.errors.minOptions", { min: MIN_OPTIONS });
-    if (correctCount === 0) return t("questionBank.form.errors.noCorrect");
-    if (!allowMultiple && correctCount > 1)
-      return t("questionBank.form.errors.singleOnly");
-    if (gradeMin !== null && gradeMax !== null && gradeMin > gradeMax)
-      return t("questionBank.form.errors.gradeRange");
-    return null;
-  }, [
-    stem,
-    exactDuplicate,
-    filledOptions.length,
-    correctCount,
-    allowMultiple,
-    gradeMin,
-    gradeMax,
-    t,
-  ]);
-
-  const updateOption = (index: number, patch: Partial<OptionDraft>) => {
-    setOptions((prev) =>
-      prev.map((o, i) => (i === index ? { ...o, ...patch } : o)),
-    );
+    dirtyRef.current = true;
+    const d = emptyDraft();
+    setDrafts((prev) => [...prev, d]);
+    window.setTimeout(() => {
+      document
+        .getElementById(`question-card-${d.key}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
+  const removeQuestion = (key: string) => {
+    if (drafts.length <= 1) return;
+    dirtyRef.current = true;
+    setDrafts((prev) => prev.filter((d) => d.key !== key));
   };
 
-  const toggleCorrect = (index: number, checked: boolean) => {
-    setOptions((prev) =>
-      prev.map((o, i) => {
-        if (i === index) return { ...o, is_correct: checked };
-        // 單選模式：勾一個就把其他取消
-        if (!allowMultiple && checked) return { ...o, is_correct: false };
-        return o;
-      }),
-    );
-  };
-
-  const handleAllowMultiple = (checked: boolean) => {
-    setAllowMultiple(checked);
-    if (!checked) {
-      // 關掉複選只保留第一個正確答案
-      let kept = false;
-      setOptions((prev) =>
-        prev.map((o) => {
-          if (o.is_correct && !kept) {
-            kept = true;
-            return o;
-          }
-          return { ...o, is_correct: false };
-        }),
+  // ---- 批次語音（只對題幹） ----
+  const pendingAudio = drafts.filter((d) => d.stem.trim() && !d.stem_audio_url);
+  const generateAllAudio = async () => {
+    if (pendingAudio.length === 0 || generatingAudio) return;
+    setGeneratingAudio(true);
+    try {
+      const { voice, rate } = getVoiceAndRate(
+        ttsSettings.accent,
+        ttsSettings.gender,
+        ttsSettings.speed,
       );
+      const res = (await apiClient.batchGenerateTTS(
+        pendingAudio.map((d) => d.stem.trim()),
+        voice,
+        rate,
+        "+0%",
+      )) as { audio_urls?: (string | null)[] };
+      const urls = res?.audio_urls ?? [];
+      const byKey = new Map<string, string>();
+      pendingAudio.forEach((d, i) => {
+        const u = urls[i];
+        if (u) byKey.set(d.key, absoluteAudioUrl(u));
+      });
+      dirtyRef.current = true;
+      setDrafts((prev) =>
+        prev.map((d) =>
+          byKey.has(d.key) ? { ...d, stem_audio_url: byKey.get(d.key)! } : d,
+        ),
+      );
+      toast.success(
+        t("questionBank.form.tools.generated", { count: byKey.size }),
+      );
+    } catch (err) {
+      console.error("Batch TTS failed:", err);
+      toast.error(t("questionBank.form.ttsFailed"));
+    } finally {
+      setGeneratingAudio(false);
     }
   };
 
-  const selectedProgram = programs.find((p) => String(p.id) === linkProgramId);
-  const addLink = () => {
-    if (!selectedProgram) return;
-    const lessonId = linkLessonId ? Number(linkLessonId) : null;
-    const exists = links.some(
-      (l) => l.program_id === selectedProgram.id && l.lesson_id === lessonId,
-    );
-    if (!exists)
-      setLinks([
-        ...links,
-        { program_id: selectedProgram.id, lesson_id: lessonId },
-      ]);
-    setLinkLessonId("");
-  };
-  const linkLabel = (l: QuestionProgramLink) => {
-    const p = programs.find((x) => x.id === l.program_id);
-    const lesson = p?.lessons?.find((x) => x.id === l.lesson_id);
-    const pName = p?.name ?? `#${l.program_id}`;
-    return lesson ? `${pName} › ${lesson.name}` : pName;
-  };
-
-  const buildPayload = (): QuestionCreateInput => ({
-    question_type: "multiple_choice",
-    stem: stem.trim(),
-    options: filledOptions.map((o) => ({
-      text: o.text.trim(),
-      is_correct: o.is_correct,
-    })),
-    explanation: explanation.trim() || null,
-    grade_min: gradeMin,
-    grade_max: gradeMax,
-    allow_multiple_answers: allowMultiple,
-    visibility,
-    exam_point_ids: examPoints.map((ep) => ep.id),
-    program_links: links,
-    organization_id: organizationId ?? null,
-  });
+  // ---- 儲存 ----
+  const scrollToCard = (key: string) =>
+    document
+      .getElementById(`question-card-${key}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   const handleSave = async () => {
-    if (validationError || saving) return;
+    if (validationMessage || saving || readOnly) {
+      if (firstErrorIndex >= 0) scrollToCard(drafts[firstErrorIndex].key);
+      return;
+    }
     setSaving(true);
     try {
-      const payload = buildPayload();
-      let saved: Question;
       if (isEdit && question) {
+        const payload = toCreateInput(drafts[0], shared);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { question_type, organization_id, school_id, ...update } =
           payload;
-        saved = await apiClient.updateQuestion(question.id, update);
+        const saved = await apiClient.updateQuestion(question.id, update);
         toast.success(t("questionBank.messages.updated"));
-      } else {
-        saved = await apiClient.createQuestion(payload);
-        toast.success(t("questionBank.messages.created"));
+        dirtyRef.current = false;
+        onSaved(saved);
+        onClose();
+        return;
       }
-      onSaved(saved);
+
+      // 新增：逐題送，失敗停在該題
+      const remaining = [...drafts];
+      let savedCount = 0;
+      let last: Question | null = null;
+      while (remaining.length > 0) {
+        const d = remaining[0];
+        try {
+          last = await apiClient.createQuestion(
+            toCreateInput(d, shared, organizationId),
+          );
+          savedCount += 1;
+          remaining.shift();
+        } catch (err) {
+          const message =
+            extractApiMessage(err) ?? t("questionBank.messages.saveFailed");
+          setDrafts(
+            remaining.map((r, i) =>
+              i === 0 ? { ...r, serverError: message } : r,
+            ),
+          );
+          if (savedCount > 0) {
+            toast.warning(
+              t("questionBank.messages.partiallySaved", {
+                saved: savedCount,
+                failed: remaining.length,
+              }),
+            );
+            onSaved(last as Question);
+          } else {
+            toast.error(message);
+          }
+          scrollToCard(d.key);
+          return;
+        }
+      }
+      toast.success(
+        t("questionBank.messages.createdCount", { count: savedCount }),
+      );
+      dirtyRef.current = false;
+      onSaved(last as Question);
       onClose();
-    } catch (err) {
-      const message = extractApiMessage(err);
-      toast.error(message ?? t("questionBank.messages.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -321,6 +324,7 @@ export default function MultipleChoiceQuestionSheet({
     try {
       await apiClient.deleteQuestion(question.id);
       toast.success(t("questionBank.messages.deleted"));
+      dirtyRef.current = false;
       onDeleted?.(question.id);
       onClose();
     } catch (err) {
@@ -332,29 +336,16 @@ export default function MultipleChoiceQuestionSheet({
     }
   };
 
-  const gradeSelect = (
-    value: number | null,
-    onChange: (v: number | null) => void,
-    testId: string,
-  ) => (
-    <Select
-      value={value === null ? "none" : String(value)}
-      onValueChange={(v) => onChange(v === "none" ? null : Number(v))}
-      disabled={readOnly}
-    >
-      <SelectTrigger className="h-9 w-28" data-testid={testId}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="none">{t("questionBank.form.gradeAny")}</SelectItem>
-        {GRADES.map((g) => (
-          <SelectItem key={g} value={String(g)}>
-            {t("questionBank.gradeSingle", { grade: g })}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+  const handleClose = () => {
+    if (busy) return;
+    if (
+      dirtyRef.current &&
+      !readOnly &&
+      !window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))
+    )
+      return;
+    onClose();
+  };
 
   if (!open) return null;
 
@@ -363,10 +354,37 @@ export default function MultipleChoiceQuestionSheet({
     : isEdit
       ? t("questionBank.form.titleEdit")
       : t("questionBank.form.titleCreate");
+  const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
+
+  const leftColumn = (
+    <>
+      {!readOnly && (
+        <QuestionBankToolsPanel
+          ttsSettings={ttsSettings}
+          onTtsSettingsChange={handleTtsSettingsChange}
+          pendingAudioCount={pendingAudio.length}
+          onGenerateAllAudio={generateAllAudio}
+          generatingAudio={generatingAudio}
+          hasAnyStem={hasAnyStem}
+          disabled={saving}
+        />
+      )}
+      <QuestionBankSettingsPanel
+        value={shared}
+        onChange={updateShared}
+        programs={programs}
+        readOnly={readOnly || saving}
+        errorMessage={
+          sharedErrorKey
+            ? t(`questionBank.form.errors.${sharedErrorKey}`)
+            : null
+        }
+      />
+    </>
+  );
 
   return (
     <>
-      {/* Backdrop：只遮內容區，sidebar 由頁面 setSidebarDisabled 處理 */}
       <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
       <div
         className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
@@ -380,9 +398,14 @@ export default function MultipleChoiceQuestionSheet({
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-            <p className="text-xs text-gray-500 truncate">
-              {t("questionBank.form.description")}
-            </p>
+            {!isEdit && !readOnly && (
+              <p className="text-xs text-gray-500">
+                {t("questionBank.form.batchHint", {
+                  count: drafts.length,
+                  max: MAX_QUESTIONS_PER_BATCH,
+                })}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isEdit && canDelete && !readOnly && (
@@ -391,7 +414,7 @@ export default function MultipleChoiceQuestionSheet({
                 variant="ghost"
                 className="text-red-600 hover:text-red-700 gap-1"
                 onClick={handleDelete}
-                disabled={deleting}
+                disabled={busy}
                 data-testid="qb-delete"
               >
                 <Trash2 size={16} />
@@ -402,8 +425,8 @@ export default function MultipleChoiceQuestionSheet({
               <Button
                 type="button"
                 onClick={handleSave}
-                disabled={!!validationError || saving}
-                title={validationError ?? undefined}
+                disabled={!!validationMessage || busy}
+                title={validationMessage ?? undefined}
                 data-testid="qb-save"
               >
                 {saving
@@ -415,7 +438,8 @@ export default function MultipleChoiceQuestionSheet({
               type="button"
               variant="ghost"
               size="icon"
-              onClick={onClose}
+              onClick={handleClose}
+              disabled={busy}
               aria-label={t("common.close", "關閉")}
               data-testid="qb-close"
             >
@@ -423,258 +447,68 @@ export default function MultipleChoiceQuestionSheet({
             </Button>
           </div>
         </div>
-        {!readOnly && validationError && (
+        {validationMessage && (
           <p
             className="px-6 py-1.5 text-xs text-gray-500 bg-gray-50 border-b border-gray-100 shrink-0"
             data-testid="qb-validation"
           >
-            {validationError}
+            {validationMessage}
           </p>
         )}
 
-        {/* 內容區 */}
+        {/* 兩欄 */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
-          <div className="space-y-5 max-w-3xl">
-            {/* 題目 */}
-            <div className="space-y-1.5">
-              <Label htmlFor="qb-stem">
-                {t("questionBank.form.stem")}{" "}
-                <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="qb-stem"
-                value={stem}
-                onChange={(e) => setStem(e.target.value)}
-                placeholder={t("questionBank.form.stemPlaceholder")}
-                rows={3}
-                disabled={readOnly}
-                data-testid="qb-stem"
-              />
-              {exactDuplicate && (
-                <div
-                  className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700"
-                  data-testid="qb-duplicate"
+          <div className="flex gap-4 items-start">
+            {/* 左欄（md 以上） */}
+            <div className="hidden md:flex md:w-[35%] flex-col gap-4 border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-180px)] overflow-y-auto overscroll-contain">
+              {leftColumn}
+            </div>
+
+            {/* 右欄 */}
+            <div className="flex-1 min-w-0 space-y-4">
+              {/* 手機：左欄內容摺疊在上方 */}
+              <details className="md:hidden border rounded-lg bg-gray-50 p-3">
+                <summary className="text-sm font-medium text-gray-800 cursor-pointer">
+                  {t("questionBank.form.settings.title")}
+                </summary>
+                <div className="mt-3 space-y-4">{leftColumn}</div>
+              </details>
+
+              {drafts.map((d, i) => (
+                <QuestionCard
+                  key={d.key}
+                  index={i}
+                  draft={d}
+                  onChange={(next) => updateDraft(d.key, next)}
+                  onRemove={
+                    !isEdit && drafts.length > 1
+                      ? () => removeQuestion(d.key)
+                      : undefined
+                  }
+                  excludeId={question?.id}
+                  ttsSettings={ttsSettings}
+                  errorMessage={
+                    errorKeys[i]
+                      ? t(`questionBank.form.errors.${errorKeys[i]}`)
+                      : null
+                  }
+                  readOnly={readOnly}
+                  disabled={saving}
+                />
+              ))}
+
+              {!isEdit && !readOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-1.5"
+                  onClick={addQuestion}
+                  disabled={saving || drafts.length >= MAX_QUESTIONS_PER_BATCH}
+                  data-testid="qb-add-question"
                 >
-                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                  <div>
-                    {t("questionBank.form.duplicateFound")}
-                    <div className="text-red-600/80 line-clamp-2">
-                      {exactDuplicate.stem}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {similar && !exactDuplicate && similar.similar.length > 0 && (
-                <div
-                  className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800"
-                  data-testid="qb-similar"
-                >
-                  <div className="font-medium">
-                    {t("questionBank.form.similarFound")}
-                  </div>
-                  <ul className="mt-1 space-y-0.5 text-amber-700/90">
-                    {similar.similar.map((s) => (
-                      <li key={s.id} className="line-clamp-1">
-                        • {s.stem}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            {/* 選項 */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  {t("questionBank.form.options")}{" "}
-                  <span className="text-xs text-gray-500">
-                    {t("questionBank.form.optionsHint", { min: MIN_OPTIONS })}
-                  </span>
-                </Label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <Switch
-                    checked={allowMultiple}
-                    onCheckedChange={handleAllowMultiple}
-                    disabled={readOnly}
-                    data-testid="qb-allow-multiple"
-                  />
-                  {t("questionBank.form.allowMultiple")}
-                </label>
-              </div>
-              <div className="space-y-2">
-                {options.map((o, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={o.is_correct}
-                      onCheckedChange={(c) => toggleCorrect(i, c === true)}
-                      disabled={readOnly || o.text.trim() === ""}
-                      aria-label={t("questionBank.form.markCorrect", {
-                        index: i + 1,
-                      })}
-                      data-testid={`qb-option-correct-${i}`}
-                    />
-                    <span className="w-5 text-sm text-gray-500">
-                      {String.fromCharCode(65 + i)}.
-                    </span>
-                    <Input
-                      value={o.text}
-                      onChange={(e) => {
-                        const text = e.target.value;
-                        updateOption(i, {
-                          text,
-                          is_correct: text.trim() === "" ? false : o.is_correct,
-                        });
-                      }}
-                      placeholder={t("questionBank.form.optionPlaceholder", {
-                        index: i + 1,
-                      })}
-                      className="h-9"
-                      disabled={readOnly}
-                      data-testid={`qb-option-text-${i}`}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 解析 */}
-            <div className="space-y-1.5">
-              <Label htmlFor="qb-explanation">
-                {t("questionBank.form.explanation")}
-              </Label>
-              <Textarea
-                id="qb-explanation"
-                value={explanation}
-                onChange={(e) => setExplanation(e.target.value)}
-                rows={2}
-                disabled={readOnly}
-                data-testid="qb-explanation"
-              />
-            </div>
-
-            {/* 設定／關聯區 */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>{t("questionBank.form.grade")}</Label>
-                <div className="flex items-center gap-2">
-                  {gradeSelect(gradeMin, setGradeMin, "qb-grade-min")}
-                  <span className="text-gray-400">–</span>
-                  {gradeSelect(gradeMax, setGradeMax, "qb-grade-max")}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("questionBank.form.visibility")}</Label>
-                <Select
-                  value={visibility}
-                  onValueChange={(v) => setVisibility(v as QuestionVisibility)}
-                  disabled={readOnly}
-                >
-                  <SelectTrigger className="h-9" data-testid="qb-visibility">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VISIBILITIES.map((v) => (
-                      <SelectItem key={v} value={v}>
-                        {t(`questionBank.visibility.${v}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("questionBank.form.examPoints")}</Label>
-              <ExamPointPicker
-                value={examPoints}
-                onChange={setExamPoints}
-                disabled={readOnly}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("questionBank.form.programLinks")}</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {links.map((l) => (
-                  <span
-                    key={`${l.program_id}-${l.lesson_id ?? "p"}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700"
-                    data-testid="qb-program-link"
-                  >
-                    {linkLabel(l)}
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        className="rounded-full hover:bg-gray-300/60 p-0.5"
-                        onClick={() => setLinks(links.filter((x) => x !== l))}
-                        aria-label={t("questionBank.form.removeLink")}
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-              {!readOnly && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Select
-                    value={linkProgramId}
-                    onValueChange={(v) => {
-                      setLinkProgramId(v);
-                      setLinkLessonId("");
-                    }}
-                  >
-                    <SelectTrigger
-                      className="h-9 sm:flex-1"
-                      data-testid="qb-link-program"
-                    >
-                      <SelectValue
-                        placeholder={t("questionBank.form.pickProgram")}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {programs.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={linkLessonId}
-                    onValueChange={setLinkLessonId}
-                    disabled={!selectedProgram?.lessons?.length}
-                  >
-                    <SelectTrigger
-                      className="h-9 sm:flex-1"
-                      data-testid="qb-link-lesson"
-                    >
-                      <SelectValue
-                        placeholder={t("questionBank.form.pickLessonOptional")}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(selectedProgram?.lessons ?? []).map((l) => (
-                        <SelectItem key={l.id} value={String(l.id)}>
-                          {l.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9 gap-1"
-                    disabled={!selectedProgram}
-                    onClick={addLink}
-                    data-testid="qb-link-add"
-                  >
-                    <Plus size={14} />
-                    {t("questionBank.form.addLink")}
-                  </Button>
-                </div>
+                  <Plus size={16} />
+                  {t("questionBank.form.addQuestion")}
+                </Button>
               )}
             </div>
           </div>
@@ -682,17 +516,4 @@ export default function MultipleChoiceQuestionSheet({
       </div>
     </>
   );
-}
-
-/** 後端 HTTPException 的 detail 可能是字串或 {message, duplicate} */
-function extractApiMessage(err: unknown): string | null {
-  if (!err || typeof err !== "object") return null;
-  const anyErr = err as { message?: unknown; detail?: unknown };
-  const detail = anyErr.detail;
-  if (typeof detail === "string") return detail;
-  if (detail && typeof detail === "object") {
-    const m = (detail as { message?: unknown }).message;
-    if (typeof m === "string") return m;
-  }
-  return typeof anyErr.message === "string" ? anyErr.message : null;
 }

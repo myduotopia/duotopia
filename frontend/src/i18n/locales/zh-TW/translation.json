@@ -5966,7 +5966,9 @@
       "updated": "題目已更新",
       "deleted": "題目已刪除",
       "saveFailed": "儲存失敗",
-      "deleteFailed": "刪除失敗"
+      "deleteFailed": "刪除失敗",
+      "createdCount": "已新增 {{count}} 題",
+      "partiallySaved": "已新增 {{saved}} 題，{{failed}} 題失敗，請修正後再儲存"
     },
     "form": {
       "titleCreate": "新增選擇題",
@@ -6003,7 +6005,42 @@
         "minOptions": "至少填 {{min}} 個選項",
         "noCorrect": "請勾選正確答案",
         "singleOnly": "單選題只能有一個正確答案，或開啟「允許複選」",
-        "gradeRange": "年級下限不可大於上限"
+        "gradeRange": "年級下限不可大於上限",
+        "duplicateInBatch": "本批內有相同題目",
+        "atQuestion": "第 {{n}} 題：{{message}}"
+      },
+      "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
+      "questionN": "第 {{n}} 題",
+      "addQuestion": "新增題目",
+      "removeQuestion": "移除此題",
+      "addOption": "新增選項",
+      "optionRequiredPlaceholder": "{{letter}} 選項",
+      "optionOptionalPlaceholder": "{{letter}} 選項（選填）",
+      "optionImage": "{{letter}} 選項圖片",
+      "removeImage": "移除圖片",
+      "explanationPlaceholder": "解析（選填）",
+      "generateAudio": "生成題目語音",
+      "regenerateAudio": "重新生成語音",
+      "removeAudio": "移除語音",
+      "ttsFailed": "語音生成失敗",
+      "limitReached": "一次最多 {{max}} 題",
+      "tools": {
+        "title": "工具",
+        "tts": "語音生成",
+        "ttsHint": "只生成題目語音，不生成選項；單題可用題目旁的麥克風",
+        "generateAll": "生成全部題目語音（{{count}}）",
+        "generating": "生成中…",
+        "generated": "已生成 {{count}} 題語音",
+        "aiAnswer": "AI 作答",
+        "aiAnalyze": "AI 考點分析",
+        "aiHint": "AI 作答會自動勾選正確答案；考點分析會建議年級與考點",
+        "needStem": "右側先輸入題目",
+        "upload": "PDF／圖片上傳",
+        "uploadHint": "上傳考卷圖片，AI 擷取題目與選項"
+      },
+      "settings": {
+        "title": "設定／關聯",
+        "hint": "套用到右側所有題目"
       }
     }
   }

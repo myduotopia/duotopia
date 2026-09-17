@@ -5922,7 +5922,9 @@
       "updated": "Question updated",
       "deleted": "Question deleted",
       "saveFailed": "Failed to save",
-      "deleteFailed": "Failed to delete"
+      "deleteFailed": "Failed to delete",
+      "createdCount": "{{count}} question(s) created",
+      "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again"
     },
     "form": {
       "titleCreate": "New Multiple-Choice Question",
@@ -5959,7 +5961,42 @@
         "minOptions": "At least {{min}} options",
         "noCorrect": "Tick a correct answer",
         "singleOnly": "Single-answer questions can have only one correct option; enable multiple answers otherwise",
-        "gradeRange": "Minimum grade cannot exceed maximum"
+        "gradeRange": "Minimum grade cannot exceed maximum",
+        "duplicateInBatch": "Duplicate question within this batch",
+        "atQuestion": "Question {{n}}: {{message}}"
+      },
+      "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
+      "questionN": "Question {{n}}",
+      "addQuestion": "Add question",
+      "removeQuestion": "Remove this question",
+      "addOption": "Add option",
+      "optionRequiredPlaceholder": "Option {{letter}}",
+      "optionOptionalPlaceholder": "Option {{letter}} (optional)",
+      "optionImage": "Option {{letter}} image",
+      "removeImage": "Remove image",
+      "explanationPlaceholder": "Explanation (optional)",
+      "generateAudio": "Generate question audio",
+      "regenerateAudio": "Regenerate audio",
+      "removeAudio": "Remove audio",
+      "ttsFailed": "Audio generation failed",
+      "limitReached": "At most {{max}} questions per batch",
+      "tools": {
+        "title": "Tools",
+        "tts": "Audio generation",
+        "ttsHint": "Generates audio for question stems only, not options; use the mic next to a question for a single one",
+        "generateAll": "Generate all question audio ({{count}})",
+        "generating": "Generating…",
+        "generated": "Generated audio for {{count}} question(s)",
+        "aiAnswer": "AI answer",
+        "aiAnalyze": "AI exam-point analysis",
+        "aiHint": "AI answer ticks the correct options; analysis suggests grade and exam points",
+        "needStem": "Enter a question on the right first",
+        "upload": "PDF / image upload",
+        "uploadHint": "Upload an exam page and let AI extract the questions and options"
+      },
+      "settings": {
+        "title": "Settings / links",
+        "hint": "Applied to every question on the right"
       }
     }
   }
