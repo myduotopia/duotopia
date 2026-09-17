@@ -9,6 +9,8 @@ import type {
   QuestionCreateInput,
   QuestionListParams,
   QuestionListResponse,
+  QuestionSource,
+  QuestionSourceCreateInput,
   QuestionUpdateInput,
   SimilarQuestionsResponse,
 } from "@/types/questionBank";
@@ -595,6 +597,17 @@ class ApiClient {
     return this.get<SimilarQuestionsResponse>(
       `/api/question-bank/questions/similar?${qs.toString()}`,
     );
+  }
+
+  async listSources(q?: string) {
+    const query = q ? `?q=${encodeURIComponent(q)}` : "";
+    return this.get<{ items: QuestionSource[] }>(
+      `/api/question-bank/sources${query}`,
+    );
+  }
+
+  async createSource(data: QuestionSourceCreateInput) {
+    return this.post<QuestionSource>("/api/question-bank/sources", data);
   }
 
   async listExamPoints(q?: string) {

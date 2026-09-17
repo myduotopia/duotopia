@@ -126,7 +126,8 @@ class ExamPointAlias(Base):
 class QuestionSource(Base):
     """來源標註：歷屆考題（exam）／出版社版本（publisher）。
 
-    organization_id 為 NULL = 平台公用；有值 = 機構自建。
+    歸屬三選一：organization_id 有值 = 機構自建；teacher_id 有值 = 個人老師自建；
+    兩者皆 NULL = 平台公用。老師在編輯面板可直接打字新增（可打字下拉）。
     跟考點分開：考點是「教什麼」，來源是「哪裡來」。
     """
 
@@ -139,6 +140,12 @@ class QuestionSource(Base):
     organization_id = Column(
         UUID,
         ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    teacher_id = Column(
+        Integer,
+        ForeignKey("teachers.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )

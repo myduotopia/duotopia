@@ -11,7 +11,7 @@ Content → ContentItem）是多對多，所以不塞進 ContentItem，另開一
 
 1. ``exam_points``            考點（平台維護、有階層、多語 names JSONB）
 2. ``exam_point_aliases``     考點異名 → 正式考點（「現完式」→「現在完成式」）
-3. ``question_sources``       來源（歷屆考題／出版社版本）
+3. ``question_sources``       來源（歷屆考題／出版社版本；organization_id / teacher_id 都 NULL = 平台公用）
 4. ``question_groups``        題組（一份素材配多題：文章／音檔／對話／圖片）
 5. ``question_group_segments`` 題組素材分段（對話聽力：每句一段、各自音檔與角色）
 6. ``questions``              題目主表（全題型共用）
@@ -132,6 +132,8 @@ def upgrade() -> None:
             year SMALLINT,
             organization_id UUID
                 REFERENCES public.organizations (id) ON DELETE CASCADE,
+            teacher_id INTEGER
+                REFERENCES public.teachers (id) ON DELETE CASCADE,
             created_at TIMESTAMPTZ DEFAULT now(),
             updated_at TIMESTAMPTZ,
             CONSTRAINT ck_question_sources_type
@@ -142,6 +144,10 @@ def upgrade() -> None:
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_question_sources_organization_id "
         "ON public.question_sources (organization_id)"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_question_sources_teacher_id "
+        "ON public.question_sources (teacher_id)"
     )
 
     # ---- 4) question_groups ----

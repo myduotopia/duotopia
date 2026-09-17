@@ -280,6 +280,51 @@ def test_image_only_question_and_option(test_client, teacher_a):
     assert resp.status_code == 422
 
 
+def test_sources_create_list_and_link(test_client, teacher_a, teacher_b):
+    """來源：個人新增 → 自己看得到、別人看不到；同名回既有；題目可掛來源。"""
+    resp = test_client.post(
+        "/api/question-bank/sources",
+        json={"source_type": "exam", "name": "113 學年度會考", "year": 2024},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 201, resp.text
+    src = resp.json()
+    assert src["teacher_id"] == teacher_a.id and src["organization_id"] is None
+
+    # 同名同型別 → 回既有那筆
+    again = test_client.post(
+        "/api/question-bank/sources",
+        json={"source_type": "exam", "name": "113 學年度會考"},
+        headers=_headers(teacher_a),
+    )
+    assert again.status_code == 201 and again.json()["id"] == src["id"]
+
+    # 搜尋
+    items = test_client.get(
+        "/api/question-bank/sources", params={"q": "113"}, headers=_headers(teacher_a)
+    ).json()["items"]
+    assert [i["id"] for i in items] == [src["id"]]
+    # B 看不到 A 的個人來源
+    items_b = test_client.get(
+        "/api/question-bank/sources", headers=_headers(teacher_b)
+    ).json()["items"]
+    assert all(i["id"] != src["id"] for i in items_b)
+
+    # 掛到題目；B 傳 A 的來源 id 會被忽略
+    q = _create(test_client, teacher_a, stem="With source", source_ids=[src["id"]])
+    assert [x["id"] for x in q["sources"]] == [src["id"]]
+    q_b = _create(test_client, teacher_b, stem="B question", source_ids=[src["id"]])
+    assert q_b["sources"] == []
+
+    # PATCH 清空
+    resp = test_client.patch(
+        f"/api/question-bank/questions/{q['id']}",
+        json={"source_ids": []},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200 and resp.json()["sources"] == []
+
+
 # ---------------------------------------------------------------- platform
 
 

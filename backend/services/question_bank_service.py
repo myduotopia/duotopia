@@ -33,6 +33,8 @@ from models import (
     QuestionExamPoint,
     QuestionOption,
     QuestionProgramLink,
+    QuestionSource,
+    QuestionSourceLink,
     Teacher,
     TeacherOrganization,
     TeacherSchool,
@@ -331,6 +333,46 @@ def replace_program_links(
     question.program_links = out
 
 
+def visible_sources_query(db: Session, teacher: Teacher) -> Query:
+    """老師可用的來源：平台公用 + 所屬機構自建 + 自己建的。"""
+    org_ids = teacher_org_ids(db, teacher.id)
+    conds = [
+        and_(
+            QuestionSource.organization_id.is_(None),
+            QuestionSource.teacher_id.is_(None),
+        ),
+        QuestionSource.teacher_id == teacher.id,
+    ]
+    if org_ids:
+        conds.append(QuestionSource.organization_id.in_(org_ids))
+    return db.query(QuestionSource).filter(or_(*conds))
+
+
+def replace_sources(
+    db: Session,
+    question: Question,
+    teacher: Teacher,
+    source_ids: Iterable[int],
+) -> None:
+    """整批覆寫來源；只接受老師可見的來源 id，其餘忽略。"""
+    wanted = list(dict.fromkeys(int(i) for i in source_ids))
+    if question.id is not None:
+        _clear_children(db, question.source_links)
+    if not wanted:
+        question.source_links = []
+        return
+    allowed = {
+        r[0]
+        for r in visible_sources_query(db, teacher)
+        .with_entities(QuestionSource.id)
+        .filter(QuestionSource.id.in_(wanted))
+        .all()
+    }
+    question.source_links = [
+        QuestionSourceLink(source_id=i) for i in wanted if i in allowed
+    ]
+
+
 def get_visible_question(
     db: Session, teacher: Teacher, question_id: int
 ) -> Optional[Question]:
@@ -342,6 +384,7 @@ def get_visible_question(
                 QuestionExamPoint.exam_point
             ),
             selectinload(Question.program_links),
+            selectinload(Question.source_links).selectinload(QuestionSourceLink.source),
         )
         .filter(Question.id == question_id)
         .first()

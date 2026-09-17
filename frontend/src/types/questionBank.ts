@@ -34,6 +34,23 @@ export interface QuestionProgramLink {
   lesson_id: number | null;
 }
 
+/** 考題來源：歷屆考題（exam）／出版社版本（publisher）。organization_id / teacher_id 皆 null = 平台公用 */
+export interface QuestionSource {
+  id: number;
+  source_type: "exam" | "publisher";
+  name: string;
+  year: number | null;
+  organization_id: string | null;
+  teacher_id: number | null;
+}
+
+export interface QuestionSourceCreateInput {
+  source_type: "exam" | "publisher";
+  name: string;
+  year?: number | null;
+  organization_id?: string | null;
+}
+
 export interface Question {
   id: number;
   question_type: QuestionType;
@@ -55,6 +72,7 @@ export interface Question {
   options: QuestionOption[];
   exam_points: QuestionExamPointRef[];
   program_links: QuestionProgramLink[];
+  sources: QuestionSource[];
   created_at: string | null;
   updated_at: string | null;
 }
@@ -126,6 +144,7 @@ export interface QuestionCreateInput {
   visibility?: QuestionVisibility;
   exam_point_ids?: number[];
   program_links?: QuestionProgramLink[];
+  source_ids?: number[];
   organization_id?: string | null;
   school_id?: string | null;
 }

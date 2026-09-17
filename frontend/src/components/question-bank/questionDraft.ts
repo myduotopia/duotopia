@@ -3,13 +3,17 @@
  *
  * 放在獨立檔案讓 QuestionCard / MultipleChoiceQuestionSheet 共用，也方便單測：
  * 驗證函式只回傳 i18n key（不呼叫 t），由呼叫端翻譯。
+ *
+ * 每題自己帶：考點（必填）、年段、教材關聯（進階設定）。左側批次設定只是「覆寫所有題」
+ * 的捷徑，儲存時仍是逐題送出各自的值。整批共用、不進 draft 的只有：公開設定、考題來源。
  */
 
+import type { GradeRange } from "@/components/shared/GradeRangeSlider";
+import type { ProgramLessonLink } from "@/components/shared/ProgramLessonPicker";
 import type {
   ExamPoint,
   Question,
   QuestionCreateInput,
-  QuestionProgramLink,
   QuestionVisibility,
   SimilarQuestionsResponse,
 } from "@/types/questionBank";
@@ -27,7 +31,14 @@ export interface OptionDraft {
   image_url: string | null;
 }
 
-export interface QuestionDraft {
+/** 左側批次設定可覆寫到每題的欄位 */
+export interface BatchDefaults {
+  exam_points: ExamPoint[];
+  grade: GradeRange;
+  program_link: ProgramLessonLink | null;
+}
+
+export interface QuestionDraft extends BatchDefaults {
   /** React key／DOM id 用，與 DB id 無關 */
   key: string;
   stem: string;
@@ -37,19 +48,12 @@ export interface QuestionDraft {
   options: OptionDraft[];
   /** 是否已展開 E/F */
   extraOptionsShown: boolean;
+  /** 進階設定（教材關聯、年段）是否展開 */
+  advancedOpen: boolean;
   /** 相似題查詢結果（每卡各自） */
   similar: SimilarQuestionsResponse | null;
   /** 後端儲存失敗時的訊息（逐題送出時標在該卡） */
   serverError: string | null;
-}
-
-/** 左欄整批共用設定 */
-export interface SharedSettings {
-  grade_min: number | null;
-  grade_max: number | null;
-  exam_points: ExamPoint[];
-  program_links: QuestionProgramLink[];
-  visibility: QuestionVisibility;
 }
 
 let keySeq = 0;
@@ -62,7 +66,13 @@ export function emptyOption(): OptionDraft {
   return { text: "", is_correct: false, image_url: null };
 }
 
-export function emptyDraft(): QuestionDraft {
+export function emptyBatchDefaults(): BatchDefaults {
+  return { exam_points: [], grade: [null, null], program_link: null };
+}
+
+export function emptyDraft(
+  defaults: BatchDefaults = emptyBatchDefaults(),
+): QuestionDraft {
   return {
     key: nextKey(),
     stem: "",
@@ -71,8 +81,35 @@ export function emptyDraft(): QuestionDraft {
     allow_multiple: false,
     options: Array.from({ length: BASE_OPTION_SLOTS }, emptyOption),
     extraOptionsShown: false,
+    advancedOpen: false,
     similar: null,
     serverError: null,
+    exam_points: [...defaults.exam_points],
+    grade: [...defaults.grade] as GradeRange,
+    program_link: defaults.program_link ? { ...defaults.program_link } : null,
+  };
+}
+
+export function examPointsFromQuestion(q: Question): ExamPoint[] {
+  return q.exam_points.map((ep) => ({
+    id: ep.id,
+    code: ep.code,
+    names: ep.names,
+    parent_id: null,
+    status: "active",
+    order_index: 0,
+    aliases: [],
+  }));
+}
+
+export function batchDefaultsFromQuestion(q: Question): BatchDefaults {
+  const first = q.program_links[0];
+  return {
+    exam_points: examPointsFromQuestion(q),
+    grade: [q.grade_min, q.grade_max],
+    program_link: first
+      ? { program_id: first.program_id, lesson_id: first.lesson_id }
+      : null,
   };
 }
 
@@ -87,44 +124,20 @@ export function draftFromQuestion(q: Question): QuestionDraft {
       };
   });
   const extra = q.options.length > BASE_OPTION_SLOTS;
+  const defaults = batchDefaultsFromQuestion(q);
   return {
-    key: nextKey(),
+    ...emptyDraft(defaults),
     stem: q.stem,
     stem_audio_url: q.stem_audio_url,
     explanation: q.explanation ?? "",
     allow_multiple: q.allow_multiple_answers,
     options: extra ? options : options.slice(0, BASE_OPTION_SLOTS),
     extraOptionsShown: extra,
-    similar: null,
-    serverError: null,
-  };
-}
-
-export function defaultSharedSettings(): SharedSettings {
-  return {
-    grade_min: null,
-    grade_max: null,
-    exam_points: [],
-    program_links: [],
-    visibility: "private",
-  };
-}
-
-export function sharedSettingsFromQuestion(q: Question): SharedSettings {
-  return {
-    grade_min: q.grade_min,
-    grade_max: q.grade_max,
-    exam_points: q.exam_points.map((ep) => ({
-      id: ep.id,
-      code: ep.code,
-      names: ep.names,
-      parent_id: null,
-      status: "active",
-      order_index: 0,
-      aliases: [],
-    })),
-    program_links: q.program_links,
-    visibility: q.visibility,
+    // 既有題目有設定過就展開給老師看
+    advancedOpen:
+      defaults.program_link !== null ||
+      defaults.grade[0] !== null ||
+      defaults.grade[1] !== null,
   };
 }
 
@@ -149,7 +162,7 @@ export function normalizeStem(stem: string): string {
 
 /**
  * 單題驗證，回傳 i18n key（`questionBank.form.errors.*` 的最後一段）或 null。
- * 順序刻意：先題幹、再重複、再選項。
+ * 順序刻意：題幹 → 重複 → 選項 → 考點。
  */
 export function validateDraft(
   d: QuestionDraft,
@@ -163,6 +176,7 @@ export function validateDraft(
   const correct = filled.filter((o) => o.is_correct).length;
   if (correct === 0) return "noCorrect";
   if (!d.allow_multiple && correct > 1) return "singleOnly";
+  if (d.exam_points.length === 0) return "examPointRequired";
   return null;
 }
 
@@ -184,17 +198,16 @@ export function findBatchDuplicateKeys(drafts: QuestionDraft[]): Set<string> {
   return dup;
 }
 
-export function validateShared(s: SharedSettings): string | null {
-  if (s.grade_min !== null && s.grade_max !== null && s.grade_min > s.grade_max)
-    return "gradeRange";
-  return null;
+export interface SharedSubmitSettings {
+  visibility: QuestionVisibility;
+  source_ids: number[];
+  organizationId?: string;
 }
 
 /** 組成送後端的 payload（只送有填的選項，順序依格子） */
 export function toCreateInput(
   d: QuestionDraft,
-  shared: SharedSettings,
-  organizationId?: string,
+  shared: SharedSubmitSettings,
 ): QuestionCreateInput {
   return {
     question_type: "multiple_choice",
@@ -206,12 +219,13 @@ export function toCreateInput(
       image_url: o.image_url,
     })),
     explanation: d.explanation.trim() || null,
-    grade_min: shared.grade_min,
-    grade_max: shared.grade_max,
+    grade_min: d.grade[0],
+    grade_max: d.grade[1],
     allow_multiple_answers: d.allow_multiple,
     visibility: shared.visibility,
-    exam_point_ids: shared.exam_points.map((ep) => ep.id),
-    program_links: shared.program_links,
-    organization_id: organizationId ?? null,
+    exam_point_ids: d.exam_points.map((ep) => ep.id),
+    program_links: d.program_link ? [d.program_link] : [],
+    source_ids: shared.source_ids,
+    organization_id: shared.organizationId ?? null,
   };
 }

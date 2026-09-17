@@ -5963,7 +5963,9 @@
         "singleOnly": "Single-answer questions can have only one correct option; enable multiple answers otherwise",
         "gradeRange": "Minimum grade cannot exceed maximum",
         "duplicateInBatch": "Duplicate question within this batch",
-        "atQuestion": "Question {{n}}: {{message}}"
+        "atQuestion": "Question {{n}}: {{message}}",
+        "examPointRequired": "Pick at least one exam point",
+        "visibilityRequired": "Choose whether to share the questions"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -5989,14 +5991,34 @@
         "generated": "Generated audio for {{count}} question(s)",
         "aiAnswer": "AI answer",
         "aiAnalyze": "AI exam-point analysis",
-        "aiHint": "AI answer ticks the correct options; analysis suggests grade and exam points",
+        "aiHint": "AI answer: sets the answer and fills the explanation; AI analysis: fills exam points and grade",
         "needStem": "Enter a question on the right first",
         "upload": "PDF / image upload",
-        "uploadHint": "Upload an exam page and let AI extract the questions and options"
+        "uploadHint": "Upload an exam page and let AI extract the questions and options",
+        "aiTitle": "AI assist"
       },
       "settings": {
         "title": "Settings / links",
         "hint": "Applied to every question on the right"
+      },
+      "pickExamPointsRequired": "Pick exam points (required)",
+      "visibilityPlaceholder": "Choose visibility",
+      "advancedSettings": "Advanced settings",
+      "gradeMinLabel": "Minimum grade",
+      "gradeMaxLabel": "Maximum grade",
+      "batch": {
+        "applyAllHint": "Applied to every question on the right (each can still be edited)",
+        "examPoints": "Exam points",
+        "grade": "Grade range",
+        "programLink": "Material link",
+        "sources": "Question source",
+        "sourcesHint": "Pick, search, or create a new one",
+        "pickSources": "Pick or create a source",
+        "sourceSearchPlaceholder": "Type a source name, e.g. “2024 national exam”",
+        "noSources": "No matching sources",
+        "createSource": "Create “{{name}}”",
+        "visibility": "Share this question?",
+        "visibilityHint": "Required"
       }
     }
   }

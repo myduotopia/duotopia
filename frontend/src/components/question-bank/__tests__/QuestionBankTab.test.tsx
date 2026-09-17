@@ -82,6 +82,7 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
       },
     ],
     program_links: [],
+    sources: [],
     created_at: null,
     updated_at: null,
     ...overrides,

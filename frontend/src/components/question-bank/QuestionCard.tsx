@@ -5,16 +5,23 @@
  * |A 選項|B 選項|
  * |C 選項(選填)|D 選項(選填)|
  * |新增選項| → 展開 E/F
+ * |考點（必填，AI 填或手動）|
+ * |解析（選填）|
+ * ▼ 進階設定（預設收起）：|關聯教材｜關聯單元|、年段拉桿
  *
  * 每格 = 正確答案 checkbox + 文字 input + 圖片 icon。文字或圖片至少一個才算「有填」。
  * 麥克風 = 單題語音：用左欄目前 TTS 設定直接呼叫 generateTTS（不開 modal）。
  * 重複偵測每卡各自 debounce 呼叫 similar API；結果存回 draft.similar。
+ * 考點／年段／教材關聯用共用元件（ExamPointPicker / GradeRangeSlider / ProgramLessonPicker），
+ * 與左側批次設定同一套。
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronRight,
   Loader2,
   Mic,
   Plus,
@@ -28,11 +35,16 @@ import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
+import ExamPointPicker from "@/components/shared/ExamPointPicker";
+import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
+import { ProgramLessonPicker } from "@/components/shared/ProgramLessonPicker";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
+import type { Program } from "@/types";
 import OptionImageButton from "./OptionImageButton";
 import {
   BASE_OPTION_SLOTS,
@@ -51,6 +63,7 @@ export interface QuestionCardProps {
   /** 編輯既有題目時帶 id，讓 similar API 排除自己 */
   excludeId?: number;
   ttsSettings: TTSSettingsState;
+  programs: Program[];
   /** 這張卡目前的驗證訊息（由外層算，含批內重複） */
   errorMessage: string | null;
   readOnly?: boolean;
@@ -68,6 +81,7 @@ export default function QuestionCard({
   onRemove,
   excludeId,
   ttsSettings,
+  programs,
   errorMessage,
   readOnly = false,
   disabled = false,
@@ -176,6 +190,7 @@ export default function QuestionCard({
     [draft.similar, exact],
   );
   const hasError = errorMessage !== null || draft.serverError !== null;
+  const letter = (i: number) => String.fromCharCode(65 + i);
 
   return (
     <div
@@ -315,19 +330,17 @@ export default function QuestionCard({
                 })}
                 data-testid={`qc-${index}-correct-${i}`}
               />
-              <span className="w-4 text-xs text-gray-500">
-                {String.fromCharCode(65 + i)}
-              </span>
+              <span className="w-4 text-xs text-gray-500">{letter(i)}</span>
               <Input
                 value={o.text}
                 onChange={(e) => updateOption(i, { text: e.target.value })}
                 placeholder={
                   optional
                     ? t("questionBank.form.optionOptionalPlaceholder", {
-                        letter: String.fromCharCode(65 + i),
+                        letter: letter(i),
                       })
                     : t("questionBank.form.optionRequiredPlaceholder", {
-                        letter: String.fromCharCode(65 + i),
+                        letter: letter(i),
                       })
                 }
                 className="h-9 flex-1 min-w-0"
@@ -339,7 +352,7 @@ export default function QuestionCard({
                 onChange={(url) => updateOption(i, { image_url: url })}
                 disabled={locked}
                 label={t("questionBank.form.optionImage", {
-                  letter: String.fromCharCode(65 + i),
+                  letter: letter(i),
                 })}
               />
             </div>
@@ -363,6 +376,22 @@ export default function QuestionCard({
           </Button>
         )}
 
+      {/* 考點（必填） */}
+      <div className="space-y-1">
+        <Label className="text-xs text-gray-600">
+          {t("questionBank.form.examPoints")}{" "}
+          <span className="text-red-500">*</span>
+        </Label>
+        <ExamPointPicker
+          value={draft.exam_points}
+          onChange={(exam_points) => patch({ exam_points })}
+          disabled={locked}
+          required
+          compact
+          data-testid={`qc-${index}-exam-points`}
+        />
+      </div>
+
       {/* 解析 */}
       <Input
         value={draft.explanation}
@@ -372,6 +401,53 @@ export default function QuestionCard({
         disabled={locked}
         data-testid={`qc-${index}-explanation`}
       />
+
+      {/* ▼ 進階設定 */}
+      <div className="border-t border-gray-100 pt-2">
+        <button
+          type="button"
+          onClick={() => patch({ advancedOpen: !draft.advancedOpen })}
+          className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900"
+          aria-expanded={draft.advancedOpen}
+          data-testid={`qc-${index}-advanced-toggle`}
+        >
+          {draft.advancedOpen ? (
+            <ChevronDown size={14} />
+          ) : (
+            <ChevronRight size={14} />
+          )}
+          {t("questionBank.form.advancedSettings")}
+        </button>
+        {draft.advancedOpen && (
+          <div className="mt-2 space-y-3" data-testid={`qc-${index}-advanced`}>
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-600">
+                {t("questionBank.form.programLinks")}
+              </Label>
+              <ProgramLessonPicker
+                programs={programs}
+                value={draft.program_link}
+                onChange={(program_link) => patch({ program_link })}
+                disabled={locked}
+                compact
+                data-testid={`qc-${index}-program-link`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-gray-600">
+                {t("questionBank.form.grade")}
+              </Label>
+              <GradeRangeSlider
+                value={draft.grade}
+                onChange={(grade) => patch({ grade })}
+                disabled={locked}
+                compact
+                data-testid={`qc-${index}-grade`}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {(errorMessage || draft.serverError) && (
         <p className="text-xs text-red-600" data-testid={`qc-${index}-error`}>

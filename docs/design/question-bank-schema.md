@@ -155,7 +155,10 @@
 | source_type | `exam` (歷屆考題) / `publisher` (出版社版本) |
 | name | 如「113 學年度會考」「康軒 B2 U3」 |
 | year | smallint, nullable |
-| organization_id | nullable；NULL = 平台公用，有值 = 機構自建 |
+| organization_id | nullable；有值 = 機構自建 |
+| teacher_id | nullable；有值 = 個人老師自建（編輯面板可打字下拉直接新增） |
+
+兩者皆 NULL = 平台公用。可見範圍 = 平台公用 + 所屬機構 + 自己建的；`POST /api/question-bank/sources` 同名同型別回既有那筆。
 
 `question_source_links (question_id, source_id)` 多對多。
 

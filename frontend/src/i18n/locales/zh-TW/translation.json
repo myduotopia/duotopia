@@ -6007,7 +6007,9 @@
         "singleOnly": "單選題只能有一個正確答案，或開啟「允許複選」",
         "gradeRange": "年級下限不可大於上限",
         "duplicateInBatch": "本批內有相同題目",
-        "atQuestion": "第 {{n}} 題：{{message}}"
+        "atQuestion": "第 {{n}} 題：{{message}}",
+        "examPointRequired": "請選擇考點",
+        "visibilityRequired": "請選擇是否公開分享考題"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
@@ -6033,14 +6035,34 @@
         "generated": "已生成 {{count}} 題語音",
         "aiAnswer": "AI 作答",
         "aiAnalyze": "AI 考點分析",
-        "aiHint": "AI 作答會自動勾選正確答案；考點分析會建議年級與考點",
+        "aiHint": "AI 作答：設定答案並填入解析；AI 考點分析：填入考點與年段",
         "needStem": "右側先輸入題目",
         "upload": "PDF／圖片上傳",
-        "uploadHint": "上傳考卷圖片，AI 擷取題目與選項"
+        "uploadHint": "上傳考卷圖片，AI 擷取題目與選項",
+        "aiTitle": "AI 協助"
       },
       "settings": {
         "title": "設定／關聯",
         "hint": "套用到右側所有題目"
+      },
+      "pickExamPointsRequired": "選擇考點（必填）",
+      "visibilityPlaceholder": "請選擇是否公開",
+      "advancedSettings": "進階設定",
+      "gradeMinLabel": "年段下限",
+      "gradeMaxLabel": "年段上限",
+      "batch": {
+        "applyAllHint": "套用到右側所有題目（各題仍可再改）",
+        "examPoints": "考點關連設定",
+        "grade": "年段關聯設定",
+        "programLink": "教材關聯設定",
+        "sources": "考題來源",
+        "sourcesHint": "可選擇、搜尋，找不到就直接新增",
+        "pickSources": "選擇或新增來源",
+        "sourceSearchPlaceholder": "輸入來源名稱，如「113 學年度會考」",
+        "noSources": "沒有符合的來源",
+        "createSource": "新增「{{name}}」",
+        "visibility": "是否公開分享考題",
+        "visibilityHint": "必選"
       }
     }
   }

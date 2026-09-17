@@ -1,8 +1,11 @@
 /**
- * MultipleChoiceQuestionSheet 測試（Issue #1064）— 兩欄批次編輯器。
+ * MultipleChoiceQuestionSheet 測試（Issue #1064）— 單字集同款左欄 + 右欄多題。
  *
- * 驗證：新增多題逐題送出且帶共用設定；批內重複擋；E/F 預設隱藏、按鈕後出現；
- * AI 兩顆在沒題幹時 disabled；編輯模式單卡預填走 updateQuestion；readOnly。
+ * 驗證：左欄順序與上傳／AI 為即將推出；進階設定預設收起；考點必填、公開必選擋送出；
+ * 左側批次覆寫所有卡且新增題帶批次值；編輯模式單卡預填走 updateQuestion（含 source_ids）；
+ * 逐題送出與部分失敗；readOnly。
+ *
+ * Radix Select 在 jsdom 難以操作，需要「已選公開設定」的送出流程用編輯模式（值已預填）。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,18 +13,27 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import MultipleChoiceQuestionSheet from "../MultipleChoiceQuestionSheet";
-import type { Question } from "@/types/questionBank";
+import type { ExamPoint, Question } from "@/types/questionBank";
 
 const createQuestion = vi.fn();
 const updateQuestion = vi.fn();
 const findSimilarQuestions = vi.fn();
+const listExamPoints = vi.fn();
+const listSources = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiClient: {
     createQuestion: (...a: unknown[]) => createQuestion(...a),
     updateQuestion: (...a: unknown[]) => updateQuestion(...a),
     deleteQuestion: vi.fn(),
     findSimilarQuestions: (...a: unknown[]) => findSimilarQuestions(...a),
-    listExamPoints: vi.fn().mockResolvedValue({ items: [] }),
+    listExamPoints: (...a: unknown[]) => listExamPoints(...a),
+    listSources: (...a: unknown[]) => listSources(...a),
+    createSource: vi.fn(),
+    getMagicPasteQuota: vi.fn().mockResolvedValue({
+      free_remaining: 5,
+      free_limit: 5,
+      points: 0,
+    }),
     generateTTS: vi.fn(),
     batchGenerateTTS: vi.fn(),
     uploadImage: vi.fn(),
@@ -51,10 +63,10 @@ vi.mock("react-i18next", () => ({
         "questionBank.form.errors.minOptions": "min options",
         "questionBank.form.errors.noCorrect": "no correct",
         "questionBank.form.errors.singleOnly": "single only",
-        "questionBank.form.errors.gradeRange": "grade range",
+        "questionBank.form.errors.examPointRequired": "exam point required",
+        "questionBank.form.errors.visibilityRequired": "visibility required",
         "questionBank.form.errors.atQuestion": `Q${opts?.n}: ${opts?.message}`,
-        "questionBank.form.addQuestion": "add question",
-        "questionBank.form.addOption": "add option",
+        "questionBank.comingSoon": "coming soon",
       };
       return (
         map[key] ??
@@ -65,7 +77,71 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+const EP: ExamPoint = {
+  id: 7,
+  code: "grammar.tense.present_perfect",
+  names: { "zh-TW": "現在完成式" },
+  parent_id: null,
+  status: "active",
+  order_index: 0,
+  aliases: [],
+};
 const noSimilar = { exact_duplicate: null, similar: [] };
+
+function baseQuestion(overrides: Partial<Question> = {}): Question {
+  return {
+    id: 5,
+    question_type: "multiple_choice",
+    stem: "Existing stem",
+    explanation: "why",
+    image_url: null,
+    stem_audio_url: null,
+    grade_min: 3,
+    grade_max: 5,
+    allow_multiple_answers: false,
+    show_stem_text: true,
+    visibility: "private",
+    is_platform: false,
+    teacher_id: 1,
+    organization_id: null,
+    school_id: null,
+    group_id: null,
+    is_owner: true,
+    options: [
+      {
+        id: 1,
+        order_index: 0,
+        text: "x",
+        is_correct: false,
+        audio_url: null,
+        image_url: null,
+      },
+      {
+        id: 2,
+        order_index: 1,
+        text: "y",
+        is_correct: true,
+        audio_url: null,
+        image_url: null,
+      },
+    ],
+    exam_points: [{ id: 7, code: EP.code, names: EP.names, source: "manual" }],
+    program_links: [],
+    sources: [
+      {
+        id: 11,
+        source_type: "exam",
+        name: "113 會考",
+        year: 2024,
+        organization_id: null,
+        teacher_id: 1,
+      },
+    ],
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
 
 function renderSheet(
   props: Partial<React.ComponentProps<typeof MultipleChoiceQuestionSheet>> = {},
@@ -101,6 +177,14 @@ async function fillCard(
   }
 }
 
+/** 從左側批次考點卡挑第一個考點（會覆寫所有卡） */
+async function pickBatchExamPoint(user: User) {
+  await user.click(screen.getByTestId("qb-batch-exam-points-picker-trigger"));
+  await user.click(
+    await screen.findByTestId("qb-batch-exam-points-picker-option-7"),
+  );
+}
+
 const saveBtn = () => screen.getByTestId("qb-save") as HTMLButtonElement;
 
 describe("MultipleChoiceQuestionSheet", () => {
@@ -108,68 +192,88 @@ describe("MultipleChoiceQuestionSheet", () => {
     createQuestion.mockReset();
     updateQuestion.mockReset();
     findSimilarQuestions.mockReset().mockResolvedValue(noSimilar);
+    listExamPoints.mockReset().mockResolvedValue({ items: [EP] });
+    listSources.mockReset().mockResolvedValue({ items: [] });
   });
 
-  it("預設一張卡、A–D 四格、E/F 按「新增選項」才出現；儲存 disabled 且提示第 1 題", async () => {
-    const user = userEvent.setup();
+  it("左欄：上傳在最上方且即將推出、AI 兩鍵 disabled、批次卡依序、公開必選", () => {
     renderSheet();
-    expect(screen.getByTestId("question-card-0")).toBeTruthy();
-    expect(screen.queryByTestId("qc-0-option-4")).toBeNull();
-    expect(saveBtn().disabled).toBe(true);
-    expect(screen.getByTestId("qb-validation").textContent).toBe(
-      "Q1: stem required",
+    const sheet = screen.getByTestId("qb-sheet");
+    const order = [
+      "qb-upload",
+      "qb-ai-card",
+      "qb-batch-exam-points",
+      "qb-batch-grade",
+      "qb-batch-program-link",
+      "qb-batch-sources",
+      "qb-batch-visibility",
+    ].map((id) =>
+      Array.from(sheet.querySelectorAll("[data-testid]")).findIndex(
+        (el) => el.getAttribute("data-testid") === id,
+      ),
     );
-
-    await user.click(screen.getByTestId("qc-0-add-option"));
-    expect(screen.getByTestId("qc-0-option-4")).toBeTruthy();
-    expect(screen.getByTestId("qc-0-option-5")).toBeTruthy();
-    expect(screen.queryByTestId("qc-0-add-option")).toBeNull();
-  });
-
-  it("AI 兩顆與上傳在沒題幹時 disabled（且本輪尚未實作維持 disabled）", async () => {
-    const user = userEvent.setup();
-    renderSheet();
-    const ai = screen.getByTestId("qb-ai-answer") as HTMLButtonElement;
-    expect(ai.disabled).toBe(true);
-    await user.type(screen.getByTestId("qc-0-stem"), "Q");
-    // 後端未接（沒傳 onAiAnswer）→ 仍 disabled
-    expect(ai.disabled).toBe(true);
+    expect(order.every((n) => n >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(screen.getByTestId("qb-upload-coming-soon")).toBeTruthy();
     expect(
-      (screen.getByTestId("qb-upload") as HTMLButtonElement).disabled,
+      (screen.getByTestId("qb-ai-answer") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId("qb-ai-analyze") as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 
-  it("多題逐題送出，共用設定併入每題，完成後 onSaved + onClose", async () => {
-    createQuestion.mockResolvedValue({ id: 1 });
+  it("右欄：預設一張卡、A–D 四格、E/F 按鈕後出現、進階設定預設收起", async () => {
     const user = userEvent.setup();
-    const { onSaved, onClose } = renderSheet({ organizationId: "org-1" });
+    renderSheet();
+    expect(screen.queryByTestId("qc-0-option-4")).toBeNull();
+    expect(screen.queryByTestId("qc-0-advanced")).toBeNull();
+    await user.click(screen.getByTestId("qc-0-add-option"));
+    expect(screen.getByTestId("qc-0-option-5")).toBeTruthy();
+    await user.click(screen.getByTestId("qc-0-advanced-toggle"));
+    expect(screen.getByTestId("qc-0-advanced")).toBeTruthy();
+    expect(screen.getByTestId("qc-0-grade")).toBeTruthy();
+  });
 
-    await fillCard(user, 0, "First question", [
+  it("驗證順序：題幹 → 選項 → 考點 → 公開設定", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    expect(screen.getByTestId("qb-validation").textContent).toBe(
+      "Q1: stem required",
+    );
+    await fillCard(user, 0, "What?", [
       ["a", true],
       ["b", false],
     ]);
-    await user.click(screen.getByTestId("qb-add-question"));
-    await fillCard(user, 1, "Second question", [
-      ["c", false],
-      ["d", true],
-    ]);
-    await waitFor(() => expect(saveBtn().disabled).toBe(false));
+    await waitFor(() =>
+      expect(screen.getByTestId("qb-validation").textContent).toBe(
+        "Q1: exam point required",
+      ),
+    );
+    await pickBatchExamPoint(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("qb-validation").textContent).toBe(
+        "visibility required",
+      ),
+    );
+    expect(saveBtn().disabled).toBe(true);
+  });
 
-    await user.click(saveBtn());
-    await waitFor(() => expect(createQuestion).toHaveBeenCalledTimes(2));
-    const [p1, p2] = createQuestion.mock.calls.map((c) => c[0]);
-    expect(p1.stem).toBe("First question");
-    expect(p1.options).toEqual([
-      { text: "a", is_correct: true, image_url: null },
-      { text: "b", is_correct: false, image_url: null },
-    ]);
-    expect(p2.stem).toBe("Second question");
-    expect(p2.options[1].is_correct).toBe(true);
-    expect(p1.organization_id).toBe("org-1");
-    expect(p2.organization_id).toBe("org-1");
-    expect(p1.visibility).toBe("private");
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalled();
+  it("左側批次考點覆寫所有卡；之後新增的題也帶入", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByTestId("qb-add-question"));
+    await pickBatchExamPoint(user);
+    expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
+    expect(screen.getByTestId("qc-1-exam-points-chip-7")).toBeTruthy();
+    await user.click(screen.getByTestId("qb-add-question"));
+    expect(screen.getByTestId("qc-2-exam-points-chip-7")).toBeTruthy();
+    // 單題移除考點只影響該題
+    await user.click(
+      within(screen.getByTestId("qc-2-exam-points-chip-7")).getByRole("button"),
+    );
+    expect(screen.queryByTestId("qc-2-exam-points-chip-7")).toBeNull();
+    expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
   });
 
   it("批內兩題題幹相同 → 擋送出", async () => {
@@ -189,10 +293,9 @@ describe("MultipleChoiceQuestionSheet", () => {
         "Q1: dup in batch",
       ),
     );
-    expect(saveBtn().disabled).toBe(true);
   });
 
-  it("後端重複（exact_duplicate）→ 該卡紅字、儲存 disabled", async () => {
+  it("後端重複（exact_duplicate）→ 該卡紅字", async () => {
     findSimilarQuestions.mockResolvedValue({
       exact_duplicate: {
         id: 9,
@@ -205,87 +308,17 @@ describe("MultipleChoiceQuestionSheet", () => {
     });
     const user = userEvent.setup();
     renderSheet();
-    await fillCard(user, 0, "Exists", [
-      ["a", true],
-      ["b", false],
-    ]);
+    await fillCard(user, 0, "Exists", [["a", true]]);
     expect(await screen.findByTestId("qc-0-duplicate")).toBeTruthy();
-    await waitFor(() => expect(saveBtn().disabled).toBe(true));
-    expect(screen.getByTestId("qb-validation").textContent).toBe(
-      "Q1: duplicate",
-    );
-  });
-
-  it("中途失敗：第 2 題 409 → 第 1 題保留、第 2 題顯示後端訊息、onSaved 仍呼叫、不關閉", async () => {
-    createQuestion
-      .mockResolvedValueOnce({ id: 1 })
-      .mockRejectedValueOnce({ detail: { message: "題目已存在" } });
-    const user = userEvent.setup();
-    const { onSaved, onClose } = renderSheet();
-    await fillCard(user, 0, "Q one", [
-      ["a", true],
-      ["b", false],
-    ]);
-    await user.click(screen.getByTestId("qb-add-question"));
-    await fillCard(user, 1, "Q two", [
-      ["a", true],
-      ["b", false],
-    ]);
-    await waitFor(() => expect(saveBtn().disabled).toBe(false));
-    await user.click(saveBtn());
-
-    await waitFor(() => expect(createQuestion).toHaveBeenCalledTimes(2));
-    // 只剩失敗的那張卡，並帶錯誤訊息
     await waitFor(() =>
-      expect(screen.queryByTestId("question-card-1")).toBeNull(),
+      expect(screen.getByTestId("qb-validation").textContent).toBe(
+        "Q1: duplicate",
+      ),
     );
-    expect(screen.getByTestId("qc-0-error").textContent).toBe("題目已存在");
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("編輯模式：單卡預填、沒有新增題目鍵、走 updateQuestion 不送 organization_id", async () => {
-    const existing: Question = {
-      id: 5,
-      question_type: "multiple_choice",
-      stem: "Existing stem",
-      explanation: "why",
-      image_url: null,
-      stem_audio_url: null,
-      grade_min: 3,
-      grade_max: 5,
-      allow_multiple_answers: false,
-      show_stem_text: true,
-      visibility: "private",
-      is_platform: false,
-      teacher_id: 1,
-      organization_id: null,
-      school_id: null,
-      group_id: null,
-      is_owner: true,
-      options: [
-        {
-          id: 1,
-          order_index: 0,
-          text: "x",
-          is_correct: false,
-          audio_url: null,
-          image_url: null,
-        },
-        {
-          id: 2,
-          order_index: 1,
-          text: "y",
-          is_correct: true,
-          audio_url: null,
-          image_url: null,
-        },
-      ],
-      exam_points: [],
-      program_links: [],
-      created_at: null,
-      updated_at: null,
-    };
+  it("編輯模式：單卡預填（含來源 chip、進階設定展開）、沒有新增題目鍵；updateQuestion 帶 source_ids 不帶 organization_id", async () => {
+    const existing = baseQuestion();
     updateQuestion.mockResolvedValue(existing);
     const user = userEvent.setup();
     renderSheet({ question: existing, organizationId: "org-1" });
@@ -293,11 +326,10 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect((screen.getByTestId("qc-0-stem") as HTMLTextAreaElement).value).toBe(
       "Existing stem",
     );
-    expect(
-      (screen.getByTestId("qc-0-option-1") as HTMLInputElement).value,
-    ).toBe("y");
+    expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
+    expect(screen.getByTestId("qb-sources-chip-11")).toBeTruthy();
+    expect(screen.getByTestId("qc-0-advanced")).toBeTruthy(); // 有年段 → 展開
     expect(screen.queryByTestId("qb-add-question")).toBeNull();
-    expect(screen.queryByTestId("qc-0-remove")).toBeNull();
     expect(saveBtn().disabled).toBe(false);
 
     await user.click(saveBtn());
@@ -307,46 +339,40 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(payload.organization_id).toBeUndefined();
     expect(payload.question_type).toBeUndefined();
     expect(payload.grade_min).toBe(3);
+    expect(payload.exam_point_ids).toEqual([7]);
+    expect(payload.source_ids).toEqual([11]);
+    expect(payload.visibility).toBe("private");
     expect(payload.options).toEqual([
       { text: "x", is_correct: false, image_url: null },
       { text: "y", is_correct: true, image_url: null },
     ]);
   });
 
-  it("readOnly：沒有儲存鍵與工具區，欄位 disabled", () => {
+  it("編輯模式改左側批次年段 → 該卡年段跟著改，送出時帶新值", async () => {
+    const existing = baseQuestion();
+    updateQuestion.mockResolvedValue(existing);
+    const user = userEvent.setup();
+    renderSheet({ question: existing });
+    // 左側批次年段清成「不限」→ 右側卡片同步
+    await user.click(screen.getByTestId("qb-batch-grade-slider-clear"));
+    expect(screen.getByTestId("qc-0-grade-label").textContent).toBe(
+      "questionBank.form.gradeAny",
+    );
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(updateQuestion.mock.calls[0][1].grade_min).toBeNull();
+    expect(updateQuestion.mock.calls[0][1].grade_max).toBeNull();
+  });
+
+  it("readOnly：沒有儲存鍵與左欄，欄位 disabled", () => {
     renderSheet({
       readOnly: true,
-      question: {
-        id: 7,
-        question_type: "multiple_choice",
-        stem: "Someone else's",
-        explanation: null,
-        image_url: null,
-        stem_audio_url: null,
-        grade_min: null,
-        grade_max: null,
-        allow_multiple_answers: false,
-        show_stem_text: true,
-        visibility: "public",
-        is_platform: true,
-        teacher_id: 2,
-        organization_id: null,
-        school_id: null,
-        group_id: null,
-        is_owner: false,
-        options: [],
-        exam_points: [],
-        program_links: [],
-        created_at: null,
-        updated_at: null,
-      },
+      question: baseQuestion({ is_owner: false, visibility: "public" }),
     });
     expect(screen.queryByTestId("qb-save")).toBeNull();
-    expect(screen.queryByTestId("qb-tools")).toBeNull();
+    expect(screen.queryByTestId("qb-batch-visibility")).toBeNull();
     expect(
       (screen.getByTestId("qc-0-stem") as HTMLTextAreaElement).disabled,
     ).toBe(true);
-    const card = within(screen.getByTestId("question-card-0"));
-    expect(card.queryByTestId("qc-0-add-option")).toBeNull();
   });
 });

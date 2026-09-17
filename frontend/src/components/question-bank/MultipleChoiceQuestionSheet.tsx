@@ -3,11 +3,13 @@
  *
  * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
  * - 標題列：儲存（擋住時下方一行寫原因）、刪除（編輯模式）、關閉
- * - 左欄（md 以上 sticky）：工具區 QuestionBankToolsPanel + 整批共用設定 QuestionBankSettingsPanel
+ * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）
  * - 右欄：多張 QuestionCard +「新增題目」
  *
- * 新增：右側每題各自一筆，逐題 createQuestion，共用設定併入每題；中途失敗停在該題、
- * 已成功的保留、該卡顯示後端訊息。編輯：單卡 + updateQuestion。
+ * 批次設定（考點／年段／教材關聯）一改就覆寫右側所有題；新增的題帶左側目前值。
+ * 整批共用、不進 draft：公開設定（必選）、考題來源。
+ * 新增：逐題 createQuestion；中途失敗停在該題、已成功的保留、該卡顯示後端訊息。
+ * 編輯：單卡 + updateQuestion。「自動生成語音」勾選時，儲存前先補齊缺語音的題幹。
  * 語音／儲存進行中 setEditorBusy，關閉鍵跟著 disabled；有變更時關閉前 confirm。
  */
 
@@ -20,24 +22,23 @@ import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/contexts/SidebarContext";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
+import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
-import type { Question } from "@/types/questionBank";
+import type { Question, QuestionVisibility } from "@/types/questionBank";
 import QuestionCard from "./QuestionCard";
-import QuestionBankToolsPanel from "./QuestionBankToolsPanel";
-import QuestionBankSettingsPanel from "./QuestionBankSettingsPanel";
+import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import {
   MAX_QUESTIONS_PER_BATCH,
-  defaultSharedSettings,
+  batchDefaultsFromQuestion,
   draftFromQuestion,
+  emptyBatchDefaults,
   emptyDraft,
   findBatchDuplicateKeys,
-  sharedSettingsFromQuestion,
   toCreateInput,
   validateDraft,
-  validateShared,
+  type BatchDefaults,
   type QuestionDraft,
-  type SharedSettings,
 } from "./questionDraft";
 
 const TTS_STORAGE_KEY = "duotopia_batch_tts_settings";
@@ -96,6 +97,16 @@ function extractApiMessage(err: unknown): string | null {
   return typeof anyErr.message === "string" ? anyErr.message : null;
 }
 
+function sourcesFromQuestion(q: Question): ComboboxItem[] {
+  return q.sources.map((s) => ({
+    id: s.id,
+    label: s.name,
+    meta: [s.source_type === "exam" ? "考試" : "出版社", s.year]
+      .filter(Boolean)
+      .join(" · "),
+  }));
+}
+
 export default function MultipleChoiceQuestionSheet({
   open,
   onClose,
@@ -112,8 +123,11 @@ export default function MultipleChoiceQuestionSheet({
   const isEdit = question !== null;
 
   const [drafts, setDrafts] = useState<QuestionDraft[]>([emptyDraft()]);
-  const [shared, setShared] = useState<SharedSettings>(defaultSharedSettings());
+  const [batch, setBatch] = useState<BatchDefaults>(emptyBatchDefaults());
+  const [sources, setSources] = useState<ComboboxItem[]>([]);
+  const [visibility, setVisibility] = useState<QuestionVisibility | null>(null);
   const [ttsSettings, setTtsSettings] = useState<TTSSettingsState>(DEFAULT_TTS);
+  const [autoTTS, setAutoTTS] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [generatingAudio, setGeneratingAudio] = useState(false);
@@ -124,12 +138,18 @@ export default function MultipleChoiceQuestionSheet({
     if (!open) return;
     if (question) {
       setDrafts([draftFromQuestion(question)]);
-      setShared(sharedSettingsFromQuestion(question));
+      setBatch(batchDefaultsFromQuestion(question));
+      setSources(sourcesFromQuestion(question));
+      setVisibility(question.visibility);
     } else {
-      setDrafts([emptyDraft()]);
-      setShared(defaultSharedSettings());
+      const defaults = emptyBatchDefaults();
+      setDrafts([emptyDraft(defaults)]);
+      setBatch(defaults);
+      setSources([]);
+      setVisibility(null);
     }
     setTtsSettings(loadTtsSettings());
+    setAutoTTS(false);
     dirtyRef.current = false;
   }, [open, question]);
 
@@ -144,9 +164,11 @@ export default function MultipleChoiceQuestionSheet({
     setDrafts((prev) => prev.map((d) => (d.key === key ? next : d)));
   }, []);
 
-  const updateShared = (next: SharedSettings) => {
+  /** 左側批次設定：改了就覆寫右側所有題的對應欄位 */
+  const applyBatch = (patch: Partial<BatchDefaults>) => {
     dirtyRef.current = true;
-    setShared(next);
+    setBatch((prev) => ({ ...prev, ...patch }));
+    setDrafts((prev) => prev.map((d) => ({ ...d, ...patch })));
   };
 
   const handleTtsSettingsChange = (s: TTSSettingsState) => {
@@ -167,19 +189,16 @@ export default function MultipleChoiceQuestionSheet({
       ),
     [drafts, batchDupKeys],
   );
-  const sharedErrorKey = validateShared(shared);
   const firstErrorIndex = errorKeys.findIndex((k) => k !== null);
   const validationMessage: string | null = readOnly
     ? null
-    : sharedErrorKey
-      ? t(`questionBank.form.errors.${sharedErrorKey}`)
-      : firstErrorIndex >= 0
-        ? t("questionBank.form.errors.atQuestion", {
-            n: firstErrorIndex + 1,
-            message: t(
-              `questionBank.form.errors.${errorKeys[firstErrorIndex]}`,
-            ),
-          })
+    : firstErrorIndex >= 0
+      ? t("questionBank.form.errors.atQuestion", {
+          n: firstErrorIndex + 1,
+          message: t(`questionBank.form.errors.${errorKeys[firstErrorIndex]}`),
+        })
+      : visibility === null
+        ? t("questionBank.form.errors.visibilityRequired")
         : null;
 
   // ---- 題目增減 ----
@@ -191,7 +210,7 @@ export default function MultipleChoiceQuestionSheet({
       return;
     }
     dirtyRef.current = true;
-    const d = emptyDraft();
+    const d = emptyDraft(batch);
     setDrafts((prev) => [...prev, d]);
     window.setTimeout(() => {
       document
@@ -205,37 +224,50 @@ export default function MultipleChoiceQuestionSheet({
     setDrafts((prev) => prev.filter((d) => d.key !== key));
   };
 
-  // ---- 批次語音（只對題幹） ----
+  // ---- 批次語音（只對題幹）----
   const pendingAudio = drafts.filter((d) => d.stem.trim() && !d.stem_audio_url);
+
+  /** 對缺語音的題幹批次生成；回傳補上語音後的 drafts（儲存流程也用） */
+  const fillMissingAudio = async (
+    current: QuestionDraft[],
+  ): Promise<QuestionDraft[]> => {
+    const pending = current.filter((d) => d.stem.trim() && !d.stem_audio_url);
+    if (pending.length === 0) return current;
+    const { voice, rate } = getVoiceAndRate(
+      ttsSettings.accent,
+      ttsSettings.gender,
+      ttsSettings.speed,
+    );
+    const res = (await apiClient.batchGenerateTTS(
+      pending.map((d) => d.stem.trim()),
+      voice,
+      rate,
+      "+0%",
+    )) as { audio_urls?: (string | null)[] };
+    const urls = res?.audio_urls ?? [];
+    const byKey = new Map<string, string>();
+    pending.forEach((d, i) => {
+      const u = urls[i];
+      if (u) byKey.set(d.key, absoluteAudioUrl(u));
+    });
+    return current.map((d) =>
+      byKey.has(d.key) ? { ...d, stem_audio_url: byKey.get(d.key)! } : d,
+    );
+  };
+
   const generateAllAudio = async () => {
     if (pendingAudio.length === 0 || generatingAudio) return;
     setGeneratingAudio(true);
     try {
-      const { voice, rate } = getVoiceAndRate(
-        ttsSettings.accent,
-        ttsSettings.gender,
-        ttsSettings.speed,
-      );
-      const res = (await apiClient.batchGenerateTTS(
-        pendingAudio.map((d) => d.stem.trim()),
-        voice,
-        rate,
-        "+0%",
-      )) as { audio_urls?: (string | null)[] };
-      const urls = res?.audio_urls ?? [];
-      const byKey = new Map<string, string>();
-      pendingAudio.forEach((d, i) => {
-        const u = urls[i];
-        if (u) byKey.set(d.key, absoluteAudioUrl(u));
-      });
+      const before = pendingAudio.length;
+      const next = await fillMissingAudio(drafts);
+      const after = next.filter(
+        (d) => d.stem.trim() && !d.stem_audio_url,
+      ).length;
       dirtyRef.current = true;
-      setDrafts((prev) =>
-        prev.map((d) =>
-          byKey.has(d.key) ? { ...d, stem_audio_url: byKey.get(d.key)! } : d,
-        ),
-      );
+      setDrafts(next);
       toast.success(
-        t("questionBank.form.tools.generated", { count: byKey.size }),
+        t("questionBank.form.tools.generated", { count: before - after }),
       );
     } catch (err) {
       console.error("Batch TTS failed:", err);
@@ -252,14 +284,32 @@ export default function MultipleChoiceQuestionSheet({
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   const handleSave = async () => {
-    if (validationMessage || saving || readOnly) {
+    if (validationMessage || saving || readOnly || visibility === null) {
       if (firstErrorIndex >= 0) scrollToCard(drafts[firstErrorIndex].key);
       return;
     }
     setSaving(true);
     try {
+      // 「自動生成語音」勾選：先補齊缺語音的題幹
+      let toSubmit = drafts;
+      if (autoTTS && pendingAudio.length > 0) {
+        try {
+          toSubmit = await fillMissingAudio(drafts);
+          setDrafts(toSubmit);
+        } catch (err) {
+          console.error("Auto TTS before save failed:", err);
+          toast.error(t("questionBank.form.ttsFailed"));
+          return;
+        }
+      }
+      const shared = {
+        visibility,
+        source_ids: sources.map((s) => s.id),
+        organizationId,
+      };
+
       if (isEdit && question) {
-        const payload = toCreateInput(drafts[0], shared);
+        const payload = toCreateInput(toSubmit[0], shared);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { question_type, organization_id, school_id, ...update } =
           payload;
@@ -272,15 +322,13 @@ export default function MultipleChoiceQuestionSheet({
       }
 
       // 新增：逐題送，失敗停在該題
-      const remaining = [...drafts];
+      const remaining = [...toSubmit];
       let savedCount = 0;
       let last: Question | null = null;
       while (remaining.length > 0) {
         const d = remaining[0];
         try {
-          last = await apiClient.createQuestion(
-            toCreateInput(d, shared, organizationId),
-          );
+          last = await apiClient.createQuestion(toCreateInput(d, shared));
           savedCount += 1;
           remaining.shift();
         } catch (err) {
@@ -356,33 +404,6 @@ export default function MultipleChoiceQuestionSheet({
       : t("questionBank.form.titleCreate");
   const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
 
-  const leftColumn = (
-    <>
-      {!readOnly && (
-        <QuestionBankToolsPanel
-          ttsSettings={ttsSettings}
-          onTtsSettingsChange={handleTtsSettingsChange}
-          pendingAudioCount={pendingAudio.length}
-          onGenerateAllAudio={generateAllAudio}
-          generatingAudio={generatingAudio}
-          hasAnyStem={hasAnyStem}
-          disabled={saving}
-        />
-      )}
-      <QuestionBankSettingsPanel
-        value={shared}
-        onChange={updateShared}
-        programs={programs}
-        readOnly={readOnly || saving}
-        errorMessage={
-          sharedErrorKey
-            ? t(`questionBank.form.errors.${sharedErrorKey}`)
-            : null
-        }
-      />
-    </>
-  );
-
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-20 z-40 transition-opacity pointer-events-none" />
@@ -456,24 +477,38 @@ export default function MultipleChoiceQuestionSheet({
           </p>
         )}
 
-        {/* 兩欄 */}
+        {/* 兩欄：左 = 單字集同款批次工作區（md 以上），右 = 題目卡 */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
           <div className="flex gap-4 items-start">
-            {/* 左欄（md 以上） */}
-            <div className="hidden md:flex md:w-[35%] flex-col gap-4 border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-180px)] overflow-y-auto overscroll-contain">
-              {leftColumn}
-            </div>
+            {!readOnly && (
+              <QuestionBankBatchPanel
+                ttsSettings={ttsSettings}
+                onTtsSettingsChange={handleTtsSettingsChange}
+                autoTTS={autoTTS}
+                onAutoTTSChange={setAutoTTS}
+                pendingAudioCount={pendingAudio.length}
+                onGenerateAllAudio={generateAllAudio}
+                generatingAudio={generatingAudio}
+                hasAnyStem={hasAnyStem}
+                batch={batch}
+                onBatchChange={applyBatch}
+                programs={programs}
+                sources={sources}
+                onSourcesChange={(next) => {
+                  dirtyRef.current = true;
+                  setSources(next);
+                }}
+                visibility={visibility}
+                onVisibilityChange={(v) => {
+                  dirtyRef.current = true;
+                  setVisibility(v);
+                }}
+                organizationId={organizationId}
+                disabled={saving}
+              />
+            )}
 
-            {/* 右欄 */}
             <div className="flex-1 min-w-0 space-y-4">
-              {/* 手機：左欄內容摺疊在上方 */}
-              <details className="md:hidden border rounded-lg bg-gray-50 p-3">
-                <summary className="text-sm font-medium text-gray-800 cursor-pointer">
-                  {t("questionBank.form.settings.title")}
-                </summary>
-                <div className="mt-3 space-y-4">{leftColumn}</div>
-              </details>
-
               {drafts.map((d, i) => (
                 <QuestionCard
                   key={d.key}
@@ -487,6 +522,7 @@ export default function MultipleChoiceQuestionSheet({
                   }
                   excludeId={question?.id}
                   ttsSettings={ttsSettings}
+                  programs={programs}
                   errorMessage={
                     errorKeys[i]
                       ? t(`questionBank.form.errors.${errorKeys[i]}`)

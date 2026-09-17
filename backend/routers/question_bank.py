@@ -9,7 +9,8 @@
 - DELETE /api/question-bank/questions/{id}            軟刪除
 - PUT    /api/question-bank/questions/{id}/program-links  整批覆寫教材包／單元關聯
 - GET    /api/question-bank/exam-points?q=            考點清單（含 alias 命中）
-- GET    /api/question-bank/sources                   來源清單（平台公用 + 自己機構）
+- GET    /api/question-bank/sources?q=                來源清單（平台公用 + 自己機構 + 自己建的）
+- POST   /api/question-bank/sources                   新增來源（可打字下拉的「新增」）
 
 可見範圍、重複偵測、考點歸一都在 services/question_bank_service.py，這裡只做
 驗證、權限與序列化。列表的 filter 參數已含 P3（#1066）需要的全部欄位。
@@ -100,6 +101,7 @@ class QuestionBase(BaseModel):
     ] = "private"
     exam_point_ids: List[int] = Field(default_factory=list)
     program_links: List[ProgramLinkIn] = Field(default_factory=list)
+    source_ids: List[int] = Field(default_factory=list)
 
     @field_validator("stem")
     @classmethod
@@ -153,6 +155,7 @@ class QuestionUpdate(BaseModel):
     )
     exam_point_ids: Optional[List[int]] = None
     program_links: Optional[List[ProgramLinkIn]] = None
+    source_ids: Optional[List[int]] = None
 
     @field_validator("stem")
     @classmethod
@@ -162,6 +165,24 @@ class QuestionUpdate(BaseModel):
 
 class ProgramLinksReplace(BaseModel):
     program_links: List[ProgramLinkIn]
+
+
+class SourceCreate(BaseModel):
+    """老師在可打字下拉直接新增來源。"""
+
+    source_type: Literal["exam", "publisher"]
+    name: str = Field(..., min_length=1, max_length=200)
+    year: Optional[int] = Field(None, ge=1900, le=2200)
+    # 給 organization_id = 建成機構來源（需為該機構 active 成員）；不給 = 個人來源
+    organization_id: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("來源名稱不可為空")
+        return v
 
 
 def _validate_options(options: List[OptionIn], allow_multiple: bool) -> None:
@@ -184,6 +205,17 @@ def _exam_point_out(ep: ExamPoint) -> dict:
         "status": ep.status,
         "order_index": ep.order_index,
         "aliases": [a.alias for a in (ep.aliases or [])],
+    }
+
+
+def _source_out(s: QuestionSource) -> dict:
+    return {
+        "id": s.id,
+        "source_type": s.source_type,
+        "name": s.name,
+        "year": s.year,
+        "organization_id": str(s.organization_id) if s.organization_id else None,
+        "teacher_id": s.teacher_id,
     }
 
 
@@ -230,6 +262,11 @@ def _question_out(q: Question, teacher: Teacher) -> dict:
         "program_links": [
             {"program_id": pl.program_id, "lesson_id": pl.lesson_id}
             for pl in q.program_links
+        ],
+        "sources": [
+            _source_out(link.source)
+            for link in q.source_links
+            if link.source is not None
         ],
         "created_at": q.created_at.isoformat() if q.created_at else None,
         "updated_at": q.updated_at.isoformat() if q.updated_at else None,
@@ -454,6 +491,7 @@ def create_question(
     qbs.replace_program_links(
         question, [pl.model_dump() for pl in payload.program_links]
     )
+    qbs.replace_sources(db, question, teacher, payload.source_ids)
 
     db.add(question)
     db.commit()
@@ -547,6 +585,8 @@ def update_question(
         qbs.replace_program_links(
             q, [pl.model_dump() for pl in payload.program_links], db=db
         )
+    if payload.source_ids is not None:
+        qbs.replace_sources(db, q, teacher, payload.source_ids)
 
     qbs.enforce_platform_rules(q, teacher)
     q.updated_at = datetime.now(timezone.utc)
@@ -596,35 +636,52 @@ def list_exam_points(
 
 @router.get("/sources")
 def list_sources(
+    q: Optional[str] = Query(None, description="名稱關鍵字"),
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """來源清單：平台公用（organization_id NULL）+ 老師所屬機構自建。"""
-    org_ids = qbs.teacher_org_ids(db, teacher.id)
-    conds = [QuestionSource.organization_id.is_(None)]
-    if org_ids:
-        conds.append(QuestionSource.organization_id.in_(org_ids))
-    rows = (
-        db.query(QuestionSource)
-        .filter(or_(*conds))
-        .order_by(
-            QuestionSource.source_type,
-            QuestionSource.year.desc().nullslast(),
-            QuestionSource.name,
+    """來源清單：平台公用 + 所屬機構自建 + 自己建的。"""
+    query = qbs.visible_sources_query(db, teacher)
+    if q and q.strip():
+        query = query.filter(QuestionSource.name.ilike(f"%{q.strip()}%"))
+    rows = query.order_by(
+        QuestionSource.source_type,
+        QuestionSource.year.desc().nullslast(),
+        QuestionSource.name,
+    ).all()
+    return {"items": [_source_out(s) for s in rows]}
+
+
+@router.post("/sources", status_code=status.HTTP_201_CREATED)
+def create_source(
+    payload: SourceCreate,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """新增來源（可打字下拉的「新增」）。同名同型別已存在就回既有那筆（idempotent）。"""
+    org_uuid = _parse_uuid(payload.organization_id, "organization_id")
+    if org_uuid is not None and not has_read_org_materials_permission(
+        teacher.id, org_uuid, db
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此機構的成員")
+    existing = (
+        qbs.visible_sources_query(db, teacher)
+        .filter(
+            QuestionSource.source_type == payload.source_type,
+            QuestionSource.name.ilike(payload.name),
         )
-        .all()
+        .first()
     )
-    return {
-        "items": [
-            {
-                "id": s.id,
-                "source_type": s.source_type,
-                "name": s.name,
-                "year": s.year,
-                "organization_id": str(s.organization_id)
-                if s.organization_id
-                else None,
-            }
-            for s in rows
-        ]
-    }
+    if existing is not None:
+        return _source_out(existing)
+    source = QuestionSource(
+        source_type=payload.source_type,
+        name=payload.name,
+        year=payload.year,
+        organization_id=org_uuid,
+        teacher_id=None if org_uuid is not None else teacher.id,
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return _source_out(source)
