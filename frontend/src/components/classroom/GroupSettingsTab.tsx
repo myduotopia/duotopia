@@ -4,6 +4,11 @@
  * 三欄版面：組別清單（可拖曳排序）∣ 選中組別的編輯區 ∣ 班級學生名冊。
  * 所有編輯都即時儲存，沒有「儲存」按鈕。
  *
+ * 第 3 欄名冊只列「尚未加入目前選中組別」的學生（issue #1070）：點一下加入後
+ * 立即從名冊消失、出現在第 2 欄；從第 2 欄移出後立即回到名冊。一位學生可屬
+ * 多組，所以已在其他組的學生仍會列出，姓名後方以小字標註他已屬於的組別名。
+ * 三欄都不設內部捲軸，名單多長就顯示多長，靠頁面捲軸瀏覽。
+ *
  * 儲存採序列化且會合併的佇列（pending + drain）：老師連點五個學生時，五個
  * 請求不可以並行競爭，否則後端整包取代的語意會讓較早送出的那包蓋掉較新的。
  * 佇列以 group id 為 key，同一組在輪到它之前又被改，就直接覆寫排隊中的草稿；
@@ -32,13 +37,13 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import {
   GROUP_COLORS,
   GROUP_COLOR_DOT,
+  buildStudentGroupIndex,
   GROUP_COLOR_RING,
   type GroupColor,
   type StudentGroup,
@@ -125,6 +130,16 @@ export function GroupSettingsTab({
     roster.forEach((s) => map.set(s.id, s));
     return map;
   }, [roster]);
+
+  // 第 3 欄只列「還沒加入目前這組」的學生；屬於其他組的照常列出（一人可多組）。
+  const available = useMemo(
+    () =>
+      draft ? roster.filter((s) => !draft.memberIds.includes(s.id)) : roster,
+    [roster, draft],
+  );
+
+  // 學生 → 他所屬的所有組別（伺服器版本），給第 3 欄標「已屬於其他組」用。
+  const groupIndex = useMemo(() => buildStudentGroupIndex(groups), [groups]);
 
   // 存檔迴圈裡要讀的值，不能閉包住過期的 render。
   const groupsRef = useRef<StudentGroup[]>([]);
@@ -558,10 +573,17 @@ export function GroupSettingsTab({
           <p className="text-sm text-gray-500 py-4">
             {t("classroomDetail.groups.noStudents")}
           </p>
+        ) : available.length === 0 ? (
+          <p className="text-sm text-gray-500 py-4">
+            {t("classroomDetail.groups.allInGroup")}
+          </p>
         ) : (
           <ul className="space-y-1">
-            {roster.map((s) => {
-              const checked = draft?.memberIds.includes(s.id) ?? false;
+            {available.map((s) => {
+              const others = (groupIndex.get(s.id) ?? []).filter(
+                (m) => m.groupId !== selectedId,
+              );
+              const otherNames = others.map((m) => m.groupName).join("、");
               return (
                 <li key={s.id}>
                   <button
@@ -570,22 +592,45 @@ export function GroupSettingsTab({
                     onClick={() => toggleMember(s.id)}
                     className={cn(
                       "w-full flex items-center gap-3 px-2 py-2 rounded-lg border text-left transition-colors",
-                      checked
-                        ? "bg-blue-50 border-blue-300"
-                        : "bg-white border-gray-200 hover:border-gray-300",
-                      !draft && "opacity-50 cursor-not-allowed",
+                      "bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50",
+                      !draft &&
+                        "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200",
                     )}
                   >
-                    <Checkbox
-                      checked={checked}
-                      className="pointer-events-none"
-                    />
+                    <Plus className="h-4 w-4 text-gray-400 shrink-0" />
                     <span className="w-10 text-xs text-gray-500 truncate">
                       {s.student_number || "-"}
                     </span>
                     <span className="flex-1 min-w-0 truncate text-sm text-gray-900">
                       {s.name}
                     </span>
+                    {others.length > 0 && (
+                      <span
+                        className="shrink-0 flex flex-wrap justify-end gap-1 max-w-[45%]"
+                        title={t("classroomDetail.groups.alsoIn", {
+                          names: otherNames,
+                        })}
+                      >
+                        {others.map((m) => (
+                          <span
+                            key={m.groupId}
+                            className="inline-flex items-center gap-1 text-[11px] text-gray-500"
+                          >
+                            <span
+                              className={cn(
+                                "h-1.5 w-1.5 rounded-full shrink-0",
+                                m.color
+                                  ? GROUP_COLOR_DOT[m.color]
+                                  : "bg-gray-400",
+                              )}
+                            />
+                            <span className="truncate max-w-[6rem]">
+                              {m.groupName}
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </button>
                 </li>
               );
