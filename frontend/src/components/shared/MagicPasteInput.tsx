@@ -29,7 +29,9 @@ export interface MagicPasteItem {
  * - vocabulary：單字集 → 一列 = 單字 + 翻譯 + 詞性 + 例句
  * - sentence  ：例句集 / 朗讀評測 → 一列 = 句子 + 翻譯
  */
-export type MagicPasteExtractMode = "vocabulary" | "sentence";
+// multiple_choice：題庫從考卷圖片擷取題目與選項（後端 #1065）
+export type MagicPasteExtractMode =
+  "vocabulary" | "sentence" | "multiple_choice";
 
 interface QuotaState {
   free_remaining: number;

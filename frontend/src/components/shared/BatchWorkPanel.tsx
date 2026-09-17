@@ -8,6 +8,11 @@
  *
  * pasteLabel：覆寫貼上區標題文字（往下傳給 BatchPasteArea 的 label）。
  *   未傳則沿用 BatchPasteArea 預設（單字用字串）；例句集/朗讀應傳入句子相關文案。
+ *
+ * hideTextTab（issue #1061 題庫）：不需要「貼上文字」的編輯器（例如題庫只吃圖片/PDF）
+ *   設 true → 不渲染 tab 列與貼上框，直接顯示 imageTab，也不顯示確認鍵／進度條；
+ *   此時 text / translate 相關 props 可省略。
+ * showTranslate：false → 不渲染翻譯卡（預設 true，既有呼叫端行為不變）。
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -28,22 +33,24 @@ export interface BatchProgress {
 }
 
 export interface BatchWorkPanelProps {
-  // --- Paste area ---
-  text: string;
-  onTextChange: (text: string) => void;
-  maxItems: number;
+  // --- Paste area（hideTextTab 時可省略）---
+  text?: string;
+  onTextChange?: (text: string) => void;
+  maxItems?: number;
   placeholder?: string;
   /** 貼上區標題文字（往下傳給 BatchPasteArea 的 label）；未傳則用其預設 */
   pasteLabel?: string;
 
-  // --- Translate settings ---
-  autoTranslate: boolean;
-  onAutoTranslateChange: (enabled: boolean) => void;
-  selectedLanguage: string;
-  onLanguageChange: (language: string) => void;
-  translationLanguages: TranslationLanguageOption[];
+  // --- Translate settings（showTranslate=false 時可省略）---
+  autoTranslate?: boolean;
+  onAutoTranslateChange?: (enabled: boolean) => void;
+  selectedLanguage?: string;
+  onLanguageChange?: (language: string) => void;
+  translationLanguages?: TranslationLanguageOption[];
   customLanguage?: string;
   onCustomLanguageChange?: (value: string) => void;
+  /** false → 不渲染翻譯卡（預設 true） */
+  showTranslate?: boolean;
 
   // --- TTS settings ---
   autoTTS: boolean;
@@ -63,21 +70,24 @@ export interface BatchWorkPanelProps {
   // --- 圖片 / PDF tab（issue #891）---
   /** 若提供，頂部顯示「貼上文字 / 圖片 PDF」tab；此為圖片 tab 的內容（MagicPasteInput） */
   imageTab?: React.ReactNode;
+  /** true → 沒有貼上文字：不渲染 tab 列與貼上框，直接顯示 imageTab（issue #1061 題庫） */
+  hideTextTab?: boolean;
 }
 
 export function BatchWorkPanel({
-  text,
-  onTextChange,
-  maxItems,
+  text = "",
+  onTextChange = () => undefined,
+  maxItems = 0,
   placeholder,
   pasteLabel,
-  autoTranslate,
-  onAutoTranslateChange,
-  selectedLanguage,
-  onLanguageChange,
-  translationLanguages,
+  autoTranslate = false,
+  onAutoTranslateChange = () => undefined,
+  selectedLanguage = "",
+  onLanguageChange = () => undefined,
+  translationLanguages = [],
   customLanguage,
   onCustomLanguageChange,
+  showTranslate = true,
   autoTTS,
   onAutoTTSChange,
   ttsSettings,
@@ -88,11 +98,13 @@ export function BatchWorkPanel({
   progress,
   children,
   imageTab,
+  hideTextTab = false,
 }: BatchWorkPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<"text" | "image">("text");
-  const showTabs = !!imageTab;
-  const onTextTab = !showTabs || activeTab === "text";
+  // hideTextTab：只有圖片分頁，沒有 tab 列
+  const showTabs = !!imageTab && !hideTextTab;
+  const onTextTab = !hideTextTab && (!showTabs || activeTab === "text");
 
   return (
     // 整塊固定在畫面上：sticky 釘住 + 用滿可視高度；貼上區可壓縮讓內容盡量一次顯示完，
@@ -146,17 +158,19 @@ export function BatchWorkPanel({
           imageTab
         )}
 
-        {/* AI Generate Translation */}
-        <BatchTranslateSettings
-          enabled={autoTranslate}
-          onEnabledChange={onAutoTranslateChange}
-          selectedLanguage={selectedLanguage}
-          onLanguageChange={onLanguageChange}
-          languages={translationLanguages}
-          customLanguage={customLanguage}
-          onCustomLanguageChange={onCustomLanguageChange}
-          variant="card"
-        />
+        {/* AI Generate Translation（showTranslate=false 的編輯器不需要） */}
+        {showTranslate && (
+          <BatchTranslateSettings
+            enabled={autoTranslate}
+            onEnabledChange={onAutoTranslateChange}
+            selectedLanguage={selectedLanguage}
+            onLanguageChange={onLanguageChange}
+            languages={translationLanguages}
+            customLanguage={customLanguage}
+            onCustomLanguageChange={onCustomLanguageChange}
+            variant="card"
+          />
+        )}
 
         {/* AI Generate TTS */}
         <BatchTTSSettings
