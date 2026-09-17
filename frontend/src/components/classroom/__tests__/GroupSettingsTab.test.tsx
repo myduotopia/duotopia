@@ -74,6 +74,17 @@ function renderTab(initial: StudentGroup[] = []) {
   return render(<Harness initial={initial} />);
 }
 
+/**
+ * 點第 1 欄的組別來選取它。不能用 findByText：第 3 欄名冊會用小字標註學生
+ * 已屬於的組別名（#1070），同名文字會出現不只一次。組別按鈕的名稱以組名
+ * 開頭，名冊列則以學號開頭，用 ^ 錨定就不會撞到。
+ */
+async function selectGroup(name: string) {
+  fireEvent.click(
+    await screen.findByRole("button", { name: new RegExp(`^${name}`) }),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -98,7 +109,7 @@ describe("GroupSettingsTab", () => {
     );
     renderTab([group()]);
 
-    fireEvent.click(await screen.findByText("第一組"));
+    await selectGroup("第一組");
     fireEvent.click(screen.getByRole("button", { name: /Amy/ }));
 
     await waitFor(() => expect(mockUpdateClassroomGroup).toHaveBeenCalled());
@@ -125,7 +136,7 @@ describe("GroupSettingsTab", () => {
     });
 
     renderTab([group()]);
-    fireEvent.click(await screen.findByText("第一組"));
+    await selectGroup("第一組");
     fireEvent.click(screen.getByRole("button", { name: /Amy/ }));
     fireEvent.click(screen.getByRole("button", { name: /Ben/ }));
     fireEvent.click(screen.getByRole("button", { name: /Cara/ }));
@@ -152,7 +163,7 @@ describe("GroupSettingsTab", () => {
       }),
     ]);
 
-    fireEvent.click(await screen.findByText("第一組"));
+    await selectGroup("第一組");
     fireEvent.click(
       screen.getByRole("button", {
         name: "classroomDetail.groups.removeMember",
@@ -213,7 +224,7 @@ describe("GroupSettingsTab", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderTab([group({ id: 10, name: "第一組" })]);
 
-    fireEvent.click(await screen.findByText("第一組"));
+    await selectGroup("第一組");
     expect(
       screen.getByLabelText("classroomDetail.groups.fieldName"),
     ).toBeTruthy();
