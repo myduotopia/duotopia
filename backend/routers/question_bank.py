@@ -61,7 +61,9 @@ MAX_OPTIONS = 6
 
 
 class OptionIn(BaseModel):
-    text: str = Field(..., min_length=1, max_length=1000)
+    """選項：文字可空（純圖選項），但文字／圖片／語音至少一個。"""
+
+    text: str = Field("", max_length=1000)
     is_correct: bool = False
     audio_url: Optional[str] = None
     image_url: Optional[str] = None
@@ -69,10 +71,13 @@ class OptionIn(BaseModel):
     @field_validator("text")
     @classmethod
     def _strip(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("選項不可為空")
-        return v
+        return (v or "").strip()
+
+    @model_validator(mode="after")
+    def _has_content(self):
+        if not (self.text or self.image_url or self.audio_url):
+            raise ValueError("選項需要文字或圖片")
+        return self
 
 
 class ProgramLinkIn(BaseModel):
@@ -81,7 +86,8 @@ class ProgramLinkIn(BaseModel):
 
 
 class QuestionBase(BaseModel):
-    stem: str = Field(..., min_length=1, max_length=5000)
+    # 題幹可空（純圖題），但 stem / image_url / stem_audio_url 至少一個
+    stem: str = Field("", max_length=5000)
     explanation: Optional[str] = Field(None, max_length=5000)
     image_url: Optional[str] = None
     stem_audio_url: Optional[str] = None
@@ -98,10 +104,7 @@ class QuestionBase(BaseModel):
     @field_validator("stem")
     @classmethod
     def _strip_stem(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("題目不可為空")
-        return v
+        return (v or "").strip()
 
     @model_validator(mode="after")
     def _grade_range(self):
@@ -111,6 +114,8 @@ class QuestionBase(BaseModel):
             and self.grade_min > self.grade_max
         ):
             raise ValueError("grade_min 不可大於 grade_max")
+        if not (self.stem or self.image_url or self.stem_audio_url):
+            raise ValueError("題目需要文字或圖片")
         return self
 
 
@@ -132,7 +137,7 @@ class QuestionCreate(QuestionBase):
 class QuestionUpdate(BaseModel):
     """PATCH：全部選填；有給 options 就整批覆寫。"""
 
-    stem: Optional[str] = Field(None, min_length=1, max_length=5000)
+    stem: Optional[str] = Field(None, max_length=5000)
     explanation: Optional[str] = Field(None, max_length=5000)
     image_url: Optional[str] = None
     stem_audio_url: Optional[str] = None
@@ -152,12 +157,7 @@ class QuestionUpdate(BaseModel):
     @field_validator("stem")
     @classmethod
     def _strip_stem(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.strip()
-        if not v:
-            raise ValueError("題目不可為空")
-        return v
+        return None if v is None else v.strip()
 
 
 class ProgramLinksReplace(BaseModel):
@@ -493,10 +493,17 @@ def update_question(
         q.stem = data["stem"]
         q.normalized_stem = qbs.normalize_stem(data["stem"])
 
+    for field in ("image_url", "stem_audio_url"):
+        if field in data:
+            setattr(q, field, data[field])
+    if not (q.stem or q.image_url or q.stem_audio_url):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="題目需要文字或圖片",
+        )
+
     for field in (
         "explanation",
-        "image_url",
-        "stem_audio_url",
         "grade_min",
         "grade_max",
         "allow_multiple_answers",

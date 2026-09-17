@@ -23,8 +23,11 @@ Content → ContentItem）是多對多，所以不塞進 ContentItem，另開一
 關鍵約束：
 - ``questions.is_platform = true`` 時 ``visibility`` 必須是 ``public``（CHECK），
   平台題庫恆公開。
-- ``UNIQUE (teacher_id, normalized_stem) WHERE is_active AND group_id IS NULL``
-  擋同一老師完全重複的單題；題組內的小題（克漏字空格題幹常是空的）不套用。
+- ``UNIQUE (teacher_id, normalized_stem) WHERE is_active AND group_id IS NULL
+  AND normalized_stem <> ''`` 擋同一老師完全重複的單題；題組內的小題（克漏字空格
+  題幹常是空的）與純圖題不套用。
+- 題幹／選項文字可為空字串（純圖題、純圖選項），但 CHECK 要求「文字、圖片、語音」
+  至少一個（``ck_questions_has_content`` / ``ck_question_options_has_content``）。
 - ``pg_trgm`` 供相似題查詢（``GIN (normalized_stem gin_trgm_ops)``）。
   Supabase 允許 ``CREATE EXTENSION IF NOT EXISTS``。
 
@@ -206,8 +209,8 @@ def upgrade() -> None:
         CREATE TABLE IF NOT EXISTS public.questions (
             id SERIAL PRIMARY KEY,
             question_type VARCHAR(30) NOT NULL,
-            stem TEXT NOT NULL,
-            normalized_stem TEXT NOT NULL,
+            stem TEXT NOT NULL DEFAULT '',
+            normalized_stem TEXT NOT NULL DEFAULT '',
             stem_audio_url TEXT,
             image_url TEXT,
             explanation TEXT,
@@ -239,16 +242,19 @@ def upgrade() -> None:
             CONSTRAINT ck_questions_answer_match_mode CHECK (
                 answer_match_mode IS NULL OR answer_match_mode IN
                     ('exact', 'case_insensitive', 'ignore_punctuation')
+            ),
+            CONSTRAINT ck_questions_has_content CHECK (
+                stem <> '' OR image_url IS NOT NULL OR stem_audio_url IS NOT NULL
             )
         )
         """
     )
-    # 同一老師的單題不可完全重複（題組小題不套用）
+    # 同一老師的單題不可完全重複（題組小題、純圖題不套用）
     op.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_teacher_normalized_stem
             ON public.questions (teacher_id, normalized_stem)
-            WHERE is_active AND group_id IS NULL
+            WHERE is_active AND group_id IS NULL AND normalized_stem <> ''
         """
     )
     op.execute(
@@ -290,13 +296,16 @@ def upgrade() -> None:
             question_id INTEGER NOT NULL
                 REFERENCES public.questions (id) ON DELETE CASCADE,
             order_index SMALLINT NOT NULL,
-            text TEXT NOT NULL,
+            text TEXT NOT NULL DEFAULT '',
             is_correct BOOLEAN NOT NULL DEFAULT FALSE,
             audio_url TEXT,
             image_url TEXT,
             created_at TIMESTAMPTZ DEFAULT now(),
             updated_at TIMESTAMPTZ,
-            CONSTRAINT uq_question_options_order UNIQUE (question_id, order_index)
+            CONSTRAINT uq_question_options_order UNIQUE (question_id, order_index),
+            CONSTRAINT ck_question_options_has_content CHECK (
+                text <> '' OR image_url IS NOT NULL OR audio_url IS NOT NULL
+            )
         )
         """
     )

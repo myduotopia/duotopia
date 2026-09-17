@@ -249,8 +249,9 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     question_type = Column(String(30), nullable=False)
-    stem = Column(Text, nullable=False)
-    normalized_stem = Column(Text, nullable=False, index=True)
+    # 可為空字串（純圖題）；DB CHECK 要求 stem / image_url / stem_audio_url 至少一個
+    stem = Column(Text, nullable=False, default="")
+    normalized_stem = Column(Text, nullable=False, default="", index=True)
     stem_audio_url = Column(Text, nullable=True)
     image_url = Column(Text, nullable=True)
     explanation = Column(Text, nullable=True)
@@ -356,7 +357,8 @@ class QuestionOption(Base):
         index=True,
     )
     order_index = Column(SmallInteger, nullable=False)
-    text = Column(Text, nullable=False)
+    # 可為空字串（純圖選項）；DB CHECK 要求 text / image_url / audio_url 至少一個
+    text = Column(Text, nullable=False, default="")
     is_correct = Column(Boolean, nullable=False, default=False)
     audio_url = Column(Text, nullable=True)
     image_url = Column(Text, nullable=True)

@@ -27,8 +27,8 @@
 |------|------|------|
 | id | serial PK | |
 | question_type | varchar(30) NOT NULL | `multiple_choice` / `reading` / `cloze` / `listening_image` / ... 本期只實作 `multiple_choice` |
-| stem | text NOT NULL | 題幹 |
-| normalized_stem | text NOT NULL | 正規化題幹（小寫、去標點、壓空白），重複偵測用 |
+| stem | text NOT NULL DEFAULT '' | 題幹；純圖題可為空字串，但 CHECK `ck_questions_has_content` 要求 stem / image_url / stem_audio_url 至少一個 |
+| normalized_stem | text NOT NULL DEFAULT '' | 正規化題幹（小寫、去標點、壓空白），重複偵測用；空字串不做去重 |
 | stem_audio_url | text | 題幹語音（語音生成工具只生成題幹，不生成選項） |
 | image_url | text | PDF/圖片上傳 |
 | explanation | text | 解析（AI 作答或老師填寫） |
@@ -52,7 +52,7 @@
 | created_at / updated_at | | |
 
 索引：
-- `UNIQUE (teacher_id, normalized_stem) WHERE is_active`  — 擋同一老師完全重複
+- `UNIQUE (teacher_id, normalized_stem) WHERE is_active AND group_id IS NULL AND normalized_stem <> ''`  — 擋同一老師完全重複（題組小題、純圖題不套用）
 - `GIN (normalized_stem gin_trgm_ops)` — 相似題查詢，需 `CREATE EXTENSION IF NOT EXISTS pg_trgm`
 - `(question_type, visibility)`、`(organization_id)`、`(grade_min, grade_max)`
 
@@ -63,7 +63,7 @@
 | id | serial PK | |
 | question_id | int FK questions ON DELETE CASCADE | |
 | order_index | smallint NOT NULL | 0-5，UI 固定 6 格，至少填 2 個 |
-| text | text NOT NULL | |
+| text | text NOT NULL DEFAULT '' | 純圖選項可為空字串，但 CHECK `ck_question_options_has_content` 要求 text / image_url / audio_url 至少一個 |
 | is_correct | boolean default false | 至少一個 true（應用層驗證） |
 | audio_url | text | 聽力題選項可為音檔 |
 | image_url | text | 圖片聽力題選項可為圖片 |

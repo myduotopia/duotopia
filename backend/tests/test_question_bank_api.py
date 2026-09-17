@@ -232,6 +232,54 @@ def test_create_rejects_unopened_type(test_client, teacher_a):
     assert resp.status_code == 422  # Literal 擋在 schema 層
 
 
+def test_image_only_question_and_option(test_client, teacher_a):
+    """純圖題／純圖選項：文字可空，但文字／圖片至少一個。"""
+    data = _create(
+        test_client,
+        teacher_a,
+        stem="",
+        image_url="https://example.com/q.png",
+        options=[
+            {"text": "", "image_url": "https://example.com/a.png", "is_correct": True},
+            {"text": "b"},
+        ],
+    )
+    assert data["stem"] == "" and data["image_url"].endswith("q.png")
+    assert data["options"][0]["text"] == ""
+
+    # 兩題純圖題不會互相被當重複（空題幹不去重）
+    _create(
+        test_client,
+        teacher_a,
+        stem="",
+        image_url="https://example.com/q2.png",
+        options=[{"text": "x", "is_correct": True}, {"text": "y"}],
+    )
+
+    # 沒文字也沒圖 → 422（題目／選項各測一次）
+    resp = test_client.post(
+        "/api/question-bank/questions",
+        json=_mc_payload(stem=""),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    resp = test_client.post(
+        "/api/question-bank/questions",
+        json=_mc_payload(options=[{"text": "", "is_correct": True}, {"text": "b"}]),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+
+    # PATCH 把題幹清空但沒圖 → 422
+    q = _create(test_client, teacher_a, stem="Has text")
+    resp = test_client.patch(
+        f"/api/question-bank/questions/{q['id']}",
+        json={"stem": ""},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+
+
 # ---------------------------------------------------------------- platform
 
 
