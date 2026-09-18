@@ -12,7 +12,7 @@
 
 | 項目 | 期限 | 若不處理的後果 |
 |---|---|---|
-| **`gemini-2.5-flash` / `gemini-2.5-pro` 退役** | **2026-10-20**（約 1 個月） | Production AI 功能全掛 |
+| **`gemini-2.5-flash` / `gemini-2.5-pro` 退役** | **2026-10-16**（約 1 個月，官方日期不一致，以較早者為準，詳見下方「尚未查證」） | Production AI 功能全掛 |
 | **Imagen `imagen-3.0-generate-002`** | 官方建議 2026-06-30 前換掉（**已逾期 80 天**） | 生圖隨時可能停止服務 |
 | `vertexai.generative_models` 移除 | 官方公告 2026-06-24（**已逾期，但套件仍有此模組**） | 升級套件才會壞；不升級暫時無事 |
 
@@ -143,8 +143,8 @@ commit `3a37b342`（#947 / PR #980）移除 OpenAI fallback 分支後，所有 A
 
 | 目前使用 | 退役日 | 位置 |
 |---|---|---|
-| `gemini-2.5-flash` | 2026-10-20 | `vertex_ai.py:27`、`scenario_grading_ai.py:50` |
-| `gemini-2.5-pro` | 2026-10-20 | `vertex_ai.py:28` |
+| `gemini-2.5-flash` | 2026-10-16（見下方日期不一致說明） | `vertex_ai.py:27`、`scenario_grading_ai.py:50` |
+| `gemini-2.5-pro` | 2026-10-16（見下方日期不一致說明） | `vertex_ai.py:28` |
 | `imagen-3.0-generate-002` | 已列入停用清單（官方建議 2026-06-30 前更換） | `scenario_dialogue_image.py:44` |
 
 ### ⚠️ 與 thinking 的交互作用
@@ -158,7 +158,7 @@ commit `3a37b342`（#947 / PR #980）移除 OpenAI fallback 分支後，所有 A
 
 ## 建議的執行計畫
 
-### Phase 1：模型汰換（急，建議 2026-10-20 前完成）
+### Phase 1：模型汰換（急，建議 2026-10-16 前完成）
 
 1. 決定替代模型（需先確認 `asia-east1` / `us-central1` 可用性與定價）
 2. 把 model ID 抽成設定，不要散在各檔案 hardcode
