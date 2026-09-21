@@ -5902,7 +5902,8 @@
       "private": "Private",
       "public": "Public",
       "organization_only": "Organizations only",
-      "individual_only": "Individuals only"
+      "individual_only": "Individuals only",
+      "organizationPrivate": "Organization only"
     },
     "owner": {
       "platform": "Platform",

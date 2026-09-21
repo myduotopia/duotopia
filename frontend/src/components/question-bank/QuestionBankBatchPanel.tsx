@@ -319,6 +319,7 @@ export default function QuestionBankBatchPanel({
         <VisibilitySelect
           value={visibility}
           onChange={onVisibilityChange}
+          scope={organizationId ? "organization" : "personal"}
           disabled={disabled}
           required
           data-testid="qb-visibility"

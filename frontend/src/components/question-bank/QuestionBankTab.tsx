@@ -38,6 +38,7 @@ import {
   type Question,
   type QuestionType,
 } from "@/types/questionBank";
+import { visibilityLabelKey } from "@/components/shared/VisibilitySelect";
 
 const PAGE_SIZE = 20;
 
@@ -278,7 +279,12 @@ export default function QuestionBankTab({
                       }
                       className="font-normal"
                     >
-                      {t(`questionBank.visibility.${q.visibility}`)}
+                      {t(
+                        visibilityLabelKey(
+                          q.visibility,
+                          q.organization_id ? "organization" : "personal",
+                        ),
+                      )}
                     </Badge>
                   </td>
                 </tr>

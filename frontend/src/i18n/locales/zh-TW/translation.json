@@ -5946,7 +5946,8 @@
       "private": "私人",
       "public": "公開",
       "organization_only": "僅機構",
-      "individual_only": "僅個人"
+      "individual_only": "僅個人",
+      "organizationPrivate": "僅機構"
     },
     "owner": {
       "platform": "平台題庫",

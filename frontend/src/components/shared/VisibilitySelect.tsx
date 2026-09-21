@@ -1,7 +1,13 @@
 /**
  * VisibilitySelect — 公開設定下拉（共用元件）。
  *
- * 值域與 ProgramVisibility 相同：private / public / organization_only / individual_only。
+ * 題庫只用兩個值（使用者定案）：
+ * - scope="personal"（個人題庫）：private「私人」／ public「公開」
+ * - scope="organization"（機構題庫）：private「僅機構」／ public「公開」
+ *   機構題庫對該機構成員本來就一律可見（後端 visible_questions_query），所以「僅機構」
+ *   不需要新值，就是機構題庫 + private。
+ * 型別仍是 QuestionVisibility（含 organization_only / individual_only），後端照舊接受，
+ * 只是這裡不再提供那兩個選項。
  * `required` 時 value 可為 null（不預設），未選顯示 placeholder；由呼叫端擋儲存。
  */
 import { useTranslation } from "react-i18next";
@@ -15,16 +21,24 @@ import {
 } from "@/components/ui/select";
 import type { QuestionVisibility } from "@/types/questionBank";
 
-const VISIBILITIES: QuestionVisibility[] = [
-  "private",
-  "public",
-  "organization_only",
-  "individual_only",
-];
+export type VisibilityScope = "personal" | "organization";
+
+const OPTIONS: QuestionVisibility[] = ["private", "public"];
+
+/** private 在機構題庫顯示成「僅機構」；列表 badge 也用這個對照 */
+export function visibilityLabelKey(
+  visibility: QuestionVisibility,
+  scope: VisibilityScope,
+): string {
+  if (visibility === "private" && scope === "organization")
+    return "questionBank.visibility.organizationPrivate";
+  return `questionBank.visibility.${visibility}`;
+}
 
 export interface VisibilitySelectProps {
   value: QuestionVisibility | null;
   onChange: (next: QuestionVisibility) => void;
+  scope?: VisibilityScope;
   disabled?: boolean;
   /** 未選時顯示紅框（必選） */
   required?: boolean;
@@ -34,6 +48,7 @@ export interface VisibilitySelectProps {
 export function VisibilitySelect({
   value,
   onChange,
+  scope = "personal",
   disabled = false,
   required = false,
   "data-testid": testId = "visibility-select",
@@ -56,9 +71,9 @@ export function VisibilitySelect({
         />
       </SelectTrigger>
       <SelectContent>
-        {VISIBILITIES.map((v) => (
-          <SelectItem key={v} value={v}>
-            {t(`questionBank.visibility.${v}`)}
+        {OPTIONS.map((v) => (
+          <SelectItem key={v} value={v} data-testid={`${testId}-option-${v}`}>
+            {t(visibilityLabelKey(v, scope))}
           </SelectItem>
         ))}
       </SelectContent>
