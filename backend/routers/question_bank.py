@@ -8,6 +8,8 @@
 - PATCH  /api/question-bank/questions/{id}            修改
 - DELETE /api/question-bank/questions/{id}            軟刪除
 - PUT    /api/question-bank/questions/{id}/program-links  整批覆寫教材包／單元關聯
+- POST   /api/question-bank/ai/answer                 AI 作答：正確選項 + 解析（#1065，不扣點）
+- POST   /api/question-bank/ai/analyze                AI 考點分析：考點 code + 年段（#1065，不扣點）
 - GET    /api/question-bank/exam-points?q=            考點清單（含 alias 命中）
 - GET    /api/question-bank/sources?q=                來源清單（平台公用 + 自己機構 + 自己建的）
 - POST   /api/question-bank/sources                   新增來源（可打字下拉的「新增」）
@@ -18,6 +20,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Literal, Optional
@@ -44,6 +47,13 @@ from models.question_bank import (
 )
 from routers.teachers import get_current_teacher
 from services import question_bank_service as qbs
+from services.question_bank_ai import (
+    MAX_QUESTIONS_PER_CALL,
+    QuestionBankAIError,
+    QuestionBankAIOutputError,
+    get_question_bank_ai_service,
+    normalize_inputs,
+)
 from utils.permissions import (
     has_manage_materials_permission,
     has_read_org_materials_permission,
@@ -165,6 +175,20 @@ class QuestionUpdate(BaseModel):
 
 class ProgramLinksReplace(BaseModel):
     program_links: List[ProgramLinkIn]
+
+
+class AiQuestionIn(BaseModel):
+    """AI 作答／考點分析的單題輸入；key 由前端給，回傳時帶回對應。"""
+
+    key: str = Field(..., min_length=1, max_length=64)
+    stem: str = Field(..., min_length=1, max_length=2000)
+    options: List[str] = Field(..., min_length=2, max_length=6)
+
+
+class AiQuestionsIn(BaseModel):
+    questions: List[AiQuestionIn] = Field(
+        ..., min_length=1, max_length=MAX_QUESTIONS_PER_CALL
+    )
 
 
 class SourceCreate(BaseModel):
@@ -621,6 +645,94 @@ def replace_program_links(
     )
     db.commit()
     return _question_out(qbs.get_visible_question(db, teacher, q.id), teacher)
+
+
+# ============ AI 工具（#1065）— 先不扣點、不記用量 ============
+
+
+def _ai_inputs(payload: AiQuestionsIn):
+    try:
+        return normalize_inputs([q.model_dump() for q in payload.questions])
+    except QuestionBankAIError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+def _ai_failed(what: str, exc: Exception) -> HTTPException:
+    logging.getLogger(__name__).warning("[qb-ai] %s failed: %s", what, exc)
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY, detail="AI 產生失敗，請稍後再試"
+    )
+
+
+@router.post("/ai/answer")
+async def ai_answer(
+    payload: AiQuestionsIn,
+    teacher: Teacher = Depends(get_current_teacher),
+):
+    """AI 作答：每題回正確選項 index（可複選）與繁中解析；判斷不了的列在 skipped。"""
+    items = _ai_inputs(payload)
+    try:
+        results, skipped = await get_question_bank_ai_service().answer(items)
+    except QuestionBankAIOutputError as e:
+        raise _ai_failed("answer", e)
+    except Exception as e:  # TimeoutError / provider errors
+        raise _ai_failed("answer", e)
+    return {
+        "results": [
+            {
+                "key": r.key,
+                "correct_indexes": r.correct_indexes,
+                "explanation": r.explanation,
+            }
+            for r in results
+        ],
+        "skipped": skipped,
+    }
+
+
+@router.post("/ai/analyze")
+async def ai_analyze(
+    payload: AiQuestionsIn,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """AI 考點分析：只能從平台正式考點挑；提議的新考點存 pending、不回前端。"""
+    items = _ai_inputs(payload)
+    try:
+        results, skipped = await get_question_bank_ai_service().analyze(db, items)
+    except QuestionBankAIError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except QuestionBankAIOutputError as e:
+        raise _ai_failed("analyze", e)
+    except Exception as e:
+        raise _ai_failed("analyze", e)
+
+    wanted = {i for r in results for i in r.exam_point_ids}
+    points = (
+        {
+            ep.id: ep
+            for ep in db.query(ExamPoint)
+            .options(selectinload(ExamPoint.aliases))
+            .filter(ExamPoint.id.in_(wanted))
+            .all()
+        }
+        if wanted
+        else {}
+    )
+    return {
+        "results": [
+            {
+                "key": r.key,
+                "exam_points": [
+                    _exam_point_out(points[i]) for i in r.exam_point_ids if i in points
+                ],
+                "grade_min": r.grade_min,
+                "grade_max": r.grade_max,
+            }
+            for r in results
+        ],
+        "skipped": skipped,
+    }
 
 
 @router.get("/exam-points")
