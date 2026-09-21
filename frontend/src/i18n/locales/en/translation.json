@@ -5899,7 +5899,8 @@
       "type": "Type",
       "grade": "Grade",
       "examPoints": "Exam Points",
-      "visibility": "Visibility"
+      "visibility": "Visibility",
+      "sources": "Source"
     },
     "visibility": {
       "private": "Private",
@@ -6027,6 +6028,22 @@
         "visibility": "Share this question?",
         "visibilityHint": "Required"
       }
+    },
+    "list": {
+      "selectAll": "Select / deselect all",
+      "selectRow": "Select this question",
+      "selected": "{{count}} selected",
+      "dirty": "{{count}} with unsaved changes",
+      "save": "Save",
+      "delete": "Delete",
+      "dispatch": "Assign",
+      "clearSelection": "Clear selection",
+      "confirmDelete": "Delete {{count}} question(s)? Assigned papers are not affected.",
+      "saved": "Saved {{count}} question(s)",
+      "saveFailed": "{{count}} question(s) failed to save",
+      "deleted": "Deleted {{count}} question(s)",
+      "deleteFailed": "{{count}} question(s) failed to delete",
+      "unsavedConfirm": "You have unsaved changes. Discard them?"
     }
   }
 }

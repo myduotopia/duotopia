@@ -13,15 +13,30 @@ import QuestionBankTab from "../QuestionBankTab";
 import type { Question, QuestionListResponse } from "@/types/questionBank";
 
 const listQuestions = vi.fn();
+const updateQuestion = vi.fn();
+const deleteQuestion = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiClient: {
     listQuestions: (...args: unknown[]) => listQuestions(...args),
+    updateQuestion: (...args: unknown[]) => updateQuestion(...args),
+    deleteQuestion: (...args: unknown[]) => deleteQuestion(...args),
+    listSources: vi.fn().mockResolvedValue({ items: [] }),
+    createSource: vi.fn(),
+    listExamPoints: vi.fn().mockResolvedValue({ items: [] }),
   },
+}));
+
+vi.mock("@/contexts/SidebarContext", () => ({
+  useSidebar: () => ({ sidebarWidth: 240 }),
 }));
 
 const toastInfo = vi.fn();
 vi.mock("sonner", () => ({
-  toast: { info: (...a: unknown[]) => toastInfo(...a), error: vi.fn() },
+  toast: {
+    info: (...a: unknown[]) => toastInfo(...a),
+    error: vi.fn(),
+    success: vi.fn(),
+  },
 }));
 
 vi.mock("react-i18next", () => ({
@@ -42,6 +57,8 @@ vi.mock("react-i18next", () => ({
         "questionBank.messages.editorComingSoon": "editor soon",
         "questionBank.visibility.private": "私人",
         "questionBank.visibility.public": "公開",
+        "questionBank.list.selected": `selected ${opts?.count}`,
+        "questionBank.list.confirmDelete": `delete ${opts?.count}?`,
         "questionBank.gradeRange": `${opts?.min}–${opts?.max} 年級`,
         "questionBank.gradeSingle": `${opts?.grade} 年級`,
         "questionBank.pagination": `第 ${opts?.page} / ${opts?.totalPages} 頁`,
@@ -99,17 +116,22 @@ function respond(
 describe("QuestionBankTab", () => {
   beforeEach(() => {
     listQuestions.mockReset();
+    updateQuestion.mockReset();
+    deleteQuestion.mockReset();
     toastInfo.mockReset();
   });
 
-  it("載入並渲染題目列表（題幹、年級、考點、公開狀態）", async () => {
+  it("載入並渲染題目列表（題幹、年級、考點 chip、公開下拉、來源下拉、checkbox）", async () => {
     listQuestions.mockResolvedValue(respond([makeQuestion()]));
     render(<QuestionBankTab scope="mine" />);
 
     expect(await screen.findByText("I ___ never been to Japan.")).toBeTruthy();
     expect(screen.getByText("7–9 年級")).toBeTruthy();
-    expect(screen.getByText("現在完成式")).toBeTruthy();
-    expect(screen.getByText("私人")).toBeTruthy();
+    expect(screen.getByTestId("qb-row-1-exam-points-chip-3")).toBeTruthy();
+    expect(screen.getByTestId("qb-row-1-visibility")).toBeTruthy();
+    expect(screen.getByTestId("qb-row-1-sources")).toBeTruthy();
+    expect(screen.getByTestId("qb-check-1")).toBeTruthy();
+    expect(screen.queryByTestId("qb-bulk-bar")).toBeNull();
     expect(listQuestions).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "mine", page: 1, page_size: 20 }),
     );
@@ -211,5 +233,77 @@ describe("QuestionBankTab", () => {
       ),
     );
     expect(await screen.findByText("Q21")).toBeTruthy();
+  });
+
+  it("全選／取消全選；勾選後底部動作列出現", async () => {
+    listQuestions.mockResolvedValue(
+      respond([makeQuestion({ id: 1 }), makeQuestion({ id: 2, stem: "Q2" })]),
+    );
+    const user = userEvent.setup();
+    render(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Q2");
+    await user.click(screen.getByTestId("qb-check-all"));
+    expect(screen.getByTestId("qb-bulk-bar").textContent).toContain(
+      "selected 2",
+    );
+    await user.click(screen.getByTestId("qb-check-all"));
+    expect(screen.queryByTestId("qb-bulk-bar")).toBeNull();
+    await user.click(screen.getByTestId("qb-check-2"));
+    expect(screen.getByTestId("qb-bulk-bar").textContent).toContain(
+      "selected 1",
+    );
+  });
+
+  it("快速編輯考點 → 該列自動勾選、變黃；儲存只 PATCH 改過的列並帶三個欄位", async () => {
+    listQuestions.mockResolvedValue(
+      respond([makeQuestion({ id: 1 }), makeQuestion({ id: 2, stem: "Q2" })]),
+    );
+    updateQuestion.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Q2");
+
+    // 移除第 1 題唯一的考點 chip → 視為修改
+    await user.click(
+      screen
+        .getByTestId("qb-row-1-exam-points-chip-3")
+        .querySelector("button")!,
+    );
+    expect(
+      screen.getByTestId("question-row-1").getAttribute("data-dirty"),
+    ).toBe("true");
+    expect(
+      screen.getByTestId("question-row-2").getAttribute("data-dirty"),
+    ).toBeNull();
+    expect(screen.getByTestId("qb-bulk-bar")).toBeTruthy();
+
+    await user.click(screen.getByTestId("qb-bulk-save"));
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(updateQuestion).toHaveBeenCalledWith(1, {
+      exam_point_ids: [],
+      source_ids: [],
+      visibility: "private",
+    });
+  });
+
+  it("刪除：confirm 後逐列 DELETE 勾選的題；取消 confirm 不刪", async () => {
+    listQuestions.mockResolvedValue(
+      respond([makeQuestion({ id: 1 }), makeQuestion({ id: 2, stem: "Q2" })]),
+    );
+    deleteQuestion.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Q2");
+    await user.click(screen.getByTestId("qb-check-all"));
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await user.click(screen.getByTestId("qb-bulk-delete"));
+    expect(deleteQuestion).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    await user.click(screen.getByTestId("qb-bulk-delete"));
+    await waitFor(() => expect(deleteQuestion).toHaveBeenCalledTimes(2));
+    expect(confirmSpy).toHaveBeenLastCalledWith("delete 2?");
+    confirmSpy.mockRestore();
   });
 });

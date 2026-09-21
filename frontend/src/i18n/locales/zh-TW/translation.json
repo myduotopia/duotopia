@@ -5943,7 +5943,8 @@
       "type": "題型",
       "grade": "適合年級",
       "examPoints": "考點",
-      "visibility": "公開"
+      "visibility": "公開",
+      "sources": "考題來源"
     },
     "visibility": {
       "private": "私人",
@@ -6071,6 +6072,22 @@
         "visibility": "是否公開分享考題",
         "visibilityHint": "必選"
       }
+    },
+    "list": {
+      "selectAll": "全選／取消全選",
+      "selectRow": "選取此題",
+      "selected": "已選 {{count}} 題",
+      "dirty": "{{count}} 題有未儲存的修改",
+      "save": "儲存",
+      "delete": "刪除",
+      "dispatch": "派發",
+      "clearSelection": "取消選取",
+      "confirmDelete": "確定刪除 {{count}} 題？已派發的考卷不受影響。",
+      "saved": "已儲存 {{count}} 題",
+      "saveFailed": "{{count}} 題儲存失敗，請再試一次",
+      "deleted": "已刪除 {{count}} 題",
+      "deleteFailed": "{{count}} 題刪除失敗",
+      "unsavedConfirm": "有尚未儲存的修改，要放棄嗎？"
     }
   }
 }
