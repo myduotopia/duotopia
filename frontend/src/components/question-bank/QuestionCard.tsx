@@ -251,20 +251,8 @@ export default function QuestionCard({
           className="flex-1"
           data-testid={`qc-${index}-stem`}
         />
-        {/* 語音按鈕組：與單字集（VocabularySetPanel）完全相同的樣式與順序 */}
-        <div className="flex items-center gap-1 shrink-0">
-          {draft.stem_audio_url && (
-            <button
-              type="button"
-              onClick={playAudio}
-              className="p-1.5 rounded text-green-600 hover:bg-green-100"
-              title={t("contentEditor.tooltips.playAudio")}
-              aria-label={t("contentEditor.tooltips.playAudio")}
-              data-testid={`qc-${index}-play`}
-            >
-              <Play className="h-4 w-4" />
-            </button>
-          )}
+        {/* 語音按鈕組：樣式同單字集；題幹是多行 textarea，所以直排（麥克風 → 播放 → 移除） */}
+        <div className="flex flex-col items-center gap-1 shrink-0 self-start">
           <button
             type="button"
             onClick={generateAudio}
@@ -288,6 +276,18 @@ export default function QuestionCard({
               <Mic className="h-4 w-4" />
             )}
           </button>
+          {draft.stem_audio_url && (
+            <button
+              type="button"
+              onClick={playAudio}
+              className="p-1.5 rounded text-green-600 hover:bg-green-100"
+              title={t("contentEditor.tooltips.playAudio")}
+              aria-label={t("contentEditor.tooltips.playAudio")}
+              data-testid={`qc-${index}-play`}
+            >
+              <Play className="h-4 w-4" />
+            </button>
+          )}
           {draft.stem_audio_url && !readOnly && (
             <button
               type="button"

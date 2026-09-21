@@ -139,11 +139,7 @@ export default function QuestionBankTab({
     <div className="space-y-4" data-testid="question-bank-tab">
       {/* ── Toolbar ── */}
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <h2 className="text-[22px] font-bold text-gray-900 whitespace-nowrap">
-          {scope === "organization"
-            ? t("questionBank.title.organization")
-            : t("questionBank.title.mine")}
-        </h2>
+        {/* 標題由上方的 tab 擔任（MaterialsPageTabs），這裡不再重複 */}
         <div className="hidden lg:block flex-1" />
         <div className="flex items-center gap-3">
           {canCreate && (
@@ -213,10 +209,10 @@ export default function QuestionBankTab({
         </div>
       ) : (
         <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
               <tr>
-                <th className="px-4 py-2 font-medium">
+                <th className="px-4 py-2 font-medium w-[42%] max-w-[520px]">
                   {t("questionBank.columns.stem")}
                 </th>
                 <th className="px-4 py-2 font-medium w-28 hidden md:table-cell">
@@ -244,7 +240,7 @@ export default function QuestionBankTab({
                   data-testid={`question-row-${q.id}`}
                 >
                   <td className="px-4 py-2.5 text-gray-900">
-                    <div className="line-clamp-2">{q.stem}</div>
+                    <div className="line-clamp-2 break-words">{q.stem}</div>
                     {!q.is_owner && (
                       <span className="text-xs text-gray-400">
                         {q.is_platform

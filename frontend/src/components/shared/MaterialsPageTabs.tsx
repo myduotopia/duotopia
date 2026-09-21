@@ -37,6 +37,10 @@ interface MaterialsPageTabsProps {
   questionsLabel: string;
 }
 
+const TRIGGER_CLASS =
+  "rounded-none px-0 pb-2 text-[22px] font-bold text-gray-400 shadow-none border-b-2 border-transparent -mb-px " +
+  "data-[state=active]:bg-transparent data-[state=active]:text-gray-900 data-[state=active]:shadow-none data-[state=active]:border-blue-600 hover:text-gray-700";
+
 export default function MaterialsPageTabs({
   value,
   onChange,
@@ -49,11 +53,20 @@ export default function MaterialsPageTabs({
       onValueChange={(v) => onChange(v as MaterialsPageTab)}
       className="w-full"
     >
-      <TabsList className="h-9">
-        <TabsTrigger value="materials" data-testid="materials-tab-materials">
+      {/* tab 本身就是頁面標頭：字級同原本的 h2（22px 粗體），選中深色＋底線、未選灰色 */}
+      <TabsList className="h-auto justify-start gap-6 rounded-none bg-transparent p-0 border-b border-gray-200">
+        <TabsTrigger
+          value="materials"
+          className={TRIGGER_CLASS}
+          data-testid="materials-tab-materials"
+        >
           {materialsLabel}
         </TabsTrigger>
-        <TabsTrigger value="questions" data-testid="materials-tab-questions">
+        <TabsTrigger
+          value="questions"
+          className={TRIGGER_CLASS}
+          data-testid="materials-tab-questions"
+        >
           {questionsLabel}
         </TabsTrigger>
       </TabsList>

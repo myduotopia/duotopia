@@ -814,7 +814,6 @@ function TeacherTemplateProgramsInner() {
         ) : (
           <>
             <MaterialsToolbar
-              title={t("teacherTemplatePrograms.title")}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               searchPlaceholder={t(

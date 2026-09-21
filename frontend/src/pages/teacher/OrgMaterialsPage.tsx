@@ -707,7 +707,6 @@ export default function OrgMaterialsPage() {
           ) : (
             <>
               <MaterialsToolbar
-                title="機構教材"
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 searchPlaceholder="搜尋機構教材..."
