@@ -105,6 +105,23 @@ export default function MagicPasteInput({
       .catch(() => setQuota(null));
   }, [resetSignal]);
 
+  // Ctrl+V：剪貼簿裡的圖片或 PDF 檔直接當作選檔（截圖最常見）。純文字貼上不攔截。
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []);
+      const f = files.find(
+        (x) => x.type.startsWith("image/") || x.type === "application/pdf",
+      );
+      if (!f) return;
+      e.preventDefault();
+      handleFile(f);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // handleFile 只依賴 t/MAX_BYTES，不需列入
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleReset = () => {
     setFile(null);
     setItems([]);
@@ -237,6 +254,11 @@ export default function MagicPasteInput({
           <span className="text-xs text-gray-600 text-center break-all">
             {file ? file.name : t("contentEditor.magicPaste.pickFile")}
           </span>
+          {!file && (
+            <span className="text-[11px] text-gray-400 mt-0.5">
+              {t("contentEditor.magicPaste.pasteHint")}
+            </span>
+          )}
         </label>
         {(file || items.length > 0) && (
           <button

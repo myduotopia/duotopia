@@ -4732,7 +4732,8 @@
       "dialogDescSentence": "Upload an image or PDF; AI extracts sentences and translations for you to review before inserting.",
       "dialogDescVocab": "Upload an image or PDF; AI extracts words, translations, and examples for you to review before inserting.",
       "noQuestionExtracted": "No multiple-choice questions found. Try a clearer image.",
-      "insertedNQuestions": "Extracted {{count}} question(s) into the editor"
+      "insertedNQuestions": "Extracted {{count}} question(s) into the editor",
+      "pasteHint": "or press Ctrl+V to paste a screenshot / PDF"
     },
     "batchTabs": {
       "text": "Paste text",

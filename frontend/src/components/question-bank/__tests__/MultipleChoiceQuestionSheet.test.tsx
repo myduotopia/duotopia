@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import MultipleChoiceQuestionSheet from "../MultipleChoiceQuestionSheet";
@@ -180,14 +180,6 @@ async function fillCard(
   }
 }
 
-/** 從左側批次考點卡挑第一個考點（會覆寫所有卡） */
-async function pickBatchExamPoint(user: User) {
-  await user.click(screen.getByTestId("qb-batch-exam-points-picker-trigger"));
-  await user.click(
-    await screen.findByTestId("qb-batch-exam-points-picker-option-7"),
-  );
-}
-
 const saveBtn = () => screen.getByTestId("qb-save") as HTMLButtonElement;
 
 describe("MultipleChoiceQuestionSheet", () => {
@@ -206,7 +198,6 @@ describe("MultipleChoiceQuestionSheet", () => {
     const order = [
       "qb-upload",
       "qb-ai-card",
-      "qb-batch-exam-points",
       "qb-batch-grade",
       "qb-batch-program-link",
       "qb-batch-sources",
@@ -253,7 +244,8 @@ describe("MultipleChoiceQuestionSheet", () => {
         "Q1: exam point required",
       ),
     );
-    await pickBatchExamPoint(user);
+    await user.click(screen.getByTestId("qc-0-exam-points-trigger"));
+    await user.click(await screen.findByTestId("qc-0-exam-points-option-7"));
     await waitFor(() =>
       expect(screen.getByTestId("qb-validation").textContent).toBe(
         "visibility required",
@@ -262,47 +254,25 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(saveBtn().disabled).toBe(true);
   });
 
-  it("左側批次考點覆寫所有卡；之後新增的題也帶入", async () => {
+  it("考點只在單題設定：右側卡片可挑考點；左側沒有考點批次卡", async () => {
     const user = userEvent.setup();
     renderSheet();
-    await user.click(screen.getByTestId("qb-add-question"));
-    await pickBatchExamPoint(user);
-    expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
-    expect(screen.getByTestId("qc-1-exam-points-chip-7")).toBeTruthy();
-    await user.click(screen.getByTestId("qb-add-question"));
-    expect(screen.getByTestId("qc-2-exam-points-chip-7")).toBeTruthy();
-    // 單題移除考點只影響該題
-    await user.click(
-      within(screen.getByTestId("qc-2-exam-points-chip-7")).getByRole("button"),
-    );
-    expect(screen.queryByTestId("qc-2-exam-points-chip-7")).toBeNull();
+    expect(screen.queryByTestId("qb-batch-exam-points")).toBeNull();
+    await user.click(screen.getByTestId("qc-0-exam-points-trigger"));
+    await user.click(await screen.findByTestId("qc-0-exam-points-option-7"));
     expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
   });
 
-  it("AI 作答：有題幹+≥2 選項才可按；只勾沒答案的題、解析空才填；toast 摘要", async () => {
-    aiAnswerQuestions.mockResolvedValue({
-      results: [{ key: "__k0", correct_indexes: [1], explanation: "ai" }],
-      skipped: [],
-    });
+  it("題幹語音按鈕同單字集：無語音只有麥克風；有語音出現播放與移除，移除後清掉", async () => {
     const user = userEvent.setup();
-    renderSheet();
-    const btn = screen.getByTestId("qb-ai-answer") as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    await fillCard(user, 0, "Pick", [
-      ["a", false],
-      ["b", false],
-    ]);
-    expect(btn.disabled).toBe(false);
-    await user.click(btn);
-    await waitFor(() => expect(aiAnswerQuestions).toHaveBeenCalledTimes(1));
-    const sent = aiAnswerQuestions.mock.calls[0][0];
-    expect(sent[0].stem).toBe("Pick");
-    expect(sent[0].options).toEqual(["a", "b"]);
-    // 後端回的 key 對不上（我們不知道卡片 key）→ 不會套用，但流程完成、按鍵恢復
-    await waitFor(() => expect(btn.disabled).toBe(false));
-    expect(
-      screen.getByTestId("qc-0-correct-1").getAttribute("data-state"),
-    ).toBe("unchecked");
+    renderSheet({
+      question: baseQuestion({ stem_audio_url: "http://x/a.mp3" }),
+    });
+    expect(screen.getByTestId("qc-0-play")).toBeTruthy();
+    await user.click(screen.getByTestId("qc-0-audio-remove"));
+    expect(screen.queryByTestId("qc-0-play")).toBeNull();
+    expect(screen.queryByTestId("qc-0-audio-remove")).toBeNull();
+    expect(screen.getByTestId("qc-0-mic")).toBeTruthy();
   });
 
   it("批內兩題題幹相同 → 擋送出", async () => {
@@ -356,7 +326,9 @@ describe("MultipleChoiceQuestionSheet", () => {
       "Existing stem",
     );
     expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
-    expect(screen.getByTestId("qb-sources-chip-11")).toBeTruthy();
+    expect(screen.queryByTestId("qb-batch-visibility")).toBeNull(); // 編輯無左欄
+    expect(screen.getByTestId("qb-edit-visibility")).toBeTruthy();
+    expect(screen.getByTestId("qb-edit-sources-chip-11")).toBeTruthy();
     expect(screen.getByTestId("qc-0-advanced")).toBeTruthy(); // 有年段 → 展開
     expect(screen.queryByTestId("qb-add-question")).toBeNull();
     expect(saveBtn().disabled).toBe(false);
@@ -377,13 +349,12 @@ describe("MultipleChoiceQuestionSheet", () => {
     ]);
   });
 
-  it("編輯模式改左側批次年段 → 該卡年段跟著改，送出時帶新值", async () => {
+  it("編輯模式改單題年段（清成不限）→ 送出時帶新值", async () => {
     const existing = baseQuestion();
     updateQuestion.mockResolvedValue(existing);
     const user = userEvent.setup();
     renderSheet({ question: existing });
-    // 左側批次年段清成「不限」→ 右側卡片同步
-    await user.click(screen.getByTestId("qb-batch-grade-slider-clear"));
+    await user.click(screen.getByTestId("qc-0-grade-clear"));
     expect(screen.getByTestId("qc-0-grade-label").textContent).toBe(
       "questionBank.form.gradeAny",
     );

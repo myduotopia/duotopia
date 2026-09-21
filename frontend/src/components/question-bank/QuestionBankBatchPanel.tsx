@@ -7,14 +7,14 @@
  *   1. PDF/圖片上傳（MagicPasteInput；AI 擷取選擇題在 #1065，本輪 disabled 遮罩）
  *   2. 語音生成設定（BatchTTSSettings card；checkbox = 儲存時自動補題幹語音）+「立即生成全部」
  *   3. AI 作答（設答案＋填解析）、AI 考點分析（填考點）— #1065 接後端，本輪 disabled
- *   4. 考點關連設定 → 覆寫所有題
- *   5. 年段關聯設定 → 覆寫所有題
- *   6. 教材關聯設定 → 覆寫所有題
- *   7. 考題來源（可打字下拉：選、搜、新增）— 整批共用
- *   8. 是否公開分享考題（必選、不預設）— 整批共用
+ *   4. 年段關聯設定 → 覆寫所有題
+ *   5. 教材關聯設定 → 覆寫所有題
+ *   6. 考題來源（可打字下拉：選、搜、新增）— 整批共用
+ *   7. 是否公開分享考題（必選、不預設）— 整批共用
+ * 考點不做批次設定（使用者定案）：只在右側單題設定，或由 AI 考點分析填入。
  */
 
-import { useCallback } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
@@ -27,7 +27,6 @@ import {
   Volume2,
 } from "lucide-react";
 
-import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   BatchSettingCard,
@@ -38,7 +37,6 @@ import {
   CreatableCombobox,
   type ComboboxItem,
 } from "@/components/shared/CreatableCombobox";
-import ExamPointPicker from "@/components/shared/ExamPointPicker";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import MagicPasteInput, {
   type MagicPasteMcItem,
@@ -46,8 +44,9 @@ import MagicPasteInput, {
 import { ProgramLessonPicker } from "@/components/shared/ProgramLessonPicker";
 import { VisibilitySelect } from "@/components/shared/VisibilitySelect";
 import type { Program } from "@/types";
-import type { QuestionSource, QuestionVisibility } from "@/types/questionBank";
+import type { QuestionVisibility } from "@/types/questionBank";
 import type { BatchDefaults } from "./questionDraft";
+import { makeCreateSource, searchSources } from "./sourcesCombobox";
 
 export interface QuestionBankBatchPanelProps {
   // 語音
@@ -81,13 +80,6 @@ export interface QuestionBankBatchPanelProps {
   disabled?: boolean;
 }
 
-function sourceToItem(s: QuestionSource): ComboboxItem {
-  const meta = [s.source_type === "exam" ? "考試" : "出版社", s.year]
-    .filter(Boolean)
-    .join(" · ");
-  return { id: s.id, label: s.name, meta };
-}
-
 export default function QuestionBankBatchPanel({
   ttsSettings,
   onTtsSettingsChange,
@@ -114,20 +106,8 @@ export default function QuestionBankBatchPanel({
   const { t } = useTranslation();
   const comingSoon = t("questionBank.comingSoon");
 
-  const searchSources = useCallback(
-    async (q: string) =>
-      (await apiClient.listSources(q || undefined)).items.map(sourceToItem),
-    [],
-  );
-  const createSource = useCallback(
-    async (name: string) =>
-      sourceToItem(
-        await apiClient.createSource({
-          source_type: "exam",
-          name,
-          organization_id: organizationId ?? null,
-        }),
-      ),
+  const createSource = useMemo(
+    () => makeCreateSource(organizationId),
     [organizationId],
   );
 
@@ -240,23 +220,7 @@ export default function QuestionBankBatchPanel({
         </div>
       </BatchSettingCard>
 
-      {/* 4. 考點關連設定 */}
-      <BatchSettingCard
-        icon={<Target className="h-4 w-4 text-emerald-600" />}
-        title={t("questionBank.form.batch.examPoints")}
-        hint={t("questionBank.form.batch.applyAllHint")}
-        tone="green"
-        data-testid="qb-batch-exam-points"
-      >
-        <ExamPointPicker
-          value={batch.exam_points}
-          onChange={(exam_points) => onBatchChange({ exam_points })}
-          disabled={disabled}
-          data-testid="qb-batch-exam-points-picker"
-        />
-      </BatchSettingCard>
-
-      {/* 5. 年段關聯設定 */}
+      {/* 4. 年段關聯設定 */}
       <BatchSettingCard
         icon={<GraduationCap className="h-4 w-4 text-blue-600" />}
         title={t("questionBank.form.batch.grade")}
@@ -272,7 +236,7 @@ export default function QuestionBankBatchPanel({
         />
       </BatchSettingCard>
 
-      {/* 6. 教材關聯設定 */}
+      {/* 5. 教材關聯設定 */}
       <BatchSettingCard
         icon={<BookOpen className="h-4 w-4 text-orange-600" />}
         title={t("questionBank.form.batch.programLink")}
@@ -289,7 +253,7 @@ export default function QuestionBankBatchPanel({
         />
       </BatchSettingCard>
 
-      {/* 7. 考題來源 */}
+      {/* 6. 考題來源 */}
       <BatchSettingCard
         icon={<FileText className="h-4 w-4 text-gray-600" />}
         title={t("questionBank.form.batch.sources")}
@@ -315,7 +279,7 @@ export default function QuestionBankBatchPanel({
         />
       </BatchSettingCard>
 
-      {/* 8. 是否公開分享考題 */}
+      {/* 7. 是否公開分享考題 */}
       <BatchSettingCard
         icon={<Globe className="h-4 w-4 text-sky-600" />}
         title={t("questionBank.form.batch.visibility")}

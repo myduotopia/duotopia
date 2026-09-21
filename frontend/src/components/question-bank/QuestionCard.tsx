@@ -10,7 +10,8 @@
  * ▼ 進階設定（預設收起）：|關聯教材｜關聯單元|、年段拉桿
  *
  * 每格 = 正確答案 checkbox + 文字 input + 圖片 icon。文字或圖片至少一個才算「有填」。
- * 麥克風 = 單題語音：用左欄目前 TTS 設定直接呼叫 generateTTS（不開 modal）。
+ * 麥克風 = 單題語音：用目前 TTS 設定直接呼叫 generateTTS（不開 modal）；按鈕組
+ * （播放／麥克風／移除）樣式與位置與單字集完全相同，接在 textarea 之後。
  * 重複偵測每卡各自 debounce 呼叫 similar API；結果存回 draft.similar。
  * 考點／年段／教材關聯用共用元件（ExamPointPicker / GradeRangeSlider / ProgramLessonPicker），
  * 與左側批次設定同一套。
@@ -24,10 +25,9 @@ import {
   ChevronRight,
   Loader2,
   Mic,
+  Play,
   Plus,
-  RotateCcw,
   Trash2,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,7 +38,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import AudioPlayer from "@/components/shared/AudioPlayer";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import ExamPointPicker from "@/components/shared/ExamPointPicker";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
@@ -184,6 +183,17 @@ export default function QuestionCard({
     }
   };
 
+  /** 播放題幹語音（同單字集：直接 new Audio，不掛播放器） */
+  const playAudio = () => {
+    if (!draft.stem_audio_url) return;
+    const audio = new Audio(draft.stem_audio_url);
+    audio.onerror = () =>
+      toast.error(t("contentEditor.messages.cannotPlayRecording"));
+    audio.play().catch(() => {
+      toast.error(t("contentEditor.messages.cannotPlayRecording"));
+    });
+  };
+
   const exact = draft.similar?.exact_duplicate ?? null;
   const similarList = useMemo(
     () => (exact ? [] : (draft.similar?.similar ?? [])),
@@ -241,48 +251,57 @@ export default function QuestionCard({
           className="flex-1"
           data-testid={`qc-${index}-stem`}
         />
-        <div className="flex flex-col items-center gap-1 shrink-0">
+        {/* 語音按鈕組：與單字集（VocabularySetPanel）完全相同的樣式與順序 */}
+        <div className="flex items-center gap-1 shrink-0">
+          {draft.stem_audio_url && (
+            <button
+              type="button"
+              onClick={playAudio}
+              className="p-1.5 rounded text-green-600 hover:bg-green-100"
+              title={t("contentEditor.tooltips.playAudio")}
+              aria-label={t("contentEditor.tooltips.playAudio")}
+              data-testid={`qc-${index}-play`}
+            >
+              <Play className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={generateAudio}
             disabled={locked || !stemTrimmed || ttsBusy}
-            className={`h-9 w-9 flex items-center justify-center rounded border ${
+            className={`p-1.5 rounded disabled:opacity-50 ${
               draft.stem_audio_url
-                ? "text-blue-600 border-blue-200 bg-blue-50"
-                : "bg-yellow-100 border-yellow-200 text-yellow-800"
-            } disabled:opacity-50`}
+                ? "text-blue-600 hover:bg-blue-100"
+                : "text-gray-600 bg-yellow-100 hover:bg-yellow-200"
+            }`}
             title={
               draft.stem_audio_url
-                ? t("questionBank.form.regenerateAudio")
-                : t("questionBank.form.generateAudio")
+                ? t("contentEditor.tooltips.rerecordOrGenerate")
+                : t("contentEditor.tooltips.openTTSRecording")
             }
             aria-label={t("questionBank.form.generateAudio")}
             data-testid={`qc-${index}-mic`}
           >
             {ttsBusy ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : draft.stem_audio_url ? (
-              <RotateCcw size={16} />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Mic size={16} />
+              <Mic className="h-4 w-4" />
             )}
           </button>
           {draft.stem_audio_url && !readOnly && (
             <button
               type="button"
               onClick={() => patch({ stem_audio_url: null })}
-              className="text-gray-400 hover:text-red-600"
-              aria-label={t("questionBank.form.removeAudio")}
+              className="p-1.5 rounded text-red-600 hover:bg-red-100"
+              title={t("contentEditor.tooltips.removeAudio")}
+              aria-label={t("contentEditor.tooltips.removeAudio")}
               data-testid={`qc-${index}-audio-remove`}
             >
-              <X size={12} />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
       </div>
-      {draft.stem_audio_url && (
-        <AudioPlayer audioUrl={draft.stem_audio_url} variant="minimal" />
-      )}
 
       {/* 重複／相似提示 */}
       {exact && (
