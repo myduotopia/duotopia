@@ -326,9 +326,13 @@ describe("MultipleChoiceQuestionSheet", () => {
       "Existing stem",
     );
     expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
-    expect(screen.queryByTestId("qb-batch-visibility")).toBeNull(); // 編輯無左欄
-    expect(screen.getByTestId("qb-edit-visibility")).toBeTruthy();
-    expect(screen.getByTestId("qb-edit-sources-chip-11")).toBeTruthy();
+    // 編輯模式左欄只剩來源與公開兩張卡（沒有上傳／語音／AI／年段／教材）
+    expect(screen.getByTestId("qb-edit-panel")).toBeTruthy();
+    expect(screen.getByTestId("qb-batch-visibility")).toBeTruthy();
+    expect(screen.getByTestId("qb-sources-chip-11")).toBeTruthy();
+    expect(screen.queryByTestId("qb-upload")).toBeNull();
+    expect(screen.queryByTestId("qb-ai-card")).toBeNull();
+    expect(screen.queryByTestId("qb-batch-grade")).toBeNull();
     expect(screen.getByTestId("qc-0-advanced")).toBeTruthy(); // 有年段 → 展開
     expect(screen.queryByTestId("qb-add-question")).toBeNull();
     expect(saveBtn().disabled).toBe(false);

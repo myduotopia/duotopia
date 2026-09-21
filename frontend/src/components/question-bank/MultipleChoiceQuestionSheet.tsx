@@ -3,8 +3,8 @@
  *
  * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
  * - 標題列：儲存（擋住時下方一行寫原因）、刪除（編輯模式）、關閉
- * - 左欄（只有新增模式）：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）
- *   編輯單題時沒有左欄，公開設定／考題來源放在卡片上方的精簡設定列
+ * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）；
+ *   編輯單題時 editOnly，左欄只剩「考題來源」與「是否公開」兩張卡
  * - 右欄：多張 QuestionCard +「新增題目」
  *
  * 批次設定（考點／年段／教材關聯）一改就覆寫右側所有題；新增的題帶左側目前值。
@@ -25,14 +25,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import type { MagicPasteMcItem } from "@/components/shared/MagicPasteInput";
-import { CreatableCombobox } from "@/components/shared/CreatableCombobox";
-import { VisibilitySelect } from "@/components/shared/VisibilitySelect";
-import { Label } from "@/components/ui/label";
-import {
-  makeCreateSource,
-  searchSources,
-  sourceToItem,
-} from "./sourcesCombobox";
+import { sourceToItem } from "./sourcesCombobox";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
 import type { Question, QuestionVisibility } from "@/types/questionBank";
@@ -556,9 +549,10 @@ export default function MultipleChoiceQuestionSheet({
         {/* 兩欄：左 = 單字集同款批次工作區（md 以上），右 = 題目卡 */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
           <div className="flex gap-4 items-start">
-            {/* 左欄只在新增模式；編輯單題不需要批次設定（使用者定案） */}
-            {!readOnly && !isEdit && (
+            {/* 左欄：新增 = 完整批次區；編輯 = 只剩考題來源與是否公開（editOnly） */}
+            {!readOnly && (
               <QuestionBankBatchPanel
+                editOnly={isEdit}
                 ttsSettings={ttsSettings}
                 onTtsSettingsChange={handleTtsSettingsChange}
                 autoTTS={autoTTS}
@@ -589,63 +583,7 @@ export default function MultipleChoiceQuestionSheet({
               />
             )}
 
-            <div
-              className={`flex-1 min-w-0 space-y-4 ${
-                isEdit ? "max-w-3xl mx-auto" : ""
-              }`}
-            >
-              {/* 編輯模式：公開設定與考題來源改放卡片上方的精簡設定列 */}
-              {isEdit && (
-                <div
-                  className="rounded-lg border border-gray-200 bg-gray-50 p-3 grid gap-3 sm:grid-cols-2"
-                  data-testid="qb-edit-meta"
-                >
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">
-                      {t("questionBank.form.batch.visibility")}
-                    </Label>
-                    <VisibilitySelect
-                      value={visibility}
-                      onChange={(v) => {
-                        dirtyRef.current = true;
-                        setVisibility(v);
-                      }}
-                      scope={
-                        question?.organization_id ? "organization" : "personal"
-                      }
-                      disabled={readOnly || saving}
-                      required
-                      data-testid="qb-edit-visibility"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-600">
-                      {t("questionBank.form.batch.sources")}
-                    </Label>
-                    <CreatableCombobox
-                      value={sources}
-                      onChange={(next) => {
-                        dirtyRef.current = true;
-                        setSources(next);
-                      }}
-                      onSearch={searchSources}
-                      onCreate={makeCreateSource(
-                        question?.organization_id ?? undefined,
-                      )}
-                      disabled={readOnly || saving}
-                      triggerLabel={t("questionBank.form.batch.pickSources")}
-                      searchPlaceholder={t(
-                        "questionBank.form.batch.sourceSearchPlaceholder",
-                      )}
-                      emptyText={t("questionBank.form.batch.noSources")}
-                      createLabel={(name) =>
-                        t("questionBank.form.batch.createSource", { name })
-                      }
-                      data-testid="qb-edit-sources"
-                    />
-                  </div>
-                </div>
-              )}
+            <div className="flex-1 min-w-0 space-y-4">
               {drafts.map((d, i) => (
                 <QuestionCard
                   key={d.key}

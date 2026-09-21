@@ -78,6 +78,8 @@ export interface QuestionBankBatchPanelProps {
   /** 建到機構題庫時，來源也建成機構來源 */
   organizationId?: string;
   disabled?: boolean;
+  /** 編輯單題：左欄只顯示「考題來源」與「是否公開」（使用者定案） */
+  editOnly?: boolean;
 }
 
 export default function QuestionBankBatchPanel({
@@ -102,6 +104,7 @@ export default function QuestionBankBatchPanel({
   onVisibilityChange,
   organizationId,
   disabled = false,
+  editOnly = false,
 }: QuestionBankBatchPanelProps) {
   const { t } = useTranslation();
   const comingSoon = t("questionBank.comingSoon");
@@ -110,6 +113,65 @@ export default function QuestionBankBatchPanel({
     () => makeCreateSource(organizationId),
     [organizationId],
   );
+
+  // 考題來源 + 是否公開：新增與編輯都會看到（編輯模式左欄只剩這兩張）
+  const sharedCards = (
+    <>
+      <BatchSettingCard
+        icon={<FileText className="h-4 w-4 text-gray-600" />}
+        title={t("questionBank.form.batch.sources")}
+        hint={t("questionBank.form.batch.sourcesHint")}
+        tone="gray"
+        data-testid="qb-batch-sources"
+      >
+        <CreatableCombobox
+          value={sources}
+          onChange={onSourcesChange}
+          onSearch={searchSources}
+          onCreate={createSource}
+          disabled={disabled}
+          triggerLabel={t("questionBank.form.batch.pickSources")}
+          searchPlaceholder={t(
+            "questionBank.form.batch.sourceSearchPlaceholder",
+          )}
+          emptyText={t("questionBank.form.batch.noSources")}
+          createLabel={(name) =>
+            t("questionBank.form.batch.createSource", { name })
+          }
+          data-testid="qb-sources"
+        />
+      </BatchSettingCard>
+
+      <BatchSettingCard
+        icon={<Globe className="h-4 w-4 text-sky-600" />}
+        title={t("questionBank.form.batch.visibility")}
+        hint={t("questionBank.form.batch.visibilityHint")}
+        tone="gray"
+        data-testid="qb-batch-visibility"
+      >
+        <VisibilitySelect
+          value={visibility}
+          onChange={onVisibilityChange}
+          scope={organizationId ? "organization" : "personal"}
+          disabled={disabled}
+          required
+          data-testid="qb-visibility"
+        />
+      </BatchSettingCard>
+    </>
+  );
+
+  if (editOnly) {
+    // 編輯單題：同一個左欄外觀（與 BatchWorkPanel 相同的容器），只放這兩張卡
+    return (
+      <div
+        className="hidden md:flex md:w-[35%] flex-col border rounded-lg bg-gray-50 p-4 sticky top-0 self-start max-h-[calc(100vh-180px)] overflow-y-auto overscroll-contain"
+        data-testid="qb-edit-panel"
+      >
+        <div className="space-y-3 flex-1 flex flex-col">{sharedCards}</div>
+      </div>
+    );
+  }
 
   return (
     <BatchWorkPanel
@@ -253,49 +315,7 @@ export default function QuestionBankBatchPanel({
         />
       </BatchSettingCard>
 
-      {/* 6. 考題來源 */}
-      <BatchSettingCard
-        icon={<FileText className="h-4 w-4 text-gray-600" />}
-        title={t("questionBank.form.batch.sources")}
-        hint={t("questionBank.form.batch.sourcesHint")}
-        tone="gray"
-        data-testid="qb-batch-sources"
-      >
-        <CreatableCombobox
-          value={sources}
-          onChange={onSourcesChange}
-          onSearch={searchSources}
-          onCreate={createSource}
-          disabled={disabled}
-          triggerLabel={t("questionBank.form.batch.pickSources")}
-          searchPlaceholder={t(
-            "questionBank.form.batch.sourceSearchPlaceholder",
-          )}
-          emptyText={t("questionBank.form.batch.noSources")}
-          createLabel={(name) =>
-            t("questionBank.form.batch.createSource", { name })
-          }
-          data-testid="qb-sources"
-        />
-      </BatchSettingCard>
-
-      {/* 7. 是否公開分享考題 */}
-      <BatchSettingCard
-        icon={<Globe className="h-4 w-4 text-sky-600" />}
-        title={t("questionBank.form.batch.visibility")}
-        hint={t("questionBank.form.batch.visibilityHint")}
-        tone="gray"
-        data-testid="qb-batch-visibility"
-      >
-        <VisibilitySelect
-          value={visibility}
-          onChange={onVisibilityChange}
-          scope={organizationId ? "organization" : "personal"}
-          disabled={disabled}
-          required
-          data-testid="qb-visibility"
-        />
-      </BatchSettingCard>
+      {sharedCards}
     </BatchWorkPanel>
   );
 }
