@@ -390,19 +390,19 @@ export default function QuestionBankTab({
                 <th className="px-4 py-2 font-medium w-1/2 max-w-[600px]">
                   {t("questionBank.columns.stem")}
                 </th>
-                <th className="px-4 py-2 font-medium w-28 hidden md:table-cell">
+                <th className="px-4 py-2 font-medium w-28 hidden sm:table-cell">
                   {t("questionBank.columns.type")}
                 </th>
-                <th className="px-4 py-2 font-medium w-24 hidden md:table-cell">
+                <th className="px-4 py-2 font-medium w-24 hidden lg:table-cell">
                   {t("questionBank.columns.grade")}
                 </th>
-                <th className="px-4 py-2 font-medium hidden lg:table-cell">
+                <th className="px-4 py-2 font-medium hidden xl:table-cell">
                   {t("questionBank.columns.examPoints")}
                 </th>
-                <th className="px-4 py-2 font-medium w-44 hidden lg:table-cell">
+                <th className="px-4 py-2 font-medium w-44 hidden md:table-cell">
                   {t("questionBank.columns.sources")}
                 </th>
-                <th className="px-4 py-2 font-medium w-32">
+                <th className="px-4 py-2 font-medium w-32 hidden lg:table-cell">
                   {t("questionBank.columns.visibility")}
                 </th>
               </tr>
@@ -441,6 +441,10 @@ export default function QuestionBankTab({
                         data-testid={`qb-stem-${q.id}`}
                       >
                         <div className="line-clamp-2 break-words">{q.stem}</div>
+                        {q.question_type === "multiple_choice" &&
+                          q.options.length > 0 && (
+                            <OptionGrid options={q.options} />
+                          )}
                       </button>
                       {!q.is_owner && (
                         <span className="text-xs text-gray-400">
@@ -450,14 +454,14 @@ export default function QuestionBankTab({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600 hidden md:table-cell">
+                    <td className="px-4 py-2.5 text-gray-600 hidden sm:table-cell">
                       {typeLabel(q.question_type)}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600 hidden md:table-cell">
+                    <td className="px-4 py-2.5 text-gray-600 hidden lg:table-cell">
                       {formatGrade(q.grade_min, q.grade_max, t)}
                     </td>
                     <td
-                      className="px-4 py-2 hidden lg:table-cell"
+                      className="px-4 py-2 hidden xl:table-cell"
                       onClick={stop}
                     >
                       <ExamPointPicker
@@ -469,7 +473,7 @@ export default function QuestionBankTab({
                       />
                     </td>
                     <td
-                      className="px-4 py-2 hidden lg:table-cell"
+                      className="px-4 py-2 hidden md:table-cell"
                       onClick={stop}
                     >
                       <CreatableCombobox
@@ -489,7 +493,10 @@ export default function QuestionBankTab({
                         data-testid={`qb-row-${q.id}-sources`}
                       />
                     </td>
-                    <td className="px-4 py-2" onClick={stop}>
+                    <td
+                      className="px-4 py-2 hidden lg:table-cell"
+                      onClick={stop}
+                    >
                       <VisibilitySelect
                         value={e.visibility}
                         onChange={(visibility) => patchRow(q, { visibility })}
@@ -554,6 +561,36 @@ export default function QuestionBankTab({
         }}
         busy={bulkBusy}
       />
+    </div>
+  );
+}
+
+/** 選項全都短（≤ 12 字）且不超過 4 個 → 一列四格；否則兩欄 */
+const SHORT_OPTION_CHARS = 12;
+
+function OptionGrid({ options }: { options: Question["options"] }) {
+  const oneRow =
+    options.length <= 4 &&
+    options.every((o) => o.text.trim().length <= SHORT_OPTION_CHARS);
+  return (
+    <div
+      className={`mt-1 grid gap-x-3 gap-y-0.5 text-xs text-gray-600 ${
+        oneRow ? "grid-cols-4" : "grid-cols-2"
+      }`}
+      data-testid="qb-option-grid"
+      data-layout={oneRow ? "1x4" : "2x2"}
+    >
+      {options.map((o, i) => (
+        <span
+          key={o.id}
+          className={`truncate ${
+            o.is_correct ? "text-green-700 font-medium" : ""
+          }`}
+          title={o.text}
+        >
+          {String.fromCharCode(65 + i)}. {o.text || (o.image_url ? "🖼" : "")}
+        </span>
+      ))}
     </div>
   );
 }
