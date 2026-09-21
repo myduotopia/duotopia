@@ -29,9 +29,18 @@ export interface MagicPasteItem {
  * - vocabulary：單字集 → 一列 = 單字 + 翻譯 + 詞性 + 例句
  * - sentence  ：例句集 / 朗讀評測 → 一列 = 句子 + 翻譯
  */
-// multiple_choice：題庫從考卷圖片擷取題目與選項（後端 #1065）
+// multiple_choice：題庫從考卷圖片擷取題目與選項（#1065）
 export type MagicPasteExtractMode =
   "vocabulary" | "sentence" | "multiple_choice";
+
+/** multiple_choice 模式的擷取結果（題庫用；不預覽，直接插到右側題目卡） */
+export interface MagicPasteMcItem {
+  stem: string;
+  options: string[];
+  /** 圖上有標答案才會有值；否則 [] */
+  correct_indexes: number[];
+  explanation: string;
+}
 
 interface QuotaState {
   free_remaining: number;
@@ -40,7 +49,10 @@ interface QuotaState {
 }
 
 interface MagicPasteInputProps {
-  onInsert: (items: MagicPasteItem[]) => void;
+  /** vocabulary / sentence 模式：老師在預覽勾選後插入 */
+  onInsert?: (items: MagicPasteItem[]) => void;
+  /** multiple_choice 模式：擷取完直接回呼，不經預覽 */
+  onInsertQuestions?: (items: MagicPasteMcItem[]) => void;
   /** CEFR 程度（僅 vocabulary 模式參考） */
   level?: string;
   /** 擷取模式，預設 vocabulary（單字集） */
@@ -63,6 +75,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 export default function MagicPasteInput({
   onInsert,
+  onInsertQuestions,
   level = "A1",
   extractMode = "vocabulary",
   onAfterInsert,
@@ -72,6 +85,7 @@ export default function MagicPasteInput({
 }: MagicPasteInputProps) {
   const { t } = useTranslation();
   const isSentenceMode = extractMode === "sentence";
+  const isMcMode = extractMode === "multiple_choice";
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<MagicPasteItem[]>([]);
@@ -128,6 +142,30 @@ export default function MagicPasteInput({
       formData.append("level", level);
       formData.append("extract_mode", extractMode);
       const result = await apiClient.magicPasteExtract(formData);
+      setQuota((prev) => ({
+        free_limit: prev?.free_limit ?? result.quota.free_limit,
+        free_remaining: result.quota.free_remaining,
+        can_use: result.quota.can_use,
+      }));
+      if (isMcMode) {
+        // 題庫：不預覽，擷取完直接插到右側題目卡
+        const questions = result.items as unknown as MagicPasteMcItem[];
+        if (!questions.length) {
+          toast.error(t("contentEditor.magicPaste.noQuestionExtracted"));
+        } else {
+          onInsertQuestions?.(questions);
+          toast.success(
+            t("contentEditor.magicPaste.insertedNQuestions", {
+              count: questions.length,
+            }),
+          );
+        }
+        setFile(null);
+        setItems([]);
+        setSelected({});
+        onAfterInsert?.();
+        return;
+      }
       if (!result.items.length) {
         toast.error(
           isSentenceMode
@@ -137,11 +175,6 @@ export default function MagicPasteInput({
       }
       setItems(result.items);
       setSelected(Object.fromEntries(result.items.map((_, i) => [i, true])));
-      setQuota((prev) => ({
-        free_limit: prev?.free_limit ?? result.quota.free_limit,
-        free_remaining: result.quota.free_remaining,
-        can_use: result.quota.can_use,
-      }));
     } catch (e) {
       const err = e as { status?: number; message?: string };
       if (err.status === 402) {
@@ -167,7 +200,7 @@ export default function MagicPasteInput({
       toast.error(t("contentEditor.magicPaste.selectAtLeastOne"));
       return;
     }
-    onInsert(selectedItems);
+    onInsert?.(selectedItems);
     setFile(null);
     setItems([]);
     setSelected({});
