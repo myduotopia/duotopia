@@ -40,7 +40,9 @@ import {
 } from "@/components/shared/CreatableCombobox";
 import ExamPointPicker from "@/components/shared/ExamPointPicker";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
-import MagicPasteInput from "@/components/shared/MagicPasteInput";
+import MagicPasteInput, {
+  type MagicPasteMcItem,
+} from "@/components/shared/MagicPasteInput";
 import { ProgramLessonPicker } from "@/components/shared/ProgramLessonPicker";
 import { VisibilitySelect } from "@/components/shared/VisibilitySelect";
 import type { Program } from "@/types";
@@ -61,6 +63,10 @@ export interface QuestionBankBatchPanelProps {
   hasAnyStem: boolean;
   onAiAnswer?: () => void;
   onAiAnalyze?: () => void;
+  /** AI 作答／分析進行中（spinner + 兩鍵 disabled） */
+  aiBusy?: boolean;
+  /** 考卷擷取結果 → 右側題目卡 */
+  onInsertExtracted?: (items: MagicPasteMcItem[]) => void;
   // 批次覆寫
   batch: BatchDefaults;
   onBatchChange: (patch: Partial<BatchDefaults>) => void;
@@ -93,6 +99,8 @@ export default function QuestionBankBatchPanel({
   hasAnyStem,
   onAiAnswer,
   onAiAnalyze,
+  aiBusy = false,
+  onInsertExtracted,
   batch,
   onBatchChange,
   programs,
@@ -134,20 +142,15 @@ export default function QuestionBankBatchPanel({
       onConfirm={() => undefined}
       isBusy={generatingAudio}
       imageTab={
-        // 1. PDF/圖片上傳：與單字集同一個 MagicPasteInput；AI 擷取選擇題在 #1065
-        <div className="relative" data-testid="qb-upload">
-          <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
-            <MagicPasteInput
-              extractMode="multiple_choice"
-              onInsert={() => undefined}
-            />
-          </div>
-          <div
-            className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/70 text-sm text-gray-500"
-            data-testid="qb-upload-coming-soon"
-          >
-            {comingSoon}
-          </div>
+        // 1. PDF/圖片上傳：與單字集同一個 MagicPasteInput；擷取完直接進右側題目卡（不預覽）
+        <div
+          className={disabled ? "opacity-50 pointer-events-none" : ""}
+          data-testid="qb-upload"
+        >
+          <MagicPasteInput
+            extractMode="multiple_choice"
+            onInsertQuestions={onInsertExtracted}
+          />
         </div>
       }
     >
@@ -187,7 +190,7 @@ export default function QuestionBankBatchPanel({
             variant="outline"
             size="sm"
             className="w-full justify-start gap-2 bg-white"
-            disabled={disabled || !hasAnyStem || !onAiAnswer}
+            disabled={disabled || aiBusy || !hasAnyStem || !onAiAnswer}
             onClick={onAiAnswer}
             title={
               !onAiAnswer
@@ -198,7 +201,11 @@ export default function QuestionBankBatchPanel({
             }
             data-testid="qb-ai-answer"
           >
-            <Sparkles size={14} className="text-violet-600" />
+            {aiBusy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Sparkles size={14} className="text-violet-600" />
+            )}
             {t("questionBank.form.tools.aiAnswer")}
             {!onAiAnswer && (
               <span className="ml-auto text-xs text-gray-400">
@@ -211,7 +218,7 @@ export default function QuestionBankBatchPanel({
             variant="outline"
             size="sm"
             className="w-full justify-start gap-2 bg-white"
-            disabled={disabled || !hasAnyStem || !onAiAnalyze}
+            disabled={disabled || aiBusy || !hasAnyStem || !onAiAnalyze}
             onClick={onAiAnalyze}
             title={
               !onAiAnalyze

@@ -4743,7 +4743,9 @@
       "insertedNSentences": "已插入 {{count}} 個句子",
       "dialogTitle": "魔術貼上：從圖片 / PDF 擷取教材",
       "dialogDescSentence": "上傳一張圖片或 PDF，AI 會自動擷取句子與翻譯，預覽確認後再插入。",
-      "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。"
+      "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。",
+      "noQuestionExtracted": "沒有擷取到選擇題，請換一張更清楚的圖片",
+      "insertedNQuestions": "已擷取 {{count}} 題，已放入右側"
     },
     "batchTabs": {
       "text": "貼上文字",
@@ -6040,7 +6042,10 @@
         "needStem": "右側先輸入題目",
         "upload": "PDF／圖片上傳",
         "uploadHint": "上傳考卷圖片，AI 擷取題目與選項",
-        "aiTitle": "AI 協助"
+        "aiTitle": "AI 協助",
+        "aiApplied": "已填入 {{applied}} 題，略過 {{skipped}} 題（已設定或無法判斷）",
+        "aiNothingToSend": "右側還沒有可分析的題目（需要題幹與至少 2 個選項）",
+        "aiFailed": "AI 處理失敗，請稍後再試"
       },
       "settings": {
         "title": "設定／關聯",

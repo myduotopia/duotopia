@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/contexts/SidebarContext";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
+import type { MagicPasteMcItem } from "@/components/shared/MagicPasteInput";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
 import type { Question, QuestionVisibility } from "@/types/questionBank";
@@ -30,13 +31,20 @@ import QuestionCard from "./QuestionCard";
 import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import {
   MAX_QUESTIONS_PER_BATCH,
+  applyAiAnalysis,
+  applyAiAnswers,
   batchDefaultsFromQuestion,
   draftFromQuestion,
+  draftHasContent,
+  draftsEligibleForAi,
+  draftsFromExtracted,
   emptyBatchDefaults,
   emptyDraft,
   findBatchDuplicateKeys,
+  toAiInputs,
   toCreateInput,
   validateDraft,
+  type ApplyResult,
   type BatchDefaults,
   type QuestionDraft,
 } from "./questionDraft";
@@ -131,6 +139,7 @@ export default function MultipleChoiceQuestionSheet({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const dirtyRef = useRef(false);
 
   // 開啟時依模式初始化
@@ -153,7 +162,7 @@ export default function MultipleChoiceQuestionSheet({
     dirtyRef.current = false;
   }, [open, question]);
 
-  const busy = saving || deleting || generatingAudio;
+  const busy = saving || deleting || generatingAudio || aiBusy;
   useEffect(() => {
     setEditorBusy(busy);
     return () => setEditorBusy(false);
@@ -275,6 +284,70 @@ export default function MultipleChoiceQuestionSheet({
     } finally {
       setGeneratingAudio(false);
     }
+  };
+
+  // ---- AI 工具（#1065）：只填空的 ----
+  const runAi = async (
+    call: (inputs: ReturnType<typeof toAiInputs>) => Promise<{
+      results:
+        | Parameters<typeof applyAiAnswers>[1]
+        | Parameters<typeof applyAiAnalysis>[1];
+      skipped: string[];
+    }>,
+    apply: (current: QuestionDraft[], results: never) => ApplyResult,
+  ) => {
+    const eligible = draftsEligibleForAi(drafts);
+    if (eligible.length === 0 || aiBusy) {
+      toast.info(t("questionBank.form.tools.aiNothingToSend"));
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const res = await call(toAiInputs(eligible));
+      const outcome = apply(drafts, res.results as never);
+      dirtyRef.current = dirtyRef.current || outcome.applied > 0;
+      setDrafts(outcome.drafts);
+      const undecided = res.skipped.length;
+      toast.success(
+        t("questionBank.form.tools.aiApplied", {
+          applied: outcome.applied,
+          skipped: outcome.skipped + undecided,
+        }),
+      );
+    } catch (err) {
+      toast.error(
+        extractApiMessage(err) ?? t("questionBank.form.tools.aiFailed"),
+      );
+    } finally {
+      setAiBusy(false);
+    }
+  };
+  const handleAiAnswer = () =>
+    runAi(
+      (inputs) => apiClient.aiAnswerQuestions(inputs),
+      (current, results) => applyAiAnswers(current, results),
+    );
+  const handleAiAnalyze = () =>
+    runAi(
+      (inputs) => apiClient.aiAnalyzeQuestions(inputs),
+      (current, results) => applyAiAnalysis(current, results),
+    );
+
+  /** 考卷擷取結果：第一張卡全空就取代，否則附加；超過上限截斷 */
+  const handleInsertExtracted = (items: MagicPasteMcItem[]) => {
+    if (items.length === 0) return;
+    dirtyRef.current = true;
+    setDrafts((prev) => {
+      const base = prev.length === 1 && !draftHasContent(prev[0]) ? [] : prev;
+      const room = Math.max(0, MAX_QUESTIONS_PER_BATCH - base.length);
+      const incoming = draftsFromExtracted(items.slice(0, room), batch);
+      if (items.length > room) {
+        toast.info(
+          t("questionBank.form.limitReached", { max: MAX_QUESTIONS_PER_BATCH }),
+        );
+      }
+      return [...base, ...incoming];
+    });
   };
 
   // ---- 儲存 ----
@@ -490,6 +563,10 @@ export default function MultipleChoiceQuestionSheet({
                 onGenerateAllAudio={generateAllAudio}
                 generatingAudio={generatingAudio}
                 hasAnyStem={hasAnyStem}
+                onAiAnswer={isEdit ? undefined : handleAiAnswer}
+                onAiAnalyze={isEdit ? undefined : handleAiAnalyze}
+                aiBusy={aiBusy}
+                onInsertExtracted={isEdit ? undefined : handleInsertExtracted}
                 batch={batch}
                 onBatchChange={applyBatch}
                 programs={programs}

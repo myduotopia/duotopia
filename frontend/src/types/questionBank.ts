@@ -153,6 +153,32 @@ export type QuestionUpdateInput = Partial<
   Omit<QuestionCreateInput, "question_type" | "organization_id" | "school_id">
 >;
 
+// ---- AI 工具（#1065）----
+export interface AiQuestionInput {
+  key: string;
+  stem: string;
+  options: string[];
+}
+
+export interface AiAnswerResult {
+  key: string;
+  correct_indexes: number[];
+  explanation: string;
+}
+
+export interface AiAnalyzeResult {
+  key: string;
+  exam_points: ExamPoint[];
+  grade_min: number | null;
+  grade_max: number | null;
+}
+
+export interface AiResponse<T> {
+  results: T[];
+  /** 模型判斷不了或回傳不合法而被丟掉的 key */
+  skipped: string[];
+}
+
 /** 顯示考點名稱：優先目前語言，退回 zh-TW → en → code */
 export function examPointLabel(
   ep: { code: string; names: Record<string, string> },

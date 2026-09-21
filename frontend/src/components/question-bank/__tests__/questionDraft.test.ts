@@ -278,3 +278,137 @@ describe("draftFromQuestion / batchDefaultsFromQuestion", () => {
     expect(draftFromQuestion(baseQuestion).advancedOpen).toBe(false);
   });
 });
+
+describe("AI 套用（#1065）：只填空的", () => {
+  const two = (): ReturnType<typeof emptyDraft> =>
+    draftWith(
+      "Q",
+      [
+        ["a", false],
+        ["b", false],
+      ],
+      [],
+    );
+
+  it("draftsEligibleForAi / toAiInputs：需題幹 + ≥2 選項；options 只送有填的", async () => {
+    const { draftsEligibleForAi, toAiInputs } =
+      await import("../questionDraft");
+    const ok = two();
+    const noStem = emptyDraft();
+    const oneOpt = draftWith("Q2", [["a", false]], []);
+    expect(draftsEligibleForAi([ok, noStem, oneOpt]).map((d) => d.key)).toEqual(
+      [ok.key],
+    );
+    ok.options[3] = {
+      text: "",
+      is_correct: false,
+      image_url: "http://x/d.png",
+    };
+    expect(toAiInputs([ok])[0].options).toEqual(["a", "b", "(圖片選項)"]);
+  });
+
+  it("applyAiAnswers：沒答案的題才勾；index 對應有填的選項；多個 index 開複選；已設答案只補空解析", async () => {
+    const { applyAiAnswers } = await import("../questionDraft");
+    const fresh = two();
+    fresh.options[2] = { text: "", is_correct: false, image_url: null }; // 空格
+    fresh.options[3] = { text: "d", is_correct: false, image_url: null };
+    const set = draftWith("Set", [
+      ["x", true],
+      ["y", false],
+    ]);
+    const res = applyAiAnswers(
+      [fresh, set],
+      [
+        { key: fresh.key, correct_indexes: [0, 2], explanation: "ai says" }, // filled idx 2 = "d"
+        { key: set.key, correct_indexes: [1], explanation: "should not flip" },
+      ],
+    );
+    expect(res.applied).toBe(1);
+    expect(res.skipped).toBe(1);
+    const f = res.drafts[0];
+    expect(f.options.map((o) => o.is_correct)).toEqual([
+      true,
+      false,
+      false,
+      true,
+    ]);
+    expect(f.allow_multiple).toBe(true);
+    expect(f.explanation).toBe("ai says");
+    const s = res.drafts[1];
+    expect(s.options.map((o) => o.is_correct)).toEqual([
+      true,
+      false,
+      false,
+      false,
+    ]);
+    expect(s.explanation).toBe("should not flip"); // 解析空 → 補
+  });
+
+  it("applyAiAnalysis：考點空才填、年段不限才填；都設過算 skipped", async () => {
+    const { applyAiAnalysis } = await import("../questionDraft");
+    const blank = two();
+    const hasPoint = two();
+    hasPoint.exam_points = [EP];
+    hasPoint.grade = [3, 5];
+    const res = applyAiAnalysis(
+      [blank, hasPoint],
+      [
+        { key: blank.key, exam_points: [EP], grade_min: 7, grade_max: 9 },
+        {
+          key: hasPoint.key,
+          exam_points: [{ ...EP, id: 99 }],
+          grade_min: 1,
+          grade_max: 2,
+        },
+      ],
+    );
+    expect(res.applied).toBe(1);
+    expect(res.skipped).toBe(1);
+    expect(res.drafts[0].exam_points).toEqual([EP]);
+    expect(res.drafts[0].grade).toEqual([7, 9]);
+    expect(res.drafts[0].advancedOpen).toBe(true);
+    expect(res.drafts[1].exam_points).toEqual([EP]);
+    expect(res.drafts[1].grade).toEqual([3, 5]);
+  });
+
+  it("draftsFromExtracted：帶批次值、圖上答案直接勾、>4 選項展開", async () => {
+    const { draftsFromExtracted } = await import("../questionDraft");
+    const batch = {
+      exam_points: [EP],
+      grade: [7, 9] as [number, number],
+      program_link: null,
+    };
+    const [a, b] = draftsFromExtracted(
+      [
+        {
+          stem: "S1",
+          options: ["p", "q"],
+          correct_indexes: [1],
+          explanation: "e",
+        },
+        {
+          stem: "S2",
+          options: ["1", "2", "3", "4", "5"],
+          correct_indexes: [0, 4],
+          explanation: "",
+        },
+      ],
+      batch,
+    );
+    expect(a.stem).toBe("S1");
+    expect(a.options.length).toBe(BASE_OPTION_SLOTS);
+    expect(a.options.map((o) => o.is_correct)).toEqual([
+      false,
+      true,
+      false,
+      false,
+    ]);
+    expect(a.exam_points).toEqual([EP]);
+    expect(a.grade).toEqual([7, 9]);
+    expect(a.explanation).toBe("e");
+    expect(b.options.length).toBe(5);
+    expect(b.extraOptionsShown).toBe(true);
+    expect(b.allow_multiple).toBe(true);
+    expect(b.options[4].is_correct).toBe(true);
+  });
+});

@@ -20,6 +20,7 @@ const updateQuestion = vi.fn();
 const findSimilarQuestions = vi.fn();
 const listExamPoints = vi.fn();
 const listSources = vi.fn();
+const aiAnswerQuestions = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiClient: {
     createQuestion: (...a: unknown[]) => createQuestion(...a),
@@ -28,6 +29,8 @@ vi.mock("@/lib/api", () => ({
     findSimilarQuestions: (...a: unknown[]) => findSimilarQuestions(...a),
     listExamPoints: (...a: unknown[]) => listExamPoints(...a),
     listSources: (...a: unknown[]) => listSources(...a),
+    aiAnswerQuestions: (...a: unknown[]) => aiAnswerQuestions(...a),
+    aiAnalyzeQuestions: vi.fn(),
     createSource: vi.fn(),
     getMagicPasteQuota: vi.fn().mockResolvedValue({
       free_remaining: 5,
@@ -194,9 +197,10 @@ describe("MultipleChoiceQuestionSheet", () => {
     findSimilarQuestions.mockReset().mockResolvedValue(noSimilar);
     listExamPoints.mockReset().mockResolvedValue({ items: [EP] });
     listSources.mockReset().mockResolvedValue({ items: [] });
+    aiAnswerQuestions.mockReset();
   });
 
-  it("左欄：上傳在最上方且即將推出、AI 兩鍵 disabled、批次卡依序、公開必選", () => {
+  it("左欄：上傳在最上方、AI 兩鍵無題幹時 disabled、批次卡依序、公開必選", () => {
     renderSheet();
     const sheet = screen.getByTestId("qb-sheet");
     const order = [
@@ -214,7 +218,6 @@ describe("MultipleChoiceQuestionSheet", () => {
     );
     expect(order.every((n) => n >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(screen.getByTestId("qb-upload-coming-soon")).toBeTruthy();
     expect(
       (screen.getByTestId("qb-ai-answer") as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -274,6 +277,32 @@ describe("MultipleChoiceQuestionSheet", () => {
     );
     expect(screen.queryByTestId("qc-2-exam-points-chip-7")).toBeNull();
     expect(screen.getByTestId("qc-0-exam-points-chip-7")).toBeTruthy();
+  });
+
+  it("AI 作答：有題幹+≥2 選項才可按；只勾沒答案的題、解析空才填；toast 摘要", async () => {
+    aiAnswerQuestions.mockResolvedValue({
+      results: [{ key: "__k0", correct_indexes: [1], explanation: "ai" }],
+      skipped: [],
+    });
+    const user = userEvent.setup();
+    renderSheet();
+    const btn = screen.getByTestId("qb-ai-answer") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    await fillCard(user, 0, "Pick", [
+      ["a", false],
+      ["b", false],
+    ]);
+    expect(btn.disabled).toBe(false);
+    await user.click(btn);
+    await waitFor(() => expect(aiAnswerQuestions).toHaveBeenCalledTimes(1));
+    const sent = aiAnswerQuestions.mock.calls[0][0];
+    expect(sent[0].stem).toBe("Pick");
+    expect(sent[0].options).toEqual(["a", "b"]);
+    // 後端回的 key 對不上（我們不知道卡片 key）→ 不會套用，但流程完成、按鍵恢復
+    await waitFor(() => expect(btn.disabled).toBe(false));
+    expect(
+      screen.getByTestId("qc-0-correct-1").getAttribute("data-state"),
+    ).toBe("unchecked");
   });
 
   it("批內兩題題幹相同 → 擋送出", async () => {

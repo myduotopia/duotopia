@@ -4,6 +4,10 @@
 
 import { API_URL } from "../config/api";
 import type {
+  AiAnalyzeResult,
+  AiAnswerResult,
+  AiQuestionInput,
+  AiResponse,
   ExamPoint,
   Question,
   QuestionCreateInput,
@@ -596,6 +600,20 @@ class ApiClient {
     if (excludeId !== undefined) qs.append("exclude_id", String(excludeId));
     return this.get<SimilarQuestionsResponse>(
       `/api/question-bank/questions/similar?${qs.toString()}`,
+    );
+  }
+
+  async aiAnswerQuestions(questions: AiQuestionInput[]) {
+    return this.post<AiResponse<AiAnswerResult>>(
+      "/api/question-bank/ai/answer",
+      { questions },
+    );
+  }
+
+  async aiAnalyzeQuestions(questions: AiQuestionInput[]) {
+    return this.post<AiResponse<AiAnalyzeResult>>(
+      "/api/question-bank/ai/analyze",
+      { questions },
     );
   }
 
