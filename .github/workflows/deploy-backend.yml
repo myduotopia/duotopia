@@ -321,6 +321,10 @@ jobs:
               'release_announcements',
               -- 班級學生分組（#1046，JWT auth 業務表）
               'student_groups', 'student_group_members',
+              -- 題庫（#1061 / #1062，JWT auth 業務表）
+              'exam_points', 'exam_point_aliases', 'question_sources',
+              'question_groups', 'question_group_segments', 'questions', 'question_options',
+              'question_exam_points', 'question_source_links', 'question_program_links',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',
