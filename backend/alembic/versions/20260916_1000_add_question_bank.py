@@ -27,7 +27,8 @@ Content → ContentItem）是多對多，所以不塞進 ContentItem，另開一
   AND normalized_stem <> ''`` 擋同一老師完全重複的單題；題組內的小題（克漏字空格
   題幹常是空的）與純圖題不套用。
 - 題幹／選項文字可為空字串（純圖題、純圖選項），但 CHECK 要求「文字、圖片、語音」
-  至少一個（``ck_questions_has_content`` / ``ck_question_options_has_content``）。
+  至少一個（``ck_questions_has_content`` / ``ck_question_options_has_content``）；
+  題組小題（``group_id`` 有值，例如克漏字空格）題幹可為空，不受此限。
 - ``pg_trgm`` 供相似題查詢（``GIN (normalized_stem gin_trgm_ops)``）。
   Supabase 允許 ``CREATE EXTENSION IF NOT EXISTS``。
 
@@ -251,6 +252,7 @@ def upgrade() -> None:
             ),
             CONSTRAINT ck_questions_has_content CHECK (
                 stem <> '' OR image_url IS NOT NULL OR stem_audio_url IS NOT NULL
+                OR group_id IS NOT NULL
             )
         )
         """
@@ -268,6 +270,11 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS ix_questions_normalized_stem_trgm
             ON public.questions USING GIN (normalized_stem gin_trgm_ops)
         """
+    )
+    # 相似題以外的等值查詢（重複偵測）用一般 btree
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_questions_normalized_stem "
+        "ON public.questions (normalized_stem)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_questions_type_visibility "
