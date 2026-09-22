@@ -325,6 +325,53 @@ def test_sources_create_list_and_link(test_client, teacher_a, teacher_b):
     assert resp.status_code == 200 and resp.json()["sources"] == []
 
 
+def test_sources_search_escapes_like_wildcards(test_client, teacher_a):
+    """#1077：來源名稱含 %／_ 的搜尋與建立，% 與 _ 不能被當 ILIKE 萬用字元。"""
+    h = _headers(teacher_a)
+    pct = test_client.post(
+        "/api/question-bank/sources",
+        json={"source_type": "exam", "name": "100%_會考"},
+        headers=h,
+    ).json()
+    other = test_client.post(
+        "/api/question-bank/sources",
+        json={"source_type": "exam", "name": "100X會考"},
+        headers=h,
+    ).json()
+    assert pct["id"] != other["id"]
+
+    # GET /sources?q=%_ 只命中字面含 "%_" 的那筆（未轉義時 "%_" 會配到全部）
+    items = test_client.get(
+        "/api/question-bank/sources", params={"q": "%_"}, headers=h
+    ).json()["items"]
+    assert [i["id"] for i in items] == [pct["id"]]
+
+    # 題目列表用 q=%_ 搜來源，也只回掛在 "100%_會考" 的題
+    q_pct = _create(test_client, teacher_a, stem="Pct source q", source_ids=[pct["id"]])
+    _create(test_client, teacher_a, stem="Other source q", source_ids=[other["id"]])
+    listing = test_client.get(
+        "/api/question-bank/questions",
+        params={"q": "%_", "only_own": "true"},
+        headers=h,
+    ).json()["items"]
+    assert [x["id"] for x in listing] == [q_pct["id"]]
+
+    # POST /sources 的「已存在」判斷是精確比對：底線不同就是新來源，不會回 100X會考
+    underscore = test_client.post(
+        "/api/question-bank/sources",
+        json={"source_type": "exam", "name": "100_會考"},
+        headers=h,
+    ).json()
+    assert underscore["id"] not in (pct["id"], other["id"])
+    # 大小寫不同仍視為同一筆（不分大小寫精確比對）
+    same = test_client.post(
+        "/api/question-bank/sources",
+        json={"source_type": "exam", "name": "100x會考"},
+        headers=h,
+    ).json()
+    assert same["id"] == other["id"]
+
+
 # ---------------------------------------------------------------- platform
 
 

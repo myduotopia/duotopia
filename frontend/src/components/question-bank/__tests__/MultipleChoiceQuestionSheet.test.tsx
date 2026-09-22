@@ -3,7 +3,8 @@
  *
  * 驗證：左欄順序與上傳／AI 為即將推出；進階設定預設收起；考點必填、公開必選擋送出；
  * 左側批次覆寫所有卡且新增題帶批次值；編輯模式單卡預填走 updateQuestion（含 source_ids）；
- * 逐題送出與部分失敗；readOnly。
+ * 逐題送出與部分失敗；批次編輯中途失敗（#1077：停在失敗題、sheet 不關、該卡顯示後端訊息、
+ * toast 部分成功）；readOnly。
  *
  * Radix Select 在 jsdom 難以操作，需要「已選公開設定」的送出流程用編輯模式（值已預填）。
  */
@@ -11,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 
 import MultipleChoiceQuestionSheet from "../MultipleChoiceQuestionSheet";
 import type { ExamPoint, Question } from "@/types/questionBank";
@@ -425,5 +427,34 @@ describe("MultipleChoiceQuestionSheet", () => {
       [5, "private", [11]],
       [6, "public", []],
     ]);
+  });
+
+  it("批次編輯中途失敗：第 2 題 PATCH 失敗 → 停在該題、sheet 不關、該卡顯示後端訊息、toast 部分成功", async () => {
+    const q1 = baseQuestion({ id: 5, stem: "First" });
+    const q2 = baseQuestion({ id: 6, stem: "Second" });
+    const q3 = baseQuestion({ id: 7, stem: "Third" });
+    updateQuestion
+      .mockResolvedValueOnce(q1)
+      .mockRejectedValueOnce({ detail: "後端錯誤訊息" })
+      .mockResolvedValueOnce(q3);
+    const user = userEvent.setup();
+    const { onSaved, onClose } = renderSheet({ questions: [q1, q2, q3] });
+
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(2));
+    expect(updateQuestion.mock.calls.map((c) => c[0])).toEqual([5, 6]);
+    // 失敗後不再送第 3 題
+    expect(updateQuestion).toHaveBeenCalledTimes(2);
+    // 失敗題（已成功的第 1 題被移出後，它成為第 1 張卡）顯示後端訊息
+    expect((await screen.findByTestId("qc-0-error")).textContent).toBe(
+      "後端錯誤訊息",
+    );
+    // toast 部分成功（已存 1、失敗 2）；sheet 不關但已通知上層刷新
+    expect(toast.warning).toHaveBeenCalledWith(
+      "questionBank.messages.partiallySaved",
+    );
+    expect(onSaved).toHaveBeenCalledWith(q1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("qb-sheet")).toBeTruthy();
   });
 });

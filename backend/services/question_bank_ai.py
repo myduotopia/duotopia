@@ -11,19 +11,23 @@
 - AI 考點分析**只能從平台正式考點清單挑 code**（餵給模型的就是這份清單）；模型認為缺的
   考點放 `proposed`，後端比對既有（含 alias、含 pending）後沒有才新增 `status='pending'`，
   不掛到題目、不回前端（平台審核後才會出現在清單）。
+- 比對既有考點用 `analyze()` 開頭建一次的 `ExamPointLookup`（名稱／alias → 考點），
+  同一批新建的 pending 考點也即時加進去，後面的題目直接重用（#1077，不再逐題全表掃描）。
+- pending 考點 code 的純中文 slug 用 md5 前 7 碼，跨 process 穩定（#1077）。
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from models import ExamPoint, ExamPointAlias
+from models import ExamPoint
 from models.question_bank import (
     EXAM_POINT_STATUS_ACTIVE,
     EXAM_POINT_STATUS_PENDING,
@@ -250,6 +254,7 @@ class QuestionBankAIService:
         if not active:
             raise QuestionBankAIError("平台尚未建立考點清單")
         code_to_id = {ep.code: ep.id for ep in active}
+        lookup = ExamPointLookup.load(db)
         catalog = [{"code": ep.code, "names": ep.names or {}} for ep in active]
         by_key = {q.key: q for q in items}
 
@@ -274,7 +279,7 @@ class QuestionBankAIService:
                     ids.append(i)
             gmin, gmax = _clamp_grade(r.get("grade_min"), r.get("grade_max"))
             # 清單不夠時：提議的新考點（建成 pending）或比對到的既有考點，直接掛上
-            proposed, proposed_ids = self._store_proposed(db, r.get("proposed"))
+            proposed, proposed_ids = self._store_proposed(db, r.get("proposed"), lookup)
             for pid in proposed_ids:
                 if pid not in ids:
                     ids.append(pid)
@@ -303,7 +308,9 @@ class QuestionBankAIService:
         return results, skipped
 
     @staticmethod
-    def _store_proposed(db: Session, raw: Any) -> tuple[list[dict], list[int]]:
+    def _store_proposed(
+        db: Session, raw: Any, lookup: ExamPointLookup
+    ) -> tuple[list[dict], list[int]]:
         """模型提議的新考點 → 比對既有（名稱／alias，含 pending），沒有才建 pending。
 
         回傳 (本次實際新建的 [{code, names}], 可掛到題目的考點 id 清單)。
@@ -321,14 +328,14 @@ class QuestionBankAIService:
             en = str(entry.get("en") or "").strip()[:100]
             if not zh and not en:
                 continue
-            existing = _find_exam_point_by_names(db, zh, en)
+            existing = _find_exam_point_by_names(db, zh, en, lookup)
             if existing is not None:
                 if existing.id not in ids:
                     ids.append(existing.id)
                 continue
             slug = _slugify(en or zh)
             code = f"pending.{slug}"
-            same_code = db.query(ExamPoint).filter(ExamPoint.code == code).first()
+            same_code = lookup.by_code.get(code)
             if same_code is not None:
                 if same_code.id not in ids:
                     ids.append(same_code.id)
@@ -341,6 +348,7 @@ class QuestionBankAIService:
             )
             db.add(ep)
             db.flush()
+            lookup.add(ep)
             created.append({"code": code, "names": ep.names})
             ids.append(ep.id)
         return created, ids
@@ -359,26 +367,63 @@ def _clamp_grade(gmin: Any, gmax: Any) -> tuple[Optional[int], Optional[int]]:
     return a, b
 
 
-def _find_exam_point_by_names(db: Session, zh: str, en: str) -> Optional[ExamPoint]:
+@dataclass
+class ExamPointLookup:
+    """一次載入全部考點（含 pending／merged）＋ alias 的對照表，analyze() 內重用。
+
+    - ``by_name``：names 各語言值（strip + lower）→ ExamPoint
+    - ``by_alias``：alias 原文（strip + lower）→ ExamPoint
+    - ``by_code``：code → ExamPoint（含同批剛建的 pending）
+    """
+
+    by_name: dict[str, ExamPoint] = field(default_factory=dict)
+    by_alias: dict[str, ExamPoint] = field(default_factory=dict)
+    by_code: dict[str, ExamPoint] = field(default_factory=dict)
+
+    @classmethod
+    def load(cls, db: Session) -> "ExamPointLookup":
+        lookup = cls()
+        points = (
+            db.query(ExamPoint)
+            .options(selectinload(ExamPoint.aliases))
+            .order_by(ExamPoint.id)
+            .all()
+        )
+        for ep in points:
+            lookup.add(ep)
+            for a in ep.aliases or []:
+                key = (a.alias or "").strip().lower()
+                if key:
+                    lookup.by_alias.setdefault(key, ep)
+        return lookup
+
+    def add(self, ep: ExamPoint) -> None:
+        """登記一筆考點（新建 pending 也走這裡，讓同批後面的題目重用）。"""
+        self.by_code.setdefault(ep.code, ep)
+        names = ep.names or {}
+        if isinstance(names, dict):
+            for v in names.values():
+                key = str(v).strip().lower()
+                if key:
+                    self.by_name.setdefault(key, ep)
+
+
+def _find_exam_point_by_names(
+    db: Session, zh: str, en: str, lookup: ExamPointLookup
+) -> Optional[ExamPoint]:
     """用中／英名稱或 alias 比對既有考點（含 pending）；merged 者 redirect 到正式考點。"""
-    needles = [n.lower() for n in (zh, en) if n]
+    needles = [n.strip().lower() for n in (zh, en) if n]
     if not needles:
         return None
-    for ep in db.query(ExamPoint).all():
-        names = ep.names or {}
-        if isinstance(names, dict) and any(
-            str(v).strip().lower() in needles for v in names.values()
-        ):
+    for needle in needles:
+        ep = lookup.by_name.get(needle)
+        if ep is not None:
             return _redirect_merged(db, ep)
-    alias_hit = (
-        db.query(ExamPointAlias)
-        .filter(ExamPointAlias.alias.in_([zh, en] if zh and en else [zh or en]))
-        .first()
-    )
-    if alias_hit is None:
-        return None
-    ep = db.query(ExamPoint).filter(ExamPoint.id == alias_hit.exam_point_id).first()
-    return _redirect_merged(db, ep) if ep is not None else None
+    for needle in needles:
+        ep = lookup.by_alias.get(needle)
+        if ep is not None:
+            return _redirect_merged(db, ep)
+    return None
 
 
 def _redirect_merged(db: Session, ep: ExamPoint) -> Optional[ExamPoint]:
@@ -392,10 +437,14 @@ def _redirect_merged(db: Session, ep: ExamPoint) -> Optional[ExamPoint]:
 
 
 def _slugify(text: str) -> str:
+    """考點 code 用的 slug：英數轉小寫底線；純中文名稱用 md5 前 7 碼（``x`` 開頭）。
+
+    內建 ``hash()`` 每個 process 的 seed 不同，同名會重複建 pending 考點；
+    改用 md5 才跨 process／重啟穩定（#1077）。
+    """
     s = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
     if not s:
-        # 純中文名稱：用 hash 保證唯一且穩定
-        s = f"x{abs(hash(text)) % 10_000_000:07d}"
+        s = "x" + hashlib.md5(text.encode("utf-8")).hexdigest()[:7]
     return s[:60]
 
 

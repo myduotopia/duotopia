@@ -4,8 +4,11 @@
 - 輸入整理：>20 題、缺題幹、選項不足、key 重複 → 400
 - AI 作答：index 越界／空／key 對不上 → 該題 skipped；正常題回 correct_indexes + explanation
 - AI 考點分析：code 不在清單被丟；proposed 新考點建成 pending 且不重複建、不回前端；年段夾在 1–12
+- #1077：同批兩題提議同一新考點只建一筆；純中文 slug 用 md5 穩定
 - 端點：未登入 401；AI 例外 → 502；魔術貼上 multiple_choice 正規化
 """
+
+import hashlib
 
 import pytest
 
@@ -187,6 +190,50 @@ async def test_analyze_only_catalog_codes_and_pending_proposals(
     )
     assert [p.code for p in pending] == ["pending.inversion"]
     assert pending[0].names == {"zh-TW": "倒裝句", "en": "Inversion"}
+
+
+@pytest.mark.asyncio
+async def test_analyze_same_new_proposal_across_questions_creates_once(
+    shared_test_session, exam_points, monkeypatch
+):
+    """#1077：兩題提議同一個純中文新考點 → 只建一筆 pending，兩題掛同一 id。"""
+    proposal = {"zh_tw": "假設語氣", "en": ""}
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate(
+            {
+                "results": [
+                    {"key": "q1", "exam_point_codes": [], "proposed": [proposal]},
+                    {"key": "q2", "exam_point_codes": [], "proposed": [proposal]},
+                ]
+            }
+        ),
+    )
+    items = qbai.normalize_inputs([_q("q1"), _q("q2")])
+    results, skipped = await qbai.QuestionBankAIService().analyze(
+        shared_test_session, items
+    )
+    assert skipped == []
+    expected_code = "pending." + qbai._slugify("假設語氣")
+    pending = (
+        shared_test_session.query(ExamPoint)
+        .filter(ExamPoint.code == expected_code)
+        .all()
+    )
+    assert len(pending) == 1
+    assert [r.exam_point_ids for r in results] == [[pending[0].id], [pending[0].id]]
+    # 只有第一題真的新建；第二題比對到同批剛建的 pending，不再建
+    assert [p["code"] for p in results[0].proposed] == [expected_code]
+    assert results[1].proposed == []
+
+
+def test_slugify_chinese_is_stable():
+    """#1077：純中文 slug 用 md5，跨呼叫／跨 process 一致。"""
+    expected = "x" + hashlib.md5("現在完成式".encode("utf-8")).hexdigest()[:7]
+    assert qbai._slugify("現在完成式") == expected
+    assert qbai._slugify("現在完成式") == qbai._slugify("現在完成式")
+    assert qbai._slugify("Present Perfect!") == "present_perfect"
 
 
 @pytest.mark.asyncio

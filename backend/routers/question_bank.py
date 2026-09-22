@@ -16,6 +16,10 @@
 
 可見範圍、重複偵測、考點歸一都在 services/question_bank_service.py，這裡只做
 驗證、權限與序列化。列表的 filter 參數已含 P3（#1066）需要的全部欄位。
+
+#1077：列表 eager-load source_links（避免 N+1）、來源搜尋走 ``qbs.ilike_contains``
+轉義 ``%``/``_``、``POST /sources`` 已存在判斷改精確（不分大小寫）比對、
+``ai_analyze`` 失敗時 rollback 已 flush 的 pending 考點。
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -370,6 +374,7 @@ def _load_options(query):
             QuestionExamPoint.exam_point
         ),
         selectinload(Question.program_links),
+        selectinload(Question.source_links).selectinload(QuestionSourceLink.source),
     )
 
 
@@ -477,13 +482,13 @@ def list_questions(
         source_hit = Question.id.in_(
             db.query(QuestionSourceLink.question_id)
             .join(QuestionSource, QuestionSource.id == QuestionSourceLink.source_id)
-            .filter(QuestionSource.name.ilike(f"%{raw}%"))
+            .filter(qbs.ilike_contains(QuestionSource.name, raw))
         )
-        query = query.filter(
-            or_(Question.normalized_stem.like(f"%{needle}%"), source_hit)
-            if needle
-            else source_hit
+        # 題幹也要轉義：normalize_stem 會保留 "_"（\w），不轉義會變成單字元萬用字元
+        stem_hit = Question.normalized_stem.like(
+            f"%{qbs.escape_like(needle)}%", escape=qbs.LIKE_ESCAPE
         )
+        query = query.filter(or_(stem_hit, source_hit) if needle else source_hit)
 
     total = query.count()
     items = (
@@ -742,10 +747,14 @@ async def ai_analyze(
     try:
         results, skipped = await get_question_bank_ai_service().analyze(db, items)
     except QuestionBankAIError as e:
+        # _store_proposed 可能已 flush pending 考點；get_db 只 close 不 rollback
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except QuestionBankAIOutputError as e:
+        db.rollback()
         raise _ai_failed("analyze", e)
     except Exception as e:
+        db.rollback()
         raise _ai_failed("analyze", e)
 
     wanted = {i for r in results for i in r.exam_point_ids}
@@ -796,7 +805,7 @@ def list_sources(
     """來源清單：平台公用 + 所屬機構自建 + 自己建的。"""
     query = qbs.visible_sources_query(db, teacher)
     if q and q.strip():
-        query = query.filter(QuestionSource.name.ilike(f"%{q.strip()}%"))
+        query = query.filter(qbs.ilike_contains(QuestionSource.name, q.strip()))
     rows = query.order_by(
         QuestionSource.source_type,
         QuestionSource.year.desc().nullslast(),
@@ -821,7 +830,7 @@ def create_source(
         qbs.visible_sources_query(db, teacher)
         .filter(
             QuestionSource.source_type == payload.source_type,
-            QuestionSource.name.ilike(payload.name),
+            func.lower(QuestionSource.name) == payload.name.strip().lower(),
         )
         .first()
     )

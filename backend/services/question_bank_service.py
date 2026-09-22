@@ -6,6 +6,8 @@
 2. **重複偵測**：只比對「自己的 + public」（``find_similar``），不含機構內部題目，
    避免相似題提示把機構題目外洩給非機構老師。
 3. **考點歸一**：alias → 正式考點、``merged`` 考點 redirect 到 ``merged_into``。
+4. **ILIKE 轉義**：``escape_like`` / ``ilike_contains`` 把使用者輸入的反斜線、``%``、``_``
+   轉義後再比對，避免 ``%`` ``_`` 被當萬用字元（#1077）。
 
 可見規則（與 docs/design/question-bank-schema.md 一致）：
   1. teacher_id = T 且非機構／學校題庫（自己的）
@@ -56,6 +58,24 @@ VISIBILITY_VALUES = ("private", "public", "organization_only", "individual_only"
 # 相似題：trgm similarity 門檻（Postgres）。SQLite 測試環境退化成 LIKE 子字串。
 SIMILARITY_THRESHOLD = 0.4
 SIMILAR_LIMIT = 5
+
+# ILIKE 轉義字元；與 ``.ilike(pattern, escape=LIKE_ESCAPE)`` 成對使用
+LIKE_ESCAPE = "\\"
+
+
+def escape_like(raw: str) -> str:
+    """把使用者輸入中的反斜線、``%``、``_`` 轉義，讓它們只當一般字元比對。"""
+    return (
+        (raw or "")
+        .replace(LIKE_ESCAPE, LIKE_ESCAPE + LIKE_ESCAPE)
+        .replace("%", LIKE_ESCAPE + "%")
+        .replace("_", LIKE_ESCAPE + "_")
+    )
+
+
+def ilike_contains(column, raw: str):
+    """``column ILIKE '%<raw 轉義後>%'``：子字串搜尋，不受 ``%``/``_`` 影響。"""
+    return column.ilike(f"%{escape_like(raw)}%", escape=LIKE_ESCAPE)
 
 
 # --------------------------------------------------------------------------- #
@@ -258,7 +278,11 @@ def find_exam_point_by_alias(db: Session, text: str) -> Optional[ExamPoint]:
     needle = (text or "").strip().lower()
     if not needle:
         return None
-    alias = db.query(ExamPointAlias).filter(ExamPointAlias.alias.ilike(needle)).first()
+    alias = (
+        db.query(ExamPointAlias)
+        .filter(ExamPointAlias.alias.ilike(escape_like(needle), escape=LIKE_ESCAPE))
+        .first()
+    )
     if alias is None:
         return None
     return resolve_exam_point(db, alias.exam_point_id)
