@@ -39,6 +39,10 @@ export interface CreatableComboboxProps {
   emptyText: string;
   /** 「新增「{{name}}」」 */
   createLabel: (name: string) => string;
+  /** 自訂觸發元素（表格格子）：不渲染預設按鈕與 chip 列，由呼叫端顯示已選值 */
+  renderTrigger?: () => React.ReactNode;
+  /** 選一個（或新增一個）就關閉選單 */
+  closeOnSelect?: boolean;
   "data-testid"?: string;
 }
 
@@ -52,6 +56,8 @@ export function CreatableCombobox({
   searchPlaceholder,
   emptyText,
   createLabel,
+  renderTrigger,
+  closeOnSelect = false,
   "data-testid": testId = "creatable-combobox",
 }: CreatableComboboxProps) {
   const { t } = useTranslation();
@@ -101,6 +107,7 @@ export function CreatableCombobox({
     } else {
       onChange([...value, item]);
     }
+    if (closeOnSelect) setOpen(false);
   };
 
   const handleCreate = async () => {
@@ -113,6 +120,7 @@ export function CreatableCombobox({
         prev.some((i) => i.id === created.id) ? prev : [created, ...prev],
       );
       setQuery("");
+      if (closeOnSelect) setOpen(false);
     } finally {
       setCreating(false);
     }
@@ -120,7 +128,7 @@ export function CreatableCombobox({
 
   return (
     <div className="space-y-2" data-testid={testId}>
-      {value.length > 0 && (
+      {!renderTrigger && value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {value.map((item) => (
             <Badge
@@ -147,19 +155,37 @@ export function CreatableCombobox({
           ))}
         </div>
       )}
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          if (disabled && o) return;
+          setOpen(o);
+        }}
+      >
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            className="gap-1.5 text-[13px] w-full justify-between"
-            data-testid={`${testId}-trigger`}
-          >
-            {triggerLabel}
-            <ChevronDown size={14} />
-          </Button>
+          {renderTrigger ? (
+            <div
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              aria-disabled={disabled || undefined}
+              className={disabled ? "cursor-default" : "cursor-pointer"}
+              data-testid={`${testId}-trigger`}
+            >
+              {renderTrigger()}
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              className="gap-1.5 text-[13px] w-full justify-between"
+              data-testid={`${testId}-trigger`}
+            >
+              {triggerLabel}
+              <ChevronDown size={14} />
+            </Button>
+          )}
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-2">
           <Input

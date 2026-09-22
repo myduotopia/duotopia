@@ -38,12 +38,16 @@ import {
 import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import { CreatableCombobox } from "@/components/shared/CreatableCombobox";
 import ExamPointPicker from "@/components/shared/ExamPointPicker";
-import { VisibilitySelect } from "@/components/shared/VisibilitySelect";
-import type {
-  ExamPoint,
-  Question,
-  QuestionType,
-  QuestionVisibility,
+import {
+  VisibilitySelect,
+  visibilityLabelKey,
+} from "@/components/shared/VisibilitySelect";
+import {
+  examPointLabel,
+  type ExamPoint,
+  type Question,
+  type QuestionType,
+  type QuestionVisibility,
 } from "@/types/questionBank";
 import QuestionBulkBar from "./QuestionBulkBar";
 import { examPointsFromQuestion } from "./questionDraft";
@@ -103,7 +107,8 @@ export default function QuestionBankTab({
   refreshKey = 0,
   onDispatch,
 }: QuestionBankTabProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
   const [items, setItems] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -376,7 +381,7 @@ export default function QuestionBankTab({
         </div>
       ) : (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <table className="w-full table-fixed text-sm">
+          <table className="w-full table-fixed text-[13px]">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
               <tr>
                 <th className="px-3 py-2 w-10">
@@ -387,13 +392,13 @@ export default function QuestionBankTab({
                     data-testid="qb-check-all"
                   />
                 </th>
-                <th className="px-4 py-2 font-medium w-1/2 max-w-[600px]">
+                <th className="px-4 py-2 font-medium w-1/2 max-w-[550px]">
                   {t("questionBank.columns.stem")}
                 </th>
-                <th className="px-4 py-2 font-medium w-28 hidden sm:table-cell">
+                <th className="px-2 py-2 font-medium w-[72px] hidden sm:table-cell">
                   {t("questionBank.columns.type")}
                 </th>
-                <th className="px-4 py-2 font-medium w-24 hidden lg:table-cell">
+                <th className="px-2 py-2 font-medium w-[56px] hidden lg:table-cell">
                   {t("questionBank.columns.grade")}
                 </th>
                 <th className="px-4 py-2 font-medium hidden xl:table-cell">
@@ -454,11 +459,11 @@ export default function QuestionBankTab({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600 hidden sm:table-cell">
+                    <td className="px-2 py-2.5 text-gray-600 hidden sm:table-cell truncate">
                       {typeLabel(q.question_type)}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-600 hidden lg:table-cell">
-                      {formatGrade(q.grade_min, q.grade_max, t)}
+                    <td className="px-2 py-2.5 text-gray-600 hidden lg:table-cell tabular-nums">
+                      {formatGrade(q.grade_min, q.grade_max)}
                     </td>
                     <td
                       className="px-4 py-2 hidden xl:table-cell"
@@ -469,6 +474,14 @@ export default function QuestionBankTab({
                         onChange={(exam_points) => patchRow(q, { exam_points })}
                         disabled={!editable || bulkBusy}
                         compact
+                        closeOnSelect
+                        renderTrigger={() => (
+                          <ChipCell
+                            labels={e.exam_points.map((ep) =>
+                              examPointLabel(ep, lang),
+                            )}
+                          />
+                        )}
                         data-testid={`qb-row-${q.id}-exam-points`}
                       />
                     </td>
@@ -490,6 +503,10 @@ export default function QuestionBankTab({
                         createLabel={(name) =>
                           t("questionBank.form.batch.createSource", { name })
                         }
+                        closeOnSelect
+                        renderTrigger={() => (
+                          <ChipCell labels={e.sources.map((x) => x.label)} />
+                        )}
                         data-testid={`qb-row-${q.id}-sources`}
                       />
                     </td>
@@ -497,12 +514,12 @@ export default function QuestionBankTab({
                       className="px-4 py-2 hidden lg:table-cell"
                       onClick={stop}
                     >
-                      <VisibilitySelect
+                      <InlineVisibility
                         value={e.visibility}
                         onChange={(visibility) => patchRow(q, { visibility })}
                         scope={q.organization_id ? "organization" : "personal"}
                         disabled={!editable || bulkBusy}
-                        data-testid={`qb-row-${q.id}-visibility`}
+                        testId={`qb-row-${q.id}-visibility`}
                       />
                     </td>
                   </tr>
@@ -565,6 +582,71 @@ export default function QuestionBankTab({
   );
 }
 
+/** 表格格子的純顯示：chip 列；沒有值顯示「—」。點整格才開選單（由外層 renderTrigger 包） */
+function ChipCell({ labels }: { labels: string[] }) {
+  if (labels.length === 0) return <span className="text-gray-300 px-1">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {labels.map((l, i) => (
+        <span
+          key={`${l}-${i}`}
+          className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 max-w-full truncate"
+          title={l}
+        >
+          {l}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 公開設定：平常顯示文字，點了才出現下拉（自動展開），選完或關閉就回純顯示 */
+function InlineVisibility({
+  value,
+  onChange,
+  scope,
+  disabled,
+  testId,
+}: {
+  value: QuestionVisibility;
+  onChange: (v: QuestionVisibility) => void;
+  scope: "personal" | "organization";
+  disabled: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setEditing(true)}
+        className="text-left w-full rounded px-1 py-0.5 hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-transparent"
+        data-testid={`${testId}-display`}
+      >
+        {t(visibilityLabelKey(value, scope))}
+      </button>
+    );
+  }
+  return (
+    <VisibilitySelect
+      value={value}
+      onChange={(v) => {
+        onChange(v);
+        setEditing(false);
+      }}
+      scope={scope}
+      disabled={disabled}
+      defaultOpen
+      onOpenChange={(open) => {
+        if (!open) setEditing(false);
+      }}
+      data-testid={testId}
+    />
+  );
+}
+
 /** 選項全都短（≤ 12 字）且不超過 4 個 → 一列四格；否則兩欄 */
 const SHORT_OPTION_CHARS = 12;
 
@@ -581,28 +663,24 @@ function OptionGrid({ options }: { options: Question["options"] }) {
       data-layout={oneRow ? "1x4" : "2x2"}
     >
       {options.map((o, i) => (
-        <span
-          key={o.id}
-          className={`truncate ${
-            o.is_correct ? "text-green-700 font-medium" : ""
-          }`}
-          title={o.text}
-        >
-          {String.fromCharCode(65 + i)}. {o.text || (o.image_url ? "🖼" : "")}
+        <span key={o.id} className="truncate" title={o.text}>
+          {String.fromCharCode(65 + i)}.{" "}
+          {o.is_correct ? (
+            <span className="rounded bg-yellow-100 px-1 text-yellow-900">
+              {o.text || (o.image_url ? "🖼" : "")}
+            </span>
+          ) : (
+            o.text || (o.image_url ? "🖼" : "")
+          )}
         </span>
       ))}
     </div>
   );
 }
 
-function formatGrade(
-  min: number | null,
-  max: number | null,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): string {
+/** 年級只顯示數字（中英文相同）：7–9、7、不限 — */
+function formatGrade(min: number | null, max: number | null): string {
   if (min === null && max === null) return "—";
-  if (min !== null && max !== null && min !== max) {
-    return t("questionBank.gradeRange", { min, max });
-  }
-  return t("questionBank.gradeSingle", { grade: min ?? max });
+  if (min !== null && max !== null && min !== max) return `${min}–${max}`;
+  return String(min ?? max);
 }

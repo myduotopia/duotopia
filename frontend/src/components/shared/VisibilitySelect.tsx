@@ -42,6 +42,9 @@ export interface VisibilitySelectProps {
   disabled?: boolean;
   /** 未選時顯示紅框（必選） */
   required?: boolean;
+  /** 一掛載就展開（列表「點格子才出現下拉」用） */
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   "data-testid"?: string;
 }
 
@@ -51,6 +54,8 @@ export function VisibilitySelect({
   scope = "personal",
   disabled = false,
   required = false,
+  defaultOpen,
+  onOpenChange,
   "data-testid": testId = "visibility-select",
 }: VisibilitySelectProps) {
   const { t } = useTranslation();
@@ -60,6 +65,8 @@ export function VisibilitySelect({
       value={value ?? ""}
       onValueChange={(v) => onChange(v as QuestionVisibility)}
       disabled={disabled}
+      defaultOpen={defaultOpen}
+      onOpenChange={onOpenChange}
     >
       <SelectTrigger
         className={`h-9 ${invalid ? "border-red-300" : ""}`}

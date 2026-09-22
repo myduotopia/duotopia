@@ -29,6 +29,13 @@ export interface ExamPointPickerProps {
   disabled?: boolean;
   required?: boolean;
   compact?: boolean;
+  /**
+   * 自訂觸發元素（例如表格格子）：傳了就不渲染預設按鈕與上方 chip 列，
+   * 由呼叫端自己顯示已選值；整個 renderTrigger 內容可點開選單。
+   */
+  renderTrigger?: () => React.ReactNode;
+  /** 選一個就關閉選單（列表快速編輯用） */
+  closeOnSelect?: boolean;
   "data-testid"?: string;
 }
 
@@ -53,6 +60,8 @@ export default function ExamPointPicker({
   disabled,
   required = false,
   compact = false,
+  renderTrigger,
+  closeOnSelect = false,
   "data-testid": testId = "exam-point-picker",
 }: ExamPointPickerProps) {
   const { t, i18n } = useTranslation();
@@ -100,11 +109,12 @@ export default function ExamPointPicker({
     } else {
       onChange([...value, ep]);
     }
+    if (closeOnSelect) setOpen(false);
   };
 
   return (
     <div className="space-y-2" data-testid={testId}>
-      {value.length > 0 && (
+      {!renderTrigger && value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {value.map((ep) => (
             <Badge
@@ -130,24 +140,42 @@ export default function ExamPointPicker({
           ))}
         </div>
       )}
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          if (disabled && o) return;
+          setOpen(o);
+        }}
+      >
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            className={`gap-1.5 w-full justify-between ${
-              compact ? "h-8 text-xs" : "text-[13px]"
-            } ${invalid ? "border-red-300 text-red-700" : ""}`}
-            aria-invalid={invalid || undefined}
-            data-testid={`${testId}-trigger`}
-          >
-            {value.length === 0 && required
-              ? t("questionBank.form.pickExamPointsRequired")
-              : t("questionBank.form.pickExamPoints")}
-            <ChevronDown size={14} />
-          </Button>
+          {renderTrigger ? (
+            <div
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              aria-disabled={disabled || undefined}
+              className={disabled ? "cursor-default" : "cursor-pointer"}
+              data-testid={`${testId}-trigger`}
+            >
+              {renderTrigger()}
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              className={`gap-1.5 w-full justify-between ${
+                compact ? "h-8 text-xs" : "text-[13px]"
+              } ${invalid ? "border-red-300 text-red-700" : ""}`}
+              aria-invalid={invalid || undefined}
+              data-testid={`${testId}-trigger`}
+            >
+              {value.length === 0 && required
+                ? t("questionBank.form.pickExamPointsRequired")
+                : t("questionBank.form.pickExamPoints")}
+              <ChevronDown size={14} />
+            </Button>
+          )}
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-2">
           <Input

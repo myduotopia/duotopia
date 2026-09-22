@@ -22,7 +22,19 @@ vi.mock("@/lib/api", () => ({
     deleteQuestion: (...args: unknown[]) => deleteQuestion(...args),
     listSources: vi.fn().mockResolvedValue({ items: [] }),
     createSource: vi.fn(),
-    listExamPoints: vi.fn().mockResolvedValue({ items: [] }),
+    listExamPoints: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 3,
+          code: "grammar.tense.present_perfect",
+          names: { "zh-TW": "現在完成式", en: "Present Perfect" },
+          parent_id: null,
+          status: "active",
+          order_index: 0,
+          aliases: [],
+        },
+      ],
+    }),
   },
 }));
 
@@ -59,8 +71,6 @@ vi.mock("react-i18next", () => ({
         "questionBank.visibility.public": "公開",
         "questionBank.list.selected": `selected ${opts?.count}`,
         "questionBank.list.confirmDelete": `delete ${opts?.count}?`,
-        "questionBank.gradeRange": `${opts?.min}–${opts?.max} 年級`,
-        "questionBank.gradeSingle": `${opts?.grade} 年級`,
         "questionBank.pagination": `第 ${opts?.page} / ${opts?.totalPages} 頁`,
         "common.loading": "Loading",
       };
@@ -126,10 +136,14 @@ describe("QuestionBankTab", () => {
     render(<QuestionBankTab scope="mine" />);
 
     expect(await screen.findByText("I ___ never been to Japan.")).toBeTruthy();
-    expect(screen.getByText("7–9 年級")).toBeTruthy();
-    expect(screen.getByTestId("qb-row-1-exam-points-chip-3")).toBeTruthy();
-    expect(screen.getByTestId("qb-row-1-visibility")).toBeTruthy();
-    expect(screen.getByTestId("qb-row-1-sources")).toBeTruthy();
+    expect(screen.getByText("7–9")).toBeTruthy();
+    // 平常只顯示值：考點 chip 文字、公開文字；沒有常駐下拉
+    expect(screen.getByText("現在完成式")).toBeTruthy();
+    expect(screen.getByTestId("qb-row-1-visibility-display").textContent).toBe(
+      "私人",
+    );
+    expect(screen.queryByTestId("qb-row-1-visibility")).toBeNull();
+    expect(screen.getByTestId("qb-row-1-sources-trigger")).toBeTruthy();
     expect(screen.getByTestId("qb-check-1")).toBeTruthy();
     expect(screen.queryByTestId("qb-bulk-bar")).toBeNull();
     expect(listQuestions).toHaveBeenCalledWith(
@@ -263,11 +277,13 @@ describe("QuestionBankTab", () => {
     render(<QuestionBankTab scope="mine" />);
     await screen.findByText("Q2");
 
-    // 移除第 1 題唯一的考點 chip → 視為修改
+    // 點考點格開選單 → 取消勾選唯一考點 → 視為修改，且選完自動關閉
+    await user.click(screen.getByTestId("qb-row-1-exam-points-trigger"));
     await user.click(
-      screen
-        .getByTestId("qb-row-1-exam-points-chip-3")
-        .querySelector("button")!,
+      await screen.findByTestId("qb-row-1-exam-points-option-3"),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("qb-row-1-exam-points-search")).toBeNull(),
     );
     expect(
       screen.getByTestId("question-row-1").getAttribute("data-dirty"),
