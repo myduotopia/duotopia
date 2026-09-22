@@ -322,4 +322,18 @@ describe("QuestionBankTab", () => {
     expect(confirmSpy).toHaveBeenLastCalledWith("delete 2?");
     confirmSpy.mockRestore();
   });
+
+  it("「只看自己的」切換後以 only_own 重新查詢", async () => {
+    listQuestions.mockResolvedValue(respond([makeQuestion()]));
+    const user = userEvent.setup();
+    render(<QuestionBankTab scope="mine" />);
+    await screen.findByText("I ___ never been to Japan.");
+    expect(listQuestions.mock.calls[0][0].only_own).toBeUndefined();
+    await user.click(screen.getByTestId("question-bank-only-own"));
+    await waitFor(() =>
+      expect(listQuestions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ only_own: true, page: 1 }),
+      ),
+    );
+  });
 });

@@ -96,6 +96,8 @@ export interface QuestionListParams {
   grade_min?: number;
   grade_max?: number;
   q?: string;
+  /** mine/organization 時只列自己的／機構的，不含公開題 */
+  only_own?: boolean;
   page?: number;
   page_size?: number;
 }

@@ -27,7 +27,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -380,6 +380,7 @@ def list_questions(
     grade_max: Optional[int] = Query(None, ge=GRADE_MIN, le=GRADE_MAX),
     q: Optional[str] = Query(None, description="題幹關鍵字"),
     scope: Literal["all", "mine", "organization", "school", "platform"] = Query("all"),
+    only_own: bool = Query(False, description="mine/organization 時只列自己的／機構的，不含公開題"),
     organization_id: Optional[str] = Query(None),
     school_id: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -395,11 +396,15 @@ def list_questions(
 
     query = qbs.visible_questions_query(db, teacher).filter(Question.group_id.is_(None))
 
+    # mine / organization 預設「自己的（機構的）+ 所有公開題」；only_own=true 只留自己的（機構的）
     if scope == "mine":
-        query = query.filter(
+        own = and_(
             Question.teacher_id == teacher.id,
             Question.organization_id.is_(None),
             Question.school_id.is_(None),
+        )
+        query = query.filter(
+            own if only_own else or_(own, Question.visibility == "public")
         )
     elif scope == "organization":
         org_uuid = _parse_uuid(organization_id, "organization_id")
@@ -408,7 +413,10 @@ def list_questions(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="organization_id required for organization scope",
             )
-        query = query.filter(Question.organization_id == org_uuid)
+        org_own = Question.organization_id == org_uuid
+        query = query.filter(
+            org_own if only_own else or_(org_own, Question.visibility == "public")
+        )
     elif scope == "school":
         school_uuid = _parse_uuid(school_id, "school_id")
         if school_uuid is None:
@@ -742,7 +750,7 @@ def list_exam_points(
     db: Session = Depends(get_db),
 ):
     """考點清單（只回 active）。有 q 時回命中項；命中 alias 也算，回傳的是正式考點。"""
-    points = qbs.search_exam_points(db, q=q)
+    points = qbs.search_exam_points(db, q=q, include_pending=True)
     return {"items": [_exam_point_out(ep) for ep in points]}
 
 

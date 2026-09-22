@@ -174,7 +174,11 @@ export default function QuestionCard({
         ttsSettings.speed,
       );
       const res = await apiClient.generateTTS(stemTrimmed, voice, rate, "+0%");
-      patch({ stem_audio_url: absoluteAudioUrl(res.audio_url) });
+      const url = absoluteAudioUrl(res.audio_url);
+      patch({ stem_audio_url: url });
+      toast.success(t("questionBank.form.audioGenerated"));
+      // 生成完立刻播一次，讓老師確認有成功
+      playUrl(url);
     } catch (err) {
       console.error("Question TTS failed:", err);
       toast.error(t("questionBank.form.ttsFailed"));
@@ -183,15 +187,20 @@ export default function QuestionCard({
     }
   };
 
-  /** 播放題幹語音（同單字集：直接 new Audio，不掛播放器） */
+  /** 播放題幹語音（同單字集：直接 new Audio，不掛播放器）；失敗時帶錯誤碼並印 URL 方便定位 */
+  const playUrl = (url: string) => {
+    const audio = new Audio(url);
+    const fail = (code: string | number) => {
+      console.error("[question-bank] audio play failed", { url, code });
+      toast.error(t("questionBank.form.audioPlayFailed", { code }));
+    };
+    audio.onerror = () => fail(audio.error?.code ?? "media");
+    audio
+      .play()
+      .catch((err: unknown) => fail(err instanceof Error ? err.name : "play"));
+  };
   const playAudio = () => {
-    if (!draft.stem_audio_url) return;
-    const audio = new Audio(draft.stem_audio_url);
-    audio.onerror = () =>
-      toast.error(t("contentEditor.messages.cannotPlayRecording"));
-    audio.play().catch(() => {
-      toast.error(t("contentEditor.messages.cannotPlayRecording"));
-    });
+    if (draft.stem_audio_url) playUrl(draft.stem_audio_url);
   };
 
   const exact = draft.similar?.exact_duplicate ?? null;
@@ -251,31 +260,25 @@ export default function QuestionCard({
           className="flex-1"
           data-testid={`qc-${index}-stem`}
         />
-        {/* 語音按鈕組：樣式同單字集；題幹是多行 textarea，所以直排（麥克風 → 播放 → 移除） */}
+        {/* 語音按鈕組（直排，樣式同單字集）：沒語音 → 只有麥克風；有語音 → 只有播放＋移除 */}
         <div className="flex flex-col items-center gap-1 shrink-0 self-start">
-          <button
-            type="button"
-            onClick={generateAudio}
-            disabled={locked || !stemTrimmed || ttsBusy}
-            className={`p-1.5 rounded disabled:opacity-50 ${
-              draft.stem_audio_url
-                ? "text-blue-600 hover:bg-blue-100"
-                : "text-gray-600 bg-yellow-100 hover:bg-yellow-200"
-            }`}
-            title={
-              draft.stem_audio_url
-                ? t("contentEditor.tooltips.rerecordOrGenerate")
-                : t("contentEditor.tooltips.openTTSRecording")
-            }
-            aria-label={t("questionBank.form.generateAudio")}
-            data-testid={`qc-${index}-mic`}
-          >
-            {ttsBusy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Mic className="h-4 w-4" />
-            )}
-          </button>
+          {!draft.stem_audio_url && (
+            <button
+              type="button"
+              onClick={generateAudio}
+              disabled={locked || !stemTrimmed || ttsBusy}
+              className="p-1.5 rounded disabled:opacity-50 text-gray-600 bg-yellow-100 hover:bg-yellow-200"
+              title={t("contentEditor.tooltips.openTTSRecording")}
+              aria-label={t("questionBank.form.generateAudio")}
+              data-testid={`qc-${index}-mic`}
+            >
+              {ttsBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </button>
+          )}
           {draft.stem_audio_url && (
             <button
               type="button"

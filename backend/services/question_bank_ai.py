@@ -156,6 +156,8 @@ def build_analyze_prompt(items: list[QuestionInput], exam_points: list[dict]) ->
         "- `proposed`: ONLY if the question clearly tests something the catalog "
         "does not cover at all, propose a new exam point with a Traditional "
         "Chinese name (`zh_tw`) and an English name (`en`). Usually an empty list.\n"
+        "- Return an entry for EVERY question key. A question must end up with at "
+        "least one exam point: either codes from the catalog or a proposal.\n"
         f"- `grade_min` / `grade_max`: integers {GRADE_MIN}–{GRADE_MAX} "
         "(Taiwan K-12: 1–6 elementary, 7–9 junior high, 10–12 senior high), "
         "grade_min <= grade_max.\n"
@@ -271,7 +273,11 @@ class QuestionBankAIService:
                 if i is not None and i not in ids:
                     ids.append(i)
             gmin, gmax = _clamp_grade(r.get("grade_min"), r.get("grade_max"))
-            proposed = self._store_proposed(db, r.get("proposed"))
+            # 清單不夠時：提議的新考點（建成 pending）或比對到的既有考點，直接掛上
+            proposed, proposed_ids = self._store_proposed(db, r.get("proposed"))
+            for pid in proposed_ids:
+                if pid not in ids:
+                    ids.append(pid)
             if not ids and gmin is None and gmax is None:
                 continue
             results.append(
@@ -297,14 +303,17 @@ class QuestionBankAIService:
         return results, skipped
 
     @staticmethod
-    def _store_proposed(db: Session, raw: Any) -> list[dict]:
+    def _store_proposed(db: Session, raw: Any) -> tuple[list[dict], list[int]]:
         """模型提議的新考點 → 比對既有（名稱／alias，含 pending），沒有才建 pending。
 
-        回傳本次實際新建的 [{code, names}]（只用來 log／測試，不回前端）。
+        回傳 (本次實際新建的 [{code, names}], 可掛到題目的考點 id 清單)。
+        id 清單含「比對到的既有考點」與「本次新建的 pending 考點」，讓清單不夠時
+        題目仍有考點可掛（使用者定案：待審考點可直接使用、不顯示標記）。
         """
         if not isinstance(raw, list):
-            return []
+            return [], []
         created: list[dict] = []
+        ids: list[int] = []
         for entry in raw[:5]:
             if not isinstance(entry, dict):
                 continue
@@ -312,11 +321,17 @@ class QuestionBankAIService:
             en = str(entry.get("en") or "").strip()[:100]
             if not zh and not en:
                 continue
-            if _exam_point_exists(db, zh, en):
+            existing = _find_exam_point_by_names(db, zh, en)
+            if existing is not None:
+                if existing.id not in ids:
+                    ids.append(existing.id)
                 continue
             slug = _slugify(en or zh)
             code = f"pending.{slug}"
-            if db.query(ExamPoint).filter(ExamPoint.code == code).first():
+            same_code = db.query(ExamPoint).filter(ExamPoint.code == code).first()
+            if same_code is not None:
+                if same_code.id not in ids:
+                    ids.append(same_code.id)
                 continue
             ep = ExamPoint(
                 code=code,
@@ -327,7 +342,8 @@ class QuestionBankAIService:
             db.add(ep)
             db.flush()
             created.append({"code": code, "names": ep.names})
-        return created
+            ids.append(ep.id)
+        return created, ids
 
 
 def _clamp_grade(gmin: Any, gmax: Any) -> tuple[Optional[int], Optional[int]]:
@@ -343,22 +359,36 @@ def _clamp_grade(gmin: Any, gmax: Any) -> tuple[Optional[int], Optional[int]]:
     return a, b
 
 
-def _exam_point_exists(db: Session, zh: str, en: str) -> bool:
+def _find_exam_point_by_names(db: Session, zh: str, en: str) -> Optional[ExamPoint]:
+    """用中／英名稱或 alias 比對既有考點（含 pending）；merged 者 redirect 到正式考點。"""
     needles = [n.lower() for n in (zh, en) if n]
     if not needles:
-        return False
+        return None
     for ep in db.query(ExamPoint).all():
         names = ep.names or {}
         if isinstance(names, dict) and any(
             str(v).strip().lower() in needles for v in names.values()
         ):
-            return True
+            return _redirect_merged(db, ep)
     alias_hit = (
         db.query(ExamPointAlias)
         .filter(ExamPointAlias.alias.in_([zh, en] if zh and en else [zh or en]))
         .first()
     )
-    return alias_hit is not None
+    if alias_hit is None:
+        return None
+    ep = db.query(ExamPoint).filter(ExamPoint.id == alias_hit.exam_point_id).first()
+    return _redirect_merged(db, ep) if ep is not None else None
+
+
+def _redirect_merged(db: Session, ep: ExamPoint) -> Optional[ExamPoint]:
+    hops = 0
+    while ep is not None and ep.status == "merged" and hops < 10:
+        if ep.merged_into_id is None:
+            return None
+        ep = db.query(ExamPoint).filter(ExamPoint.id == ep.merged_into_id).first()
+        hops += 1
+    return ep
 
 
 def _slugify(text: str) -> str:

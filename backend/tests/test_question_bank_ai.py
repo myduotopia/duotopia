@@ -170,10 +170,17 @@ async def test_analyze_only_catalog_codes_and_pending_proposals(
         shared_test_session, items
     )
     assert len(results) == 1 and results[0].key == "q1"
-    assert results[0].exam_point_ids == [exam_points["pp"].id]
+    # 清單裡的 + alias 比對到的既有 + 本次新建的 pending，都可掛
+    pending_id = (
+        shared_test_session.query(ExamPoint)
+        .filter(ExamPoint.code == "pending.inversion")
+        .one()
+        .id
+    )
+    assert results[0].exam_point_ids == [exam_points["pp"].id, pending_id]
     assert (results[0].grade_min, results[0].grade_max) == (7, 9)  # 交換
     assert [p["code"] for p in results[0].proposed] == ["pending.inversion"]
-    assert skipped == ["q2"]  # 沒 code、年段無效
+    assert skipped == ["q2"]  # 沒 code、沒提議、年段無效
 
     pending = (
         shared_test_session.query(ExamPoint).filter(ExamPoint.status == "pending").all()
@@ -263,12 +270,16 @@ def test_ai_analyze_endpoint_serializes_points(
     r = resp.json()["results"][0]
     assert [ep["code"] for ep in r["exam_points"]] == ["vocab.meaning"]
     assert r["grade_min"] == 3 and r["grade_max"] == 4
-    assert "proposed" not in r  # 待審不回前端
-    # pending 考點不出現在 picker 清單
+    assert "proposed" not in r  # 不另外標示待審
+    # 提議建出的 pending 考點直接掛上，且出現在 picker 清單（外觀與正式相同）
+    assert [ep["code"] for ep in r["exam_points"]] == [
+        "vocab.meaning",
+        "pending.something_new",
+    ]
     listing = test_client.get(
         "/api/question-bank/exam-points", headers=_headers(teacher)
     ).json()["items"]
-    assert all(not i["code"].startswith("pending.") for i in listing)
+    assert any(i["code"] == "pending.something_new" for i in listing)
 
 
 def test_ai_provider_failure_is_502(test_client, teacher, monkeypatch):

@@ -436,7 +436,7 @@ def test_organization_bank_visible_to_members_only(
         headers=_headers(teacher_a),
     ).json()
     assert [i["id"] for i in listing["items"]] == [q["id"]]
-    # 不在 mine scope
+    # 不在 mine scope（機構題不是公開的）
     mine = test_client.get(
         "/api/question-bank/questions",
         params={"scope": "mine"},
@@ -534,6 +534,66 @@ def test_individual_only_and_organization_only(
     }
     assert org_only["id"] in b_ids and indiv_only["id"] not in b_ids
     assert indiv_only["id"] in p_ids and org_only["id"] not in p_ids
+
+
+def test_list_scope_includes_public_unless_only_own(
+    test_client, shared_test_session, teacher_a, teacher_b
+):
+    """mine / organization 預設含所有公開題（只讀）；only_own=true 只留自己的／機構的。"""
+    mine = _create(test_client, teacher_a, stem="A private")
+    other_public = _create(test_client, teacher_b, stem="B public", visibility="public")
+    _create(test_client, teacher_b, stem="B private")
+
+    def ids(**params):
+        return {
+            i["id"]: i["is_owner"]
+            for i in test_client.get(
+                "/api/question-bank/questions",
+                params={"scope": "mine", **params},
+                headers=_headers(teacher_a),
+            ).json()["items"]
+        }
+
+    got = ids()
+    assert got[mine["id"]] is True and got[other_public["id"]] is False
+    assert len(got) == 2
+    assert set(ids(only_own="true")) == {mine["id"]}
+
+    # organization scope 同理
+    org = Organization(id=uuid.uuid4(), name="Scope Org")
+    shared_test_session.add(org)
+    shared_test_session.flush()
+    shared_test_session.add(
+        TeacherOrganization(
+            teacher_id=teacher_a.id, organization_id=org.id, role="org_owner"
+        )
+    )
+    shared_test_session.commit()
+    org_q = _create(
+        test_client, teacher_a, stem="Org question", organization_id=str(org.id)
+    )
+    org_ids = {
+        i["id"]
+        for i in test_client.get(
+            "/api/question-bank/questions",
+            params={"scope": "organization", "organization_id": str(org.id)},
+            headers=_headers(teacher_a),
+        ).json()["items"]
+    }
+    assert org_ids == {org_q["id"], other_public["id"]}
+    org_only = {
+        i["id"]
+        for i in test_client.get(
+            "/api/question-bank/questions",
+            params={
+                "scope": "organization",
+                "organization_id": str(org.id),
+                "only_own": "true",
+            },
+            headers=_headers(teacher_a),
+        ).json()["items"]
+    }
+    assert org_only == {org_q["id"]}
 
 
 # ---------------------------------------------------------------- similar / dedup

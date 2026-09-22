@@ -269,6 +269,7 @@ describe("MultipleChoiceQuestionSheet", () => {
       question: baseQuestion({ stem_audio_url: "http://x/a.mp3" }),
     });
     expect(screen.getByTestId("qc-0-play")).toBeTruthy();
+    expect(screen.queryByTestId("qc-0-mic")).toBeNull(); // 有語音 → 沒有麥克風
     await user.click(screen.getByTestId("qc-0-audio-remove"));
     expect(screen.queryByTestId("qc-0-play")).toBeNull();
     expect(screen.queryByTestId("qc-0-audio-remove")).toBeNull();

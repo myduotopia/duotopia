@@ -6027,7 +6027,9 @@
         "createSource": "Create “{{name}}”",
         "visibility": "Share this question?",
         "visibilityHint": "Required"
-      }
+      },
+      "audioGenerated": "Audio generated",
+      "audioPlayFailed": "Cannot play audio ({{code}})"
     },
     "list": {
       "selectAll": "Select / deselect all",
@@ -6043,7 +6045,12 @@
       "saveFailed": "{{count}} question(s) failed to save",
       "deleted": "Deleted {{count}} question(s)",
       "deleteFailed": "{{count}} question(s) failed to delete",
-      "unsavedConfirm": "You have unsaved changes. Discard them?"
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "onlyOwn": "Only mine",
+      "onlyOrg": "Organization only"
     }
+  },
+  "orgMaterials": {
+    "title": "Organization Materials"
   }
 }

@@ -29,6 +29,7 @@ import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -115,6 +116,8 @@ export default function QuestionBankTab({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  // 只看自己的／機構的（預設關：含所有公開題）
+  const [onlyOwn, setOnlyOwn] = useState(false);
   // 快速編輯：只存改過的列；勾選集合
   const [edits, setEdits] = useState<Record<number, RowEdit>>({});
   const [checked, setChecked] = useState<Set<number>>(new Set());
@@ -149,6 +152,7 @@ export default function QuestionBankTab({
         scope,
         organization_id: scope === "organization" ? organizationId : undefined,
         q: debouncedSearch || undefined,
+        only_own: onlyOwn || undefined,
         page,
         page_size: PAGE_SIZE,
       });
@@ -163,7 +167,7 @@ export default function QuestionBankTab({
     } finally {
       setLoading(false);
     }
-  }, [scope, organizationId, debouncedSearch, page, t]);
+  }, [scope, organizationId, debouncedSearch, onlyOwn, page, t]);
 
   useEffect(() => {
     void load();
@@ -261,6 +265,7 @@ export default function QuestionBankTab({
           organization_id:
             scope === "organization" ? organizationId : undefined,
           q: debouncedSearch || undefined,
+          only_own: onlyOwn || undefined,
           page,
           page_size: PAGE_SIZE,
         });
@@ -362,6 +367,20 @@ export default function QuestionBankTab({
               data-testid="question-bank-search"
             />
           </div>
+          <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap">
+            <Switch
+              checked={onlyOwn}
+              onCheckedChange={(v) => {
+                if (!confirmDiscard()) return;
+                setOnlyOwn(v);
+                setPage(1);
+              }}
+              data-testid="question-bank-only-own"
+            />
+            {scope === "organization"
+              ? t("questionBank.list.onlyOrg")
+              : t("questionBank.list.onlyOwn")}
+          </label>
         </div>
       </div>
 

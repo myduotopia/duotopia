@@ -6071,7 +6071,9 @@
         "createSource": "新增「{{name}}」",
         "visibility": "是否公開分享考題",
         "visibilityHint": "必選"
-      }
+      },
+      "audioGenerated": "語音已生成",
+      "audioPlayFailed": "無法播放語音（{{code}}）"
     },
     "list": {
       "selectAll": "全選／取消全選",
@@ -6087,7 +6089,12 @@
       "saveFailed": "{{count}} 題儲存失敗，請再試一次",
       "deleted": "已刪除 {{count}} 題",
       "deleteFailed": "{{count}} 題刪除失敗",
-      "unsavedConfirm": "有尚未儲存的修改，要放棄嗎？"
+      "unsavedConfirm": "有尚未儲存的修改，要放棄嗎？",
+      "onlyOwn": "只看自己的",
+      "onlyOrg": "只看機構的"
     }
+  },
+  "orgMaterials": {
+    "title": "機構教材"
   }
 }

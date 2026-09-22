@@ -42,6 +42,7 @@ from models import (
 from models.question_bank import (
     EXAM_POINT_LINK_SOURCE_MANUAL,
     EXAM_POINT_STATUS_ACTIVE,
+    EXAM_POINT_STATUS_PENDING,
     EXAM_POINT_STATUS_MERGED,
 )
 
@@ -198,11 +199,18 @@ def resolve_exam_point(db: Session, exam_point_id: int) -> Optional[ExamPoint]:
 
 
 def resolve_exam_point_ids(db: Session, ids: Iterable[int]) -> list[int]:
-    """去重、redirect、丟掉非 active 的考點。"""
+    """去重、redirect；active 與 pending（AI 提議、待平台審核）都可掛，只丟 merged 未指向者。
+
+    使用者定案：待審考點對老師來說跟正式考點一樣可用、不顯示標記，避免清單不夠時
+    題目掛不到考點而存不了。
+    """
     out: list[int] = []
     for i in ids:
         ep = resolve_exam_point(db, i)
-        if ep is not None and ep.status == EXAM_POINT_STATUS_ACTIVE:
+        if ep is not None and ep.status in (
+            EXAM_POINT_STATUS_ACTIVE,
+            EXAM_POINT_STATUS_PENDING,
+        ):
             if ep.id not in out:
                 out.append(ep.id)
     return out
@@ -222,7 +230,7 @@ def search_exam_points(
     避免 JSONB 查詢在 SQLite / Postgres 之間寫兩套。"""
     statuses = [EXAM_POINT_STATUS_ACTIVE]
     if include_pending:
-        statuses.append("pending")
+        statuses.append(EXAM_POINT_STATUS_PENDING)
     points = (
         db.query(ExamPoint)
         .options(selectinload(ExamPoint.aliases))
