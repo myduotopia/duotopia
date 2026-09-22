@@ -248,7 +248,7 @@ describe("MultipleChoiceQuestionSheet", () => {
     await user.click(await screen.findByTestId("qc-0-exam-points-option-7"));
     await waitFor(() =>
       expect(screen.getByTestId("qb-validation").textContent).toBe(
-        "visibility required",
+        "Q1: visibility required",
       ),
     );
     expect(saveBtn().disabled).toBe(true);
@@ -266,7 +266,7 @@ describe("MultipleChoiceQuestionSheet", () => {
   it("題幹語音按鈕同單字集：無語音只有麥克風；有語音出現播放與移除，移除後清掉", async () => {
     const user = userEvent.setup();
     renderSheet({
-      question: baseQuestion({ stem_audio_url: "http://x/a.mp3" }),
+      questions: [baseQuestion({ stem_audio_url: "http://x/a.mp3" })],
     });
     expect(screen.getByTestId("qc-0-play")).toBeTruthy();
     expect(screen.queryByTestId("qc-0-mic")).toBeNull(); // 有語音 → 沒有麥克風
@@ -321,7 +321,7 @@ describe("MultipleChoiceQuestionSheet", () => {
     const existing = baseQuestion();
     updateQuestion.mockResolvedValue(existing);
     const user = userEvent.setup();
-    renderSheet({ question: existing, organizationId: "org-1" });
+    renderSheet({ questions: [existing], organizationId: "org-1" });
 
     expect((screen.getByTestId("qc-0-stem") as HTMLTextAreaElement).value).toBe(
       "Existing stem",
@@ -358,7 +358,7 @@ describe("MultipleChoiceQuestionSheet", () => {
     const existing = baseQuestion();
     updateQuestion.mockResolvedValue(existing);
     const user = userEvent.setup();
-    renderSheet({ question: existing });
+    renderSheet({ questions: [existing] });
     await user.click(screen.getByTestId("qc-0-grade-clear"));
     expect(screen.getByTestId("qc-0-grade-label").textContent).toBe(
       "questionBank.form.gradeAny",
@@ -372,12 +372,51 @@ describe("MultipleChoiceQuestionSheet", () => {
   it("readOnly：沒有儲存鍵與左欄，欄位 disabled", () => {
     renderSheet({
       readOnly: true,
-      question: baseQuestion({ is_owner: false, visibility: "public" }),
+      questions: [baseQuestion({ is_owner: false, visibility: "public" })],
     });
     expect(screen.queryByTestId("qb-save")).toBeNull();
     expect(screen.queryByTestId("qb-batch-visibility")).toBeNull();
     expect(
       (screen.getByTestId("qc-0-stem") as HTMLTextAreaElement).disabled,
     ).toBe(true);
+  });
+
+  it("批次編輯：N 張卡各自帶值、左欄完整但批次值空白；左欄改公開 → 全部卡；儲存逐題 PATCH", async () => {
+    const q1 = baseQuestion({ id: 5, stem: "First", visibility: "private" });
+    const q2 = baseQuestion({
+      id: 6,
+      stem: "Second",
+      visibility: "public",
+      sources: [],
+    });
+    updateQuestion.mockResolvedValue(q1);
+    const user = userEvent.setup();
+    renderSheet({ questions: [q1, q2] });
+
+    expect(screen.getByTestId("qb-sheet").getAttribute("data-mode")).toBe(
+      "bulk",
+    );
+    expect(screen.getByTestId("question-card-1")).toBeTruthy();
+    // 左欄完整（不是 editOnly），批次值空白：公開下拉沒選、來源沒 chip
+    expect(screen.queryByTestId("qb-edit-panel")).toBeNull();
+    expect(screen.getByTestId("qb-upload")).toBeTruthy();
+    expect(
+      screen.getByTestId("qb-visibility").getAttribute("aria-invalid"),
+    ).toBe("true");
+    expect(screen.queryByTestId("qb-sources-chip-11")).toBeNull();
+    // 批次編輯沒有「新增題目」以外的限制：仍可新增／擷取
+    expect(screen.getByTestId("qb-add-question")).toBeTruthy();
+
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(2));
+    const payloads = updateQuestion.mock.calls.map((c) => [
+      c[0],
+      c[1].visibility,
+      c[1].source_ids,
+    ]);
+    expect(payloads).toEqual([
+      [5, "private", [11]],
+      [6, "public", []],
+    ]);
   });
 });

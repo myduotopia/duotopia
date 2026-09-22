@@ -5920,15 +5920,15 @@
   },
   "questionBank": {
     "title": {
-      "mine": "我的題庫",
-      "organization": "機構題庫"
+      "mine": "題庫",
+      "organization": "題庫"
     },
     "buttons": {
       "addQuestion": "新增題目",
       "prevPage": "上一頁",
       "nextPage": "下一頁"
     },
-    "searchPlaceholder": "搜尋題目...",
+    "searchPlaceholder": "搜尋題目或來源...",
     "comingSoon": "即將推出",
     "types": {
       "multiple_choice": "選擇題",
@@ -5973,7 +5973,8 @@
       "saveFailed": "儲存失敗",
       "deleteFailed": "刪除失敗",
       "createdCount": "已新增 {{count}} 題",
-      "partiallySaved": "已新增 {{saved}} 題，{{failed}} 題失敗，請修正後再儲存"
+      "partiallySaved": "已新增 {{saved}} 題，{{failed}} 題失敗，請修正後再儲存",
+      "bulkSaved": "已更新 {{updated}} 題、新增 {{created}} 題"
     },
     "form": {
       "titleCreate": "新增選擇題",
@@ -6073,7 +6074,8 @@
         "visibilityHint": "必選"
       },
       "audioGenerated": "語音已生成",
-      "audioPlayFailed": "無法播放語音（{{code}}）"
+      "audioPlayFailed": "無法播放語音（{{code}}）",
+      "titleBulkEdit": "批次編輯 {{count}} 題"
     },
     "list": {
       "selectAll": "全選／取消全選",
@@ -6091,7 +6093,12 @@
       "deleteFailed": "{{count}} 題刪除失敗",
       "unsavedConfirm": "有尚未儲存的修改，要放棄嗎？",
       "onlyOwn": "只看自己的",
-      "onlyOrg": "只看機構的"
+      "onlyOrg": "只看機構的",
+      "pageSize": "每頁 {{count}} 題",
+      "typeAll": "全部題型",
+      "bulkEdit": "編輯",
+      "bulkEditTypeMismatch": "題型不同的題目無法一起編輯",
+      "bulkEditNoPermission": "勾選的題目沒有編輯權限"
     }
   },
   "orgMaterials": {

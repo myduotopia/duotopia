@@ -55,8 +55,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       const map: Record<string, string> = {
-        "questionBank.title.mine": "我的題庫",
-        "questionBank.title.organization": "機構題庫",
+        "questionBank.title.mine": "題庫",
+        "questionBank.title.organization": "題庫",
         "questionBank.buttons.addQuestion": "新增題目",
         "questionBank.types.multiple_choice": "選擇題",
         "questionBank.types.reading": "閱讀測驗",

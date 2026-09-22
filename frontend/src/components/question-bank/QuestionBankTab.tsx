@@ -31,6 +31,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useSearchParams } from "react-router-dom";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -58,7 +66,18 @@ import {
   sourceToItem,
 } from "./sourcesCombobox";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZES = [20, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 20;
+const TYPE_FILTERS: QuestionType[] = CREATE_TYPES_ORDER;
+
+const CREATE_TYPES_ORDER: QuestionType[] = [
+  "multiple_choice",
+  "reading",
+  "cloze",
+  "fill_in",
+  "listening",
+  "listening_image",
+];
 
 /** 「新增題目 ▽」的題型清單；只有 multiple_choice 本期可用 */
 const CREATE_TYPES: { type: QuestionType; enabled: boolean }[] = [
@@ -97,6 +116,8 @@ export interface QuestionBankTabProps {
   refreshKey?: number;
   /** 派發流程接上後傳入；未傳 = 派發鍵顯示但 disabled */
   onDispatch?: (questions: Question[]) => void;
+  /** 勾選的題型全相同時的批次編輯（開編輯面板多張卡） */
+  onBulkEdit?: (questions: Question[]) => void;
 }
 
 export default function QuestionBankTab({
@@ -107,17 +128,38 @@ export default function QuestionBankTab({
   onSelectQuestion,
   refreshKey = 0,
   onDispatch,
+  onBulkEdit,
 }: QuestionBankTabProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [items, setItems] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // 頁碼／每頁筆數／題型／只看自己的 都存 URL query，重整與分享連結保留
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const pageSize = (PAGE_SIZES as readonly number[]).includes(
+    Number(searchParams.get("size")),
+  )
+    ? Number(searchParams.get("size"))
+    : DEFAULT_PAGE_SIZE;
+  const typeFilter = (
+    TYPE_FILTERS.includes(searchParams.get("type") as QuestionType)
+      ? searchParams.get("type")
+      : ""
+  ) as QuestionType | "";
+  const onlyOwn = searchParams.get("own") === "1";
+  const setQuery = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(patch).forEach(([k, v]) => {
+      if (v === null || v === "") next.delete(k);
+      else next.set(k, v);
+    });
+    setSearchParams(next, { replace: true });
+  };
+  const setPage = (n: number) => setQuery({ page: n <= 1 ? null : String(n) });
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  // 只看自己的／機構的（預設關：含所有公開題）
-  const [onlyOwn, setOnlyOwn] = useState(false);
   // 快速編輯：只存改過的列；勾選集合
   const [edits, setEdits] = useState<Record<number, RowEdit>>({});
   const [checked, setChecked] = useState<Set<number>>(new Set());
@@ -133,9 +175,14 @@ export default function QuestionBankTab({
   // 題幹搜尋 debounce，避免每個字都打 API
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
+      setDebouncedSearch((prev) => {
+        const nextValue = search.trim();
+        if (prev !== nextValue) setPage(1);
+        return nextValue;
+      });
     }, 300);
+    // setPage 來自 searchParams，不列入依賴（只在搜尋字改變時觸發）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     return () => window.clearTimeout(handle);
   }, [search]);
 
@@ -153,8 +200,9 @@ export default function QuestionBankTab({
         organization_id: scope === "organization" ? organizationId : undefined,
         q: debouncedSearch || undefined,
         only_own: onlyOwn || undefined,
+        question_type: typeFilter || undefined,
         page,
-        page_size: PAGE_SIZE,
+        page_size: pageSize,
       });
       setItems(res.items);
       setTotal(res.total);
@@ -167,13 +215,22 @@ export default function QuestionBankTab({
     } finally {
       setLoading(false);
     }
-  }, [scope, organizationId, debouncedSearch, onlyOwn, page, t]);
+  }, [
+    scope,
+    organizationId,
+    debouncedSearch,
+    onlyOwn,
+    typeFilter,
+    page,
+    pageSize,
+    t,
+  ]);
 
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const handleCreate = (type: QuestionType) => {
     if (onCreateQuestion) {
@@ -229,6 +286,14 @@ export default function QuestionBankTab({
   };
 
   // ---- 底部動作列 ----
+  const checkedItems = items.filter((q) => checked.has(q.id));
+  const editableChecked = checkedItems.filter(canEdit);
+  const checkedSameType =
+    checkedItems.length > 0 &&
+    checkedItems.every(
+      (q) => q.question_type === checkedItems[0].question_type,
+    );
+
   const handleSave = async () => {
     const ids = Object.keys(edits).map(Number);
     if (ids.length === 0) return;
@@ -266,8 +331,9 @@ export default function QuestionBankTab({
             scope === "organization" ? organizationId : undefined,
           q: debouncedSearch || undefined,
           only_own: onlyOwn || undefined,
+          question_type: typeFilter || undefined,
           page,
-          page_size: PAGE_SIZE,
+          page_size: pageSize,
         });
         setItems(res.items);
         setTotal(res.total);
@@ -367,13 +433,36 @@ export default function QuestionBankTab({
               data-testid="question-bank-search"
             />
           </div>
+          <Select
+            value={typeFilter || "all"}
+            onValueChange={(v) => {
+              if (!confirmDiscard()) return;
+              setQuery({ type: v === "all" ? null : v, page: null });
+            }}
+          >
+            <SelectTrigger
+              className="h-9 w-32 text-[13px]"
+              data-testid="question-bank-type-filter"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                {t("questionBank.list.typeAll")}
+              </SelectItem>
+              {TYPE_FILTERS.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {typeLabel(type)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap">
             <Switch
               checked={onlyOwn}
               onCheckedChange={(v) => {
                 if (!confirmDiscard()) return;
-                setOnlyOwn(v);
-                setPage(1);
+                setQuery({ own: v ? "1" : null, page: null });
               }}
               data-testid="question-bank-only-own"
             />
@@ -550,8 +639,32 @@ export default function QuestionBankTab({
       )}
 
       {/* ── Pagination ── */}
-      {total > PAGE_SIZE && (
+      {(total > pageSize || pageSize !== DEFAULT_PAGE_SIZE) && (
         <div className="flex items-center justify-end gap-2 text-sm text-gray-600">
+          <Select
+            value={String(pageSize)}
+            onValueChange={(v) => {
+              if (!confirmDiscard()) return;
+              setQuery({
+                size: v === String(DEFAULT_PAGE_SIZE) ? null : v,
+                page: null,
+              });
+            }}
+          >
+            <SelectTrigger
+              className="h-8 w-28 text-xs"
+              data-testid="question-bank-page-size"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZES.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {t("questionBank.list.pageSize", { count: n })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <span>
             {t("questionBank.pagination", {
               page,
@@ -589,6 +702,21 @@ export default function QuestionBankTab({
           onDispatch
             ? () => onDispatch(items.filter((q) => checked.has(q.id)))
             : undefined
+        }
+        onEdit={
+          onBulkEdit && checkedSameType && editableChecked.length > 0
+            ? () => {
+                if (!confirmDiscard()) return;
+                onBulkEdit(editableChecked);
+              }
+            : undefined
+        }
+        editDisabledReason={
+          !checkedSameType
+            ? t("questionBank.list.bulkEditTypeMismatch")
+            : editableChecked.length === 0
+              ? t("questionBank.list.bulkEditNoPermission")
+              : undefined
         }
         onClear={() => {
           if (!confirmDiscard()) return;

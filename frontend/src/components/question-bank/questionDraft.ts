@@ -11,6 +11,7 @@
 import type { GradeRange } from "@/components/shared/GradeRangeSlider";
 import type { ProgramLessonLink } from "@/components/shared/ProgramLessonPicker";
 import type { MagicPasteMcItem } from "@/components/shared/MagicPasteInput";
+import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import type {
   AiAnalyzeResult,
   AiAnswerResult,
@@ -18,9 +19,11 @@ import type {
   ExamPoint,
   Question,
   QuestionCreateInput,
+  QuestionUpdateInput,
   QuestionVisibility,
   SimilarQuestionsResponse,
 } from "@/types/questionBank";
+import { sourceToItem } from "./sourcesCombobox";
 
 /** 預設顯示 A–D 四格；按「新增選項」才展開到 6 格 */
 export const BASE_OPTION_SLOTS = 4;
@@ -58,6 +61,12 @@ export interface QuestionDraft extends BatchDefaults {
   similar: SimilarQuestionsResponse | null;
   /** 後端儲存失敗時的訊息（逐題送出時標在該卡） */
   serverError: string | null;
+  /** 既有題目的 id（編輯／批次編輯）；新題為 null */
+  existingId: number | null;
+  /** 公開設定：新增時由左欄套用（必選），編輯時各題自帶 */
+  visibility: QuestionVisibility | null;
+  /** 考題來源：同上 */
+  sources: ComboboxItem[];
 }
 
 let keySeq = 0;
@@ -88,6 +97,9 @@ export function emptyDraft(
     advancedOpen: false,
     similar: null,
     serverError: null,
+    existingId: null,
+    visibility: null,
+    sources: [],
     exam_points: [...defaults.exam_points],
     grade: [...defaults.grade] as GradeRange,
     program_link: defaults.program_link ? { ...defaults.program_link } : null,
@@ -131,6 +143,9 @@ export function draftFromQuestion(q: Question): QuestionDraft {
   const defaults = batchDefaultsFromQuestion(q);
   return {
     ...emptyDraft(defaults),
+    existingId: q.id,
+    visibility: q.visibility,
+    sources: q.sources.map(sourceToItem),
     stem: q.stem,
     stem_audio_url: q.stem_audio_url,
     explanation: q.explanation ?? "",
@@ -181,6 +196,7 @@ export function validateDraft(
   if (correct === 0) return "noCorrect";
   if (!d.allow_multiple && correct > 1) return "singleOnly";
   if (d.exam_points.length === 0) return "examPointRequired";
+  if (d.visibility === null) return "visibilityRequired";
   return null;
 }
 
@@ -202,16 +218,10 @@ export function findBatchDuplicateKeys(drafts: QuestionDraft[]): Set<string> {
   return dup;
 }
 
-export interface SharedSubmitSettings {
-  visibility: QuestionVisibility;
-  source_ids: number[];
-  organizationId?: string;
-}
-
-/** 組成送後端的 payload（只送有填的選項，順序依格子） */
+/** 組成送後端的 payload（只送有填的選項，順序依格子）。visibility 由 validateDraft 保證非 null */
 export function toCreateInput(
   d: QuestionDraft,
-  shared: SharedSubmitSettings,
+  organizationId?: string,
 ): QuestionCreateInput {
   return {
     question_type: "multiple_choice",
@@ -226,12 +236,20 @@ export function toCreateInput(
     grade_min: d.grade[0],
     grade_max: d.grade[1],
     allow_multiple_answers: d.allow_multiple,
-    visibility: shared.visibility,
+    visibility: d.visibility ?? "private",
     exam_point_ids: d.exam_points.map((ep) => ep.id),
     program_links: d.program_link ? [d.program_link] : [],
-    source_ids: shared.source_ids,
-    organization_id: shared.organizationId ?? null,
+    source_ids: d.sources.map((s) => s.id),
+    organization_id: organizationId ?? null,
   };
+}
+
+/** 編輯既有題目的 PATCH payload（不含 question_type／歸屬） */
+export function toUpdateInput(d: QuestionDraft): QuestionUpdateInput {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { question_type, organization_id, school_id, ...update } =
+    toCreateInput(d);
+  return update;
 }
 
 // --------------------------------------------------------------------------- #

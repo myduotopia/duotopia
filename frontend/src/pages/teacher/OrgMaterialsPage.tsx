@@ -61,8 +61,9 @@ export default function OrgMaterialsPage() {
   // 題庫：新增／編輯選擇題 dialog（issue #1064）
   const [questionDialog, setQuestionDialog] = useState<{
     open: boolean;
-    question: Question | null;
-  }>({ open: false, question: null });
+    /** 1 題＝編輯、≥2 題＝批次編輯、null＝新增 */
+    questions: Question[] | null;
+  }>({ open: false, questions: null });
   const [questionRefreshKey, setQuestionRefreshKey] = useState(0);
 
   const [loading, setLoading] = useState(true);
@@ -698,10 +699,13 @@ export default function OrgMaterialsPage() {
               organizationId={selectedOrganization?.id}
               refreshKey={questionRefreshKey}
               onCreateQuestion={() =>
-                setQuestionDialog({ open: true, question: null })
+                setQuestionDialog({ open: true, questions: null })
               }
               onSelectQuestion={(q) =>
-                setQuestionDialog({ open: true, question: q })
+                setQuestionDialog({ open: true, questions: [q] })
+              }
+              onBulkEdit={(qs) =>
+                setQuestionDialog({ open: true, questions: qs })
               }
             />
           ) : (
@@ -1331,11 +1335,11 @@ export default function OrgMaterialsPage() {
         {/* 機構題庫：成員都可新增；編輯／刪除由後端依教材管理權限判定，前端不擋 */}
         <MultipleChoiceQuestionSheet
           open={questionDialog.open}
-          question={questionDialog.question}
+          questions={questionDialog.questions}
           programs={programs}
           organizationId={selectedOrganization?.id}
           canDelete={canManage}
-          onClose={() => setQuestionDialog({ open: false, question: null })}
+          onClose={() => setQuestionDialog({ open: false, questions: null })}
           onSaved={() => setQuestionRefreshKey((k) => k + 1)}
           onDeleted={() => setQuestionRefreshKey((k) => k + 1)}
         />

@@ -2,15 +2,20 @@
  * 新增／編輯選擇題側邊面板（Issue #1061 / #1064）。
  *
  * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
- * - 標題列：儲存（擋住時下方一行寫原因）、刪除（編輯模式）、關閉
- * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）；
- *   編輯單題時 editOnly，左欄只剩「考題來源」與「是否公開」兩張卡
+ * - 標題列：儲存（擋住時下方一行寫原因）、刪除（單題編輯）、關閉
+ * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）
  * - 右欄：多張 QuestionCard +「新增題目」
  *
- * 批次設定（考點／年段／教材關聯）一改就覆寫右側所有題；新增的題帶左側目前值。
- * 整批共用、不進 draft：公開設定（必選）、考題來源。
+ * 三種模式（由 `questions` 決定）：
+ * - 新增（未傳／空）：左欄完整；批次值套到所有卡；公開設定由左欄選（必選）
+ * - 單題編輯（1 題）：左欄 editOnly 只剩來源／公開，值預填該題
+ * - 批次編輯（≥2 題，列表勾選同題型）：左欄完整但批次值**一律空白**（語音設定除外），
+ *   老師改左欄才覆寫全部卡；每張卡各自帶自己的值（含公開／來源）；儲存逐題 PATCH，
+ *   上傳擷取附加的新卡走 POST
+ *
+ * 批次設定（考點／年段／教材關聯／公開／來源）一改就覆寫右側所有題；新增的題帶左側目前值。
  * 新增：逐題 createQuestion；中途失敗停在該題、已成功的保留、該卡顯示後端訊息。
- * 編輯：單卡 + updateQuestion。「自動生成語音」勾選時，儲存前先補齊缺語音的題幹。
+ * 「自動生成語音」勾選時，儲存前先補齊缺語音的題幹。
  * 語音／儲存進行中 setEditorBusy，關閉鍵跟著 disabled；有變更時關閉前 confirm。
  */
 
@@ -25,7 +30,6 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import type { MagicPasteMcItem } from "@/components/shared/MagicPasteInput";
-import { sourceToItem } from "./sourcesCombobox";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
 import type { Question, QuestionVisibility } from "@/types/questionBank";
@@ -45,6 +49,7 @@ import {
   findBatchDuplicateKeys,
   toAiInputs,
   toCreateInput,
+  toUpdateInput,
   validateDraft,
   type ApplyResult,
   type BatchDefaults,
@@ -61,15 +66,15 @@ const DEFAULT_TTS: TTSSettingsState = {
 export interface MultipleChoiceQuestionSheetProps {
   open: boolean;
   onClose: () => void;
-  /** 編輯模式帶題目；新增為 null */
-  question?: Question | null;
+  /** 編輯模式帶題目（1 題＝單題編輯；≥2 題＝批次編輯）；新增為空／未傳 */
+  questions?: Question[] | null;
   /** 可關聯的教材包（含 lessons） */
   programs: Program[];
   /** 建到機構題庫時帶 organization_id（編輯時忽略） */
   organizationId?: string;
   /** 只讀（看別人公開的題目） */
   readOnly?: boolean;
-  /** 是否可刪除（編輯模式） */
+  /** 是否可刪除（單題編輯） */
   canDelete?: boolean;
   onSaved: (question: Question) => void;
   onDeleted?: (questionId: number) => void;
@@ -107,14 +112,10 @@ function extractApiMessage(err: unknown): string | null {
   return typeof anyErr.message === "string" ? anyErr.message : null;
 }
 
-function sourcesFromQuestion(q: Question): ComboboxItem[] {
-  return q.sources.map(sourceToItem);
-}
-
 export default function MultipleChoiceQuestionSheet({
   open,
   onClose,
-  question = null,
+  questions = null,
   programs,
   organizationId,
   readOnly = false,
@@ -124,12 +125,18 @@ export default function MultipleChoiceQuestionSheet({
 }: MultipleChoiceQuestionSheetProps) {
   const { t } = useTranslation();
   const { sidebarWidth, setEditorBusy } = useSidebar();
-  const isEdit = question !== null;
+  const existing = questions ?? [];
+  const mode: "create" | "edit" | "bulk" =
+    existing.length === 0 ? "create" : existing.length === 1 ? "edit" : "bulk";
+  const isEdit = mode === "edit";
+  const single = isEdit ? existing[0] : null;
 
   const [drafts, setDrafts] = useState<QuestionDraft[]>([emptyDraft()]);
   const [batch, setBatch] = useState<BatchDefaults>(emptyBatchDefaults());
-  const [sources, setSources] = useState<ComboboxItem[]>([]);
-  const [visibility, setVisibility] = useState<QuestionVisibility | null>(null);
+  // 左欄「套用到全部」的公開／來源；新增與批次編輯初始空白，單題編輯預填該題
+  const [batchSources, setBatchSources] = useState<ComboboxItem[]>([]);
+  const [batchVisibility, setBatchVisibility] =
+    useState<QuestionVisibility | null>(null);
   const [ttsSettings, setTtsSettings] = useState<TTSSettingsState>(DEFAULT_TTS);
   const [autoTTS, setAutoTTS] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -141,22 +148,31 @@ export default function MultipleChoiceQuestionSheet({
   // 開啟時依模式初始化
   useEffect(() => {
     if (!open) return;
-    if (question) {
-      setDrafts([draftFromQuestion(question)]);
-      setBatch(batchDefaultsFromQuestion(question));
-      setSources(sourcesFromQuestion(question));
-      setVisibility(question.visibility);
+    if (mode === "edit" && single) {
+      const d = draftFromQuestion(single);
+      setDrafts([d]);
+      setBatch(batchDefaultsFromQuestion(single));
+      setBatchSources(d.sources);
+      setBatchVisibility(d.visibility);
+    } else if (mode === "bulk") {
+      // 批次編輯：每張卡帶自己的值；左欄批次值一律空白，不從任何題預填（使用者定案）
+      setDrafts(existing.map(draftFromQuestion));
+      setBatch(emptyBatchDefaults());
+      setBatchSources([]);
+      setBatchVisibility(null);
     } else {
       const defaults = emptyBatchDefaults();
       setDrafts([emptyDraft(defaults)]);
       setBatch(defaults);
-      setSources([]);
-      setVisibility(null);
+      setBatchSources([]);
+      setBatchVisibility(null);
     }
     setTtsSettings(loadTtsSettings());
     setAutoTTS(false);
     dirtyRef.current = false;
-  }, [open, question]);
+    // existing 每次 render 都是新陣列，用 questions 當依賴
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, questions]);
 
   const busy = saving || deleting || generatingAudio || aiBusy;
   useEffect(() => {
@@ -169,11 +185,21 @@ export default function MultipleChoiceQuestionSheet({
     setDrafts((prev) => prev.map((d) => (d.key === key ? next : d)));
   }, []);
 
-  /** 左側批次設定：改了就覆寫右側所有題的對應欄位 */
+  /** 左側批次設定（考點／年段／教材）：改了就覆寫右側所有題 */
   const applyBatch = (patch: Partial<BatchDefaults>) => {
     dirtyRef.current = true;
     setBatch((prev) => ({ ...prev, ...patch }));
     setDrafts((prev) => prev.map((d) => ({ ...d, ...patch })));
+  };
+  const applyVisibility = (v: QuestionVisibility) => {
+    dirtyRef.current = true;
+    setBatchVisibility(v);
+    setDrafts((prev) => prev.map((d) => ({ ...d, visibility: v })));
+  };
+  const applySources = (next: ComboboxItem[]) => {
+    dirtyRef.current = true;
+    setBatchSources(next);
+    setDrafts((prev) => prev.map((d) => ({ ...d, sources: next })));
   };
 
   const handleTtsSettingsChange = (s: TTSSettingsState) => {
@@ -202,11 +228,15 @@ export default function MultipleChoiceQuestionSheet({
           n: firstErrorIndex + 1,
           message: t(`questionBank.form.errors.${errorKeys[firstErrorIndex]}`),
         })
-      : visibility === null
-        ? t("questionBank.form.errors.visibilityRequired")
-        : null;
+      : null;
 
   // ---- 題目增減 ----
+  const newDraft = () => {
+    const d = emptyDraft(batch);
+    d.visibility = batchVisibility;
+    d.sources = batchSources;
+    return d;
+  };
   const addQuestion = () => {
     if (drafts.length >= MAX_QUESTIONS_PER_BATCH) {
       toast.info(
@@ -215,7 +245,7 @@ export default function MultipleChoiceQuestionSheet({
       return;
     }
     dirtyRef.current = true;
-    const d = emptyDraft(batch);
+    const d = newDraft();
     setDrafts((prev) => [...prev, d]);
     window.setTimeout(() => {
       document
@@ -334,9 +364,14 @@ export default function MultipleChoiceQuestionSheet({
     if (items.length === 0) return;
     dirtyRef.current = true;
     setDrafts((prev) => {
-      const base = prev.length === 1 && !draftHasContent(prev[0]) ? [] : prev;
+      const base =
+        prev.length === 1 && !draftHasContent(prev[0]) && !prev[0].existingId
+          ? []
+          : prev;
       const room = Math.max(0, MAX_QUESTIONS_PER_BATCH - base.length);
-      const incoming = draftsFromExtracted(items.slice(0, room), batch);
+      const incoming = draftsFromExtracted(items.slice(0, room), batch).map(
+        (d) => ({ ...d, visibility: batchVisibility, sources: batchSources }),
+      );
       if (items.length > room) {
         toast.info(
           t("questionBank.form.limitReached", { max: MAX_QUESTIONS_PER_BATCH }),
@@ -353,7 +388,7 @@ export default function MultipleChoiceQuestionSheet({
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   const handleSave = async () => {
-    if (validationMessage || saving || readOnly || visibility === null) {
+    if (validationMessage || saving || readOnly) {
       if (firstErrorIndex >= 0) scrollToCard(drafts[firstErrorIndex].key);
       return;
     }
@@ -371,34 +406,27 @@ export default function MultipleChoiceQuestionSheet({
           return;
         }
       }
-      const shared = {
-        visibility,
-        source_ids: sources.map((s) => s.id),
-        organizationId,
-      };
 
-      if (isEdit && question) {
-        const payload = toCreateInput(toSubmit[0], shared);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { question_type, organization_id, school_id, ...update } =
-          payload;
-        const saved = await apiClient.updateQuestion(question.id, update);
-        toast.success(t("questionBank.messages.updated"));
-        dirtyRef.current = false;
-        onSaved(saved);
-        onClose();
-        return;
-      }
-
-      // 新增：逐題送，失敗停在該題
+      // 逐題送：既有題 PATCH、新題 POST；失敗停在該題
       const remaining = [...toSubmit];
-      let savedCount = 0;
+      let created = 0;
+      let updated = 0;
       let last: Question | null = null;
       while (remaining.length > 0) {
         const d = remaining[0];
         try {
-          last = await apiClient.createQuestion(toCreateInput(d, shared));
-          savedCount += 1;
+          if (d.existingId !== null) {
+            last = await apiClient.updateQuestion(
+              d.existingId,
+              toUpdateInput(d),
+            );
+            updated += 1;
+          } else {
+            last = await apiClient.createQuestion(
+              toCreateInput(d, organizationId),
+            );
+            created += 1;
+          }
           remaining.shift();
         } catch (err) {
           const message =
@@ -408,10 +436,10 @@ export default function MultipleChoiceQuestionSheet({
               i === 0 ? { ...r, serverError: message } : r,
             ),
           );
-          if (savedCount > 0) {
+          if (created + updated > 0) {
             toast.warning(
               t("questionBank.messages.partiallySaved", {
-                saved: savedCount,
+                saved: created + updated,
                 failed: remaining.length,
               }),
             );
@@ -423,9 +451,15 @@ export default function MultipleChoiceQuestionSheet({
           return;
         }
       }
-      toast.success(
-        t("questionBank.messages.createdCount", { count: savedCount }),
-      );
+      if (mode === "edit") toast.success(t("questionBank.messages.updated"));
+      else if (mode === "bulk")
+        toast.success(
+          t("questionBank.messages.bulkSaved", { updated, created }),
+        );
+      else
+        toast.success(
+          t("questionBank.messages.createdCount", { count: created }),
+        );
       dirtyRef.current = false;
       onSaved(last as Question);
       onClose();
@@ -435,14 +469,14 @@ export default function MultipleChoiceQuestionSheet({
   };
 
   const handleDelete = async () => {
-    if (!question || deleting) return;
+    if (!single || deleting) return;
     if (!window.confirm(t("questionBank.form.confirmDelete"))) return;
     setDeleting(true);
     try {
-      await apiClient.deleteQuestion(question.id);
+      await apiClient.deleteQuestion(single.id);
       toast.success(t("questionBank.messages.deleted"));
       dirtyRef.current = false;
-      onDeleted?.(question.id);
+      onDeleted?.(single.id);
       onClose();
     } catch (err) {
       toast.error(
@@ -468,10 +502,13 @@ export default function MultipleChoiceQuestionSheet({
 
   const title = readOnly
     ? t("questionBank.form.titleView")
-    : isEdit
+    : mode === "edit"
       ? t("questionBank.form.titleEdit")
-      : t("questionBank.form.titleCreate");
+      : mode === "bulk"
+        ? t("questionBank.form.titleBulkEdit", { count: existing.length })
+        : t("questionBank.form.titleCreate");
   const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
+  const canAddOrExtract = !readOnly && mode !== "edit";
 
   return (
     <>
@@ -483,12 +520,13 @@ export default function MultipleChoiceQuestionSheet({
         aria-modal="true"
         aria-label={title}
         data-testid="qb-sheet"
+        data-mode={mode}
       >
         {/* 標題列 */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-            {!isEdit && !readOnly && (
+            {mode === "create" && !readOnly && (
               <p className="text-xs text-gray-500">
                 {t("questionBank.form.batchHint", {
                   count: drafts.length,
@@ -549,7 +587,7 @@ export default function MultipleChoiceQuestionSheet({
         {/* 兩欄：左 = 單字集同款批次工作區（md 以上），右 = 題目卡 */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
           <div className="flex gap-4 items-start">
-            {/* 左欄：新增 = 完整批次區；編輯 = 只剩考題來源與是否公開（editOnly） */}
+            {/* 左欄：新增／批次編輯 = 完整批次區；單題編輯 = 只剩考題來源與是否公開（editOnly） */}
             {!readOnly && (
               <QuestionBankBatchPanel
                 editOnly={isEdit}
@@ -561,23 +599,19 @@ export default function MultipleChoiceQuestionSheet({
                 onGenerateAllAudio={generateAllAudio}
                 generatingAudio={generatingAudio}
                 hasAnyStem={hasAnyStem}
-                onAiAnswer={isEdit ? undefined : handleAiAnswer}
-                onAiAnalyze={isEdit ? undefined : handleAiAnalyze}
+                onAiAnswer={canAddOrExtract ? handleAiAnswer : undefined}
+                onAiAnalyze={canAddOrExtract ? handleAiAnalyze : undefined}
                 aiBusy={aiBusy}
-                onInsertExtracted={isEdit ? undefined : handleInsertExtracted}
+                onInsertExtracted={
+                  canAddOrExtract ? handleInsertExtracted : undefined
+                }
                 batch={batch}
                 onBatchChange={applyBatch}
                 programs={programs}
-                sources={sources}
-                onSourcesChange={(next) => {
-                  dirtyRef.current = true;
-                  setSources(next);
-                }}
-                visibility={visibility}
-                onVisibilityChange={(v) => {
-                  dirtyRef.current = true;
-                  setVisibility(v);
-                }}
+                sources={batchSources}
+                onSourcesChange={applySources}
+                visibility={batchVisibility}
+                onVisibilityChange={applyVisibility}
                 organizationId={organizationId}
                 disabled={saving}
               />
@@ -591,11 +625,11 @@ export default function MultipleChoiceQuestionSheet({
                   draft={d}
                   onChange={(next) => updateDraft(d.key, next)}
                   onRemove={
-                    !isEdit && drafts.length > 1
+                    mode !== "edit" && drafts.length > 1
                       ? () => removeQuestion(d.key)
                       : undefined
                   }
-                  excludeId={question?.id}
+                  excludeId={d.existingId ?? undefined}
                   ttsSettings={ttsSettings}
                   programs={programs}
                   errorMessage={
@@ -608,7 +642,7 @@ export default function MultipleChoiceQuestionSheet({
                 />
               ))}
 
-              {!isEdit && !readOnly && (
+              {canAddOrExtract && (
                 <Button
                   type="button"
                   variant="outline"

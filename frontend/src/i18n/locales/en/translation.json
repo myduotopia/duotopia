@@ -5876,15 +5876,15 @@
   },
   "questionBank": {
     "title": {
-      "mine": "My Question Bank",
-      "organization": "Organization Question Bank"
+      "mine": "Question Bank",
+      "organization": "Question Bank"
     },
     "buttons": {
       "addQuestion": "Add Question",
       "prevPage": "Previous page",
       "nextPage": "Next page"
     },
-    "searchPlaceholder": "Search questions...",
+    "searchPlaceholder": "Search questions or sources...",
     "comingSoon": "Coming soon",
     "types": {
       "multiple_choice": "Multiple Choice",
@@ -5929,7 +5929,8 @@
       "saveFailed": "Failed to save",
       "deleteFailed": "Failed to delete",
       "createdCount": "{{count}} question(s) created",
-      "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again"
+      "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again",
+      "bulkSaved": "Updated {{updated}}, created {{created}}"
     },
     "form": {
       "titleCreate": "New Multiple-Choice Question",
@@ -6029,7 +6030,8 @@
         "visibilityHint": "Required"
       },
       "audioGenerated": "Audio generated",
-      "audioPlayFailed": "Cannot play audio ({{code}})"
+      "audioPlayFailed": "Cannot play audio ({{code}})",
+      "titleBulkEdit": "Bulk edit {{count}} questions"
     },
     "list": {
       "selectAll": "Select / deselect all",
@@ -6047,7 +6049,12 @@
       "deleteFailed": "{{count}} question(s) failed to delete",
       "unsavedConfirm": "You have unsaved changes. Discard them?",
       "onlyOwn": "Only mine",
-      "onlyOrg": "Organization only"
+      "onlyOrg": "Organization only",
+      "pageSize": "{{count}} per page",
+      "typeAll": "All types",
+      "bulkEdit": "Edit",
+      "bulkEditTypeMismatch": "Questions of different types can't be edited together",
+      "bulkEditNoPermission": "No permission to edit the selected questions"
     }
   },
   "orgMaterials": {

@@ -36,6 +36,7 @@ from models import (
     Question,
     QuestionExamPoint,
     QuestionSource,
+    QuestionSourceLink,
     Teacher,
 )
 from models.question_bank import (
@@ -450,10 +451,20 @@ def list_questions(
         query = query.filter(
             or_(Question.grade_min.is_(None), Question.grade_min <= grade_max)
         )
-    if q:
-        needle = qbs.normalize_stem(q)
-        if needle:
-            query = query.filter(Question.normalized_stem.like(f"%{needle}%"))
+    if q and q.strip():
+        # 題幹（正規化後子字串）或 考題來源名稱（ILIKE）任一命中
+        raw = q.strip()
+        needle = qbs.normalize_stem(raw)
+        source_hit = Question.id.in_(
+            db.query(QuestionSourceLink.question_id)
+            .join(QuestionSource, QuestionSource.id == QuestionSourceLink.source_id)
+            .filter(QuestionSource.name.ilike(f"%{raw}%"))
+        )
+        query = query.filter(
+            or_(Question.normalized_stem.like(f"%{needle}%"), source_hit)
+            if needle
+            else source_hit
+        )
 
     total = query.count()
     items = (

@@ -37,6 +37,7 @@ function draftWith(
   const d = emptyDraft();
   d.stem = stem;
   d.exam_points = examPoints;
+  d.visibility = "private";
   options.forEach(([text, correct], i) => {
     d.options[i] = { text, is_correct: correct, image_url: null };
   });
@@ -147,6 +148,8 @@ describe("validateDraft", () => {
     expect(validateDraft(d)).toBe("examPointRequired");
     d.exam_points = [EP];
     expect(validateDraft(d)).toBeNull();
+    d.visibility = null;
+    expect(validateDraft(d)).toBe("visibilityRequired");
   });
   it("純圖選項也算有填", () => {
     const d = draftWith("Q", [["a", true]]);
@@ -204,11 +207,12 @@ describe("toCreateInput", () => {
     d.options[3] = { text: "", is_correct: false, image_url: "http://x/d.png" };
     d.grade = [3, 5];
     d.program_link = { program_id: 1, lesson_id: 4 };
-    const payload = toCreateInput(d, {
-      visibility: "public",
-      source_ids: [11, 12],
-      organizationId: "org-1",
-    });
+    d.visibility = "public";
+    d.sources = [
+      { id: 11, label: "a" },
+      { id: 12, label: "b" },
+    ];
+    const payload = toCreateInput(d, "org-1");
     expect(payload.stem).toBe("Pick one");
     expect(payload.options).toEqual([
       { text: "alpha", is_correct: true, image_url: null },
@@ -228,9 +232,8 @@ describe("toCreateInput", () => {
       ["a", true],
       ["b", false],
     ]);
-    expect(
-      toCreateInput(d, { visibility: "private", source_ids: [] }).program_links,
-    ).toEqual([]);
+    d.visibility = "private";
+    expect(toCreateInput(d).program_links).toEqual([]);
   });
 });
 
@@ -271,6 +274,8 @@ describe("draftFromQuestion / batchDefaultsFromQuestion", () => {
       ],
     };
     const b = batchDefaultsFromQuestion(q);
+    expect(draftFromQuestion(q).existingId).toBe(1);
+    expect(draftFromQuestion(q).visibility).toBe("private");
     expect(b.grade).toEqual([7, 9]);
     expect(b.exam_points.map((e) => e.id)).toEqual([7]);
     expect(b.program_link).toEqual({ program_id: 2, lesson_id: 5 });

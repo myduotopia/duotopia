@@ -74,8 +74,9 @@ function TeacherTemplateProgramsInner() {
   // 題庫：新增／編輯選擇題 dialog（issue #1064）
   const [questionDialog, setQuestionDialog] = useState<{
     open: boolean;
-    question: Question | null;
-  }>({ open: false, question: null });
+    /** 1 題＝編輯、≥2 題＝批次編輯、null＝新增 */
+    questions: Question[] | null;
+  }>({ open: false, questions: null });
   const [questionRefreshKey, setQuestionRefreshKey] = useState(0);
 
   const [loading, setLoading] = useState(true);
@@ -805,10 +806,13 @@ function TeacherTemplateProgramsInner() {
             scope="mine"
             refreshKey={questionRefreshKey}
             onCreateQuestion={() =>
-              setQuestionDialog({ open: true, question: null })
+              setQuestionDialog({ open: true, questions: null })
             }
             onSelectQuestion={(q) =>
-              setQuestionDialog({ open: true, question: q })
+              setQuestionDialog({ open: true, questions: [q] })
+            }
+            onBulkEdit={(qs) =>
+              setQuestionDialog({ open: true, questions: qs })
             }
           />
         ) : (
@@ -1494,13 +1498,14 @@ function TeacherTemplateProgramsInner() {
       {/* Dialogs */}
       <MultipleChoiceQuestionSheet
         open={questionDialog.open}
-        question={questionDialog.question}
+        questions={questionDialog.questions}
         programs={programs}
         readOnly={
-          questionDialog.question !== null && !questionDialog.question.is_owner
+          questionDialog.questions?.length === 1 &&
+          !questionDialog.questions[0].is_owner
         }
         canDelete
-        onClose={() => setQuestionDialog({ open: false, question: null })}
+        onClose={() => setQuestionDialog({ open: false, questions: null })}
         onSaved={() => setQuestionRefreshKey((k) => k + 1)}
         onDeleted={() => setQuestionRefreshKey((k) => k + 1)}
       />

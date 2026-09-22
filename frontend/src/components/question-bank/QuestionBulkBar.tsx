@@ -7,7 +7,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { Loader2, Save, Send, Trash2, X } from "lucide-react";
+import { Loader2, Pencil, Save, Send, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/contexts/SidebarContext";
@@ -20,6 +20,9 @@ export interface QuestionBulkBarProps {
   onDelete: () => void;
   /** 未傳 = 派發尚未實作（顯示但 disabled） */
   onDispatch?: () => void;
+  /** 勾選的題型全相同時可批次編輯；未傳 = 不可（顯示 disabled + 原因） */
+  onEdit?: () => void;
+  editDisabledReason?: string;
   onClear: () => void;
   busy?: boolean;
 }
@@ -30,6 +33,8 @@ export default function QuestionBulkBar({
   onSave,
   onDelete,
   onDispatch,
+  onEdit,
+  editDisabledReason,
   onClear,
   busy = false,
 }: QuestionBulkBarProps) {
@@ -77,6 +82,19 @@ export default function QuestionBulkBar({
         >
           <Trash2 size={14} />
           {t("questionBank.list.delete")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onEdit}
+          disabled={busy || !onEdit}
+          title={!onEdit ? editDisabledReason : undefined}
+          className="gap-1"
+          data-testid="qb-bulk-edit"
+        >
+          <Pencil size={14} />
+          {t("questionBank.list.bulkEdit")}
         </Button>
         <Button
           type="button"
