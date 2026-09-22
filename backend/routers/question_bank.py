@@ -826,9 +826,22 @@ def create_source(
         teacher.id, org_uuid, db
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此機構的成員")
+    # 只在「平台公用 + 要建立的 scope」內去重；不能回到老師其他機構或個人的同名來源
+    if org_uuid is not None:
+        scope_cond = QuestionSource.organization_id == org_uuid
+    else:
+        scope_cond = and_(
+            QuestionSource.organization_id.is_(None),
+            QuestionSource.teacher_id == teacher.id,
+        )
+    platform_cond = and_(
+        QuestionSource.organization_id.is_(None),
+        QuestionSource.teacher_id.is_(None),
+    )
     existing = (
-        qbs.visible_sources_query(db, teacher)
+        db.query(QuestionSource)
         .filter(
+            or_(platform_cond, scope_cond),
             QuestionSource.source_type == payload.source_type,
             func.lower(QuestionSource.name) == payload.name.strip().lower(),
         )

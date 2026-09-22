@@ -17,7 +17,7 @@
  * 與左側批次設定同一套。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -92,6 +92,11 @@ export default function QuestionCard({
   const patch = (p: Partial<QuestionDraft>) => onChange({ ...draft, ...p });
 
   // ---- 相似題（debounce 400ms） ----
+  // 回應晚到時要合併進「最新」的 draft，否則查詢期間改的其他欄位會被蓋掉
+  const latestRef = useRef({ draft, onChange });
+  useEffect(() => {
+    latestRef.current = { draft, onChange };
+  });
   const stemTrimmed = draft.stem.trim();
   useEffect(() => {
     if (readOnly) return;
@@ -104,7 +109,9 @@ export default function QuestionCard({
       apiClient
         .findSimilarQuestions(stemTrimmed, excludeId)
         .then((res) => {
-          if (!cancelled) onChange({ ...draft, similar: res });
+          if (cancelled) return;
+          const latest = latestRef.current;
+          latest.onChange({ ...latest.draft, similar: res });
         })
         .catch(() => {
           /* 查不到相似題不影響編輯 */

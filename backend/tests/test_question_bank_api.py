@@ -23,6 +23,7 @@ from models import (
     ExamPointAlias,
     Organization,
     Question,
+    QuestionSource,
     Teacher,
     TeacherOrganization,
 )
@@ -323,6 +324,55 @@ def test_sources_create_list_and_link(test_client, teacher_a, teacher_b):
         headers=_headers(teacher_a),
     )
     assert resp.status_code == 200 and resp.json()["sources"] == []
+
+
+def test_sources_create_dedup_respects_requested_scope(
+    test_client, shared_test_session, teacher_a
+):
+    """同名來源只在「平台公用 + 要建立的那個 scope」內去重，不會回到別的機構或個人。"""
+    s = shared_test_session
+    org_a = Organization(id=uuid.uuid4(), name="Src Org A")
+    org_b = Organization(id=uuid.uuid4(), name="Src Org B")
+    s.add_all([org_a, org_b])
+    s.flush()
+    for org in (org_a, org_b):
+        s.add(
+            TeacherOrganization(
+                teacher_id=teacher_a.id, organization_id=org.id, role="org_owner"
+            )
+        )
+    s.commit()
+    h = _headers(teacher_a)
+
+    def post(name, org=None):
+        body = {"source_type": "exam", "name": name}
+        if org is not None:
+            body["organization_id"] = str(org.id)
+        resp = test_client.post("/api/question-bank/sources", json=body, headers=h)
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    in_a = post("114 學年度會考", org_a)
+    assert in_a["organization_id"] == str(org_a.id)
+    # 同名但指定 Org B → 建一筆 Org B 的，不能回 Org A 那筆
+    in_b = post("114 學年度會考", org_b)
+    assert in_b["id"] != in_a["id"]
+    assert in_b["organization_id"] == str(org_b.id)
+    # 同名但不帶機構（個人）→ 建個人的
+    personal = post("114 學年度會考")
+    assert personal["id"] not in (in_a["id"], in_b["id"])
+    assert personal["teacher_id"] == teacher_a.id
+    assert personal["organization_id"] is None
+    # 各 scope 內重送仍 idempotent
+    assert post("114 學年度會考", org_b)["id"] == in_b["id"]
+    assert post("114 學年度會考")["id"] == personal["id"]
+
+    # 平台公用來源同名 → 任何 scope 都沿用平台那筆，不重複建立
+    platform_src = QuestionSource(source_type="exam", name="平台共用來源")
+    s.add(platform_src)
+    s.commit()
+    assert post("平台共用來源", org_a)["id"] == platform_src.id
+    assert post("平台共用來源")["id"] == platform_src.id
 
 
 def test_sources_search_escapes_like_wildcards(test_client, teacher_a):

@@ -322,6 +322,36 @@ describe("MultipleChoiceQuestionSheet", () => {
     );
   });
 
+  it("相似題結果晚到，不會蓋掉查詢期間改的其他欄位", async () => {
+    let resolveSimilar: (v: unknown) => void = () => {};
+    findSimilarQuestions.mockReturnValue(
+      new Promise((r) => {
+        resolveSimilar = r;
+      }),
+    );
+    const user = userEvent.setup();
+    renderSheet();
+    await user.type(screen.getByTestId("qc-0-stem"), "Late stem");
+    // 等 debounce 打出 similar 查詢，回應還沒回來時改解析
+    await waitFor(() => expect(findSimilarQuestions).toHaveBeenCalled());
+    await user.type(screen.getByTestId("qc-0-explanation"), "kept");
+
+    resolveSimilar({
+      exact_duplicate: {
+        id: 9,
+        stem: "Late stem",
+        visibility: "public",
+        is_platform: false,
+        is_owner: false,
+      },
+      similar: [],
+    });
+    expect(await screen.findByTestId("qc-0-duplicate")).toBeTruthy();
+    expect(
+      (screen.getByTestId("qc-0-explanation") as HTMLTextAreaElement).value,
+    ).toBe("kept");
+  });
+
   it("編輯模式：單卡預填（含來源 chip、進階設定展開）、沒有新增題目鍵；updateQuestion 帶 source_ids 不帶 organization_id", async () => {
     const existing = baseQuestion();
     updateQuestion.mockResolvedValue(existing);
