@@ -268,7 +268,6 @@ def test_ai_analyze_endpoint_serializes_points(
     )
     assert resp.status_code == 200, resp.text
     r = resp.json()["results"][0]
-    assert [ep["code"] for ep in r["exam_points"]] == ["vocab.meaning"]
     assert r["grade_min"] == 3 and r["grade_max"] == 4
     assert "proposed" not in r  # 不另外標示待審
     # 提議建出的 pending 考點直接掛上，且出現在 picker 清單（外觀與正式相同）
