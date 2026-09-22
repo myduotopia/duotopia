@@ -415,7 +415,8 @@ describe("QuestionBankTab", () => {
     await user.click(screen.getByTestId("qb-exam-point-clear"));
     await waitFor(() =>
       expect(
-        listQuestions.mock.calls.at(-1)?.[0].exam_point_ids,
+        listQuestions.mock.calls[listQuestions.mock.calls.length - 1][0]
+          .exam_point_ids,
       ).toBeUndefined(),
     );
     expect(screen.getByTestId("loc").textContent).not.toContain("ep=");
