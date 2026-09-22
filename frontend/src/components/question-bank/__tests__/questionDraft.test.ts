@@ -62,6 +62,7 @@ const baseQuestion: Question = {
   school_id: null,
   group_id: null,
   is_owner: true,
+  can_edit: true,
   options: [],
   exam_points: [],
   program_links: [],

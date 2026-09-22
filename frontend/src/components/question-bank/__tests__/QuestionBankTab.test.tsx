@@ -99,6 +99,7 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
     school_id: null,
     group_id: null,
     is_owner: true,
+    can_edit: true,
     options: [],
     exam_points: [
       {
@@ -266,6 +267,38 @@ describe("QuestionBankTab", () => {
     expect(screen.getByTestId("qb-bulk-bar").textContent).toContain(
       "selected 1",
     );
+  });
+
+  it("can_edit=false 的題：勾選後編輯鍵 disabled 並顯示無權限；混勾時 onBulkEdit 只收到可編輯題", async () => {
+    listQuestions.mockResolvedValue(
+      respond([
+        makeQuestion({ id: 1 }),
+        makeQuestion({
+          id: 2,
+          stem: "Q2",
+          organization_id: "org-1",
+          is_owner: false,
+          can_edit: false,
+        }),
+      ]),
+    );
+    const onBulkEdit = vi.fn();
+    const user = userEvent.setup();
+    render(<QuestionBankTab scope="mine" onBulkEdit={onBulkEdit} />);
+    await screen.findByText("Q2");
+    await user.click(screen.getByTestId("qb-check-2"));
+    const editBtn = screen.getByTestId("qb-bulk-edit") as HTMLButtonElement;
+    expect(editBtn.disabled).toBe(true);
+    expect(editBtn.getAttribute("title")).toBe(
+      "questionBank.list.bulkEditNoPermission",
+    );
+    await user.click(screen.getByTestId("qb-check-1"));
+    expect(
+      (screen.getByTestId("qb-bulk-edit") as HTMLButtonElement).disabled,
+    ).toBe(false);
+    await user.click(screen.getByTestId("qb-bulk-edit"));
+    expect(onBulkEdit).toHaveBeenCalledTimes(1);
+    expect(onBulkEdit.mock.calls[0][0].map((q: Question) => q.id)).toEqual([1]);
   });
 
   it("快速編輯考點 → 該列自動勾選、變黃；儲存只 PATCH 改過的列並帶三個欄位", async () => {

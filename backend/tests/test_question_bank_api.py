@@ -456,7 +456,7 @@ def test_organization_bank_visible_to_members_only(
     )
     assert resp.status_code == 403
 
-    # B 加入為一般成員：可以新增到機構題庫，但不能編輯／刪除（需擁有人或管理權限）
+    # B 加入為一般成員：可以新增到機構題庫，可刪改自己建的；別人建的不能改（需擁有人或管理權限）
     s.add(
         TeacherOrganization(
             teacher_id=teacher_b.id, organization_id=org.id, role="teacher"
@@ -470,21 +470,42 @@ def test_organization_bank_visible_to_members_only(
         organization_id=str(org.id),
     )
     assert q_b["organization_id"] == str(org.id)
+    assert q_b["can_edit"] is True
+    # B 改自己建的機構題：可以
     assert (
         test_client.patch(
             f"/api/question-bank/questions/{q_b['id']}",
             json={"explanation": "member edit"},
             headers=_headers(teacher_b),
         ).status_code
+        == 200
+    )
+    # B 改／刪 A（擁有人）建的機構題：不行；列表 can_edit 也要對應
+    assert (
+        test_client.patch(
+            f"/api/question-bank/questions/{q['id']}",
+            json={"explanation": "member edits owner question"},
+            headers=_headers(teacher_b),
+        ).status_code
         == 403
     )
     assert (
         test_client.delete(
-            f"/api/question-bank/questions/{q_b['id']}", headers=_headers(teacher_b)
+            f"/api/question-bank/questions/{q['id']}", headers=_headers(teacher_b)
         ).status_code
         == 403
     )
-    # A 是 org_owner：可以編輯成員建的題
+    org_list_b = {
+        i["id"]: i
+        for i in test_client.get(
+            "/api/question-bank/questions",
+            params={"scope": "organization", "organization_id": str(org.id)},
+            headers=_headers(teacher_b),
+        ).json()["items"]
+    }
+    assert org_list_b[q_b["id"]]["can_edit"] is True
+    assert org_list_b[q["id"]]["can_edit"] is False
+    # A 是 org_owner：可以編輯成員建的題，列表 can_edit 全 True
     assert (
         test_client.patch(
             f"/api/question-bank/questions/{q_b['id']}",
@@ -492,6 +513,19 @@ def test_organization_bank_visible_to_members_only(
             headers=_headers(teacher_a),
         ).status_code
         == 200
+    )
+    org_list_a = test_client.get(
+        "/api/question-bank/questions",
+        params={"scope": "organization", "organization_id": str(org.id)},
+        headers=_headers(teacher_a),
+    ).json()["items"]
+    assert all(i["can_edit"] for i in org_list_a if i["id"] in (q["id"], q_b["id"]))
+    # B 刪自己建的機構題：可以
+    assert (
+        test_client.delete(
+            f"/api/question-bank/questions/{q_b['id']}", headers=_headers(teacher_b)
+        ).status_code
+        == 204
     )
 
 

@@ -1502,9 +1502,12 @@ function TeacherTemplateProgramsInner() {
         programs={programs}
         readOnly={
           questionDialog.questions?.length === 1 &&
-          !questionDialog.questions[0].is_owner
+          !questionDialog.questions[0].can_edit
         }
-        canDelete
+        canDelete={
+          !questionDialog.questions ||
+          questionDialog.questions.every((q) => q.can_edit)
+        }
         onClose={() => setQuestionDialog({ open: false, questions: null })}
         onSaved={() => setQuestionRefreshKey((k) => k + 1)}
         onDeleted={() => setQuestionRefreshKey((k) => k + 1)}

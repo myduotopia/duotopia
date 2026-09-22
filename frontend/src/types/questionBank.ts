@@ -69,6 +69,8 @@ export interface Question {
   school_id: string | null;
   group_id: number | null;
   is_owner: boolean;
+  /** 後端算出：建立者本人，或機構擁有人／教材管理者 → 可編輯／刪除 */
+  can_edit: boolean;
   options: QuestionOption[];
   exam_points: QuestionExamPointRef[];
   program_links: QuestionProgramLink[];

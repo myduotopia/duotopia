@@ -1332,13 +1332,21 @@ export default function OrgMaterialsPage() {
           )}
 
         {/* Dialogs */}
-        {/* 機構題庫：成員都可新增；編輯／刪除由後端依教材管理權限判定，前端不擋 */}
+        {/* 機構題庫：成員都可新增；可編輯／刪除依後端回的 can_edit（自建題，或擁有人／教材管理者） */}
         <MultipleChoiceQuestionSheet
           open={questionDialog.open}
           questions={questionDialog.questions}
           programs={programs}
           organizationId={selectedOrganization?.id}
-          canDelete={canManage}
+          readOnly={
+            questionDialog.questions?.length === 1 &&
+            !questionDialog.questions[0].can_edit
+          }
+          canDelete={
+            canManage &&
+            (!questionDialog.questions ||
+              questionDialog.questions.every((q) => q.can_edit))
+          }
           onClose={() => setQuestionDialog({ open: false, questions: null })}
           onSaved={() => setQuestionRefreshKey((k) => k + 1)}
           onDeleted={() => setQuestionRefreshKey((k) => k + 1)}

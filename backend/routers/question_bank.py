@@ -244,7 +244,9 @@ def _source_out(s: QuestionSource) -> dict:
     }
 
 
-def _question_out(q: Question, teacher: Teacher) -> dict:
+def _question_out(
+    db: Session, q: Question, teacher: Teacher, perm_cache: dict | None = None
+) -> dict:
     return {
         "id": q.id,
         "question_type": q.question_type,
@@ -263,6 +265,7 @@ def _question_out(q: Question, teacher: Teacher) -> dict:
         "school_id": str(q.school_id) if q.school_id else None,
         "group_id": q.group_id,
         "is_owner": q.teacher_id == teacher.id,
+        "can_edit": _can_edit(db, teacher, q, perm_cache),
         "options": [
             {
                 "id": o.id,
@@ -322,17 +325,33 @@ def _parse_uuid(value: Optional[str], field: str) -> Optional[uuid.UUID]:
         )
 
 
-def _can_edit(db: Session, teacher: Teacher, q: Question) -> bool:
-    """自己的題目：建立者本人。
+def _can_edit(
+    db: Session, teacher: Teacher, q: Question, perm_cache: dict | None = None
+) -> bool:
+    """建立者本人一律可編輯／刪除自己建的題（含建到機構／學校題庫的）。
 
-    機構／學校題庫：所有 active 成員都能新增（見 create_question），但編輯／刪除
-    只有機構擁有人或有教材管理權限的管理者可以（使用者定案）。
+    機構／學校題庫裡別人建的題：只有機構擁有人或有教材管理權限的管理者可以
+    （使用者定案：成員可刪改自建題，擁有人／管理者權限不變）。
+    perm_cache 由列表傳入，同一 request 內依 (kind, id) 快取，避免每題重查 Casbin。
     """
+    if q.teacher_id == teacher.id:
+        return True
     if q.organization_id is not None:
-        return has_manage_materials_permission(teacher.id, q.organization_id, db)
-    if q.school_id is not None:
-        return has_school_materials_permission(teacher.id, q.school_id, db)
-    return q.teacher_id == teacher.id
+        key = ("org", q.organization_id)
+        checker = has_manage_materials_permission
+        target = q.organization_id
+    elif q.school_id is not None:
+        key = ("school", q.school_id)
+        checker = has_school_materials_permission
+        target = q.school_id
+    else:
+        return False
+    if perm_cache is not None and key in perm_cache:
+        return perm_cache[key]
+    ok = checker(teacher.id, target, db)
+    if perm_cache is not None:
+        perm_cache[key] = ok
+    return ok
 
 
 def _require_editable(db: Session, teacher: Teacher, question_id: int) -> Question:
@@ -474,8 +493,9 @@ def list_questions(
         .limit(page_size)
         .all()
     )
+    perm_cache: dict = {}
     return {
-        "items": [_question_out(x, teacher) for x in items],
+        "items": [_question_out(db, x, teacher, perm_cache) for x in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -539,7 +559,9 @@ def create_question(
     db.add(question)
     db.commit()
     db.refresh(question)
-    return _question_out(qbs.get_visible_question(db, teacher, question.id), teacher)
+    return _question_out(
+        db, qbs.get_visible_question(db, teacher, question.id), teacher
+    )
 
 
 @router.get("/questions/{question_id}")
@@ -551,7 +573,7 @@ def get_question(
     q = qbs.get_visible_question(db, teacher, question_id)
     if q is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="題目不存在")
-    return _question_out(q, teacher)
+    return _question_out(db, q, teacher)
 
 
 @router.patch("/questions/{question_id}")
@@ -634,7 +656,7 @@ def update_question(
     qbs.enforce_platform_rules(q, teacher)
     q.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return _question_out(qbs.get_visible_question(db, teacher, q.id), teacher)
+    return _question_out(db, qbs.get_visible_question(db, teacher, q.id), teacher)
 
 
 @router.delete("/questions/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -663,7 +685,7 @@ def replace_program_links(
         q, [pl.model_dump() for pl in payload.program_links], db=db
     )
     db.commit()
-    return _question_out(qbs.get_visible_question(db, teacher, q.id), teacher)
+    return _question_out(db, qbs.get_visible_question(db, teacher, q.id), teacher)
 
 
 # ============ AI 工具（#1065）— 先不扣點、不記用量 ============

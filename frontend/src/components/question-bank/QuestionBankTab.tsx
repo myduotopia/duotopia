@@ -265,7 +265,8 @@ export default function QuestionBankTab({
   };
 
   // ---- 快速編輯：改了就勾選 ----
-  const canEdit = (q: Question) => q.is_owner || !!q.organization_id;
+  // 後端算好的 can_edit（建立者本人，或機構擁有人／教材管理者）
+  const canEdit = (q: Question) => q.can_edit;
   const currentEdit = (q: Question): RowEdit =>
     edits[q.id] ?? editFromQuestion(q);
   const patchRow = (q: Question, patch: Partial<RowEdit>) => {

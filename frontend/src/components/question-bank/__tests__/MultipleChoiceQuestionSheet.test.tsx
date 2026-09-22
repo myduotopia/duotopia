@@ -110,6 +110,7 @@ function baseQuestion(overrides: Partial<Question> = {}): Question {
     school_id: null,
     group_id: null,
     is_owner: true,
+    can_edit: true,
     options: [
       {
         id: 1,
@@ -372,7 +373,13 @@ describe("MultipleChoiceQuestionSheet", () => {
   it("readOnly：沒有儲存鍵與左欄，欄位 disabled", () => {
     renderSheet({
       readOnly: true,
-      questions: [baseQuestion({ is_owner: false, visibility: "public" })],
+      questions: [
+        baseQuestion({
+          is_owner: false,
+          can_edit: false,
+          visibility: "public",
+        }),
+      ],
     });
     expect(screen.queryByTestId("qb-save")).toBeNull();
     expect(screen.queryByTestId("qb-batch-visibility")).toBeNull();
