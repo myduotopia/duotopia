@@ -68,8 +68,6 @@ import {
 
 const PAGE_SIZES = [20, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = 20;
-const TYPE_FILTERS: QuestionType[] = CREATE_TYPES_ORDER;
-
 const CREATE_TYPES_ORDER: QuestionType[] = [
   "multiple_choice",
   "reading",
@@ -78,6 +76,8 @@ const CREATE_TYPES_ORDER: QuestionType[] = [
   "listening",
   "listening_image",
 ];
+/** 題型下拉的選項順序（同新增清單） */
+const TYPE_FILTERS: QuestionType[] = CREATE_TYPES_ORDER;
 
 /** 「新增題目 ▽」的題型清單；只有 multiple_choice 本期可用 */
 const CREATE_TYPES: { type: QuestionType; enabled: boolean }[] = [
