@@ -11,6 +11,8 @@
  * - 有勾選 → 底部浮現 QuestionBulkBar：儲存（只送改過的列）、刪除（勾選的列，先 confirm）、
  *   派發（先顯示、待派發流程接上）
  * - 有未儲存修改時換頁／搜尋前 confirm
+ * 工具列：搜尋（題幹＋來源）、題型下拉、考點多選（OR，`ep=1,2`）、只看自己的、每頁筆數；
+ * 全部存 URL query。考點目錄 mount 時抓一次，重整後用 id 對回名稱。
  * 點題目文字仍開編輯面板（onSelectQuestion）。
  */
 
@@ -22,6 +24,7 @@ import {
   ChevronRight,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -148,6 +151,35 @@ export default function QuestionBankTab({
       : ""
   ) as QuestionType | "";
   const onlyOwn = searchParams.get("own") === "1";
+  // 考點 filter：`ep=3,7`（OR）；非正整數丟掉、去重
+  const epParam = searchParams.get("ep") ?? "";
+  const examPointIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          epParam
+            .split(",")
+            .map(Number)
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ),
+    [epParam],
+  );
+  // 考點目錄（整棵樹、數百筆）：mount 抓一次，讓 URL 帶進來的 id 能顯示名稱
+  const [examPointCatalog, setExamPointCatalog] = useState<ExamPoint[]>([]);
+  useEffect(() => {
+    apiClient
+      .listExamPoints()
+      .then((res) => setExamPointCatalog(res.items))
+      .catch((err) => console.error("Failed to load exam points", err));
+  }, []);
+  const selectedExamPoints = useMemo(
+    () =>
+      examPointIds
+        .map((id) => examPointCatalog.find((ep) => ep.id === id))
+        .filter((ep): ep is ExamPoint => !!ep),
+    [examPointIds, examPointCatalog],
+  );
   const setQuery = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
     Object.entries(patch).forEach(([k, v]) => {
@@ -186,6 +218,30 @@ export default function QuestionBankTab({
     return () => window.clearTimeout(handle);
   }, [search]);
 
+  // 列表查詢參數（load 與批次儲存後重查共用）
+  const listParams = useMemo(
+    () => ({
+      scope,
+      organization_id: scope === "organization" ? organizationId : undefined,
+      q: debouncedSearch || undefined,
+      only_own: onlyOwn || undefined,
+      question_type: typeFilter || undefined,
+      exam_point_ids: examPointIds.length > 0 ? examPointIds : undefined,
+      page,
+      page_size: pageSize,
+    }),
+    [
+      scope,
+      organizationId,
+      debouncedSearch,
+      onlyOwn,
+      typeFilter,
+      examPointIds,
+      page,
+      pageSize,
+    ],
+  );
+
   const load = useCallback(async () => {
     if (scope === "organization" && !organizationId) {
       setItems([]);
@@ -195,15 +251,7 @@ export default function QuestionBankTab({
     }
     setLoading(true);
     try {
-      const res = await apiClient.listQuestions({
-        scope,
-        organization_id: scope === "organization" ? organizationId : undefined,
-        q: debouncedSearch || undefined,
-        only_own: onlyOwn || undefined,
-        question_type: typeFilter || undefined,
-        page,
-        page_size: pageSize,
-      });
+      const res = await apiClient.listQuestions(listParams);
       setItems(res.items);
       setTotal(res.total);
       // 換頁／重載後清掉編輯狀態（換頁前已 confirm 過）
@@ -215,16 +263,7 @@ export default function QuestionBankTab({
     } finally {
       setLoading(false);
     }
-  }, [
-    scope,
-    organizationId,
-    debouncedSearch,
-    onlyOwn,
-    typeFilter,
-    page,
-    pageSize,
-    t,
-  ]);
+  }, [scope, organizationId, listParams, t]);
 
   useEffect(() => {
     void load();
@@ -326,16 +365,7 @@ export default function QuestionBankTab({
         );
         setChecked(new Set(failed));
         // 重新抓成功那些的最新值
-        const res = await apiClient.listQuestions({
-          scope,
-          organization_id:
-            scope === "organization" ? organizationId : undefined,
-          q: debouncedSearch || undefined,
-          only_own: onlyOwn || undefined,
-          question_type: typeFilter || undefined,
-          page,
-          page_size: pageSize,
-        });
+        const res = await apiClient.listQuestions(listParams);
         setItems(res.items);
         setTotal(res.total);
       } else {
@@ -458,6 +488,60 @@ export default function QuestionBankTab({
               ))}
             </SelectContent>
           </Select>
+          {/* 考點多選 filter：trigger 對齊題型下拉；有選取時顯示前兩個名稱 + N */}
+          <div className="flex items-center gap-1">
+            <ExamPointPicker
+              value={selectedExamPoints}
+              onChange={(next) => {
+                if (!confirmDiscard()) return;
+                setQuery({
+                  ep: next.length ? next.map((ep) => ep.id).join(",") : null,
+                  page: null,
+                });
+              }}
+              compact
+              renderTrigger={() => (
+                <div
+                  className={`flex h-9 max-w-[220px] items-center gap-1 rounded-md border border-input bg-background px-3 text-[13px] ${
+                    examPointIds.length > 0 ? "text-gray-900" : "text-gray-500"
+                  }`}
+                >
+                  <span className="truncate">
+                    {selectedExamPoints.length === 0
+                      ? examPointIds.length > 0
+                        ? t("questionBank.list.examPointSelected", {
+                            count: examPointIds.length,
+                          })
+                        : t("questionBank.list.examPointAll")
+                      : selectedExamPoints
+                          .slice(0, 2)
+                          .map((ep) => examPointLabel(ep, lang))
+                          .join("、") +
+                        (selectedExamPoints.length > 2
+                          ? ` +${selectedExamPoints.length - 2}`
+                          : "")}
+                  </span>
+                  <ChevronDown size={14} className="shrink-0 opacity-50" />
+                </div>
+              )}
+              data-testid="qb-exam-point-filter"
+            />
+            {examPointIds.length > 0 && (
+              <button
+                type="button"
+                className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                aria-label={t("questionBank.list.examPointClear")}
+                title={t("questionBank.list.examPointClear")}
+                onClick={() => {
+                  if (!confirmDiscard()) return;
+                  setQuery({ ep: null, page: null });
+                }}
+                data-testid="qb-exam-point-clear"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap">
             <Switch
               checked={onlyOwn}
@@ -484,7 +568,7 @@ export default function QuestionBankTab({
           className="py-16 text-center text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg"
           data-testid="question-bank-empty"
         >
-          {debouncedSearch
+          {debouncedSearch || examPointIds.length > 0
             ? t("questionBank.empty.noMatch")
             : t("questionBank.empty.noQuestions")}
         </div>

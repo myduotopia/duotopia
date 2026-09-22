@@ -892,10 +892,22 @@ def test_list_filters(test_client, teacher_a, exam_points):
     assert ids(q="EVER seen") == {q_pp["id"]}
     # 疊加
     assert ids(exam_point_ids=[pp, vocab], grade_min=7) == {q_pp["id"]}
+    # 同時掛兩個考點的題：雙選只出現一次、total 不重複計數（IN 子查詢不 join）
+    q_both = _create(
+        test_client, teacher_a, stem="Both points", exam_point_ids=[pp, vocab]
+    )
+    both = test_client.get(
+        "/api/question-bank/questions",
+        params={"exam_point_ids": [pp, vocab]},
+        headers=_headers(teacher_a),
+    ).json()
+    assert [i["id"] for i in both["items"]].count(q_both["id"]) == 1
+    assert both["total"] == 3
+
     # 分頁
     page = test_client.get(
         "/api/question-bank/questions",
         params={"page": 1, "page_size": 2},
         headers=_headers(teacher_a),
     ).json()
-    assert page["total"] == 3 and len(page["items"]) == 2
+    assert page["total"] == 4 and len(page["items"]) == 2

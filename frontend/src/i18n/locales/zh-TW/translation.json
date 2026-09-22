@@ -6096,6 +6096,9 @@
       "onlyOrg": "只看機構的",
       "pageSize": "每頁 {{count}} 題",
       "typeAll": "全部題型",
+      "examPointAll": "全部考點",
+      "examPointSelected": "考點 {{count}}",
+      "examPointClear": "清除考點篩選",
       "bulkEdit": "編輯",
       "bulkEditTypeMismatch": "題型不同的題目無法一起編輯",
       "bulkEditNoPermission": "勾選的題目沒有編輯權限"

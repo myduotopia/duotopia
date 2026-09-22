@@ -1,6 +1,8 @@
 /**
  * QuestionBankTab 測試（Issue #1063）。
  *
+ * 所有 render 都包 MemoryRouter（元件用 useSearchParams 存 filter／分頁）。
+ *
  * 驗證：列表載入與渲染、scope 對應的 API 參數、機構 scope 沒 organizationId 不打 API、
  * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁。
  */
@@ -8,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import QuestionBankTab from "../QuestionBankTab";
 import type { Question, QuestionListResponse } from "@/types/questionBank";
@@ -31,6 +34,15 @@ vi.mock("@/lib/api", () => ({
           parent_id: null,
           status: "active",
           order_index: 0,
+          aliases: [],
+        },
+        {
+          id: 7,
+          code: "vocab.food",
+          names: { "zh-TW": "食物字彙", en: "Food vocabulary" },
+          parent_id: null,
+          status: "active",
+          order_index: 1,
           aliases: [],
         },
       ],
@@ -117,6 +129,21 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
   };
 }
 
+/** URL 探針：把目前 search 字串印出來讓測試斷言 */
+function LocationProbe() {
+  const loc = useLocation();
+  return <span data-testid="loc">{loc.search}</span>;
+}
+
+function renderTab(ui: React.ReactElement, initialEntries: string[] = ["/"]) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      {ui}
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+}
+
 function respond(
   items: Question[],
   total = items.length,
@@ -134,7 +161,7 @@ describe("QuestionBankTab", () => {
 
   it("載入並渲染題目列表（題幹、年級、考點 chip、公開下拉、來源下拉、checkbox）", async () => {
     listQuestions.mockResolvedValue(respond([makeQuestion()]));
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
 
     expect(await screen.findByText("I ___ never been to Japan.")).toBeTruthy();
     expect(screen.getByText("7–9")).toBeTruthy();
@@ -154,7 +181,7 @@ describe("QuestionBankTab", () => {
 
   it("機構 scope 會帶 organization_id；沒有 organizationId 時不打 API", async () => {
     listQuestions.mockResolvedValue(respond([]));
-    const { unmount } = render(
+    const { unmount } = renderTab(
       <QuestionBankTab scope="organization" organizationId="org-1" />,
     );
     await waitFor(() =>
@@ -168,7 +195,7 @@ describe("QuestionBankTab", () => {
     unmount();
 
     listQuestions.mockClear();
-    render(<QuestionBankTab scope="organization" />);
+    renderTab(<QuestionBankTab scope="organization" />);
     expect(await screen.findByTestId("question-bank-empty")).toBeTruthy();
     expect(listQuestions).not.toHaveBeenCalled();
   });
@@ -177,7 +204,7 @@ describe("QuestionBankTab", () => {
     listQuestions.mockResolvedValue(respond([]));
     const onCreate = vi.fn();
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" onCreateQuestion={onCreate} />);
+    renderTab(<QuestionBankTab scope="mine" onCreateQuestion={onCreate} />);
     await screen.findByTestId("question-bank-empty");
 
     await user.click(screen.getByTestId("question-bank-add"));
@@ -193,7 +220,7 @@ describe("QuestionBankTab", () => {
   it("沒傳 onCreateQuestion 時點選擇題顯示提示", async () => {
     listQuestions.mockResolvedValue(respond([]));
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByTestId("question-bank-empty");
 
     await user.click(screen.getByTestId("question-bank-add"));
@@ -205,7 +232,7 @@ describe("QuestionBankTab", () => {
 
   it("canCreate=false 不顯示新增按鈕", async () => {
     listQuestions.mockResolvedValue(respond([]));
-    render(<QuestionBankTab scope="mine" canCreate={false} />);
+    renderTab(<QuestionBankTab scope="mine" canCreate={false} />);
     await screen.findByTestId("question-bank-empty");
     expect(screen.queryByTestId("question-bank-add")).toBeNull();
   });
@@ -215,7 +242,7 @@ describe("QuestionBankTab", () => {
       .mockResolvedValueOnce(respond([makeQuestion()]))
       .mockResolvedValueOnce(respond([]));
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("I ___ never been to Japan.");
 
     await user.type(screen.getByTestId("question-bank-search"), "nothing");
@@ -237,7 +264,7 @@ describe("QuestionBankTab", () => {
         respond([makeQuestion({ id: 21, stem: "Q21" })], 45),
       );
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("Q1");
     expect(screen.getByText("第 1 / 3 頁")).toBeTruthy();
 
@@ -255,7 +282,7 @@ describe("QuestionBankTab", () => {
       respond([makeQuestion({ id: 1 }), makeQuestion({ id: 2, stem: "Q2" })]),
     );
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("Q2");
     await user.click(screen.getByTestId("qb-check-all"));
     expect(screen.getByTestId("qb-bulk-bar").textContent).toContain(
@@ -284,7 +311,7 @@ describe("QuestionBankTab", () => {
     );
     const onBulkEdit = vi.fn();
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" onBulkEdit={onBulkEdit} />);
+    renderTab(<QuestionBankTab scope="mine" onBulkEdit={onBulkEdit} />);
     await screen.findByText("Q2");
     await user.click(screen.getByTestId("qb-check-2"));
     const editBtn = screen.getByTestId("qb-bulk-edit") as HTMLButtonElement;
@@ -307,7 +334,7 @@ describe("QuestionBankTab", () => {
     );
     updateQuestion.mockResolvedValue({});
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("Q2");
 
     // 點考點格開選單 → 取消勾選唯一考點 → 視為修改，且選完自動關閉
@@ -341,7 +368,7 @@ describe("QuestionBankTab", () => {
     );
     deleteQuestion.mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("Q2");
     await user.click(screen.getByTestId("qb-check-all"));
 
@@ -356,10 +383,62 @@ describe("QuestionBankTab", () => {
     confirmSpy.mockRestore();
   });
 
+  it("考點多選 filter：選一個→exam_point_ids 重查＋URL ep；再選一個→兩個；清除→移除", async () => {
+    listQuestions.mockResolvedValue(respond([makeQuestion()]));
+    const user = userEvent.setup();
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByText("I ___ never been to Japan.");
+    expect(listQuestions.mock.calls[0][0].exam_point_ids).toBeUndefined();
+
+    await user.click(screen.getByTestId("qb-exam-point-filter-trigger"));
+    await user.click(
+      await screen.findByTestId("qb-exam-point-filter-option-3"),
+    );
+    await waitFor(() =>
+      expect(listQuestions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ exam_point_ids: [3], page: 1 }),
+      ),
+    );
+    expect(screen.getByTestId("loc").textContent).toContain("ep=3");
+    expect(
+      screen.getByTestId("qb-exam-point-filter-trigger").textContent,
+    ).toContain("現在完成式");
+
+    await user.click(screen.getByTestId("qb-exam-point-filter-option-7"));
+    await waitFor(() =>
+      expect(listQuestions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ exam_point_ids: [3, 7] }),
+      ),
+    );
+    expect(screen.getByTestId("loc").textContent).toContain("ep=3%2C7");
+
+    await user.click(screen.getByTestId("qb-exam-point-clear"));
+    await waitFor(() =>
+      expect(
+        listQuestions.mock.calls.at(-1)?.[0].exam_point_ids,
+      ).toBeUndefined(),
+    );
+    expect(screen.getByTestId("loc").textContent).not.toContain("ep=");
+  });
+
+  it("URL 帶 ep=3 進入：首次查詢就帶 exam_point_ids，trigger 顯示考點名稱", async () => {
+    listQuestions.mockResolvedValue(respond([makeQuestion()]));
+    renderTab(<QuestionBankTab scope="mine" />, ["/?ep=3"]);
+    await screen.findByText("I ___ never been to Japan.");
+    expect(listQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ exam_point_ids: [3] }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("qb-exam-point-filter-trigger").textContent,
+      ).toContain("現在完成式"),
+    );
+  });
+
   it("「只看自己的」切換後以 only_own 重新查詢", async () => {
     listQuestions.mockResolvedValue(respond([makeQuestion()]));
     const user = userEvent.setup();
-    render(<QuestionBankTab scope="mine" />);
+    renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("I ___ never been to Japan.");
     expect(listQuestions.mock.calls[0][0].only_own).toBeUndefined();
     await user.click(screen.getByTestId("question-bank-only-own"));

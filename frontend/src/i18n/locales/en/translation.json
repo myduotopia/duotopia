@@ -6052,6 +6052,9 @@
       "onlyOrg": "Organization only",
       "pageSize": "{{count}} per page",
       "typeAll": "All types",
+      "examPointAll": "All exam points",
+      "examPointSelected": "{{count}} exam points",
+      "examPointClear": "Clear exam point filter",
       "bulkEdit": "Edit",
       "bulkEditTypeMismatch": "Questions of different types can't be edited together",
       "bulkEditNoPermission": "No permission to edit the selected questions"
