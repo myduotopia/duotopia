@@ -31,7 +31,9 @@ export interface MagicPasteItem {
  */
 // multiple_choice：題庫從考卷圖片擷取題目與選項（#1065）
 export type MagicPasteExtractMode =
-  "vocabulary" | "sentence" | "multiple_choice";
+  | "vocabulary"
+  | "sentence"
+  | "multiple_choice";
 
 /** multiple_choice 模式的擷取結果（題庫用；不預覽，直接插到右側題目卡） */
 export interface MagicPasteMcItem {

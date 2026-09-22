@@ -10,7 +10,12 @@
 import type { ReactNode } from "react";
 
 export type BatchSettingTone =
-  "yellow" | "blue" | "purple" | "green" | "orange" | "gray";
+  | "yellow"
+  | "blue"
+  | "purple"
+  | "green"
+  | "orange"
+  | "gray";
 
 const TONE_CLASS: Record<BatchSettingTone, string> = {
   yellow: "bg-yellow-50/60 border-yellow-200",

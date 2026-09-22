@@ -63,8 +63,9 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
+// t 必須是穩定參考：每次 render 回新函式會讓依賴 t 的 useCallback/useEffect 無限重跑
+vi.mock("react-i18next", () => {
+  const translation = {
     t: (key: string, opts?: Record<string, unknown>) => {
       const map: Record<string, string> = {
         "questionBank.title.mine": "題庫",
@@ -89,8 +90,9 @@ vi.mock("react-i18next", () => ({
       return map[key] ?? key;
     },
     i18n: { language: "zh-TW" },
-  }),
-}));
+  };
+  return { useTranslation: () => translation };
+});
 
 function makeQuestion(overrides: Partial<Question> = {}): Question {
   return {

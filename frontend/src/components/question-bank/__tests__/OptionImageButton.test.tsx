@@ -55,7 +55,8 @@ describe("OptionImageButton", () => {
 
   it("非圖片型別或超過 2MB → 擋下不上傳", async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
+    // applyAccept: false — 否則 user-event 依 accept 屬性直接濾掉 .txt，驗不到元件本身的型別檢查
+    const user = userEvent.setup({ applyAccept: false });
     render(<OptionImageButton imageUrl={null} onChange={onChange} label="A" />);
     const input = screen.getByTestId("option-image-input");
 

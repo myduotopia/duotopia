@@ -187,6 +187,8 @@ const saveBtn = () => screen.getByTestId("qb-save") as HTMLButtonElement;
 
 describe("MultipleChoiceQuestionSheet", () => {
   beforeEach(() => {
+    // jsdom 沒有 scrollIntoView（元件新增題目／存檔失敗時會捲到該卡）
+    Element.prototype.scrollIntoView = vi.fn();
     createQuestion.mockReset();
     updateQuestion.mockReset();
     findSimilarQuestions.mockReset().mockResolvedValue(noSimilar);

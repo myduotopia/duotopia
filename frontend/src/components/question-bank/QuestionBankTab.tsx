@@ -213,9 +213,9 @@ export default function QuestionBankTab({
         return nextValue;
       });
     }, 300);
+    return () => window.clearTimeout(handle);
     // setPage 來自 searchParams，不列入依賴（只在搜尋字改變時觸發）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    return () => window.clearTimeout(handle);
   }, [search]);
 
   // 列表查詢參數（load 與批次儲存後重查共用）

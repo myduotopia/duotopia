@@ -11,7 +11,10 @@ export type QuestionType =
   | "listening_image";
 
 export type QuestionVisibility =
-  "private" | "public" | "organization_only" | "individual_only";
+  | "private"
+  | "public"
+  | "organization_only"
+  | "individual_only";
 
 export interface QuestionOption {
   id: number;
@@ -87,7 +90,11 @@ export interface QuestionListResponse {
 }
 
 export type QuestionListScope =
-  "all" | "mine" | "organization" | "school" | "platform";
+  | "all"
+  | "mine"
+  | "organization"
+  | "school"
+  | "platform";
 
 export interface QuestionListParams {
   scope?: QuestionListScope;
