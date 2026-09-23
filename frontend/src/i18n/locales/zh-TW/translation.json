@@ -4745,7 +4745,10 @@
       "insertedNSentences": "已插入 {{count}} 個句子",
       "dialogTitle": "魔術貼上：從圖片 / PDF 擷取教材",
       "dialogDescSentence": "上傳一張圖片或 PDF，AI 會自動擷取句子與翻譯，預覽確認後再插入。",
-      "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。"
+      "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。",
+      "noQuestionExtracted": "沒有擷取到選擇題，請換一張更清楚的圖片",
+      "insertedNQuestions": "已擷取 {{count}} 題，已放入右側",
+      "pasteHint": "或按 Ctrl+V 貼上截圖／PDF"
     },
     "batchTabs": {
       "text": "貼上文字",
@@ -5916,5 +5919,194 @@
         "description": "點這顆橘色按鈕就能立刻練習這份內容，不用先派發給學生。"
       }
     }
+  },
+  "questionBank": {
+    "title": {
+      "mine": "題庫",
+      "organization": "題庫"
+    },
+    "buttons": {
+      "addQuestion": "新增題目",
+      "prevPage": "上一頁",
+      "nextPage": "下一頁"
+    },
+    "searchPlaceholder": "搜尋題目或來源...",
+    "comingSoon": "即將推出",
+    "types": {
+      "multiple_choice": "選擇題",
+      "reading": "閱讀測驗",
+      "cloze": "克漏字",
+      "fill_in": "填充題",
+      "listening": "聽力選擇",
+      "listening_image": "圖片聽力"
+    },
+    "columns": {
+      "stem": "題目",
+      "type": "題型",
+      "grade": "適合年級",
+      "examPoints": "考點",
+      "visibility": "公開",
+      "sources": "考題來源"
+    },
+    "visibility": {
+      "private": "私人",
+      "public": "公開",
+      "organization_only": "僅機構",
+      "individual_only": "僅個人",
+      "organizationPrivate": "僅機構"
+    },
+    "owner": {
+      "platform": "平台題庫",
+      "other": "其他老師"
+    },
+    "gradeRange": "{{min}}–{{max}} 年級",
+    "gradeSingle": "{{grade}} 年級",
+    "pagination": "第 {{page}} / {{totalPages}} 頁，共 {{total}} 題",
+    "empty": {
+      "noQuestions": "還沒有題目，點「新增題目」開始建立",
+      "noMatch": "沒有符合的題目"
+    },
+    "messages": {
+      "loadFailed": "載入題庫失敗",
+      "editorComingSoon": "選擇題編輯器將在下一版提供",
+      "created": "題目已新增",
+      "updated": "題目已更新",
+      "deleted": "題目已刪除",
+      "saveFailed": "儲存失敗",
+      "deleteFailed": "刪除失敗",
+      "createdCount": "已新增 {{count}} 題",
+      "partiallySaved": "已新增 {{saved}} 題，{{failed}} 題失敗，請修正後再儲存",
+      "bulkSaved": "已更新 {{updated}} 題、新增 {{created}} 題"
+    },
+    "form": {
+      "titleCreate": "新增選擇題",
+      "titleEdit": "編輯選擇題",
+      "titleView": "檢視題目",
+      "description": "填寫題目與選項，勾選正確答案；可設定年級、考點與教材關聯。",
+      "stem": "題目",
+      "stemPlaceholder": "輸入題目內容…",
+      "duplicateFound": "題庫已有一模一樣的題目，請修改題目或取消：",
+      "similarFound": "題庫有相似題目，請確認是否重複：",
+      "options": "選項",
+      "optionsHint": "（至少填 {{min}} 個，勾選正確答案）",
+      "optionPlaceholder": "選項 {{index}}",
+      "markCorrect": "選項 {{index}} 為正確答案",
+      "allowMultiple": "允許複選",
+      "explanation": "解析（選填）",
+      "grade": "適合年級",
+      "gradeAny": "不限",
+      "visibility": "公開設定",
+      "examPoints": "考點",
+      "pickExamPoints": "選擇考點",
+      "examPointSearchPlaceholder": "搜尋考點（可輸入慣用名稱，如「現完式」）",
+      "noExamPoints": "找不到考點",
+      "removeExamPoint": "移除考點 {{name}}",
+      "programLinks": "關聯教材包／單元",
+      "pickProgram": "選擇教材包",
+      "pickLessonOptional": "單元（選填）",
+      "addLink": "加入",
+      "removeLink": "移除關聯",
+      "confirmDelete": "確定要刪除這題嗎？已派發的考卷不受影響。",
+      "errors": {
+        "stemRequired": "請輸入題目",
+        "duplicate": "題目與既有題目重複",
+        "minOptions": "至少填 {{min}} 個選項",
+        "noCorrect": "請勾選正確答案",
+        "singleOnly": "單選題只能有一個正確答案，或開啟「允許複選」",
+        "gradeRange": "年級下限不可大於上限",
+        "duplicateInBatch": "本批內有相同題目",
+        "atQuestion": "第 {{n}} 題：{{message}}",
+        "examPointRequired": "請選擇考點",
+        "visibilityRequired": "請選擇是否公開分享考題"
+      },
+      "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
+      "questionN": "第 {{n}} 題",
+      "addQuestion": "新增題目",
+      "removeQuestion": "移除此題",
+      "addOption": "新增選項",
+      "optionRequiredPlaceholder": "{{letter}} 選項",
+      "optionOptionalPlaceholder": "{{letter}} 選項（選填）",
+      "optionImage": "{{letter}} 選項圖片",
+      "removeImage": "移除圖片",
+      "explanationPlaceholder": "解析（選填）",
+      "generateAudio": "生成題目語音",
+      "regenerateAudio": "重新生成語音",
+      "removeAudio": "移除語音",
+      "ttsFailed": "語音生成失敗",
+      "limitReached": "一次最多 {{max}} 題",
+      "tools": {
+        "title": "工具",
+        "tts": "語音生成",
+        "ttsHint": "只生成題目語音，不生成選項；單題可用題目旁的麥克風",
+        "generateAll": "生成全部題目語音（{{count}}）",
+        "generating": "生成中…",
+        "generated": "已生成 {{count}} 題語音",
+        "aiAnswer": "AI 作答",
+        "aiAnalyze": "AI 考點分析",
+        "aiHint": "AI 作答：設定答案並填入解析；AI 考點分析：填入考點與年段",
+        "needStem": "右側先輸入題目",
+        "upload": "PDF／圖片上傳",
+        "uploadHint": "上傳考卷圖片，AI 擷取題目與選項",
+        "aiTitle": "AI 協助",
+        "aiApplied": "已填入 {{applied}} 題，略過 {{skipped}} 題（已設定或無法判斷）",
+        "aiNothingToSend": "右側還沒有可分析的題目（需要題幹與至少 2 個選項）",
+        "aiFailed": "AI 處理失敗，請稍後再試"
+      },
+      "settings": {
+        "title": "設定／關聯",
+        "hint": "套用到右側所有題目"
+      },
+      "pickExamPointsRequired": "選擇考點（必填）",
+      "visibilityPlaceholder": "請選擇是否公開",
+      "advancedSettings": "進階設定",
+      "gradeMinLabel": "年段下限",
+      "gradeMaxLabel": "年段上限",
+      "batch": {
+        "applyAllHint": "套用到右側所有題目（各題仍可再改）",
+        "examPoints": "考點關連設定",
+        "grade": "年段關聯設定",
+        "programLink": "教材關聯設定",
+        "sources": "考題來源",
+        "sourcesHint": "可選擇、搜尋，找不到就直接新增",
+        "pickSources": "選擇或新增來源",
+        "sourceSearchPlaceholder": "輸入來源名稱，如「113 學年度會考」",
+        "noSources": "沒有符合的來源",
+        "createSource": "新增「{{name}}」",
+        "visibility": "是否公開分享考題",
+        "visibilityHint": "必選"
+      },
+      "audioGenerated": "語音已生成",
+      "audioPlayFailed": "無法播放語音（{{code}}）",
+      "titleBulkEdit": "批次編輯 {{count}} 題"
+    },
+    "list": {
+      "selectAll": "全選／取消全選",
+      "selectRow": "選取此題",
+      "selected": "已選 {{count}} 題",
+      "dirty": "{{count}} 題有未儲存的修改",
+      "save": "儲存",
+      "delete": "刪除",
+      "dispatch": "派發",
+      "clearSelection": "取消選取",
+      "confirmDelete": "確定刪除 {{count}} 題？已派發的考卷不受影響。",
+      "saved": "已儲存 {{count}} 題",
+      "saveFailed": "{{count}} 題儲存失敗，請再試一次",
+      "deleted": "已刪除 {{count}} 題",
+      "deleteFailed": "{{count}} 題刪除失敗",
+      "unsavedConfirm": "有尚未儲存的修改，要放棄嗎？",
+      "onlyOwn": "只看自己的",
+      "onlyOrg": "只看機構的",
+      "pageSize": "每頁 {{count}} 題",
+      "typeAll": "全部題型",
+      "examPointAll": "全部考點",
+      "examPointSelected": "考點 {{count}}",
+      "examPointClear": "清除考點篩選",
+      "bulkEdit": "編輯",
+      "bulkEditTypeMismatch": "題型不同的題目無法一起編輯",
+      "bulkEditNoPermission": "勾選的題目沒有編輯權限"
+    }
+  },
+  "orgMaterials": {
+    "title": "機構教材"
   }
 }

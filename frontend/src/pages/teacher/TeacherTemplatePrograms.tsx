@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   RecursiveTreeAccordion,
@@ -29,6 +29,14 @@ import { useTeacherOrganizations } from "@/hooks/useTeacherOrganizations";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import MaterialsToolbar from "@/components/shared/MaterialsToolbar";
+import MaterialsPageTabs, {
+  readMaterialsTab,
+  withMaterialsTab,
+  type MaterialsPageTab,
+} from "@/components/shared/MaterialsPageTabs";
+import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
+import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
+import type { Question } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import { apiClient } from "@/lib/api";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
@@ -63,6 +71,14 @@ function TeacherTemplateProgramsInner() {
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  // 題庫：新增／編輯選擇題 dialog（issue #1064）
+  const [questionDialog, setQuestionDialog] = useState<{
+    open: boolean;
+    /** 1 題＝編輯、≥2 題＝批次編輯、null＝新增 */
+    questions: Question[] | null;
+  }>({ open: false, questions: null });
+  const [questionRefreshKey, setQuestionRefreshKey] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [isReordering, setIsReordering] = useState(false);
 
@@ -70,6 +86,11 @@ function TeacherTemplateProgramsInner() {
   // 教材包（?demoCopyProgram=）。個人視圖複製完重載清單並開始引導；機構視圖的
   // 教材在另一頁（/teacher/org-materials），改導過去並帶著新教材 id。
   const navigate = useNavigate();
+  // 教材｜題庫 tab，存在 URL query（?tab=questions）重整後保留
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = readMaterialsTab(searchParams);
+  const setActiveTab = (tab: MaterialsPageTab) =>
+    setSearchParams(withMaterialsTab(searchParams, tab), { replace: true });
   const { start: startGuide } = useHighlightGuide();
   // 複製完成後要引導的新教材 id；等清單重載到它之後才開始走引導。
   const [guideProgramId, setGuideProgramId] = useState<number | null>(null);
@@ -213,13 +234,17 @@ function TeacherTemplateProgramsInner() {
   // Disable sidebar when editor panels are open
   useEffect(() => {
     setSidebarDisabled(
-      showReadingEditor || showVocabularySetEditor || scenarioEditor.isOpen,
+      showReadingEditor ||
+        showVocabularySetEditor ||
+        scenarioEditor.isOpen ||
+        questionDialog.open,
     );
     return () => setSidebarDisabled(false);
   }, [
     showReadingEditor,
     showVocabularySetEditor,
     scenarioEditor.isOpen,
+    questionDialog.open,
     setSidebarDisabled,
   ]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
@@ -768,211 +793,254 @@ function TeacherTemplateProgramsInner() {
             : ""
         }`}
       >
-        <MaterialsToolbar
-          title={t("teacherTemplatePrograms.title")}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder={t(
-            "teacherTemplatePrograms.toolbar.searchPlaceholder",
-            "搜尋我的教材...",
-          )}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          onAdd={handleCreateProgram}
-          addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+        {/* 教材｜題庫 tab（issue #1061） */}
+        <MaterialsPageTabs
+          value={activeTab}
+          onChange={setActiveTab}
+          materialsLabel={t("teacherTemplatePrograms.title")}
+          questionsLabel={t("questionBank.title.mine")}
         />
 
-        {/* ── Content area ── */}
-        {viewMode === "tree" ? (
-          <RecursiveTreeAccordion
-            data={filteredPrograms}
-            config={treeConfig}
-            showCreateButton={false}
-            onCreateClick={handleCreateProgram}
-            onEdit={(item, level, parentId) => {
-              if (level === 0) handleEditProgram(item.id);
-              else if (level === 1)
-                handleEditLesson(parentId as number, item.id);
-            }}
-            onDelete={(item, level, parentId) => {
-              if (level === 0) handleDeleteProgram(item.id);
-              else if (level === 1)
-                handleDeleteLesson(parentId as number, item.id);
-              else if (level === 2)
-                handleDeleteContent(parentId as number, item.id, item.title);
-            }}
-            onClick={(item, level, parentId) => {
-              if (level === 2) {
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === parentId),
-                );
-                const lesson = program?.lessons?.find((l) => l.id === parentId);
-                handleContentClick({
-                  ...item,
-                  lesson_id: parentId as number,
-                  lessonName: lesson?.name,
-                  programName: program?.name,
-                });
-              }
-            }}
-            onCreate={(level, parentId) => {
-              if (level === 1) {
-                // Creating lesson inside program
-                handleCreateLesson(parentId as number);
-              } else if (level === 2) {
-                // Creating content inside lesson - need to find program
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === parentId),
-                );
-                if (program) {
-                  handleCreateContent(program.id, parentId as number);
-                }
-              }
-            }}
-            onReorder={(fromIndex, toIndex, level, parentId) => {
-              if (level === 0) handleReorderPrograms(fromIndex, toIndex);
-              else if (level === 1)
-                handleReorderLessons(parentId as number, fromIndex, toIndex);
-              else if (level === 2)
-                handleReorderContents(parentId as number, fromIndex, toIndex);
-            }}
-            onInstantPractice={(item, level) => {
-              if (level === 2) {
-                setInstantPracticeContent({
-                  id: item.id as number,
-                  title: (item.title || item.name) as string,
-                  type: item.type as string | undefined,
-                });
-                setShowInstantPractice(true);
-              }
-            }}
-            onCopy={(item, level) => {
-              if (level === 2) {
-                setCopyContentInfo({
-                  id: item.id as number,
-                  title: (item.title || item.name) as string,
-                });
-                setShowCopyDialog(true);
-              }
-            }}
-            onDownload={(item, level) => {
-              if (
-                level === 2 &&
-                typeof item.type === "string" &&
-                item.type.toLowerCase() === "vocabulary_set"
-              ) {
-                setDownloadContentInfo({
-                  id: item.id as number,
-                  title: (item.title || item.name || "") as string,
-                });
-                setDownloadSheetOpen(true);
-              }
-            }}
-            onAssign={(item, level, parentId) => {
-              if (level === 2 && typeof item.id === "number") {
-                const program = programs.find((p) =>
-                  p.lessons?.some((l) => l.id === parentId),
-                );
-                const lesson = program?.lessons?.find((l) => l.id === parentId);
-                const cartItem: CartItem = {
-                  contentId: item.id as number,
-                  programName: program?.name || "",
-                  lessonName: lesson?.name || "",
-                  contentTitle: (item.title || item.name) as string,
-                  contentType: (item.type as string) || "",
-                  itemsCount: item.items_count as number | undefined,
-                  order: 0,
-                  hasMissingAudio: false,
-                  hasMissingExampleAudio: false,
-                  hasMissingImage: false,
-                };
-                setAssignContents([cartItem]);
-                setShowAssignmentDialog(true);
-              }
-            }}
+        {activeTab === "questions" ? (
+          <QuestionBankTab
+            scope="mine"
+            refreshKey={questionRefreshKey}
+            onCreateQuestion={() =>
+              setQuestionDialog({ open: true, questions: null })
+            }
+            onSelectQuestion={(q) =>
+              setQuestionDialog({ open: true, questions: [q] })
+            }
+            onBulkEdit={(qs) =>
+              setQuestionDialog({ open: true, questions: qs })
+            }
           />
         ) : (
-          <ProgramFolderView
-            programs={filteredPrograms}
-            showVisibility={isResourceAccount}
-            onVisibilityChange={handleVisibilityChange}
-            onEditProgram={handleEditProgram}
-            onDeleteProgram={handleDeleteProgram}
-            onCopyProgramTo={
-              hasOrganizations ? handleCopyProgramToOrg : undefined
-            }
-            onEditLesson={handleEditLesson}
-            onDeleteLesson={handleDeleteLesson}
-            onCreateLesson={handleCreateLesson}
-            onContentClick={(content, lessonId) => {
-              const program = programs.find((p) =>
-                p.lessons?.some((l) => l.id === lessonId),
-              );
-              const lesson = program?.lessons?.find((l) => l.id === lessonId);
-              handleContentClick({
-                ...content,
-                lesson_id: lessonId,
-                lessonName: lesson?.name,
-                programName: program?.name,
-              });
-            }}
-            onDeleteContent={handleDeleteContent}
-            onCopyContent={(contentId, title) => {
-              setCopyContentInfo({ id: contentId, title });
-              setShowCopyDialog(true);
-            }}
-            onDownloadContent={(content) => {
-              if (
-                typeof content.type === "string" &&
-                content.type.toLowerCase() === "vocabulary_set"
-              ) {
-                setDownloadContentInfo({
-                  id: content.id,
-                  title: content.title,
-                });
-                setDownloadSheetOpen(true);
-              }
-            }}
-            onInstantPractice={(content) => {
-              setInstantPracticeContent({
-                id: content.id,
-                title: content.title,
-                type: content.type,
-              });
-              setShowInstantPractice(true);
-            }}
-            onCreateContent={handleCreateContent}
-            onReorderPrograms={handleReorderPrograms}
-            onReorderLessons={handleReorderLessons}
-            onReorderContents={handleReorderContents}
-            onReorderProgramContents={handleReorderProgramContents}
-            onAssignContent={(content, lessonId, programId) => {
-              const program =
-                lessonId === 0
-                  ? programs.find((p) => p.id === programId)
-                  : programs.find((p) =>
-                      p.lessons?.some((l) => l.id === lessonId),
+          <>
+            <MaterialsToolbar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder={t(
+                "teacherTemplatePrograms.toolbar.searchPlaceholder",
+                "搜尋我的教材...",
+              )}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onAdd={handleCreateProgram}
+              addButtonText={t("teacherTemplatePrograms.buttons.addProgram")}
+            />
+
+            {/* ── Content area ── */}
+            {viewMode === "tree" ? (
+              <RecursiveTreeAccordion
+                data={filteredPrograms}
+                config={treeConfig}
+                showCreateButton={false}
+                onCreateClick={handleCreateProgram}
+                onEdit={(item, level, parentId) => {
+                  if (level === 0) handleEditProgram(item.id);
+                  else if (level === 1)
+                    handleEditLesson(parentId as number, item.id);
+                }}
+                onDelete={(item, level, parentId) => {
+                  if (level === 0) handleDeleteProgram(item.id);
+                  else if (level === 1)
+                    handleDeleteLesson(parentId as number, item.id);
+                  else if (level === 2)
+                    handleDeleteContent(
+                      parentId as number,
+                      item.id,
+                      item.title,
                     );
-              const lesson =
-                lessonId === 0
-                  ? undefined
-                  : program?.lessons?.find((l) => l.id === lessonId);
-              const cartItem: CartItem = {
-                contentId: content.id,
-                programName: program?.name || "",
-                lessonName: lesson?.name || "",
-                contentTitle: content.title,
-                contentType: content.type || "",
-                itemsCount: content.items_count,
-                order: 0,
-                hasMissingAudio: false,
-                hasMissingExampleAudio: false,
-                hasMissingImage: false,
-              };
-              setAssignContents([cartItem]);
-              setShowAssignmentDialog(true);
-            }}
-          />
+                }}
+                onClick={(item, level, parentId) => {
+                  if (level === 2) {
+                    const program = programs.find((p) =>
+                      p.lessons?.some((l) => l.id === parentId),
+                    );
+                    const lesson = program?.lessons?.find(
+                      (l) => l.id === parentId,
+                    );
+                    handleContentClick({
+                      ...item,
+                      lesson_id: parentId as number,
+                      lessonName: lesson?.name,
+                      programName: program?.name,
+                    });
+                  }
+                }}
+                onCreate={(level, parentId) => {
+                  if (level === 1) {
+                    // Creating lesson inside program
+                    handleCreateLesson(parentId as number);
+                  } else if (level === 2) {
+                    // Creating content inside lesson - need to find program
+                    const program = programs.find((p) =>
+                      p.lessons?.some((l) => l.id === parentId),
+                    );
+                    if (program) {
+                      handleCreateContent(program.id, parentId as number);
+                    }
+                  }
+                }}
+                onReorder={(fromIndex, toIndex, level, parentId) => {
+                  if (level === 0) handleReorderPrograms(fromIndex, toIndex);
+                  else if (level === 1)
+                    handleReorderLessons(
+                      parentId as number,
+                      fromIndex,
+                      toIndex,
+                    );
+                  else if (level === 2)
+                    handleReorderContents(
+                      parentId as number,
+                      fromIndex,
+                      toIndex,
+                    );
+                }}
+                onInstantPractice={(item, level) => {
+                  if (level === 2) {
+                    setInstantPracticeContent({
+                      id: item.id as number,
+                      title: (item.title || item.name) as string,
+                      type: item.type as string | undefined,
+                    });
+                    setShowInstantPractice(true);
+                  }
+                }}
+                onCopy={(item, level) => {
+                  if (level === 2) {
+                    setCopyContentInfo({
+                      id: item.id as number,
+                      title: (item.title || item.name) as string,
+                    });
+                    setShowCopyDialog(true);
+                  }
+                }}
+                onDownload={(item, level) => {
+                  if (
+                    level === 2 &&
+                    typeof item.type === "string" &&
+                    item.type.toLowerCase() === "vocabulary_set"
+                  ) {
+                    setDownloadContentInfo({
+                      id: item.id as number,
+                      title: (item.title || item.name || "") as string,
+                    });
+                    setDownloadSheetOpen(true);
+                  }
+                }}
+                onAssign={(item, level, parentId) => {
+                  if (level === 2 && typeof item.id === "number") {
+                    const program = programs.find((p) =>
+                      p.lessons?.some((l) => l.id === parentId),
+                    );
+                    const lesson = program?.lessons?.find(
+                      (l) => l.id === parentId,
+                    );
+                    const cartItem: CartItem = {
+                      contentId: item.id as number,
+                      programName: program?.name || "",
+                      lessonName: lesson?.name || "",
+                      contentTitle: (item.title || item.name) as string,
+                      contentType: (item.type as string) || "",
+                      itemsCount: item.items_count as number | undefined,
+                      order: 0,
+                      hasMissingAudio: false,
+                      hasMissingExampleAudio: false,
+                      hasMissingImage: false,
+                    };
+                    setAssignContents([cartItem]);
+                    setShowAssignmentDialog(true);
+                  }
+                }}
+              />
+            ) : (
+              <ProgramFolderView
+                programs={filteredPrograms}
+                showVisibility={isResourceAccount}
+                onVisibilityChange={handleVisibilityChange}
+                onEditProgram={handleEditProgram}
+                onDeleteProgram={handleDeleteProgram}
+                onCopyProgramTo={
+                  hasOrganizations ? handleCopyProgramToOrg : undefined
+                }
+                onEditLesson={handleEditLesson}
+                onDeleteLesson={handleDeleteLesson}
+                onCreateLesson={handleCreateLesson}
+                onContentClick={(content, lessonId) => {
+                  const program = programs.find((p) =>
+                    p.lessons?.some((l) => l.id === lessonId),
+                  );
+                  const lesson = program?.lessons?.find(
+                    (l) => l.id === lessonId,
+                  );
+                  handleContentClick({
+                    ...content,
+                    lesson_id: lessonId,
+                    lessonName: lesson?.name,
+                    programName: program?.name,
+                  });
+                }}
+                onDeleteContent={handleDeleteContent}
+                onCopyContent={(contentId, title) => {
+                  setCopyContentInfo({ id: contentId, title });
+                  setShowCopyDialog(true);
+                }}
+                onDownloadContent={(content) => {
+                  if (
+                    typeof content.type === "string" &&
+                    content.type.toLowerCase() === "vocabulary_set"
+                  ) {
+                    setDownloadContentInfo({
+                      id: content.id,
+                      title: content.title,
+                    });
+                    setDownloadSheetOpen(true);
+                  }
+                }}
+                onInstantPractice={(content) => {
+                  setInstantPracticeContent({
+                    id: content.id,
+                    title: content.title,
+                    type: content.type,
+                  });
+                  setShowInstantPractice(true);
+                }}
+                onCreateContent={handleCreateContent}
+                onReorderPrograms={handleReorderPrograms}
+                onReorderLessons={handleReorderLessons}
+                onReorderContents={handleReorderContents}
+                onReorderProgramContents={handleReorderProgramContents}
+                onAssignContent={(content, lessonId, programId) => {
+                  const program =
+                    lessonId === 0
+                      ? programs.find((p) => p.id === programId)
+                      : programs.find((p) =>
+                          p.lessons?.some((l) => l.id === lessonId),
+                        );
+                  const lesson =
+                    lessonId === 0
+                      ? undefined
+                      : program?.lessons?.find((l) => l.id === lessonId);
+                  const cartItem: CartItem = {
+                    contentId: content.id,
+                    programName: program?.name || "",
+                    lessonName: lesson?.name || "",
+                    contentTitle: content.title,
+                    contentType: content.type || "",
+                    itemsCount: content.items_count,
+                    order: 0,
+                    hasMissingAudio: false,
+                    hasMissingExampleAudio: false,
+                    hasMissingImage: false,
+                  };
+                  setAssignContents([cartItem]);
+                  setShowAssignmentDialog(true);
+                }}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -1428,6 +1496,23 @@ function TeacherTemplateProgramsInner() {
         )}
 
       {/* Dialogs */}
+      <MultipleChoiceQuestionSheet
+        open={questionDialog.open}
+        questions={questionDialog.questions}
+        programs={programs}
+        readOnly={
+          questionDialog.questions?.length === 1 &&
+          !questionDialog.questions[0].can_edit
+        }
+        canDelete={
+          !questionDialog.questions ||
+          questionDialog.questions.every((q) => q.can_edit)
+        }
+        onClose={() => setQuestionDialog({ open: false, questions: null })}
+        onSaved={() => setQuestionRefreshKey((k) => k + 1)}
+        onDeleted={() => setQuestionRefreshKey((k) => k + 1)}
+      />
+
       <ProgramDialog
         program={selectedProgram}
         dialogType={programDialogType}

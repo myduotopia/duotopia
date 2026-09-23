@@ -4732,7 +4732,10 @@
       "insertedNSentences": "Inserted {{count}} sentences",
       "dialogTitle": "Magic Paste: extract from image / PDF",
       "dialogDescSentence": "Upload an image or PDF; AI extracts sentences and translations for you to review before inserting.",
-      "dialogDescVocab": "Upload an image or PDF; AI extracts words, translations, and examples for you to review before inserting."
+      "dialogDescVocab": "Upload an image or PDF; AI extracts words, translations, and examples for you to review before inserting.",
+      "noQuestionExtracted": "No multiple-choice questions found. Try a clearer image.",
+      "insertedNQuestions": "Extracted {{count}} question(s) into the editor",
+      "pasteHint": "or press Ctrl+V to paste a screenshot / PDF"
     },
     "batchTabs": {
       "text": "Paste text",
@@ -5872,5 +5875,194 @@
         "description": "This orange button practises the content right away — no need to assign it to students first."
       }
     }
+  },
+  "questionBank": {
+    "title": {
+      "mine": "Question Bank",
+      "organization": "Question Bank"
+    },
+    "buttons": {
+      "addQuestion": "Add Question",
+      "prevPage": "Previous page",
+      "nextPage": "Next page"
+    },
+    "searchPlaceholder": "Search questions or sources...",
+    "comingSoon": "Coming soon",
+    "types": {
+      "multiple_choice": "Multiple Choice",
+      "reading": "Reading",
+      "cloze": "Cloze",
+      "fill_in": "Fill in the Blank",
+      "listening": "Listening",
+      "listening_image": "Picture Listening"
+    },
+    "columns": {
+      "stem": "Question",
+      "type": "Type",
+      "grade": "Grade",
+      "examPoints": "Exam Points",
+      "visibility": "Visibility",
+      "sources": "Source"
+    },
+    "visibility": {
+      "private": "Private",
+      "public": "Public",
+      "organization_only": "Organizations only",
+      "individual_only": "Individuals only",
+      "organizationPrivate": "Organization only"
+    },
+    "owner": {
+      "platform": "Platform",
+      "other": "Other teacher"
+    },
+    "gradeRange": "Grade {{min}}–{{max}}",
+    "gradeSingle": "Grade {{grade}}",
+    "pagination": "Page {{page}} / {{totalPages}}, {{total}} questions",
+    "empty": {
+      "noQuestions": "No questions yet. Click \"Add Question\" to start.",
+      "noMatch": "No matching questions"
+    },
+    "messages": {
+      "loadFailed": "Failed to load question bank",
+      "editorComingSoon": "The multiple-choice editor is coming in the next release",
+      "created": "Question created",
+      "updated": "Question updated",
+      "deleted": "Question deleted",
+      "saveFailed": "Failed to save",
+      "deleteFailed": "Failed to delete",
+      "createdCount": "{{count}} question(s) created",
+      "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again",
+      "bulkSaved": "Updated {{updated}}, created {{created}}"
+    },
+    "form": {
+      "titleCreate": "New Multiple-Choice Question",
+      "titleEdit": "Edit Question",
+      "titleView": "View Question",
+      "description": "Enter the question and options, mark the correct answers; optionally set grade, exam points and material links.",
+      "stem": "Question",
+      "stemPlaceholder": "Type the question…",
+      "duplicateFound": "An identical question already exists. Edit the question or cancel:",
+      "similarFound": "Similar questions exist. Please check for duplicates:",
+      "options": "Options",
+      "optionsHint": "(at least {{min}}, tick the correct ones)",
+      "optionPlaceholder": "Option {{index}}",
+      "markCorrect": "Option {{index}} is correct",
+      "allowMultiple": "Allow multiple answers",
+      "explanation": "Explanation (optional)",
+      "grade": "Grade",
+      "gradeAny": "Any",
+      "visibility": "Visibility",
+      "examPoints": "Exam points",
+      "pickExamPoints": "Pick exam points",
+      "examPointSearchPlaceholder": "Search exam points (aliases work too)",
+      "noExamPoints": "No exam points found",
+      "removeExamPoint": "Remove exam point {{name}}",
+      "programLinks": "Linked material packs / lessons",
+      "pickProgram": "Pick a material pack",
+      "pickLessonOptional": "Lesson (optional)",
+      "addLink": "Add",
+      "removeLink": "Remove link",
+      "confirmDelete": "Delete this question? Assigned papers are not affected.",
+      "errors": {
+        "stemRequired": "Question is required",
+        "duplicate": "Duplicate of an existing question",
+        "minOptions": "At least {{min}} options",
+        "noCorrect": "Tick a correct answer",
+        "singleOnly": "Single-answer questions can have only one correct option; enable multiple answers otherwise",
+        "gradeRange": "Minimum grade cannot exceed maximum",
+        "duplicateInBatch": "Duplicate question within this batch",
+        "atQuestion": "Question {{n}}: {{message}}",
+        "examPointRequired": "Pick at least one exam point",
+        "visibilityRequired": "Choose whether to share the questions"
+      },
+      "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
+      "questionN": "Question {{n}}",
+      "addQuestion": "Add question",
+      "removeQuestion": "Remove this question",
+      "addOption": "Add option",
+      "optionRequiredPlaceholder": "Option {{letter}}",
+      "optionOptionalPlaceholder": "Option {{letter}} (optional)",
+      "optionImage": "Option {{letter}} image",
+      "removeImage": "Remove image",
+      "explanationPlaceholder": "Explanation (optional)",
+      "generateAudio": "Generate question audio",
+      "regenerateAudio": "Regenerate audio",
+      "removeAudio": "Remove audio",
+      "ttsFailed": "Audio generation failed",
+      "limitReached": "At most {{max}} questions per batch",
+      "tools": {
+        "title": "Tools",
+        "tts": "Audio generation",
+        "ttsHint": "Generates audio for question stems only, not options; use the mic next to a question for a single one",
+        "generateAll": "Generate all question audio ({{count}})",
+        "generating": "Generating…",
+        "generated": "Generated audio for {{count}} question(s)",
+        "aiAnswer": "AI answer",
+        "aiAnalyze": "AI exam-point analysis",
+        "aiHint": "AI answer: sets the answer and fills the explanation; AI analysis: fills exam points and grade",
+        "needStem": "Enter a question on the right first",
+        "upload": "PDF / image upload",
+        "uploadHint": "Upload an exam page and let AI extract the questions and options",
+        "aiTitle": "AI assist",
+        "aiApplied": "Filled {{applied}} question(s), skipped {{skipped}} (already set or undecidable)",
+        "aiNothingToSend": "No question on the right is ready (needs a stem and at least 2 options)",
+        "aiFailed": "AI failed, please try again later"
+      },
+      "settings": {
+        "title": "Settings / links",
+        "hint": "Applied to every question on the right"
+      },
+      "pickExamPointsRequired": "Pick exam points (required)",
+      "visibilityPlaceholder": "Choose visibility",
+      "advancedSettings": "Advanced settings",
+      "gradeMinLabel": "Minimum grade",
+      "gradeMaxLabel": "Maximum grade",
+      "batch": {
+        "applyAllHint": "Applied to every question on the right (each can still be edited)",
+        "examPoints": "Exam points",
+        "grade": "Grade range",
+        "programLink": "Material link",
+        "sources": "Question source",
+        "sourcesHint": "Pick, search, or create a new one",
+        "pickSources": "Pick or create a source",
+        "sourceSearchPlaceholder": "Type a source name, e.g. “2024 national exam”",
+        "noSources": "No matching sources",
+        "createSource": "Create “{{name}}”",
+        "visibility": "Share this question?",
+        "visibilityHint": "Required"
+      },
+      "audioGenerated": "Audio generated",
+      "audioPlayFailed": "Cannot play audio ({{code}})",
+      "titleBulkEdit": "Bulk edit {{count}} questions"
+    },
+    "list": {
+      "selectAll": "Select / deselect all",
+      "selectRow": "Select this question",
+      "selected": "{{count}} selected",
+      "dirty": "{{count}} with unsaved changes",
+      "save": "Save",
+      "delete": "Delete",
+      "dispatch": "Assign",
+      "clearSelection": "Clear selection",
+      "confirmDelete": "Delete {{count}} question(s)? Assigned papers are not affected.",
+      "saved": "Saved {{count}} question(s)",
+      "saveFailed": "{{count}} question(s) failed to save",
+      "deleted": "Deleted {{count}} question(s)",
+      "deleteFailed": "{{count}} question(s) failed to delete",
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "onlyOwn": "Only mine",
+      "onlyOrg": "Organization only",
+      "pageSize": "{{count}} per page",
+      "typeAll": "All types",
+      "examPointAll": "All exam points",
+      "examPointSelected": "{{count}} exam points",
+      "examPointClear": "Clear exam point filter",
+      "bulkEdit": "Edit",
+      "bulkEditTypeMismatch": "Questions of different types can't be edited together",
+      "bulkEditNoPermission": "No permission to edit the selected questions"
+    }
+  },
+  "orgMaterials": {
+    "title": "Organization Materials"
   }
 }

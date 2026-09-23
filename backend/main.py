@@ -57,6 +57,7 @@ from routers import organization_programs
 from routers import school_programs
 from routers import resource_materials
 from routers import magic_paste  # 教材內容魔術貼上（issue #891）
+from routers import question_bank  # 題庫（issue #1061）
 from routers import scenario_dialogue_ai  # 情境對話 AI 生成（issue #1021）
 from routers import student_groups  # 班級學生分組（issue #1046）
 from routers.auth_one_campus import router as auth_one_campus_router
@@ -300,6 +301,7 @@ app.include_router(unassign.router)
 app.include_router(files.router)  # 檔案服務路由
 app.include_router(programs.router)  # 課程管理路由
 app.include_router(magic_paste.router)  # 教材內容魔術貼上（issue #891）
+app.include_router(question_bank.router)  # 題庫（issue #1061）
 app.include_router(scenario_dialogue_ai.router)  # 情境對話 AI（issue #1021）
 app.include_router(resource_materials.router)  # 資源教材包路由
 app.include_router(speech_assessment.router)  # 語音評估路由
