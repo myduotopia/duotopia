@@ -1,20 +1,15 @@
 /**
  * 選項圖片按鈕（Issue #1064）。
  *
- * 抽自 VocabularySetPanel 的 handleImageUpload：2MB 上限、型別白名單、
- * `apiClient.uploadImage`（題庫不帶 content_id / item_index）。
- * 無圖＝圖片 icon；有圖＝縮圖，hover 顯示移除。
+ * 上傳邏輯在 `uploadImageFile`（2MB 上限、型別白名單、`apiClient.uploadImage`），
+ * 與題組排版的圖片區塊共用。無圖＝圖片 icon；有圖＝縮圖，hover 顯示移除。
  */
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ImagePlus, Loader2, X } from "lucide-react";
-import { toast } from "sonner";
 
-import { apiClient } from "@/lib/api";
-
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const VALID_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
 
 export interface OptionImageButtonProps {
   imageUrl: string | null;
@@ -34,23 +29,10 @@ export default function OptionImageButton({
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File) => {
-    if (file.size > MAX_IMAGE_BYTES) {
-      toast.error(t("vocabularySet.image.tooLarge"));
-      return;
-    }
-    if (!VALID_TYPES.includes(file.type)) {
-      toast.error(t("vocabularySet.image.invalidType"));
-      return;
-    }
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await apiClient.uploadImage(formData);
-      onChange(res.image_url);
-    } catch (err) {
-      console.error("Option image upload failed:", err);
-      toast.error(t("vocabularySet.image.uploadFailed"));
+      const url = await uploadImageFile(file, t);
+      if (url) onChange(url);
     } finally {
       setUploading(false);
     }
@@ -61,7 +43,7 @@ export default function OptionImageButton({
       <input
         ref={inputRef}
         type="file"
-        accept={VALID_TYPES.join(",")}
+        accept={VALID_IMAGE_TYPES.join(",")}
         className="hidden"
         disabled={disabled || uploading}
         onChange={(e) => {
