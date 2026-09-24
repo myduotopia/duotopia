@@ -386,9 +386,45 @@ export function groupHasStimulus(g: GroupDraft): boolean {
   );
 }
 
-/** 題組驗證：主圖文、至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */
+/** 排版裡有沒有沒填完的區塊（空標題／段落、沒圖的圖片、對話缺說話者或內容） */
+export function layoutIncomplete(layout: LayoutDoc | null): boolean {
+  if (!layout) return false;
+  for (const node of layout.rows) {
+    const rows = node.type === "section" ? node.rows : [node];
+    for (const row of rows) {
+      for (const col of row.columns) {
+        for (const b of col.blocks) {
+          if (b.type === "heading" || b.type === "paragraph") {
+            if (!b.text.trim()) return true;
+          } else if (b.type === "image") {
+            if (!b.url) return true;
+          } else if (
+            b.lines.length === 0 ||
+            b.lines.some((l) => !l.speaker.trim() || !l.text.trim())
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** 送後端前丟掉空白的單字註解列 */
+export function cleanGlossary(
+  entries: GlossaryEntry[],
+): GlossaryEntry[] | null {
+  const kept = entries
+    .map((e) => ({ word: e.word.trim(), zh: e.zh.trim() }))
+    .filter((e) => e.word && e.zh);
+  return kept.length > 0 ? kept : null;
+}
+
+/** 題組驗證：主圖文、排版填完、至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */
 export function validateGroupDraft(g: GroupDraft): string | null {
   if (!groupHasStimulus(g)) return "groupNeedsContent";
+  if (layoutIncomplete(g.layout)) return "layoutIncomplete";
   if (g.questions.length === 0) return "groupNeedsQuestions";
   const stemOptional = groupStemOptional(g);
   for (const q of g.questions) {
@@ -428,7 +464,7 @@ export function toCreateGroupInput(
     passage_text: groupPassageText(g),
     image_url: g.image_url,
     layout: g.layout,
-    glossary: g.glossary.length > 0 ? g.glossary : null,
+    glossary: cleanGlossary(g.glossary),
     grade_min: g.grade[0],
     grade_max: g.grade[1],
     visibility: g.visibility ?? "private",
@@ -445,7 +481,7 @@ export function toUpdateGroupInput(g: GroupDraft): QuestionGroupUpdateInput {
     passage_text: groupPassageText(g),
     image_url: g.image_url,
     layout: g.layout,
-    glossary: g.glossary.length > 0 ? g.glossary : null,
+    glossary: cleanGlossary(g.glossary),
     grade_min: g.grade[0],
     grade_max: g.grade[1],
     visibility: g.visibility ?? "private",

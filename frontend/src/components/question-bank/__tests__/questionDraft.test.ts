@@ -272,6 +272,15 @@ describe("題組草稿與單元（#1082 骨架）", () => {
     expect(validateGroupDraft(g)).toBe("groupNeedsContent");
     g.passage_text = "text";
     expect(validateGroupDraft(g)).toBe("groupNeedsQuestions");
+    // 排版有沒填完的區塊 → layoutIncomplete
+    g.layout = {
+      version: 1,
+      rows: [
+        { columns: [{ span: 1, blocks: [{ type: "paragraph", text: "  " }] }] },
+      ],
+    };
+    expect(validateGroupDraft(g)).toBe("layoutIncomplete");
+    g.layout = null;
     const q = draftWith("Q", [
       ["a", true],
       ["b", false],

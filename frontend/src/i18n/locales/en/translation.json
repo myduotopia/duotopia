@@ -5978,7 +5978,8 @@
         "examPointRequired": "Pick at least one exam point",
         "visibilityRequired": "Choose whether to share the questions",
         "groupNeedsQuestions": "A group needs at least one question",
-        "groupNeedsContent": "A group needs a passage, an image or a layout"
+        "groupNeedsContent": "A group needs a passage, an image or a layout",
+        "layoutIncomplete": "The layout has unfinished blocks (empty text, an image without a file, or a dialogue line missing content)"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",

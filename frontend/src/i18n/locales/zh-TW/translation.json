@@ -6022,7 +6022,8 @@
         "examPointRequired": "請選擇考點",
         "visibilityRequired": "請選擇是否公開分享考題",
         "groupNeedsQuestions": "題組至少要有一個小題",
-        "groupNeedsContent": "題組需要文章、圖片或排版內容"
+        "groupNeedsContent": "題組需要文章、圖片或排版內容",
+        "layoutIncomplete": "排版裡有尚未填完的區塊（空白文字、沒有圖片或對話缺內容）"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
