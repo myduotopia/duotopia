@@ -26,7 +26,7 @@ const BLANK_RE = /\{\{(\d+)\}\}/g;
  * 允許粗體內含底線（反之亦然），同種標記不巢狀。
  */
 export function parseInline(text: string): InlineNode[] {
-  return parseRange(text, 0, text.length, null).nodes;
+  return parseRange(text, 0, text.length, null);
 }
 
 type Marker = "**" | "__";
@@ -36,7 +36,7 @@ function parseRange(
   start: number,
   end: number,
   closing: Marker | null,
-): { nodes: InlineNode[]; next: number } {
+): InlineNode[] {
   const nodes: InlineNode[] = [];
   let buf = "";
   const flush = () => {
@@ -48,22 +48,17 @@ function parseRange(
   let i = start;
   while (i < end) {
     const two = text.slice(i, i + 2);
-    if (closing && two === closing) {
-      flush();
-      return { nodes, next: i + 2 };
-    }
     if (two === "**" || two === "__") {
       const marker = two as Marker;
-      // 只有在後面找得到成對的關閉標記時才當標記
+      // 只有在（本範圍內）找得到成對的關閉標記才當標記；同種標記不巢狀
       const close = text.indexOf(marker, i + 2);
       if (close !== -1 && close < end && marker !== closing) {
         flush();
-        const inner = parseRange(text, i + 2, close, marker);
         nodes.push({
           type: marker === "**" ? "bold" : "underline",
-          children: inner.nodes,
+          children: parseRange(text, i + 2, close, marker),
         });
-        i = inner.next;
+        i = close + marker.length;
         continue;
       }
       buf += two;
@@ -90,7 +85,7 @@ function parseRange(
     i += 1;
   }
   flush();
-  return { nodes, next: end };
+  return nodes;
 }
 
 /** 去掉行內標記；`{{n}}` → `____` */
