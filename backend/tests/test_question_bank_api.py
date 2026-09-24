@@ -11,6 +11,7 @@
 - 表單驗證：選項 < 2、沒勾正確答案、單選勾兩個 → 422
 - PATCH / DELETE（軟刪除）與權限
 - filter：考點 OR、年級交集、關鍵字
+- 題組（#1082）：整組一個交易建立、失敗 rollback、可見範圍與機構成員、列表單題＋題組列混合
 """
 
 import uuid
@@ -23,6 +24,7 @@ from models import (
     ExamPointAlias,
     Organization,
     Question,
+    QuestionGroup,
     QuestionSource,
     Teacher,
     TeacherOrganization,
@@ -961,3 +963,282 @@ def test_list_filters(test_client, teacher_a, exam_points):
         headers=_headers(teacher_a),
     ).json()
     assert page["total"] == 4 and len(page["items"]) == 2
+
+
+# ---------------------------------------------------------------- 題組（#1082 骨架）
+
+
+def _group_payload(**overrides):
+    payload = {
+        "question_type": "reading",
+        "stimulus_type": "passage",
+        "title": "Vivaldi",
+        "passage_text": "Antonio Vivaldi was a violin player with red hair.",
+        "layout": {
+            "version": 1,
+            "rows": [
+                {
+                    "columns": [
+                        {
+                            "span": 1,
+                            "blocks": [
+                                {
+                                    "type": "paragraph",
+                                    "text": "Antonio Vivaldi was a violin player.",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ],
+        },
+        "glossary": [{"word": "timeline", "zh": "時間軸"}],
+        "grade_min": 7,
+        "grade_max": 9,
+        "visibility": "private",
+        "questions": [
+            {
+                "stem": "Which is the best title for the reading?",
+                "options": [
+                    {"text": "Vivaldi Life Story", "is_correct": True},
+                    {"text": "Vivaldi and His Students"},
+                ],
+            },
+            {
+                "stem": "According to the reading, which is WRONG?",
+                "options": [
+                    {"text": "He had red hair."},
+                    {"text": "He never played the violin.", "is_correct": True},
+                ],
+            },
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _create_group(client, teacher, **kw):
+    resp = client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(**kw),
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_create_question_group_one_transaction(test_client, teacher_a, exam_points):
+    pp = exam_points["present_perfect"].id
+    payload = _group_payload()
+    payload["questions"][0]["exam_point_ids"] = [pp]
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=payload,
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 201, resp.text
+    g = resp.json()
+    assert g["question_type"] == "reading"
+    assert g["stimulus_type"] == "passage"
+    assert g["layout"]["rows"][0]["columns"][0]["blocks"][0]["type"] == "paragraph"
+    assert g["glossary"] == [{"word": "timeline", "zh": "時間軸"}]
+    assert g["is_owner"] is True and g["can_edit"] is True
+    assert [q["group_order"] for q in g["questions"]] == [0, 1]
+    # 小題跟隨題組：題型、公開、年段、group_id
+    for q in g["questions"]:
+        assert q["question_type"] == "reading"
+        assert q["visibility"] == "private"
+        assert q["group_id"] == g["id"]
+        assert (q["grade_min"], q["grade_max"]) == (7, 9)
+    assert [ep["id"] for ep in g["questions"][0]["exam_points"]] == [pp]
+
+    # GET 回同一份
+    got = test_client.get(
+        f"/api/question-bank/question-groups/{g['id']}", headers=_headers(teacher_a)
+    )
+    assert got.status_code == 200
+    assert [q["id"] for q in got.json()["questions"]] == [
+        q["id"] for q in g["questions"]
+    ]
+
+    # 小題不出現在單題列表；題組以 kind=group 一列出現
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    assert listing["total"] == 1
+    (row,) = listing["items"]
+    assert row["kind"] == "group"
+    assert row["id"] == g["id"]
+    assert row["question_count"] == 2
+    assert row["question_type"] == "reading"
+    assert row["title"] == "Vivaldi"
+
+
+def test_create_question_group_validation(test_client, teacher_a):
+    # 沒有小題
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(questions=[]),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # 沒有文章／圖片／排版
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(passage_text=None, layout=None, image_url=None),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # layout.rows 不是陣列
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(layout={"version": 1, "rows": "x"}),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # 小題沒勾正確答案
+    bad = _group_payload()
+    bad["questions"][1]["options"] = [{"text": "a"}, {"text": "b"}]
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    # 單題端點不收 reading
+    resp = test_client.post(
+        "/api/question-bank/questions",
+        json=_mc_payload(question_type="reading"),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code in (400, 422)
+
+
+def test_create_question_group_rollback_on_failure(
+    test_client, shared_test_session, teacher_a, monkeypatch
+):
+    """第二個小題處理時炸掉 → 整組（group + 第一個小題）都不能留下。"""
+    import routers.question_bank as router_module
+
+    calls = {"n": 0}
+    original = router_module.qbs.replace_sources
+
+    def boom(db, question, teacher, source_ids):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("boom")
+        return original(db, question, teacher, source_ids)
+
+    monkeypatch.setattr(router_module.qbs, "replace_sources", boom)
+    with pytest.raises(RuntimeError):
+        test_client.post(
+            "/api/question-bank/question-groups",
+            json=_group_payload(),
+            headers=_headers(teacher_a),
+        )
+    s = shared_test_session
+    assert s.query(QuestionGroup).count() == 0
+    assert s.query(Question).count() == 0
+
+
+def test_question_group_visibility_and_membership(
+    test_client, shared_test_session, teacher_a, teacher_b
+):
+    s = shared_test_session
+    org = Organization(id=uuid.uuid4(), name="QB Org G")
+    s.add(org)
+    s.flush()
+    s.add(
+        TeacherOrganization(
+            teacher_id=teacher_a.id, organization_id=org.id, role="org_owner"
+        )
+    )
+    s.commit()
+
+    private_g = _create_group(test_client, teacher_a, title="A private")
+    public_g = _create_group(
+        test_client, teacher_a, title="A public", visibility="public"
+    )
+    org_g = _create_group(
+        test_client, teacher_a, title="Org group", organization_id=str(org.id)
+    )
+    assert org_g["organization_id"] == str(org.id)
+
+    # B 看得到 public，看不到 private／機構
+    assert (
+        test_client.get(
+            f"/api/question-bank/question-groups/{public_g['id']}",
+            headers=_headers(teacher_b),
+        ).status_code
+        == 200
+    )
+    for gid in (private_g["id"], org_g["id"]):
+        assert (
+            test_client.get(
+                f"/api/question-bank/question-groups/{gid}",
+                headers=_headers(teacher_b),
+            ).status_code
+            == 404
+        )
+    listing_b = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_b)
+    ).json()
+    assert {i["id"] for i in listing_b["items"]} == {public_g["id"]}
+    assert listing_b["items"][0]["is_owner"] is False
+    assert listing_b["items"][0]["can_edit"] is False
+
+    # B 不是機構成員：不能建到機構題庫
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(organization_id=str(org.id)),
+        headers=_headers(teacher_b),
+    )
+    assert resp.status_code == 403
+
+    # organization scope 只列機構的（only_own）
+    org_list = test_client.get(
+        "/api/question-bank/questions",
+        params={
+            "scope": "organization",
+            "organization_id": str(org.id),
+            "only_own": True,
+        },
+        headers=_headers(teacher_a),
+    ).json()
+    assert {i["id"] for i in org_list["items"]} == {org_g["id"]}
+
+
+def test_list_mixed_singles_and_groups(test_client, teacher_a, exam_points):
+    pp = exam_points["present_perfect"].id
+    single = _create(
+        test_client, teacher_a, stem="Single question here", grade_min=3, grade_max=5
+    )
+    g = _group_payload(title="Group with point", grade_min=10, grade_max=12)
+    g["questions"][0]["exam_point_ids"] = [pp]
+    g["questions"][0]["stem"] = "Group stem about Vivaldi music"
+    group = _create_group(test_client, teacher_a, **g)
+
+    def rows(**params):
+        res = test_client.get(
+            "/api/question-bank/questions", params=params, headers=_headers(teacher_a)
+        ).json()
+        return res["total"], [(i.get("kind", "single"), i["id"]) for i in res["items"]]
+
+    total, items = rows()
+    assert total == 2
+    assert set(items) == {("single", single["id"]), ("group", group["id"])}
+    # 題型 filter
+    assert rows(question_type="reading")[1] == [("group", group["id"])]
+    assert rows(question_type="multiple_choice")[1] == [("single", single["id"])]
+    # 考點 filter 看小題
+    assert rows(exam_point_ids=[pp])[1] == [("group", group["id"])]
+    # 年級看題組
+    assert rows(grade_min=11)[1] == [("group", group["id"])]
+    assert rows(grade_max=5)[1] == [("single", single["id"])]
+    # 關鍵字：題組標題／文章／小題題幹都算
+    assert rows(q="Group with point")[1] == [("group", group["id"])]
+    assert rows(q="vivaldi music")[1] == [("group", group["id"])]
+    assert rows(q="single question")[1] == [("single", single["id"])]
+    # 分頁：page_size=1 兩頁各一列、不重複
+    t1, p1 = rows(page=1, page_size=1)
+    t2, p2 = rows(page=2, page_size=1)
+    assert t1 == t2 == 2
+    assert len(p1) == len(p2) == 1 and p1 != p2

@@ -1,8 +1,10 @@
 """
 題庫 API（Issue #1061 / #1062）。
 
-- GET    /api/question-bank/questions                 列表（可見範圍 + filter + 分頁）
-- POST   /api/question-bank/questions                 新增（本期只開放 multiple_choice）
+- GET    /api/question-bank/questions                 列表：單題 + 題組列（kind 分流；可見範圍 + filter + 分頁）
+- POST   /api/question-bank/questions                 新增單題（只開放 multiple_choice）
+- POST   /api/question-bank/question-groups           新增題組（整組一個交易；#1082，reading）
+- GET    /api/question-bank/question-groups/{id}      題組（含小題）
 - GET    /api/question-bank/questions/similar?stem=   相似題（自己的 + public）
 - GET    /api/question-bank/questions/{id}            單題
 - PATCH  /api/question-bank/questions/{id}            修改
@@ -20,6 +22,11 @@
 #1077：列表 eager-load source_links（避免 N+1）、來源搜尋走 ``qbs.ilike_contains``
 轉義 ``%``/``_``、``POST /sources`` 已存在判斷改精確（不分大小寫）比對、
 ``ai_analyze`` 失敗時 rollback 已 flush 的 pending 考點。
+
+#1082 骨架：列表回傳 ``kind: single | group``（小題不單獨出現）；題組經
+``POST /question-groups`` 一次建立（group + 小題 + 選項／考點／來源同一交易）；
+小題的 visibility／歸屬跟隨題組，不做重複偵測（同一篇文章的問法常重複）。
+AI 作答／考點分析輸入可帶 ``passage``（題組主圖文純文字）。
 """
 
 from __future__ import annotations
@@ -39,6 +46,7 @@ from models import (
     ExamPoint,
     Question,
     QuestionExamPoint,
+    QuestionGroup,
     QuestionSource,
     QuestionSourceLink,
     Teacher,
@@ -49,6 +57,7 @@ from models.question_bank import (
     GRADE_MIN,
     QUESTION_TYPE_MULTIPLE_CHOICE,
     QUESTION_TYPES,
+    STIMULUS_TYPES,
 )
 from routers.teachers import get_current_teacher
 from services import question_bank_service as qbs
@@ -67,8 +76,11 @@ from utils.permissions import (
 
 router = APIRouter(prefix="/api/question-bank", tags=["question-bank"])
 
-# 本期只開放建立的題型（其餘表已建好，UI 尚未做）
-CREATABLE_TYPES = (QUESTION_TYPE_MULTIPLE_CHOICE,)
+# 可建立的題型：單題端點只收 multiple_choice；reading 只能經題組端點建（#1082）
+SINGLE_CREATABLE_TYPES = (QUESTION_TYPE_MULTIPLE_CHOICE,)
+GROUP_CREATABLE_TYPES = ("reading",)
+CREATABLE_TYPES = SINGLE_CREATABLE_TYPES + GROUP_CREATABLE_TYPES
+MAX_GROUP_QUESTIONS = 20
 MIN_OPTIONS = 2
 MAX_OPTIONS = 6
 
@@ -151,6 +163,65 @@ class QuestionCreate(QuestionBase):
         return self
 
 
+class GroupQuestionIn(QuestionBase):
+    """題組小題：與單題相同，但 question_type／歸屬／visibility 由題組決定。"""
+
+    options: List[OptionIn] = Field(..., min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)
+    # 不給就照陣列順序
+    group_order: Optional[int] = Field(None, ge=0)
+
+    @model_validator(mode="after")
+    def _answers(self):
+        _validate_options(self.options, self.allow_multiple_answers)
+        return self
+
+
+class QuestionGroupCreate(BaseModel):
+    """題組：主圖文 + 小題，一次建立。layout 深度驗證在閱讀題組編輯器那段再做。"""
+
+    question_type: Literal["reading"] = "reading"
+    stimulus_type: Literal["passage", "audio", "dialogue", "image", "mixed"] = "passage"
+    title: Optional[str] = Field(None, max_length=200)
+    passage_text: Optional[str] = Field(None, max_length=20000)
+    image_url: Optional[str] = None
+    layout: Optional[dict] = None
+    glossary: Optional[List[dict]] = None
+    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
+    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
+    visibility: Literal[
+        "private", "public", "organization_only", "individual_only"
+    ] = "private"
+    questions: List[GroupQuestionIn] = Field(
+        ..., min_length=1, max_length=MAX_GROUP_QUESTIONS
+    )
+    organization_id: Optional[str] = None
+    school_id: Optional[str] = None
+
+    @field_validator("title", "passage_text")
+    @classmethod
+    def _strip_opt(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if (
+            self.grade_min is not None
+            and self.grade_max is not None
+            and self.grade_min > self.grade_max
+        ):
+            raise ValueError("grade_min 不可大於 grade_max")
+        if self.organization_id and self.school_id:
+            raise ValueError("organization_id 與 school_id 只能擇一")
+        if self.layout is not None and not isinstance(self.layout.get("rows"), list):
+            raise ValueError("layout.rows 必須是陣列")
+        if not (self.passage_text or self.image_url or self.layout):
+            raise ValueError("題組需要文章、圖片或排版內容")
+        return self
+
+
 class QuestionUpdate(BaseModel):
     """PATCH：全部選填；有給 options 就整批覆寫。"""
 
@@ -188,6 +259,8 @@ class AiQuestionIn(BaseModel):
     key: str = Field(..., min_length=1, max_length=64)
     stem: str = Field(..., min_length=1, max_length=2000)
     options: List[str] = Field(..., min_length=2, max_length=6)
+    # 題組小題：主圖文純文字，附在題目前給模型（#1082）
+    passage: Optional[str] = Field(None, max_length=6000)
 
 
 class AiQuestionsIn(BaseModel):
@@ -268,6 +341,7 @@ def _question_out(
         "organization_id": str(q.organization_id) if q.organization_id else None,
         "school_id": str(q.school_id) if q.school_id else None,
         "group_id": q.group_id,
+        "group_order": q.group_order,
         "is_owner": q.teacher_id == teacher.id,
         "can_edit": _can_edit(db, teacher, q, perm_cache),
         "options": [
@@ -305,6 +379,69 @@ def _question_out(
     }
 
 
+def _group_out(
+    db: Session, g: QuestionGroup, teacher: Teacher, perm_cache: dict | None = None
+) -> dict:
+    questions = [q for q in g.questions if q.is_active]
+    return {
+        "id": g.id,
+        "question_type": questions[0].question_type if questions else "reading",
+        "stimulus_type": g.stimulus_type,
+        "title": g.title,
+        "passage_text": g.passage_text,
+        "image_url": g.image_url,
+        "audio_url": g.audio_url,
+        "layout": g.layout,
+        "glossary": g.glossary,
+        "grade_min": g.grade_min,
+        "grade_max": g.grade_max,
+        "visibility": g.visibility,
+        "is_platform": g.is_platform,
+        "teacher_id": g.teacher_id,
+        "organization_id": str(g.organization_id) if g.organization_id else None,
+        "school_id": str(g.school_id) if g.school_id else None,
+        "is_owner": g.teacher_id == teacher.id,
+        "can_edit": _can_edit(db, teacher, g, perm_cache),
+        "questions": [_question_out(db, q, teacher, perm_cache) for q in questions],
+        "created_at": g.created_at.isoformat() if g.created_at else None,
+        "updated_at": g.updated_at.isoformat() if g.updated_at else None,
+    }
+
+
+def _group_row_out(
+    db: Session, g: QuestionGroup, teacher: Teacher, perm_cache: dict | None = None
+) -> dict:
+    """列表的題組列：不帶小題內容，帶小題數與來源聯集。"""
+    questions = [q for q in g.questions if q.is_active]
+    sources: dict = {}
+    for q in questions:
+        for link in q.source_links:
+            if link.source is not None:
+                sources.setdefault(link.source.id, link.source)
+    preview = (g.passage_text or "").strip()[:200]
+    return {
+        "kind": "group",
+        "id": g.id,
+        "question_type": questions[0].question_type if questions else "reading",
+        "stimulus_type": g.stimulus_type,
+        "title": g.title,
+        "preview": preview,
+        "question_count": len(questions),
+        "grade_min": g.grade_min,
+        "grade_max": g.grade_max,
+        "visibility": g.visibility,
+        "is_platform": g.is_platform,
+        "teacher_id": g.teacher_id,
+        "organization_id": str(g.organization_id) if g.organization_id else None,
+        "school_id": str(g.school_id) if g.school_id else None,
+        "is_owner": g.teacher_id == teacher.id,
+        "can_edit": _can_edit(db, teacher, g, perm_cache),
+        "sources": [_source_out(x) for x in sources.values()],
+        "created_at": g.created_at.isoformat() if g.created_at else None,
+        "updated_at": g.updated_at.isoformat() if g.updated_at else None,
+    }
+
+
 def _similar_out(q: Question, teacher: Teacher) -> dict:
     return {
         "id": q.id,
@@ -330,9 +467,12 @@ def _parse_uuid(value: Optional[str], field: str) -> Optional[uuid.UUID]:
 
 
 def _can_edit(
-    db: Session, teacher: Teacher, q: Question, perm_cache: dict | None = None
+    db: Session,
+    teacher: Teacher,
+    q: Question | QuestionGroup,
+    perm_cache: dict | None = None,
 ) -> bool:
-    """建立者本人一律可編輯／刪除自己建的題（含建到機構／學校題庫的）。
+    """建立者本人一律可編輯／刪除自己建的題／題組（含建到機構／學校題庫的）。
 
     機構／學校題庫裡別人建的題：只有機構擁有人或有教材管理權限的管理者可以
     （使用者定案：成員可刪改自建題，擁有人／管理者權限不變）。
@@ -378,6 +518,70 @@ def _load_options(query):
     )
 
 
+def _load_group_rows(query):
+    """列表題組列只需要小題的題型／來源（不載選項）。"""
+    return query.options(
+        selectinload(QuestionGroup.questions)
+        .selectinload(Question.source_links)
+        .selectinload(QuestionSourceLink.source),
+    )
+
+
+def _scope_filter(query, model, scope, only_own, organization_id, school_id, teacher):
+    """列表 scope：questions / question_groups 欄位同名，共用。"""
+    if scope == "mine":
+        own = and_(
+            model.teacher_id == teacher.id,
+            model.organization_id.is_(None),
+            model.school_id.is_(None),
+        )
+        return query.filter(own if only_own else or_(own, model.visibility == "public"))
+    if scope == "organization":
+        org_uuid = _parse_uuid(organization_id, "organization_id")
+        if org_uuid is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="organization_id required for organization scope",
+            )
+        org_own = model.organization_id == org_uuid
+        return query.filter(
+            org_own if only_own else or_(org_own, model.visibility == "public")
+        )
+    if scope == "school":
+        school_uuid = _parse_uuid(school_id, "school_id")
+        if school_uuid is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="school_id required for school scope",
+            )
+        return query.filter(model.school_id == school_uuid)
+    if scope == "platform":
+        return query.filter(model.is_platform.is_(True))
+    return query
+
+
+def _grade_filter(query, model, grade_min, grade_max):
+    """年級：範圍有交集（沒設年級的不會被排除）。"""
+    if grade_min is not None:
+        query = query.filter(
+            or_(model.grade_max.is_(None), model.grade_max >= grade_min)
+        )
+    if grade_max is not None:
+        query = query.filter(
+            or_(model.grade_min.is_(None), model.grade_min <= grade_max)
+        )
+    return query
+
+
+def _order_key(x):
+    """單題與題組合併排序：updated_at desc（null 最後）、id desc。"""
+    return (
+        x.updated_at is None,
+        -(x.updated_at.timestamp()) if x.updated_at else 0,
+        -x.id,
+    )
+
+
 # ============ Endpoints ============
 
 
@@ -413,73 +617,53 @@ def list_questions(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """題庫列表。filter 可疊加；考點以 OR 查詢；年級為「範圍有交集」。"""
+    """題庫列表：單題 + 題組列（kind 分流）。filter 可疊加；考點以 OR 查詢；
+    年級為「範圍有交集」。題組的題型／考點／來源／關鍵字看小題，年級看題組。
+    分頁：兩邊各取前 page*page_size 筆後合併排序再切頁（單頁最多載 2*page*page_size 筆）。
+    """
     if question_type is not None and question_type not in QUESTION_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid question_type"
         )
 
-    query = qbs.visible_questions_query(db, teacher).filter(Question.group_id.is_(None))
+    singles = qbs.visible_questions_query(db, teacher).filter(
+        Question.group_id.is_(None)
+    )
+    groups = qbs.visible_groups_query(db, teacher)
+    singles = _scope_filter(
+        singles, Question, scope, only_own, organization_id, school_id, teacher
+    )
+    groups = _scope_filter(
+        groups, QuestionGroup, scope, only_own, organization_id, school_id, teacher
+    )
 
-    # mine / organization 預設「自己的（機構的）+ 所有公開題」；only_own=true 只留自己的（機構的）
-    if scope == "mine":
-        own = and_(
-            Question.teacher_id == teacher.id,
-            Question.organization_id.is_(None),
-            Question.school_id.is_(None),
-        )
-        query = query.filter(
-            own if only_own else or_(own, Question.visibility == "public")
-        )
-    elif scope == "organization":
-        org_uuid = _parse_uuid(organization_id, "organization_id")
-        if org_uuid is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="organization_id required for organization scope",
-            )
-        org_own = Question.organization_id == org_uuid
-        query = query.filter(
-            org_own if only_own else or_(org_own, Question.visibility == "public")
-        )
-    elif scope == "school":
-        school_uuid = _parse_uuid(school_id, "school_id")
-        if school_uuid is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="school_id required for school scope",
-            )
-        query = query.filter(Question.school_id == school_uuid)
-    elif scope == "platform":
-        query = query.filter(Question.is_platform.is_(True))
-
+    # 題組的小題（active）子查詢，題型／考點／關鍵字 filter 都透過它
+    sub_q = db.query(Question.group_id).filter(
+        Question.group_id.isnot(None), Question.is_active.is_(True)
+    )
     if question_type:
-        query = query.filter(Question.question_type == question_type)
+        singles = singles.filter(Question.question_type == question_type)
+        groups = groups.filter(
+            QuestionGroup.id.in_(sub_q.filter(Question.question_type == question_type))
+        )
     if exam_point_ids:
         resolved = qbs.resolve_exam_point_ids(db, exam_point_ids)
         if not resolved:
             return {"items": [], "total": 0, "page": page, "page_size": page_size}
-        query = query.filter(
-            Question.id.in_(
-                db.query(QuestionExamPoint.question_id).filter(
-                    QuestionExamPoint.exam_point_id.in_(resolved)
-                )
-            )
+        ep_q = db.query(QuestionExamPoint.question_id).filter(
+            QuestionExamPoint.exam_point_id.in_(resolved)
         )
-    # 年級：題目範圍與查詢範圍有交集（沒設年級的題目不會被年級 filter 排除）
-    if grade_min is not None:
-        query = query.filter(
-            or_(Question.grade_max.is_(None), Question.grade_max >= grade_min)
+        singles = singles.filter(Question.id.in_(ep_q))
+        groups = groups.filter(
+            QuestionGroup.id.in_(sub_q.filter(Question.id.in_(ep_q)))
         )
-    if grade_max is not None:
-        query = query.filter(
-            or_(Question.grade_min.is_(None), Question.grade_min <= grade_max)
-        )
+    singles = _grade_filter(singles, Question, grade_min, grade_max)
+    groups = _grade_filter(groups, QuestionGroup, grade_min, grade_max)
     if q and q.strip():
-        # 題幹（正規化後子字串）或 考題來源名稱（ILIKE）任一命中
+        # 題幹（正規化後子字串）或 考題來源名稱（ILIKE）任一命中；題組另看標題／文章
         raw = q.strip()
         needle = qbs.normalize_stem(raw)
-        source_hit = Question.id.in_(
+        source_q = (
             db.query(QuestionSourceLink.question_id)
             .join(QuestionSource, QuestionSource.id == QuestionSourceLink.source_id)
             .filter(qbs.ilike_contains(QuestionSource.name, raw))
@@ -488,19 +672,75 @@ def list_questions(
         stem_hit = Question.normalized_stem.like(
             f"%{qbs.escape_like(needle)}%", escape=qbs.LIKE_ESCAPE
         )
-        query = query.filter(or_(stem_hit, source_hit) if needle else source_hit)
+        single_hit = (
+            or_(stem_hit, Question.id.in_(source_q))
+            if needle
+            else Question.id.in_(source_q)
+        )
+        singles = singles.filter(single_hit)
+        group_hit = [
+            QuestionGroup.id.in_(sub_q.filter(single_hit)),
+            qbs.ilike_contains(QuestionGroup.title, raw),
+            qbs.ilike_contains(QuestionGroup.passage_text, raw),
+        ]
+        groups = groups.filter(or_(*group_hit))
 
-    total = query.count()
-    items = (
-        _load_options(query)
-        .order_by(Question.updated_at.desc().nullslast(), Question.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+    total = singles.count() + groups.count()
+    take = page * page_size
+    top_singles = (
+        singles.order_by(Question.updated_at.desc().nullslast(), Question.id.desc())
+        .limit(take)
         .all()
     )
+    top_groups = (
+        groups.order_by(
+            QuestionGroup.updated_at.desc().nullslast(), QuestionGroup.id.desc()
+        )
+        .limit(take)
+        .all()
+    )
+    merged = sorted(
+        [("single", x) for x in top_singles] + [("group", g) for g in top_groups],
+        key=lambda kv: _order_key(kv[1]),
+    )[(page - 1) * page_size : take]
+
+    # 只對本頁的列載入關聯（selectinload 批次查，不會 N+1）
+    single_ids = [x.id for kind, x in merged if kind == "single"]
+    group_ids = [g.id for kind, g in merged if kind == "group"]
+    loaded_q = (
+        {
+            x.id: x
+            for x in _load_options(
+                db.query(Question).filter(Question.id.in_(single_ids))
+            ).all()
+        }
+        if single_ids
+        else {}
+    )
+    loaded_g = (
+        {
+            g.id: g
+            for g in _load_group_rows(
+                db.query(QuestionGroup).filter(QuestionGroup.id.in_(group_ids))
+            ).all()
+        }
+        if group_ids
+        else {}
+    )
     perm_cache: dict = {}
+    items = []
+    for kind, x in merged:
+        if kind == "single":
+            items.append(
+                {
+                    "kind": "single",
+                    **_question_out(db, loaded_q[x.id], teacher, perm_cache),
+                }
+            )
+        else:
+            items.append(_group_row_out(db, loaded_g[x.id], teacher, perm_cache))
     return {
-        "items": [_question_out(db, x, teacher, perm_cache) for x in items],
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -513,20 +753,12 @@ def create_question(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    if payload.question_type not in CREATABLE_TYPES:
+    if payload.question_type not in SINGLE_CREATABLE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="此題型尚未開放")
 
     org_uuid = _parse_uuid(payload.organization_id, "organization_id")
     school_uuid = _parse_uuid(payload.school_id, "school_id")
-    # 新增：機構／學校的 active 成員都可以；編輯／刪除才需要管理權限（_can_edit）
-    if org_uuid is not None and not has_read_org_materials_permission(
-        teacher.id, org_uuid, db
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此機構的成員")
-    if school_uuid is not None and school_uuid not in qbs.teacher_school_ids(
-        db, teacher.id
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此學校的成員")
+    _require_bank_membership(db, teacher, org_uuid, school_uuid)
 
     dup = qbs.find_exact_duplicate(db, teacher, payload.stem)
     if dup is not None:
@@ -567,6 +799,112 @@ def create_question(
     return _question_out(
         db, qbs.get_visible_question(db, teacher, question.id), teacher
     )
+
+
+def _require_bank_membership(
+    db: Session, teacher: Teacher, org_uuid, school_uuid
+) -> None:
+    """新增到機構／學校題庫：active 成員即可；編輯／刪除才需要管理權限（_can_edit）。"""
+    if org_uuid is not None and not has_read_org_materials_permission(
+        teacher.id, org_uuid, db
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此機構的成員")
+    if school_uuid is not None and school_uuid not in qbs.teacher_school_ids(
+        db, teacher.id
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此學校的成員")
+
+
+@router.post("/question-groups", status_code=status.HTTP_201_CREATED)
+def create_question_group(
+    payload: QuestionGroupCreate,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """建立題組：group + 小題 + 選項／考點／教材／來源在同一個交易；任一步失敗整組 rollback。
+
+    小題的 question_type／visibility／歸屬跟隨題組；小題不做重複偵測（partial unique
+    index 也排除 group_id 有值的列）。
+    """
+    if payload.question_type not in GROUP_CREATABLE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="此題型尚未開放")
+    if payload.stimulus_type not in STIMULUS_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stimulus_type"
+        )
+    org_uuid = _parse_uuid(payload.organization_id, "organization_id")
+    school_uuid = _parse_uuid(payload.school_id, "school_id")
+    _require_bank_membership(db, teacher, org_uuid, school_uuid)
+
+    group = QuestionGroup(
+        stimulus_type=payload.stimulus_type,
+        title=payload.title,
+        passage_text=payload.passage_text,
+        image_url=payload.image_url,
+        layout=payload.layout,
+        glossary=payload.glossary,
+        grade_min=payload.grade_min,
+        grade_max=payload.grade_max,
+        visibility=payload.visibility,
+        teacher_id=teacher.id,
+        organization_id=org_uuid,
+        school_id=school_uuid,
+    )
+    qbs.enforce_platform_rules(group, teacher)
+    try:
+        for i, qin in enumerate(payload.questions):
+            question = Question(
+                question_type=payload.question_type,
+                stem=qin.stem,
+                normalized_stem=qbs.normalize_stem(qin.stem),
+                explanation=qin.explanation,
+                image_url=qin.image_url,
+                stem_audio_url=qin.stem_audio_url,
+                grade_min=qin.grade_min
+                if qin.grade_min is not None
+                else group.grade_min,
+                grade_max=qin.grade_max
+                if qin.grade_max is not None
+                else group.grade_max,
+                allow_multiple_answers=qin.allow_multiple_answers,
+                show_stem_text=qin.show_stem_text,
+                visibility=group.visibility,
+                is_platform=group.is_platform,
+                teacher_id=teacher.id,
+                organization_id=org_uuid,
+                school_id=school_uuid,
+                group_order=qin.group_order if qin.group_order is not None else i,
+            )
+            qbs.replace_options(question, [o.model_dump() for o in qin.options])
+            qbs.replace_exam_points(
+                db, question, qin.exam_point_ids, source=EXAM_POINT_LINK_SOURCE_MANUAL
+            )
+            qbs.replace_program_links(
+                question, [pl.model_dump() for pl in qin.program_links]
+            )
+            qbs.replace_sources(db, question, teacher, qin.source_ids)
+            group.questions.append(question)
+        db.add(group)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    return _group_out(db, qbs.get_visible_group(db, teacher, group.id), teacher)
+
+
+@router.get("/question-groups/{group_id}")
+def get_question_group(
+    group_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    g = qbs.get_visible_group(db, teacher, group_id)
+    if g is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="題組不存在")
+    return _group_out(db, g, teacher)
 
 
 @router.get("/questions/{question_id}")
