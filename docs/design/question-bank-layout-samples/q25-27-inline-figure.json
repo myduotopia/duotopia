@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "rows": [
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "paragraph", "text": "Antonio Vivaldi was a violin player with red hair. He wrote a lot of beautiful music. Here is a simple timeline of his life." },
+      { "type": "image", "url": "<timeline.png>", "alt": "Timeline of Vivaldi's life", "align": "center" },
+      { "type": "paragraph", "text": "In his lifetime, Vivaldi wrote about 500 pieces of music. He wrote most of them for his students to learn and play. When the students played the music, they had to listen to each other and work together as a group. He also wanted them to learn that everyone played an important part." },
+      { "type": "paragraph", "text": "Vivaldi's music sounds bright and full of life. When you listen to his music, you will feel happy. It is usually fast and clear. And his music tells a story with only sounds, not words. When people listen, they can feel the story in the music." },
+      { "type": "paragraph", "text": "Sadly, Vivaldi died poor and sick, but today, people all over the world love and play his music." }
+    ] } ] }
+  ],
+  "_glossary": [ { "word": "timeline", "zh": "時間軸" } ]
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "rows": [
+    { "columns": [
+      { "span": 2, "blocks": [
+        { "type": "paragraph", "text": "Every Christmas, about half a million people visit Lapland, Finland. They enjoy doing a lot of fun things there. {{40}}, they meet Santa Claus, see reindeer, play in the snow, and watch beautiful dancing lights in the night sky." },
+        { "type": "paragraph", "text": "However, this year, Santa Claus has something heavy on his mind. Every year in November, Lapland is snowy, but this year is {{41}}. The temperature is 2°C, so there may not be much snow in his hometown. That means it will be hard to have a white Christmas this year." }
+      ] },
+      { "span": 1, "blocks": [ { "type": "image", "url": "<santa.png>", "alt": "Santa Claus and a reindeer" } ] }
+    ] },
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "paragraph", "text": "Santa Claus {{42}} the reindeer. When the weather becomes warmer, snow can melt and then freeze again. This makes the ground hard. That way, reindeer have trouble finding food under the ground. They cannot get enough food and may become hungry and weak during the long winter." },
+      { "type": "paragraph", "text": "As Santa Claus said, \"Our hometown is getting warm faster than other places in the world. {{43}}. Because of this, the reindeer have a hard time in winter.\"" }
+    ] } ] }
+  ],
+  "_glossary": [ { "word": "temperature", "zh": "溫度" }, { "word": "melt", "zh": "融化" }, { "word": "freeze", "zh": "結冰" }, { "word": "weak", "zh": "虛弱的" } ],
+  "_note": "{{40}}..{{43}} 對應四個小題的 blank_index；小題題幹留空，只有選項"
+}
