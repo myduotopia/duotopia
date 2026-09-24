@@ -10,16 +10,20 @@
  * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）
  * - 右欄：多個「單元」+「新增題目」
  *
- * 三種模式（由 `questions` 決定）：
- * - 新增（未傳／空）：左欄完整；批次值套到所有單元；公開設定由左欄選（必選）
+ * 四種模式（由 `questions` / `groupId` / `createType` 決定）：
+ * - 新增（未傳／空）：左欄完整；批次值套到所有單元；公開設定由左欄選（必選）。
+ *   `createType` 為題組題型（reading）時右欄是一張 `GroupCard`，一次只建一個題組
  * - 單題編輯（1 題）：左欄 editOnly 只剩來源／公開，值預填該題
+ * - 題組編輯（`groupId`）：開啟時 getQuestionGroup 載入 → 一張 GroupCard；左欄 editOnly；
+ *   儲存 updateQuestionGroup（整組替換、單交易）、刪除 deleteQuestionGroup（整組軟刪除）
  * - 批次編輯（≥2 題，列表勾選同題型）：左欄完整但批次值**一律空白**（語音設定除外），
  *   老師改左欄才覆寫全部卡；每張卡各自帶自己的值（含公開／來源）；儲存逐題 PATCH，
  *   上傳擷取附加的新卡走 POST
  *
  * 批次設定（考點／年段／教材關聯／公開／來源）一改就覆寫右側所有單元；新增的帶左側目前值。
- * 儲存逐單元送：單題 createQuestion／updateQuestion，題組 createQuestionGroup（整組一個交易）；
+ * 儲存逐單元送：單題 createQuestion／updateQuestion，題組 createQuestionGroup／updateQuestionGroup；
  * 中途失敗停在該單元、已成功的保留、該卡顯示後端訊息。
+ * AI 作答／考點分析：題組小題附主圖文純文字當上下文。
  * 「自動生成語音」勾選時，儲存前先補齊缺語音的題幹（含題組小題）。
  * 語音／儲存進行中 setEditorBusy，關閉鍵跟著 disabled；有變更時關閉前 confirm。
  */
@@ -37,7 +41,12 @@ import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import type { MagicPasteMcItem } from "@/components/shared/MagicPasteInput";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
-import type { Question, QuestionVisibility } from "@/types/questionBank";
+import type {
+  Question,
+  QuestionGroup,
+  QuestionType,
+  QuestionVisibility,
+} from "@/types/questionBank";
 import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import QuestionUnitList from "./QuestionUnitList";
 import {
@@ -50,14 +59,18 @@ import {
   draftsFromExtracted,
   emptyBatchDefaults,
   emptyDraft,
+  emptyGroupDraft,
   findBatchDuplicateKeys,
+  groupDraftFromGroup,
   mapUnitQuestions,
   toAiInputs,
   toCreateGroupInput,
   toCreateInput,
+  toUpdateGroupInput,
   toUpdateInput,
   unitHasContent,
   unitKey,
+  unitPassageByKey,
   unitQuestions,
   validateDraft,
   validateGroupDraft,
@@ -67,6 +80,9 @@ import {
   type QuestionDraft,
   type UnitDraft,
 } from "./questionDraft";
+
+/** 走題組端點的題型（與後端 GROUP_CREATABLE_TYPES 對齊） */
+const GROUP_TYPES: QuestionType[] = ["reading", "cloze"];
 
 const TTS_STORAGE_KEY = "duotopia_batch_tts_settings";
 const DEFAULT_TTS: TTSSettingsState = {
@@ -80,6 +96,10 @@ export interface QuestionSheetProps {
   onClose: () => void;
   /** 編輯模式帶題目（1 題＝單題編輯；≥2 題＝批次編輯）；新增為空／未傳 */
   questions?: Question[] | null;
+  /** 編輯題組：帶 id，開啟時載入整組 */
+  groupId?: number | null;
+  /** 新增時的題型：reading／cloze 開題組卡；預設選擇題 */
+  createType?: QuestionType;
   /** 可關聯的教材包（含 lessons） */
   programs: Program[];
   /** 建到機構題庫時帶 organization_id（編輯時忽略） */
@@ -125,6 +145,7 @@ function extractApiMessage(err: unknown): string | null {
 }
 
 const single = (draft: QuestionDraft): UnitDraft => ({ kind: "single", draft });
+const groupUnit = (draft: GroupDraft): UnitDraft => ({ kind: "group", draft });
 
 function withServerError(u: UnitDraft, message: string): UnitDraft {
   return u.kind === "single"
@@ -136,6 +157,8 @@ export default function QuestionSheet({
   open,
   onClose,
   questions = null,
+  groupId = null,
+  createType = "multiple_choice",
   programs,
   organizationId,
   readOnly = false,
@@ -146,12 +169,26 @@ export default function QuestionSheet({
   const { t } = useTranslation();
   const { sidebarWidth, setEditorBusy } = useSidebar();
   const existing = questions ?? [];
-  const mode: "create" | "edit" | "bulk" =
-    existing.length === 0 ? "create" : existing.length === 1 ? "edit" : "bulk";
+  const mode: "create" | "edit" | "bulk" | "editGroup" =
+    groupId !== null
+      ? "editGroup"
+      : existing.length === 0
+        ? "create"
+        : existing.length === 1
+          ? "edit"
+          : "bulk";
   const isEdit = mode === "edit";
   const singleQuestion = isEdit ? existing[0] : null;
+  /** 右欄是題組（新增題組或編輯題組）：一次只有一個單元，沒有「新增題目」與擷取 */
+  const groupMode = mode === "editGroup" || (mode === "create" && GROUP_TYPES.includes(createType));
 
   const [units, setUnits] = useState<UnitDraft[]>([single(emptyDraft())]);
+  const [loadedGroup, setLoadedGroup] = useState<QuestionGroup | null>(null);
+  const [loadingGroup, setLoadingGroup] = useState(false);
+  /** 題組編輯時依載入結果的 can_edit 決定只讀 */
+  const effectiveReadOnly =
+    readOnly ||
+    (mode === "editGroup" && loadedGroup !== null && !loadedGroup.can_edit);
   const [batch, setBatch] = useState<BatchDefaults>(emptyBatchDefaults());
   // 左欄「套用到全部」的公開／來源；新增與批次編輯初始空白，單題編輯預填該題
   const [batchSources, setBatchSources] = useState<ComboboxItem[]>([]);
@@ -171,6 +208,45 @@ export default function QuestionSheet({
   // 開啟時依模式初始化
   useEffect(() => {
     if (!open) return;
+    setLoadedGroup(null);
+    if (mode === "editGroup" && groupId !== null) {
+      // 題組編輯：先放空卡佔位，載入後換成整組
+      setUnits([]);
+      setBatch(emptyBatchDefaults());
+      setBatchSources([]);
+      setBatchVisibility(null);
+      setLoadingGroup(true);
+      let cancelled = false;
+      apiClient
+        .getQuestionGroup(groupId)
+        .then((g) => {
+          if (cancelled) return;
+          const d = groupDraftFromGroup(g);
+          setLoadedGroup(g);
+          setUnits([groupUnit(d)]);
+          setBatch({
+            exam_points: [],
+            grade: d.grade,
+            program_link: d.program_link,
+          });
+          setBatchSources(d.sources);
+          setBatchVisibility(d.visibility);
+        })
+        .catch((err) => {
+          console.error("Load question group failed:", err);
+          toast.error(t("questionBank.group.loadFailed"));
+          onClose();
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingGroup(false);
+        });
+      setTtsSettings(loadTtsSettings());
+      setAutoTTS(false);
+      dirtyRef.current = false;
+      return () => {
+        cancelled = true;
+      };
+    }
     if (mode === "edit" && singleQuestion) {
       const d = draftFromQuestion(singleQuestion);
       setUnits([single(d)]);
@@ -185,7 +261,11 @@ export default function QuestionSheet({
       setBatchVisibility(null);
     } else {
       const defaults = emptyBatchDefaults();
-      setUnits([single(emptyDraft(defaults))]);
+      setUnits([
+        GROUP_TYPES.includes(createType)
+          ? groupUnit(emptyGroupDraft(createType, defaults))
+          : single(emptyDraft(defaults)),
+      ]);
       setBatch(defaults);
       setBatchSources([]);
       setBatchVisibility(null);
@@ -195,9 +275,9 @@ export default function QuestionSheet({
     dirtyRef.current = false;
     // existing 每次 render 都是新陣列，用 questions 當依賴
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, questions]);
+  }, [open, questions, groupId, createType]);
 
-  const busy = saving || deleting || generatingAudio || aiBusy;
+  const busy = saving || deleting || generatingAudio || aiBusy || loadingGroup;
   useEffect(() => {
     setEditorBusy(busy);
     return () => setEditorBusy(false);
@@ -286,8 +366,10 @@ export default function QuestionSheet({
       ),
     [units, batchDupKeys],
   );
+  /** 題組小題 → 主圖文純文字（AI 上下文） */
+  const passageByKey = useMemo(() => unitPassageByKey(units), [units]);
   const firstErrorIndex = errorKeys.findIndex((k) => k !== null);
-  const validationMessage: string | null = readOnly
+  const validationMessage: string | null = effectiveReadOnly
     ? null
     : firstErrorIndex >= 0
       ? t("questionBank.form.errors.atQuestion", {
@@ -390,14 +472,14 @@ export default function QuestionSheet({
     }>,
     apply: (current: QuestionDraft[], results: never) => ApplyResult,
   ) => {
-    const eligible = draftsEligibleForAi(drafts);
+    const eligible = draftsEligibleForAi(drafts, passageByKey);
     if (eligible.length === 0 || aiBusy) {
       toast.info(t("questionBank.form.tools.aiNothingToSend"));
       return;
     }
     setAiBusy(true);
     try {
-      const res = await call(toAiInputs(eligible));
+      const res = await call(toAiInputs(eligible, passageByKey));
       const outcome = apply(drafts, res.results as never);
       dirtyRef.current = dirtyRef.current || outcome.applied > 0;
       const byKey = new Map(outcome.drafts.map((d) => [d.key, d]));
@@ -468,18 +550,20 @@ export default function QuestionSheet({
         ? apiClient.updateQuestion(d.existingId, toUpdateInput(d))
         : apiClient.createQuestion(toCreateInput(d, organizationId));
     }
-    if (u.draft.existingId !== null) {
-      // 題組編輯在閱讀題組編輯器那段接上
-      throw new Error(t("questionBank.messages.saveFailed"));
-    }
-    const group = await apiClient.createQuestionGroup(
-      toCreateGroupInput(u.draft, organizationId),
-    );
+    const group =
+      u.draft.existingId !== null
+        ? await apiClient.updateQuestionGroup(
+            u.draft.existingId,
+            toUpdateGroupInput(u.draft),
+          )
+        : await apiClient.createQuestionGroup(
+            toCreateGroupInput(u.draft, organizationId),
+          );
     return group.questions[0];
   };
 
   const handleSave = async () => {
-    if (validationMessage || saving || readOnly) {
+    if (validationMessage || saving || effectiveReadOnly) {
       if (firstErrorIndex >= 0) scrollToCard(unitKey(units[firstErrorIndex]));
       return;
     }
@@ -507,7 +591,7 @@ export default function QuestionSheet({
         const u = remaining[0];
         try {
           last = await submitUnit(u);
-          if (u.kind === "single" && u.draft.existingId !== null) updated += 1;
+          if (u.draft.existingId !== null) updated += 1;
           else created += 1;
           remaining.shift();
         } catch (err) {
@@ -533,11 +617,15 @@ export default function QuestionSheet({
           return;
         }
       }
-      if (mode === "edit") toast.success(t("questionBank.messages.updated"));
+      if (mode === "editGroup")
+        toast.success(t("questionBank.messages.groupUpdated"));
+      else if (mode === "edit") toast.success(t("questionBank.messages.updated"));
       else if (mode === "bulk")
         toast.success(
           t("questionBank.messages.bulkSaved", { updated, created }),
         );
+      else if (groupMode)
+        toast.success(t("questionBank.messages.groupCreated"));
       else
         toast.success(
           t("questionBank.messages.createdCount", { count: created }),
@@ -551,14 +639,33 @@ export default function QuestionSheet({
   };
 
   const handleDelete = async () => {
-    if (!singleQuestion || deleting) return;
-    if (!window.confirm(t("questionBank.form.confirmDelete"))) return;
+    if (deleting) return;
+    const targetGroup = mode === "editGroup" ? loadedGroup : null;
+    if (!singleQuestion && !targetGroup) return;
+    if (
+      !window.confirm(
+        t(
+          targetGroup
+            ? "questionBank.group.confirmDelete"
+            : "questionBank.form.confirmDelete",
+        ),
+      )
+    )
+      return;
     setDeleting(true);
     try {
-      await apiClient.deleteQuestion(singleQuestion.id);
+      if (targetGroup) {
+        await apiClient.deleteQuestionGroup(targetGroup.id);
+        toast.success(t("questionBank.messages.groupDeleted"));
+        dirtyRef.current = false;
+        onDeleted?.(targetGroup.questions[0]?.id ?? targetGroup.id);
+        onClose();
+        return;
+      }
+      await apiClient.deleteQuestion(singleQuestion!.id);
       toast.success(t("questionBank.messages.deleted"));
       dirtyRef.current = false;
-      onDeleted?.(singleQuestion.id);
+      onDeleted?.(singleQuestion!.id);
       onClose();
     } catch (err) {
       toast.error(
@@ -573,7 +680,7 @@ export default function QuestionSheet({
     if (busy) return;
     if (
       dirtyRef.current &&
-      !readOnly &&
+      !effectiveReadOnly &&
       !window.confirm(t("contentEditor.labels.unsavedChangesConfirm"))
     )
       return;
@@ -582,15 +689,26 @@ export default function QuestionSheet({
 
   if (!open) return null;
 
-  const title = readOnly
+  const groupTypeLabel = t(
+    `questionBank.types.${loadedGroup?.question_type ?? createType}`,
+  );
+  const title = effectiveReadOnly
     ? t("questionBank.form.titleView")
-    : mode === "edit"
-      ? t("questionBank.form.titleEdit")
-      : mode === "bulk"
-        ? t("questionBank.form.titleBulkEdit", { count: existing.length })
-        : t("questionBank.form.titleCreate");
+    : mode === "editGroup"
+      ? t("questionBank.group.titleEdit", { type: groupTypeLabel })
+      : mode === "edit"
+        ? t("questionBank.form.titleEdit")
+        : mode === "bulk"
+          ? t("questionBank.form.titleBulkEdit", { count: existing.length })
+          : groupMode
+            ? t("questionBank.group.titleCreate", { type: groupTypeLabel })
+            : t("questionBank.form.titleCreate");
   const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
-  const canAddOrExtract = !readOnly && mode !== "edit";
+  const canAddOrExtract = !effectiveReadOnly && mode === "create" && !groupMode;
+  const canDeleteNow =
+    canDelete &&
+    !effectiveReadOnly &&
+    (isEdit || (mode === "editGroup" && loadedGroup !== null));
 
   return (
     <>
@@ -608,7 +726,7 @@ export default function QuestionSheet({
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-            {mode === "create" && !readOnly && (
+            {mode === "create" && !groupMode && !effectiveReadOnly && (
               <p className="text-xs text-gray-500">
                 {t("questionBank.form.batchHint", {
                   count: units.length,
@@ -618,7 +736,7 @@ export default function QuestionSheet({
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {isEdit && canDelete && !readOnly && (
+            {canDeleteNow && (
               <Button
                 type="button"
                 variant="ghost"
@@ -631,11 +749,11 @@ export default function QuestionSheet({
                 {t("common.delete", "刪除")}
               </Button>
             )}
-            {!readOnly && (
+            {!effectiveReadOnly && (
               <Button
                 type="button"
                 onClick={handleSave}
-                disabled={!!validationMessage || busy}
+                disabled={!!validationMessage || busy || units.length === 0}
                 title={validationMessage ?? undefined}
                 data-testid="qb-save"
               >
@@ -669,10 +787,10 @@ export default function QuestionSheet({
         {/* 兩欄：左 = 單字集同款批次工作區（md 以上），右 = 單元卡 */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
           <div className="flex gap-4 items-start">
-            {/* 左欄：新增／批次編輯 = 完整批次區；單題編輯 = 只剩考題來源與是否公開（editOnly） */}
-            {!readOnly && (
+            {/* 左欄：新增／批次編輯 = 完整批次區；單題／題組編輯 = 只剩考題來源與是否公開（editOnly） */}
+            {!effectiveReadOnly && (
               <QuestionBankBatchPanel
-                editOnly={isEdit}
+                editOnly={isEdit || mode === "editGroup"}
                 ttsSettings={ttsSettings}
                 onTtsSettingsChange={handleTtsSettingsChange}
                 autoTTS={autoTTS}
@@ -700,17 +818,29 @@ export default function QuestionSheet({
             )}
 
             <div className="flex-1 min-w-0 space-y-4">
+              {loadingGroup && (
+                <p
+                  className="py-8 text-center text-sm text-gray-500"
+                  data-testid="qb-group-loading"
+                >
+                  {t("questionBank.group.loading")}
+                </p>
+              )}
               <QuestionUnitList
                 units={units}
                 errorKeys={errorKeys}
                 onChangeQuestion={updateQuestion}
                 onChangeGroup={updateGroup}
                 onRemove={
-                  mode !== "edit" && units.length > 1 ? removeUnit : undefined
+                  mode === "create" && !groupMode && units.length > 1
+                    ? removeUnit
+                    : mode === "bulk" && units.length > 1
+                      ? removeUnit
+                      : undefined
                 }
                 ttsSettings={ttsSettings}
                 programs={programs}
-                readOnly={readOnly}
+                readOnly={effectiveReadOnly}
                 disabled={saving}
               />
 

@@ -5932,7 +5932,10 @@
       "deleteFailed": "Failed to delete",
       "createdCount": "{{count}} question(s) created",
       "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again",
-      "bulkSaved": "Updated {{updated}}, created {{created}}"
+      "bulkSaved": "Updated {{updated}}, created {{created}}",
+      "groupCreated": "Group created",
+      "groupUpdated": "Group updated",
+      "groupDeleted": "Group deleted"
     },
     "form": {
       "titleCreate": "New Multiple-Choice Question",
@@ -5974,7 +5977,8 @@
         "atQuestion": "Question {{n}}: {{message}}",
         "examPointRequired": "Pick at least one exam point",
         "visibilityRequired": "Choose whether to share the questions",
-        "groupNeedsQuestions": "A group needs at least one question"
+        "groupNeedsQuestions": "A group needs at least one question",
+        "groupNeedsContent": "A group needs a passage, an image or a layout"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -6034,7 +6038,8 @@
       },
       "audioGenerated": "Audio generated",
       "audioPlayFailed": "Cannot play audio ({{code}})",
-      "titleBulkEdit": "Bulk edit {{count}} questions"
+      "titleBulkEdit": "Bulk edit {{count}} questions",
+      "stemOptionalPlaceholder": "Stem (optional for cloze)"
     },
     "list": {
       "selectAll": "Select / deselect all",
@@ -6062,6 +6067,77 @@
       "bulkEdit": "Edit",
       "bulkEditTypeMismatch": "Questions of different types can't be edited together",
       "bulkEditNoPermission": "No permission to edit the selected questions"
+    },
+    "group": {
+      "titleCreate": "New {{type}}",
+      "titleEdit": "Edit {{type}}",
+      "titlePlaceholder": "Group title (optional, shown in the list)",
+      "loading": "Loading group…",
+      "loadFailed": "Failed to load the group",
+      "confirmDelete": "Delete the whole group (all sub-questions)? Assigned papers are not affected.",
+      "stimulus": {
+        "passage": "Passage",
+        "image": "Image",
+        "mixed": "Mixed"
+      },
+      "layout": {
+        "title": "Passage layout",
+        "addRow": "Add row",
+        "ratio": "Columns",
+        "row": "Row",
+        "section": "Box",
+        "wrap": "Box it",
+        "unwrap": "Unbox",
+        "frame": "Border",
+        "removeRow": "Remove row",
+        "addBlock": "Add block",
+        "removeBlock": "Remove block",
+        "dragBlock": "Drag block",
+        "dragRow": "Drag row",
+        "block": {
+          "heading": "Heading",
+          "paragraph": "Paragraph",
+          "image": "Image",
+          "dialogue": "Dialogue"
+        },
+        "bold": "Bold",
+        "underline": "Underline",
+        "headingPlaceholder": "Heading text",
+        "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
+        "imageUpload": "Upload image",
+        "imageAlt": "Alt text",
+        "imageCaption": "Caption",
+        "imageMaxWidth": "Max width (px)",
+        "imageFrame": "Border",
+        "alignLeft": "Left",
+        "alignCenter": "Center",
+        "alignRight": "Right",
+        "dialogueSpeaker": "Speaker",
+        "dialogueText": "Line",
+        "addLine": "Add line",
+        "removeLine": "Remove line",
+        "preview": "Preview",
+        "previewDesktop": "Desktop",
+        "previewMobile": "Mobile",
+        "empty": "Nothing yet — click “Add row” to start",
+        "emptyColumn": "Drop blocks here or add one"
+      },
+      "glossary": {
+        "title": "Glossary",
+        "word": "Word",
+        "zh": "Meaning",
+        "add": "Add entry",
+        "remove": "Remove entry"
+      },
+      "questions": {
+        "title": "Sub-questions ({{count}})",
+        "add": "Add sub-question",
+        "empty": "No sub-questions yet",
+        "drag": "Drag to reorder"
+      },
+      "render": {
+        "zoomImage": "Zoom image"
+      }
     }
   },
   "orgMaterials": {

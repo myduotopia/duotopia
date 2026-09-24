@@ -13,6 +13,7 @@ import type {
   QuestionCreateInput,
   QuestionGroup,
   QuestionGroupCreateInput,
+  QuestionGroupUpdateInput,
   QuestionListParams,
   QuestionListResponse,
   QuestionSource,
@@ -606,6 +607,18 @@ class ApiClient {
     return this.get<QuestionGroup>(
       `/api/question-bank/question-groups/${groupId}`,
     );
+  }
+
+  /** 整組替換（單交易）：group 欄位只送有改的；questions 帶 id 更新、無 id 新增、缺席刪除 */
+  async updateQuestionGroup(groupId: number, data: QuestionGroupUpdateInput) {
+    return this.patch<QuestionGroup>(
+      `/api/question-bank/question-groups/${groupId}`,
+      data,
+    );
+  }
+
+  async deleteQuestionGroup(groupId: number) {
+    return this.delete<void>(`/api/question-bank/question-groups/${groupId}`);
   }
 
   async findSimilarQuestions(stem: string, excludeId?: number) {

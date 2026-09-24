@@ -85,10 +85,10 @@ const CREATE_TYPES_ORDER: QuestionType[] = [
 /** 題型下拉的選項順序（同新增清單） */
 const TYPE_FILTERS: QuestionType[] = CREATE_TYPES_ORDER;
 
-/** 「新增題目 ▽」的題型清單；只有 multiple_choice 本期可用 */
+/** 「新增題目 ▽」的題型清單；選擇題與閱讀題組可用（#1082），其餘後續題型接上 */
 const CREATE_TYPES: { type: QuestionType; enabled: boolean }[] = [
   { type: "multiple_choice", enabled: true },
-  { type: "reading", enabled: false },
+  { type: "reading", enabled: true },
   { type: "cloze", enabled: false },
   { type: "fill_in", enabled: false },
   { type: "listening", enabled: false },
@@ -118,6 +118,8 @@ export interface QuestionBankTabProps {
   onCreateQuestion?: (type: QuestionType) => void;
   /** 點一列時的回呼（#1064 接編輯表單） */
   onSelectQuestion?: (question: Question) => void;
+  /** 點題組列 → 開題組編輯面板（#1082） */
+  onSelectGroup?: (group: QuestionGroupListRow) => void;
   /** 由外部觸發重新載入（例如新增完成後）；每次數值改變就 refetch */
   refreshKey?: number;
   /** 派發流程接上後傳入；未傳 = 派發鍵顯示但 disabled */
@@ -132,6 +134,7 @@ export default function QuestionBankTab({
   canCreate = true,
   onCreateQuestion,
   onSelectQuestion,
+  onSelectGroup,
   refreshKey = 0,
   onDispatch,
   onBulkEdit,
@@ -624,6 +627,7 @@ export default function QuestionBankTab({
                       key={`g-${item.id}`}
                       row={item}
                       typeLabel={typeLabel}
+                      onSelect={onSelectGroup}
                     />
                   );
                 }
@@ -903,13 +907,15 @@ function InlineVisibility({
 /** 選項全都短（≤ 12 字）且不超過 4 個 → 一列四格；否則兩欄 */
 const SHORT_OPTION_CHARS = 12;
 
-/** 題組列（#1082 骨架）：只顯示，不勾選、不快速編輯；完整列 UI 隨閱讀題組編輯器接上 */
+/** 題組列（#1082）：點標題開題組編輯面板；不勾選、不快速編輯（整組操作在面板內） */
 function GroupRow({
   row,
   typeLabel,
+  onSelect,
 }: {
   row: QuestionGroupListRow;
   typeLabel: (type: QuestionType) => string;
+  onSelect?: (row: QuestionGroupListRow) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -925,9 +931,16 @@ function GroupRow({
         />
       </td>
       <td className="px-4 py-2.5 text-gray-900">
-        <div className="line-clamp-2 break-words">
-          {row.title || row.preview}
-        </div>
+        <button
+          type="button"
+          onClick={() => onSelect?.(row)}
+          className={`text-left w-full ${onSelect ? "hover:underline" : "cursor-default"}`}
+          data-testid={`qb-group-title-${row.id}`}
+        >
+          <div className="line-clamp-2 break-words">
+            {row.title || row.preview || typeLabel(row.question_type)}
+          </div>
+        </button>
         <span className="text-xs text-gray-500">
           {t("questionBank.list.groupQuestionCount", {
             count: row.question_count,

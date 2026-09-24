@@ -17,8 +17,11 @@ import {
   mapUnitQuestions,
   normalizeStem,
   optionFilled,
+  toAiInputs,
   toCreateGroupInput,
   toCreateInput,
+  toUpdateGroupInput,
+  unitPassageByKey,
   unitQuestions,
   validateDraft,
   validateGroupDraft,
@@ -263,9 +266,11 @@ describe("題組草稿與單元（#1082 骨架）", () => {
     expect(q.sources).toEqual([{ id: 3, label: "s" }]);
     expect(q.exam_points).toEqual([]);
   });
-  it("validateGroupDraft：沒小題 → groupNeedsQuestions；小題錯誤往上冒；公開未選擋", () => {
+  it("validateGroupDraft：沒主圖文 → groupNeedsContent；沒小題 → groupNeedsQuestions；小題錯誤往上冒；公開未選擋", () => {
     const g = emptyGroupDraft("reading");
     g.visibility = "private";
+    expect(validateGroupDraft(g)).toBe("groupNeedsContent");
+    g.passage_text = "text";
     expect(validateGroupDraft(g)).toBe("groupNeedsQuestions");
     const q = draftWith("Q", [
       ["a", true],
@@ -511,5 +516,84 @@ describe("AI 套用（#1065）：只填空的", () => {
     expect(b.extraOptionsShown).toBe(true);
     expect(b.allow_multiple).toBe(true);
     expect(b.options[4].is_correct).toBe(true);
+  });
+
+  it("toCreateGroupInput：有 layout 時 passage_text 由 layout 拼出（去標記）", () => {
+    const g = emptyGroupDraft("reading");
+    g.visibility = "private";
+    g.passage_text = "old copy";
+    g.layout = {
+      version: 1,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [
+                { type: "heading", level: 2, text: "Vivaldi" },
+                { type: "paragraph", text: "He wrote **500** pieces." },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    g.questions = [
+      draftWith("Q1", [
+        ["a", true],
+        ["b", false],
+      ]),
+    ];
+    expect(toCreateGroupInput(g).passage_text).toBe(
+      "Vivaldi
+
+He wrote 500 pieces.",
+    );
+  });
+  it("toUpdateGroupInput：帶 existingId 的小題送 id，新小題不送；不含題型／歸屬", () => {
+    const g = emptyGroupDraft("reading");
+    g.visibility = "public";
+    g.passage_text = "text";
+    const kept = draftWith("Q1", [
+      ["a", true],
+      ["b", false],
+    ]);
+    kept.existingId = 42;
+    const fresh = draftWith("Q2", [
+      ["c", true],
+      ["d", false],
+    ]);
+    g.questions = [kept, fresh];
+    const payload = toUpdateGroupInput(g);
+    expect(payload).not.toHaveProperty("question_type");
+    expect(payload).not.toHaveProperty("organization_id");
+    expect(payload.visibility).toBe("public");
+    expect(payload.questions?.map((q) => [q.id, q.group_order])).toEqual([
+      [42, 0],
+      [undefined, 1],
+    ]);
+  });
+  it("AI 輸入：題組小題附主圖文純文字，單題沒有", () => {
+    const g = emptyGroupDraft("reading");
+    g.passage_text = "The passage.";
+    const sub = draftWith("", [
+      ["a", true],
+      ["b", false],
+    ]);
+    g.questions = [sub];
+    const solo = draftWith("Solo", [
+      ["a", true],
+      ["b", false],
+    ]);
+    const units: UnitDraft[] = [
+      { kind: "group", draft: g },
+      { kind: "single", draft: solo },
+    ];
+    const map = unitPassageByKey(units);
+    expect(map.get(sub.key)).toBe("The passage.");
+    expect(map.has(solo.key)).toBe(false);
+    const inputs = toAiInputs(unitQuestions(units), map);
+    expect(inputs[0].passage).toBe("The passage.");
+    expect(inputs[1]).not.toHaveProperty("passage");
   });
 });

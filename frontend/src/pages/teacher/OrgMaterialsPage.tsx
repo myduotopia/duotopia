@@ -14,7 +14,7 @@ import MaterialsPageTabs, {
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
 import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
-import type { Question } from "@/types/questionBank";
+import type { Question, QuestionType } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
 import { ProgramDialog } from "@/components/ProgramDialog";
@@ -63,6 +63,10 @@ export default function OrgMaterialsPage() {
     open: boolean;
     /** 1 題＝編輯、≥2 題＝批次編輯、null＝新增 */
     questions: Question[] | null;
+    /** 題組編輯（#1082）：帶 id */
+    groupId?: number | null;
+    /** 新增時的題型（reading 開題組卡） */
+    createType?: QuestionType;
   }>({ open: false, questions: null });
   const [questionRefreshKey, setQuestionRefreshKey] = useState(0);
 
@@ -698,12 +702,15 @@ export default function OrgMaterialsPage() {
               scope="organization"
               organizationId={selectedOrganization?.id}
               refreshKey={questionRefreshKey}
-              onCreateQuestion={() =>
-                setQuestionDialog({ open: true, questions: null })
-              }
+              onCreateQuestion={(type) =>
+              setQuestionDialog({ open: true, questions: null, createType: type })
+            }
               onSelectQuestion={(q) =>
                 setQuestionDialog({ open: true, questions: [q] })
               }
+            onSelectGroup={(g) =>
+              setQuestionDialog({ open: true, questions: null, groupId: g.id })
+            }
               onBulkEdit={(qs) =>
                 setQuestionDialog({ open: true, questions: qs })
               }
@@ -1336,6 +1343,8 @@ export default function OrgMaterialsPage() {
         <MultipleChoiceQuestionSheet
           open={questionDialog.open}
           questions={questionDialog.questions}
+          groupId={questionDialog.groupId ?? null}
+          createType={questionDialog.createType}
           programs={programs}
           organizationId={selectedOrganization?.id}
           readOnly={

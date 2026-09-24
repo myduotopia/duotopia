@@ -1,8 +1,8 @@
 /**
- * 題庫編輯面板右欄：依「單元」kind 分流的卡片列表（Issue #1082 骨架）。
+ * 題庫編輯面板右欄：依「單元」kind 分流的卡片列表（Issue #1082）。
  *
- * - `single` → 既有 `QuestionCard`（選擇題）
- * - `group`  → `GroupCardPlaceholder`：閱讀題組編輯器在 #1082 下一段接上，本段只佔位
+ * - `single` → `QuestionCard`（選擇題）
+ * - `group`  → `GroupCard`（閱讀／克漏字題組：主圖文區塊編輯器 + 小題）
  *
  * 同一個列表、同一個 sheet，不為題型另開路由或複製 sheet（與批改頁「同路由分 Panel」同原則）。
  * DOM id 一律 `question-card-<unitKey>`，讓 sheet 的捲動／定位對單題與題組一致。
@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import type { Program } from "@/types";
+import GroupCard from "./GroupCard";
 import QuestionCard from "./QuestionCard";
 import {
   unitKey,
@@ -34,33 +35,11 @@ export interface QuestionUnitListProps {
   disabled: boolean;
 }
 
-function GroupCardPlaceholder({
-  index,
-  draft,
-}: {
-  index: number;
-  draft: GroupDraft;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div
-      id={`question-card-${draft.key}`}
-      className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500"
-      data-testid={`qb-group-card-${draft.key}`}
-    >
-      <span className="font-medium text-gray-700">
-        {index + 1}. {t(`questionBank.types.${draft.question_type}`)}
-      </span>
-      <span className="ml-2">{t("questionBank.comingSoon")}</span>
-    </div>
-  );
-}
-
 export default function QuestionUnitList({
   units,
   errorKeys,
   onChangeQuestion,
-  onChangeGroup: _onChangeGroup,
+  onChangeGroup,
   onRemove,
   ttsSettings,
   programs,
@@ -70,8 +49,11 @@ export default function QuestionUnitList({
   const { t } = useTranslation();
   return (
     <>
-      {units.map((u, i) =>
-        u.kind === "single" ? (
+      {units.map((u, i) => {
+        const errorMessage = errorKeys[i]
+          ? t(`questionBank.form.errors.${errorKeys[i]}`)
+          : null;
+        return u.kind === "single" ? (
           <QuestionCard
             key={unitKey(u)}
             index={i}
@@ -81,18 +63,25 @@ export default function QuestionUnitList({
             excludeId={u.draft.existingId ?? undefined}
             ttsSettings={ttsSettings}
             programs={programs}
-            errorMessage={
-              errorKeys[i]
-                ? t(`questionBank.form.errors.${errorKeys[i]}`)
-                : null
-            }
+            errorMessage={errorMessage}
             readOnly={readOnly}
             disabled={disabled}
           />
         ) : (
-          <GroupCardPlaceholder key={unitKey(u)} index={i} draft={u.draft} />
-        ),
-      )}
+          <GroupCard
+            key={unitKey(u)}
+            index={i}
+            draft={u.draft}
+            onChange={(next) => onChangeGroup(u.draft.key, next)}
+            onRemove={onRemove ? () => onRemove(u.draft.key) : undefined}
+            ttsSettings={ttsSettings}
+            programs={programs}
+            errorMessage={errorMessage}
+            readOnly={readOnly}
+            disabled={disabled}
+          />
+        );
+      })}
     </>
   );
 }

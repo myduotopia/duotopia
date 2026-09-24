@@ -28,12 +28,14 @@ import type {
   QuestionCreateInput,
   QuestionGroup,
   QuestionGroupCreateInput,
+  QuestionGroupUpdateInput,
   QuestionType,
   QuestionUpdateInput,
   QuestionVisibility,
   SimilarQuestionsResponse,
   StimulusType,
 } from "@/types/questionBank";
+import { layoutToPlainText } from "./layoutInline";
 import { sourceToItem } from "./sourcesCombobox";
 
 /** 預設顯示 A–D 四格；按「新增選項」才展開到 6 格 */
@@ -203,9 +205,9 @@ export function normalizeStem(stem: string): string {
  */
 export function validateDraft(
   d: QuestionDraft,
-  opts: { duplicateInBatch?: boolean } = {},
+  opts: { duplicateInBatch?: boolean; stemOptional?: boolean } = {},
 ): string | null {
-  if (!draftHasContent(d)) return "stemRequired";
+  if (!opts.stemOptional && !draftHasContent(d)) return "stemRequired";
   if (d.similar?.exact_duplicate) return "duplicate";
   if (opts.duplicateInBatch) return "duplicateInBatch";
   const filled = d.options.filter(optionFilled);
@@ -339,6 +341,7 @@ export function emptyGroupQuestion(g: GroupDraft): QuestionDraft {
 }
 
 export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
+  const first = g.questions[0];
   const draft: GroupDraft = {
     key: nextKey(),
     question_type: g.question_type,
@@ -350,9 +353,15 @@ export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
     passage_text: g.passage_text ?? "",
     questions: [],
     grade: [g.grade_min, g.grade_max],
-    program_link: null,
+    // 題組層沒有教材關聯／來源欄位：以第一個小題的值當左欄預填（各小題仍各自帶）
+    program_link: first?.program_links[0]
+      ? {
+          program_id: first.program_links[0].program_id,
+          lesson_id: first.program_links[0].lesson_id,
+        }
+      : null,
     visibility: g.visibility,
-    sources: [],
+    sources: first ? first.sources.map(sourceToItem) : [],
     serverError: null,
     existingId: g.id,
   };
@@ -363,15 +372,45 @@ export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
   return draft;
 }
 
-/** 題組驗證：至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */
+/** 克漏字小題題幹可空 */
+export function groupStemOptional(g: GroupDraft): boolean {
+  return g.question_type === "cloze";
+}
+
+/** 題組有內容 = 有排版、有文字版或有圖 */
+export function groupHasStimulus(g: GroupDraft): boolean {
+  return (
+    (g.layout !== null && g.layout.rows.length > 0) ||
+    g.passage_text.trim() !== "" ||
+    g.image_url !== null
+  );
+}
+
+/** 題組驗證：主圖文、至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */
 export function validateGroupDraft(g: GroupDraft): string | null {
+  if (!groupHasStimulus(g)) return "groupNeedsContent";
   if (g.questions.length === 0) return "groupNeedsQuestions";
+  const stemOptional = groupStemOptional(g);
   for (const q of g.questions) {
-    const err = validateDraft({ ...q, visibility: g.visibility });
+    const err = validateDraft({ ...q, visibility: g.visibility }, { stemOptional });
     if (err) return err;
   }
   if (g.visibility === null) return "visibilityRequired";
   return null;
+}
+
+/** 純文字副本：有排版就由排版拼；沒有（或排版沒有文字）才用老師手打的文字版 */
+export function groupPassageText(g: GroupDraft): string | null {
+  const derived = layoutToPlainText(g.layout);
+  const text = derived || g.passage_text.trim();
+  return text || null;
+}
+
+function groupQuestionInput(q: QuestionDraft, i: number) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { question_type, organization_id, school_id, visibility, ...rest } =
+    toCreateInput(q);
+  return { ...rest, group_order: i };
 }
 
 /** 題組送後端的 payload：小題不帶 question_type／歸屬／公開（跟隨題組） */
@@ -383,21 +422,47 @@ export function toCreateGroupInput(
     question_type: g.question_type,
     stimulus_type: g.stimulus_type,
     title: g.title.trim() || null,
-    passage_text: g.passage_text.trim() || null,
+    passage_text: groupPassageText(g),
     image_url: g.image_url,
     layout: g.layout,
     glossary: g.glossary.length > 0 ? g.glossary : null,
     grade_min: g.grade[0],
     grade_max: g.grade[1],
     visibility: g.visibility ?? "private",
-    questions: g.questions.map((q, i) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { question_type, organization_id, school_id, visibility, ...rest } =
-        toCreateInput(q);
-      return { ...rest, group_order: i };
-    }),
+    questions: g.questions.map(groupQuestionInput),
     organization_id: organizationId ?? null,
   };
+}
+
+/** 編輯既有題組的 PATCH payload：整組欄位 + 小題整份對齊（帶 existingId 的更新、其餘新增） */
+export function toUpdateGroupInput(g: GroupDraft): QuestionGroupUpdateInput {
+  return {
+    stimulus_type: g.stimulus_type,
+    title: g.title.trim() || null,
+    passage_text: groupPassageText(g),
+    image_url: g.image_url,
+    layout: g.layout,
+    glossary: g.glossary.length > 0 ? g.glossary : null,
+    grade_min: g.grade[0],
+    grade_max: g.grade[1],
+    visibility: g.visibility ?? "private",
+    questions: g.questions.map((q, i) => ({
+      ...groupQuestionInput(q, i),
+      ...(q.existingId !== null ? { id: q.existingId } : {}),
+    })),
+  };
+}
+
+/** 題組小題的 AI 上下文：key → 主圖文純文字（單題沒有） */
+export function unitPassageByKey(units: UnitDraft[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const u of units) {
+    if (u.kind !== "group") continue;
+    const passage = groupPassageText(u.draft);
+    if (!passage) continue;
+    for (const q of u.draft.questions) map.set(q.key, passage);
+  }
+  return map;
 }
 
 /** 單元內所有單題草稿（含題組小題），供批次語音／AI／重複偵測沿用單題邏輯 */
@@ -430,31 +495,41 @@ export function unitKey(u: UnitDraft): string {
 export function unitHasContent(u: UnitDraft): boolean {
   return u.kind === "single"
     ? draftHasContent(u.draft)
-    : u.draft.questions.length > 0 ||
-        u.draft.passage_text.trim() !== "" ||
-        u.draft.image_url !== null;
+    : u.draft.questions.length > 0 || groupHasStimulus(u.draft);
 }
 
 // --------------------------------------------------------------------------- #
 // AI 工具（#1065）：只填空的，不動老師已設的
 // --------------------------------------------------------------------------- #
 
-/** 可送給 AI 的題：有題幹且有填的選項 ≥ 2 */
-export function draftsEligibleForAi(drafts: QuestionDraft[]): QuestionDraft[] {
+/** 可送給 AI 的題：有題幹（或題組小題有主圖文上下文）且有填的選項 ≥ 2 */
+export function draftsEligibleForAi(
+  drafts: QuestionDraft[],
+  passageByKey: Map<string, string> = new Map(),
+): QuestionDraft[] {
   return drafts.filter(
-    (d) => draftHasContent(d) && d.options.filter(optionFilled).length >= 2,
+    (d) =>
+      (draftHasContent(d) || passageByKey.has(d.key)) &&
+      d.options.filter(optionFilled).length >= 2,
   );
 }
 
-/** 轉成 API 輸入；options 只送有填的（index 對應 applyAiAnswers 用 filled 順序） */
-export function toAiInputs(drafts: QuestionDraft[]): AiQuestionInput[] {
-  return drafts.map((d) => ({
-    key: d.key,
-    stem: d.stem.trim(),
-    options: d.options
-      .filter(optionFilled)
-      .map((o) => o.text.trim() || "(圖片選項)"),
-  }));
+/** 轉成 API 輸入；options 只送有填的（index 對應 applyAiAnswers 用 filled 順序）；題組小題附主圖文 */
+export function toAiInputs(
+  drafts: QuestionDraft[],
+  passageByKey: Map<string, string> = new Map(),
+): AiQuestionInput[] {
+  return drafts.map((d) => {
+    const passage = passageByKey.get(d.key);
+    return {
+      key: d.key,
+      stem: d.stem.trim(),
+      options: d.options
+        .filter(optionFilled)
+        .map((o) => o.text.trim() || "(圖片選項)"),
+      ...(passage ? { passage } : {}),
+    };
+  });
 }
 
 export interface ApplyResult {

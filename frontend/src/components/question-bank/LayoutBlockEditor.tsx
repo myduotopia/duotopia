@@ -1,0 +1,393 @@
+/**
+ * 區塊編輯器裡「一個區塊」的表單（Issue #1082）。
+ *
+ * - heading：層級（2/3）＋文字
+ * - paragraph：textarea，工具列插入 `**粗體**`／`__底線__` 標記（克漏字 `{{n}}` 由克漏字段接）
+ * - image：上傳（與選項圖片同一條 uploadImageFile 路徑）＋替代文字／圖說／對齊／最大寬度／框線
+ * - dialogue：說話者＋內容的行列表
+ *
+ * 只負責欄位，不知道自己在哪一欄；拖曳握把與刪除由 LayoutEditor 包在外面。
+ */
+
+import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Bold, ImagePlus, Loader2, Plus, Trash2, Underline } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { LayoutBlock, LayoutDialogueLine } from "@/types/questionBank";
+import type { EditorBlock } from "./layoutEditorModel";
+import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
+
+export interface LayoutBlockEditorProps {
+  block: EditorBlock;
+  onChange: (patch: Partial<LayoutBlock>) => void;
+  disabled?: boolean;
+  testId: string;
+}
+
+/** 在 textarea 目前選取範圍兩側包上標記；沒選取就插入一對標記讓游標停在中間 */
+function wrapSelection(
+  el: HTMLTextAreaElement | null,
+  value: string,
+  marker: "**" | "__",
+): { next: string; cursor: number } {
+  const start = el?.selectionStart ?? value.length;
+  const end = el?.selectionEnd ?? value.length;
+  const selected = value.slice(start, end);
+  const next = `${value.slice(0, start)}${marker}${selected}${marker}${value.slice(end)}`;
+  return {
+    next,
+    cursor: selected ? end + marker.length * 2 : start + marker.length,
+  };
+}
+
+function MarkupToolbar({
+  onWrap,
+  disabled,
+  testId,
+}: {
+  onWrap: (marker: "**" | "__") => void;
+  disabled?: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex gap-1">
+      <button
+        type="button"
+        onClick={() => onWrap("**")}
+        disabled={disabled}
+        className="rounded border border-gray-200 p-1 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+        title={t("questionBank.group.layout.bold")}
+        aria-label={t("questionBank.group.layout.bold")}
+        data-testid={`${testId}-bold`}
+      >
+        <Bold size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onWrap("__")}
+        disabled={disabled}
+        className="rounded border border-gray-200 p-1 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+        title={t("questionBank.group.layout.underline")}
+        aria-label={t("questionBank.group.layout.underline")}
+        data-testid={`${testId}-underline`}
+      >
+        <Underline size={14} />
+      </button>
+    </div>
+  );
+}
+
+function TextBlockFields({
+  block,
+  onChange,
+  disabled,
+  testId,
+}: {
+  block: Extract<EditorBlock, { type: "heading" | "paragraph" }>;
+  onChange: (patch: Partial<LayoutBlock>) => void;
+  disabled?: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const wrap = (marker: "**" | "__") => {
+    const { next, cursor } = wrapSelection(ref.current, block.text, marker);
+    onChange({ text: next });
+    window.setTimeout(() => {
+      ref.current?.focus();
+      ref.current?.setSelectionRange(cursor, cursor);
+    }, 0);
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        {block.type === "heading" && (
+          <Select
+            value={String(block.level)}
+            onValueChange={(v) => onChange({ level: Number(v) as 2 | 3 })}
+            disabled={disabled}
+          >
+            <SelectTrigger
+              className="h-7 w-20 text-xs"
+              data-testid={`${testId}-level`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="2">H2</SelectItem>
+              <SelectItem value="3">H3</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+        <MarkupToolbar onWrap={wrap} disabled={disabled} testId={testId} />
+      </div>
+      <Textarea
+        ref={ref}
+        value={block.text}
+        onChange={(e) => onChange({ text: e.target.value })}
+        rows={block.type === "heading" ? 1 : 4}
+        placeholder={t(
+          block.type === "heading"
+            ? "questionBank.group.layout.headingPlaceholder"
+            : "questionBank.group.layout.paragraphPlaceholder",
+        )}
+        disabled={disabled}
+        className={block.type === "heading" ? "min-h-0 font-semibold" : "min-h-[96px]"}
+        data-testid={`${testId}-text`}
+      />
+    </div>
+  );
+}
+
+function ImageBlockFields({
+  block,
+  onChange,
+  disabled,
+  testId,
+}: {
+  block: Extract<EditorBlock, { type: "image" }>;
+  onChange: (patch: Partial<LayoutBlock>) => void;
+  disabled?: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const url = await uploadImageFile(file, t);
+      if (url) onChange({ url });
+    } finally {
+      setUploading(false);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={VALID_IMAGE_TYPES.join(",")}
+        className="hidden"
+        disabled={disabled || uploading}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleFile(f);
+          e.target.value = "";
+        }}
+        data-testid={`${testId}-file`}
+      />
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled || uploading}
+          className="flex h-24 w-32 shrink-0 items-center justify-center overflow-hidden rounded border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+          aria-label={t("questionBank.group.layout.imageUpload")}
+          data-testid={`${testId}-upload`}
+        >
+          {uploading ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : block.url ? (
+            <img src={block.url} alt="" className="h-full w-full object-contain" />
+          ) : (
+            <span className="flex flex-col items-center gap-1 text-xs">
+              <ImagePlus size={18} />
+              {t("questionBank.group.layout.imageUpload")}
+            </span>
+          )}
+        </button>
+        <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+          <Input
+            value={block.alt ?? ""}
+            onChange={(e) => onChange({ alt: e.target.value })}
+            placeholder={t("questionBank.group.layout.imageAlt")}
+            className="h-8 text-xs"
+            disabled={disabled}
+            data-testid={`${testId}-alt`}
+          />
+          <Input
+            value={block.caption ?? ""}
+            onChange={(e) => onChange({ caption: e.target.value || undefined })}
+            placeholder={t("questionBank.group.layout.imageCaption")}
+            className="h-8 text-xs"
+            disabled={disabled}
+            data-testid={`${testId}-caption`}
+          />
+          <Select
+            value={block.align ?? "center"}
+            onValueChange={(v) =>
+              onChange({ align: v as "left" | "center" | "right" })
+            }
+            disabled={disabled}
+          >
+            <SelectTrigger className="h-8 text-xs" data-testid={`${testId}-align`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="left">
+                {t("questionBank.group.layout.alignLeft")}
+              </SelectItem>
+              <SelectItem value="center">
+                {t("questionBank.group.layout.alignCenter")}
+              </SelectItem>
+              <SelectItem value="right">
+                {t("questionBank.group.layout.alignRight")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={2000}
+              value={block.maxWidth ?? ""}
+              onChange={(e) =>
+                onChange({
+                  maxWidth: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+              placeholder={t("questionBank.group.layout.imageMaxWidth")}
+              className="h-8 text-xs"
+              disabled={disabled}
+              data-testid={`${testId}-max-width`}
+            />
+            <label className="flex shrink-0 items-center gap-1 text-xs text-gray-600">
+              <Checkbox
+                checked={block.frame ?? false}
+                onCheckedChange={(c) => onChange({ frame: c === true })}
+                disabled={disabled}
+                data-testid={`${testId}-frame`}
+              />
+              {t("questionBank.group.layout.imageFrame")}
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DialogueBlockFields({
+  block,
+  onChange,
+  disabled,
+  testId,
+}: {
+  block: Extract<EditorBlock, { type: "dialogue" }>;
+  onChange: (patch: Partial<LayoutBlock>) => void;
+  disabled?: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const setLines = (lines: LayoutDialogueLine[]) => onChange({ lines });
+  const patchLine = (i: number, p: Partial<LayoutDialogueLine>) =>
+    setLines(block.lines.map((l, idx) => (idx === i ? { ...l, ...p } : l)));
+  return (
+    <div className="space-y-1.5">
+      {block.lines.map((line, i) => (
+        <div key={i} className="flex items-start gap-1.5">
+          <Input
+            value={line.speaker}
+            onChange={(e) => patchLine(i, { speaker: e.target.value })}
+            placeholder={t("questionBank.group.layout.dialogueSpeaker")}
+            className="h-8 w-24 shrink-0 text-xs"
+            disabled={disabled}
+            data-testid={`${testId}-speaker-${i}`}
+          />
+          <Textarea
+            value={line.text}
+            onChange={(e) => patchLine(i, { text: e.target.value })}
+            placeholder={t("questionBank.group.layout.dialogueText")}
+            rows={1}
+            className="min-h-0 flex-1 text-sm"
+            disabled={disabled}
+            data-testid={`${testId}-line-${i}`}
+          />
+          <button
+            type="button"
+            onClick={() => setLines(block.lines.filter((_, idx) => idx !== i))}
+            disabled={disabled || block.lines.length <= 1}
+            className="mt-1.5 text-gray-400 hover:text-red-600 disabled:opacity-40"
+            aria-label={t("questionBank.group.layout.removeLine")}
+            data-testid={`${testId}-remove-line-${i}`}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs text-gray-600"
+          onClick={() => setLines([...block.lines, { speaker: "", text: "" }])}
+          disabled={disabled}
+          data-testid={`${testId}-add-line`}
+        >
+          <Plus size={12} />
+          {t("questionBank.group.layout.addLine")}
+        </Button>
+        <label className="flex items-center gap-1 text-xs text-gray-600">
+          <Checkbox
+            checked={block.frame !== false}
+            onCheckedChange={(c) => onChange({ frame: c === true })}
+            disabled={disabled}
+          />
+          {t("questionBank.group.layout.frame")}
+        </label>
+      </div>
+    </div>
+  );
+}
+
+export default function LayoutBlockEditor({
+  block,
+  onChange,
+  disabled,
+  testId,
+}: LayoutBlockEditorProps) {
+  switch (block.type) {
+    case "heading":
+    case "paragraph":
+      return (
+        <TextBlockFields
+          block={block}
+          onChange={onChange}
+          disabled={disabled}
+          testId={testId}
+        />
+      );
+    case "image":
+      return (
+        <ImageBlockFields
+          block={block}
+          onChange={onChange}
+          disabled={disabled}
+          testId={testId}
+        />
+      );
+    case "dialogue":
+      return (
+        <DialogueBlockFields
+          block={block}
+          onChange={onChange}
+          disabled={disabled}
+          testId={testId}
+        />
+      );
+  }
+}

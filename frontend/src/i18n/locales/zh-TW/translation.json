@@ -5976,7 +5976,10 @@
       "deleteFailed": "刪除失敗",
       "createdCount": "已新增 {{count}} 題",
       "partiallySaved": "已新增 {{saved}} 題，{{failed}} 題失敗，請修正後再儲存",
-      "bulkSaved": "已更新 {{updated}} 題、新增 {{created}} 題"
+      "bulkSaved": "已更新 {{updated}} 題、新增 {{created}} 題",
+      "groupCreated": "題組已新增",
+      "groupUpdated": "題組已更新",
+      "groupDeleted": "題組已刪除"
     },
     "form": {
       "titleCreate": "新增選擇題",
@@ -6018,7 +6021,8 @@
         "atQuestion": "第 {{n}} 題：{{message}}",
         "examPointRequired": "請選擇考點",
         "visibilityRequired": "請選擇是否公開分享考題",
-        "groupNeedsQuestions": "題組至少要有一個小題"
+        "groupNeedsQuestions": "題組至少要有一個小題",
+        "groupNeedsContent": "題組需要文章、圖片或排版內容"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
@@ -6078,7 +6082,8 @@
       },
       "audioGenerated": "語音已生成",
       "audioPlayFailed": "無法播放語音（{{code}}）",
-      "titleBulkEdit": "批次編輯 {{count}} 題"
+      "titleBulkEdit": "批次編輯 {{count}} 題",
+      "stemOptionalPlaceholder": "題幹（克漏字可留空）"
     },
     "list": {
       "selectAll": "全選／取消全選",
@@ -6106,6 +6111,77 @@
       "bulkEdit": "編輯",
       "bulkEditTypeMismatch": "題型不同的題目無法一起編輯",
       "bulkEditNoPermission": "勾選的題目沒有編輯權限"
+    },
+    "group": {
+      "titleCreate": "新增{{type}}",
+      "titleEdit": "編輯{{type}}",
+      "titlePlaceholder": "題組標題（選填，列表顯示用）",
+      "loading": "載入題組中…",
+      "loadFailed": "載入題組失敗",
+      "confirmDelete": "確定要刪除整個題組（含所有小題）嗎？已派發的考卷不受影響。",
+      "stimulus": {
+        "passage": "文章",
+        "image": "圖片",
+        "mixed": "圖文混合"
+      },
+      "layout": {
+        "title": "主圖文排版",
+        "addRow": "新增列",
+        "ratio": "欄位比例",
+        "row": "列",
+        "section": "框",
+        "wrap": "框起來",
+        "unwrap": "解開",
+        "frame": "框線",
+        "removeRow": "刪除列",
+        "addBlock": "新增區塊",
+        "removeBlock": "刪除區塊",
+        "dragBlock": "拖曳區塊",
+        "dragRow": "拖曳列",
+        "block": {
+          "heading": "標題",
+          "paragraph": "段落",
+          "image": "圖片",
+          "dialogue": "對話"
+        },
+        "bold": "粗體",
+        "underline": "底線",
+        "headingPlaceholder": "標題文字",
+        "paragraphPlaceholder": "段落內容（**粗體**、__底線__）",
+        "imageUpload": "上傳圖片",
+        "imageAlt": "替代文字",
+        "imageCaption": "圖說",
+        "imageMaxWidth": "最大寬度 (px)",
+        "imageFrame": "框線",
+        "alignLeft": "靠左",
+        "alignCenter": "置中",
+        "alignRight": "靠右",
+        "dialogueSpeaker": "說話者",
+        "dialogueText": "內容",
+        "addLine": "新增一行",
+        "removeLine": "刪除這行",
+        "preview": "預覽",
+        "previewDesktop": "桌機",
+        "previewMobile": "手機",
+        "empty": "還沒有內容，按「新增列」開始排版",
+        "emptyColumn": "把區塊拖到這裡，或新增區塊"
+      },
+      "glossary": {
+        "title": "單字註解",
+        "word": "單字",
+        "zh": "中文",
+        "add": "新增註解",
+        "remove": "刪除註解"
+      },
+      "questions": {
+        "title": "小題（{{count}}）",
+        "add": "新增小題",
+        "empty": "還沒有小題",
+        "drag": "拖曳排序"
+      },
+      "render": {
+        "zoomImage": "放大圖片"
+      }
     }
   },
   "orgMaterials": {

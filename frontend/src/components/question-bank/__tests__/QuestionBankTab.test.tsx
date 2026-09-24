@@ -202,7 +202,7 @@ describe("QuestionBankTab", () => {
     expect(listQuestions).not.toHaveBeenCalled();
   });
 
-  it("「新增題目」下拉只有選擇題可點，其餘 disabled；點選擇題呼叫 onCreateQuestion", async () => {
+  it("「新增題目」下拉：選擇題與閱讀題組可點，其餘 disabled；點選呼叫 onCreateQuestion(type)", async () => {
     listQuestions.mockResolvedValue(respond([]));
     const onCreate = vi.fn();
     const user = userEvent.setup();
@@ -212,11 +212,13 @@ describe("QuestionBankTab", () => {
     await user.click(screen.getByTestId("question-bank-add"));
     const mc = await screen.findByTestId("question-bank-add-multiple_choice");
     const reading = screen.getByTestId("question-bank-add-reading");
-    expect(reading.getAttribute("data-disabled")).not.toBeNull();
+    const cloze = screen.getByTestId("question-bank-add-cloze");
+    expect(cloze.getAttribute("data-disabled")).not.toBeNull();
+    expect(reading.getAttribute("data-disabled")).toBeNull();
     expect(mc.getAttribute("data-disabled")).toBeNull();
 
-    await user.click(mc);
-    expect(onCreate).toHaveBeenCalledWith("multiple_choice");
+    await user.click(reading);
+    expect(onCreate).toHaveBeenCalledWith("reading");
   });
 
   it("沒傳 onCreateQuestion 時點選擇題顯示提示", async () => {
