@@ -11,11 +11,18 @@ import {
   draftFromQuestion,
   emptyBatchDefaults,
   emptyDraft,
+  emptyGroupDraft,
+  emptyGroupQuestion,
   findBatchDuplicateKeys,
+  mapUnitQuestions,
   normalizeStem,
   optionFilled,
+  toCreateGroupInput,
   toCreateInput,
+  unitQuestions,
   validateDraft,
+  validateGroupDraft,
+  type UnitDraft,
 } from "../questionDraft";
 import type { ExamPoint, Question } from "@/types/questionBank";
 
@@ -214,6 +221,7 @@ describe("toCreateInput", () => {
       { id: 12, label: "b" },
     ];
     const payload = toCreateInput(d, "org-1");
+    expect(payload.question_type).toBe("multiple_choice");
     expect(payload.stem).toBe("Pick one");
     expect(payload.options).toEqual([
       { text: "alpha", is_correct: true, image_url: null },
@@ -235,6 +243,92 @@ describe("toCreateInput", () => {
     ]);
     d.visibility = "private";
     expect(toCreateInput(d).program_links).toEqual([]);
+  });
+});
+
+describe("題組草稿與單元（#1082 骨架）", () => {
+  it("emptyDraft 預設 multiple_choice、無題組；emptyGroupQuestion 帶題組的題型／年段／公開／來源", () => {
+    const d = emptyDraft();
+    expect(d.question_type).toBe("multiple_choice");
+    expect(d.groupKey).toBeNull();
+    const g = emptyGroupDraft("reading");
+    g.grade = [7, 9];
+    g.visibility = "public";
+    g.sources = [{ id: 3, label: "s" }];
+    const q = emptyGroupQuestion(g);
+    expect(q.question_type).toBe("reading");
+    expect(q.groupKey).toBe(g.key);
+    expect(q.grade).toEqual([7, 9]);
+    expect(q.visibility).toBe("public");
+    expect(q.sources).toEqual([{ id: 3, label: "s" }]);
+    expect(q.exam_points).toEqual([]);
+  });
+  it("validateGroupDraft：沒小題 → groupNeedsQuestions；小題錯誤往上冒；公開未選擋", () => {
+    const g = emptyGroupDraft("reading");
+    g.visibility = "private";
+    expect(validateGroupDraft(g)).toBe("groupNeedsQuestions");
+    const q = draftWith("Q", [
+      ["a", true],
+      ["b", false],
+    ]);
+    g.questions = [q];
+    expect(validateGroupDraft(g)).toBeNull();
+    g.questions = [draftWith("", [["a", true]])];
+    expect(validateGroupDraft(g)).toBe("stemRequired");
+    g.questions = [q];
+    g.visibility = null;
+    expect(validateGroupDraft(g)).toBe("visibilityRequired");
+  });
+  it("toCreateGroupInput：小題不帶題型／歸屬／公開，依序帶 group_order；空 glossary → null", () => {
+    const g = emptyGroupDraft("reading");
+    g.title = " Vivaldi ";
+    g.passage_text = "text";
+    g.visibility = "organization_only";
+    g.grade = [7, 9];
+    g.questions = [
+      draftWith("Q1", [
+        ["a", true],
+        ["b", false],
+      ]),
+      draftWith("Q2", [
+        ["c", false],
+        ["d", true],
+      ]),
+    ];
+    const payload = toCreateGroupInput(g, "org-9");
+    expect(payload.question_type).toBe("reading");
+    expect(payload.title).toBe("Vivaldi");
+    expect(payload.visibility).toBe("organization_only");
+    expect(payload.organization_id).toBe("org-9");
+    expect(payload.glossary).toBeNull();
+    expect(payload.grade_min).toBe(7);
+    expect(payload.questions.map((q) => q.group_order)).toEqual([0, 1]);
+    const first = payload.questions[0] as Record<string, unknown>;
+    expect(first.question_type).toBeUndefined();
+    expect(first.visibility).toBeUndefined();
+    expect(first.organization_id).toBeUndefined();
+    expect(first.stem).toBe("Q1");
+  });
+  it("unitQuestions / mapUnitQuestions 含題組小題", () => {
+    const g = emptyGroupDraft("reading");
+    g.questions = [emptyGroupQuestion(g), emptyGroupQuestion(g)];
+    const s = emptyDraft();
+    const units: UnitDraft[] = [
+      { kind: "single", draft: s },
+      { kind: "group", draft: g },
+    ];
+    expect(unitQuestions(units).map((q) => q.key)).toEqual([
+      s.key,
+      g.questions[0].key,
+      g.questions[1].key,
+    ]);
+    const next = mapUnitQuestions(units, (d) => ({ ...d, stem: "X" }));
+    expect(next[0].kind === "single" && next[0].draft.stem).toBe("X");
+    expect(
+      next[1].kind === "group" && next[1].draft.questions.every((q) => q.stem === "X"),
+    ).toBe(true);
+    // 原陣列不變
+    expect(s.stem).toBe("");
   });
 });
 

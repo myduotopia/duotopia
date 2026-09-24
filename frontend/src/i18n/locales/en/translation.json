@@ -5973,7 +5973,8 @@
         "duplicateInBatch": "Duplicate question within this batch",
         "atQuestion": "Question {{n}}: {{message}}",
         "examPointRequired": "Pick at least one exam point",
-        "visibilityRequired": "Choose whether to share the questions"
+        "visibilityRequired": "Choose whether to share the questions",
+        "groupNeedsQuestions": "A group needs at least one question"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -6038,6 +6039,7 @@
     "list": {
       "selectAll": "Select / deselect all",
       "selectRow": "Select this question",
+      "groupQuestionCount": "{{count}} questions",
       "selected": "{{count}} selected",
       "dirty": "{{count}} with unsaved changes",
       "save": "Save",

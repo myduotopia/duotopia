@@ -54,6 +54,100 @@ export interface QuestionSourceCreateInput {
   organization_id?: string | null;
 }
 
+
+// ---- 題組（#1079 閱讀題組）----
+
+export type StimulusType = "passage" | "audio" | "dialogue" | "image" | "mixed";
+
+/**
+ * 題組主圖文排版（question_groups.layout）。格式定義與驗收樣本：
+ * docs/design/question-bank-layout-samples/README.md
+ * rows 由上到下；row 內 columns 依 span 比例分欄，手機寬度依序上下堆疊；
+ * section 把一組 rows 框起來；paragraph 可含行內 markdown 與克漏字 `{{n}}`。
+ */
+export interface LayoutHeadingBlock {
+  type: "heading";
+  level: 2 | 3;
+  text: string;
+}
+export interface LayoutParagraphBlock {
+  type: "paragraph";
+  text: string;
+}
+export interface LayoutImageBlock {
+  type: "image";
+  url: string;
+  alt?: string;
+  caption?: string;
+  align?: "left" | "center" | "right";
+  maxWidth?: number;
+  frame?: boolean;
+}
+export interface LayoutDialogueLine {
+  speaker: string;
+  text: string;
+}
+export interface LayoutDialogueBlock {
+  type: "dialogue";
+  frame?: boolean;
+  lines: LayoutDialogueLine[];
+}
+export type LayoutBlock =
+  | LayoutHeadingBlock
+  | LayoutParagraphBlock
+  | LayoutImageBlock
+  | LayoutDialogueBlock;
+
+export interface LayoutColumn {
+  span: number;
+  blocks: LayoutBlock[];
+}
+export interface LayoutRow {
+  type?: "row";
+  columns: LayoutColumn[];
+}
+export interface LayoutSection {
+  type: "section";
+  frame?: boolean;
+  rows: LayoutRow[];
+}
+export type LayoutNode = LayoutRow | LayoutSection;
+
+export interface LayoutDoc {
+  version: 1;
+  rows: LayoutNode[];
+}
+
+/** 會考題本底部的單字註解 */
+export interface GlossaryEntry {
+  word: string;
+  zh: string;
+}
+
+export interface QuestionGroup {
+  id: number;
+  question_type: QuestionType;
+  stimulus_type: StimulusType;
+  title: string | null;
+  passage_text: string | null;
+  image_url: string | null;
+  audio_url: string | null;
+  layout: LayoutDoc | null;
+  glossary: GlossaryEntry[] | null;
+  grade_min: number | null;
+  grade_max: number | null;
+  visibility: QuestionVisibility;
+  is_platform: boolean;
+  teacher_id: number;
+  organization_id: string | null;
+  school_id: string | null;
+  is_owner: boolean;
+  can_edit: boolean;
+  questions: Question[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface Question {
   id: number;
   question_type: QuestionType;
@@ -71,6 +165,8 @@ export interface Question {
   organization_id: string | null;
   school_id: string | null;
   group_id: number | null;
+  /** 題組內小題順序；單題為 null */
+  group_order?: number | null;
   is_owner: boolean;
   /** 後端算出：建立者本人，或機構擁有人／教材管理者 → 可編輯／刪除 */
   can_edit: boolean;
@@ -82,8 +178,43 @@ export interface Question {
   updated_at: string | null;
 }
 
+/** 列表的題組列（小題不單獨出現在列表） */
+export interface QuestionGroupListRow {
+  kind: "group";
+  id: number;
+  /** 題組內小題的題型（整組同一種） */
+  question_type: QuestionType;
+  stimulus_type: StimulusType;
+  title: string | null;
+  /** 列表顯示用：passage_text 或 title 的前段 */
+  preview: string;
+  question_count: number;
+  grade_min: number | null;
+  grade_max: number | null;
+  visibility: QuestionVisibility;
+  is_platform: boolean;
+  teacher_id: number;
+  organization_id: string | null;
+  school_id: string | null;
+  is_owner: boolean;
+  can_edit: boolean;
+  /** 題組內小題的來源聯集 */
+  sources: QuestionSource[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 列表列：單題（kind 可省略 = 舊資料相容）或題組 */
+export type QuestionListItem =
+  | (Question & { kind?: "single" })
+  | QuestionGroupListRow;
+
+export function isGroupRow(item: QuestionListItem): item is QuestionGroupListRow {
+  return item.kind === "group";
+}
+
 export interface QuestionListResponse {
-  items: Question[];
+  items: QuestionListItem[];
   total: number;
   page: number;
   page_size: number;
@@ -142,7 +273,7 @@ export interface QuestionOptionInput {
 }
 
 export interface QuestionCreateInput {
-  question_type: "multiple_choice";
+  question_type: QuestionType;
   stem: string;
   options: QuestionOptionInput[];
   explanation?: string | null;
@@ -164,11 +295,35 @@ export type QuestionUpdateInput = Partial<
   Omit<QuestionCreateInput, "question_type" | "organization_id" | "school_id">
 >;
 
+/** 題組小題：與單題相同，但歸屬／公開由題組決定 */
+export type QuestionGroupQuestionInput = Omit<
+  QuestionCreateInput,
+  "question_type" | "organization_id" | "school_id" | "visibility"
+> & { group_order?: number };
+
+export interface QuestionGroupCreateInput {
+  question_type: QuestionType;
+  stimulus_type: StimulusType;
+  title?: string | null;
+  passage_text?: string | null;
+  image_url?: string | null;
+  layout?: LayoutDoc | null;
+  glossary?: GlossaryEntry[] | null;
+  grade_min?: number | null;
+  grade_max?: number | null;
+  visibility?: QuestionVisibility;
+  questions: QuestionGroupQuestionInput[];
+  organization_id?: string | null;
+  school_id?: string | null;
+}
+
 // ---- AI 工具（#1065）----
 export interface AiQuestionInput {
   key: string;
   stem: string;
   options: string[];
+  /** 題組小題：主圖文的純文字（後端會附在題目前給模型） */
+  passage?: string;
 }
 
 export interface AiAnswerResult {

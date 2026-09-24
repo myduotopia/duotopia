@@ -6017,7 +6017,8 @@
         "duplicateInBatch": "本批內有相同題目",
         "atQuestion": "第 {{n}} 題：{{message}}",
         "examPointRequired": "請選擇考點",
-        "visibilityRequired": "請選擇是否公開分享考題"
+        "visibilityRequired": "請選擇是否公開分享考題",
+        "groupNeedsQuestions": "題組至少要有一個小題"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
@@ -6082,6 +6083,7 @@
     "list": {
       "selectAll": "全選／取消全選",
       "selectRow": "選取此題",
+      "groupQuestionCount": "{{count}} 小題",
       "selected": "已選 {{count}} 題",
       "dirty": "{{count}} 題有未儲存的修改",
       "save": "儲存",

@@ -1,11 +1,16 @@
 /**
- * 選擇題編輯面板的草稿型別與純驗證函式（Issue #1064）。
+ * 題庫編輯面板的草稿型別與純驗證函式（Issue #1064 / #1082）。
  *
- * 放在獨立檔案讓 QuestionCard / MultipleChoiceQuestionSheet 共用，也方便單測：
+ * 放在獨立檔案讓 QuestionCard / QuestionSheet / QuestionUnitList 共用，也方便單測：
  * 驗證函式只回傳 i18n key（不呼叫 t），由呼叫端翻譯。
  *
- * 每題自己帶：考點（必填）、年段、教材關聯（進階設定）。左側批次設定只是「覆寫所有題」
- * 的捷徑，儲存時仍是逐題送出各自的值。整批共用、不進 draft 的只有：公開設定、考題來源。
+ * 兩種草稿、一種「單元」：
+ * - `QuestionDraft`：單題（目前只有選擇題）。每題自己帶：考點（必填）、年段、教材關聯。
+ * - `GroupDraft`：題組（閱讀／克漏字…）：主圖文 layout + 多個小題 `QuestionDraft`。
+ * - `UnitDraft`：sheet 右欄的一個單元 = 單題或題組；儲存逐單元送出，單題走
+ *   createQuestion／updateQuestion，題組走 createQuestionGroup（整組一個交易）。
+ *
+ * 左側批次設定只是「覆寫所有單元」的捷徑，儲存時仍是逐單元送出各自的值。
  */
 
 import type { GradeRange } from "@/components/shared/GradeRangeSlider";
@@ -17,11 +22,17 @@ import type {
   AiAnswerResult,
   AiQuestionInput,
   ExamPoint,
+  GlossaryEntry,
+  LayoutDoc,
   Question,
   QuestionCreateInput,
+  QuestionGroup,
+  QuestionGroupCreateInput,
+  QuestionType,
   QuestionUpdateInput,
   QuestionVisibility,
   SimilarQuestionsResponse,
+  StimulusType,
 } from "@/types/questionBank";
 import { sourceToItem } from "./sourcesCombobox";
 
@@ -48,6 +59,10 @@ export interface BatchDefaults {
 export interface QuestionDraft extends BatchDefaults {
   /** React key／DOM id 用，與 DB id 無關 */
   key: string;
+  /** 題型；單題目前只有 multiple_choice，題組小題跟隨題組 */
+  question_type: QuestionType;
+  /** 所屬題組草稿的 key；單題為 null */
+  groupKey: string | null;
   stem: string;
   stem_audio_url: string | null;
   explanation: string;
@@ -88,6 +103,8 @@ export function emptyDraft(
 ): QuestionDraft {
   return {
     key: nextKey(),
+    question_type: "multiple_choice",
+    groupKey: null,
     stem: "",
     stem_audio_url: null,
     explanation: "",
@@ -143,6 +160,7 @@ export function draftFromQuestion(q: Question): QuestionDraft {
   const defaults = batchDefaultsFromQuestion(q);
   return {
     ...emptyDraft(defaults),
+    question_type: q.question_type,
     existingId: q.id,
     visibility: q.visibility,
     sources: q.sources.map(sourceToItem),
@@ -224,7 +242,7 @@ export function toCreateInput(
   organizationId?: string,
 ): QuestionCreateInput {
   return {
-    question_type: "multiple_choice",
+    question_type: d.question_type,
     stem: d.stem.trim(),
     stem_audio_url: d.stem_audio_url,
     options: d.options.filter(optionFilled).map((o) => ({
@@ -250,6 +268,169 @@ export function toUpdateInput(d: QuestionDraft): QuestionUpdateInput {
   const { question_type, organization_id, school_id, ...update } =
     toCreateInput(d);
   return update;
+}
+
+
+// --------------------------------------------------------------------------- #
+// 題組草稿與「單元」（#1082 骨架；閱讀題組編輯器在下一段接上）
+// --------------------------------------------------------------------------- #
+
+export interface GroupDraft {
+  /** React key；小題的 groupKey 指向它 */
+  key: string;
+  question_type: QuestionType;
+  stimulus_type: StimulusType;
+  title: string;
+  /** 主圖文排版；null = 只用 passage_text + image_url */
+  layout: LayoutDoc | null;
+  glossary: GlossaryEntry[];
+  image_url: string | null;
+  /** layout 的純文字副本（搜尋／AI 用）；以圖為準時是老師可修的「文字版」 */
+  passage_text: string;
+  /** 小題（groupKey 都指向本題組） */
+  questions: QuestionDraft[];
+  grade: GradeRange;
+  program_link: ProgramLessonLink | null;
+  visibility: QuestionVisibility | null;
+  sources: ComboboxItem[];
+  serverError: string | null;
+  existingId: number | null;
+}
+
+/** sheet 右欄的一個單元：單題或題組 */
+export type UnitDraft =
+  | { kind: "single"; draft: QuestionDraft }
+  | { kind: "group"; draft: GroupDraft };
+
+export function emptyGroupDraft(
+  question_type: QuestionType = "reading",
+  defaults: BatchDefaults = emptyBatchDefaults(),
+): GroupDraft {
+  return {
+    key: nextKey(),
+    question_type,
+    stimulus_type: "passage",
+    title: "",
+    layout: null,
+    glossary: [],
+    image_url: null,
+    passage_text: "",
+    questions: [],
+    grade: [...defaults.grade] as GradeRange,
+    program_link: defaults.program_link ? { ...defaults.program_link } : null,
+    visibility: null,
+    sources: [],
+    serverError: null,
+    existingId: null,
+  };
+}
+
+/** 題組內新增一個小題：帶題組的題型、年段、教材；考點各題自選 */
+export function emptyGroupQuestion(g: GroupDraft): QuestionDraft {
+  const d = emptyDraft({
+    exam_points: [],
+    grade: g.grade,
+    program_link: g.program_link,
+  });
+  d.question_type = g.question_type;
+  d.groupKey = g.key;
+  d.visibility = g.visibility;
+  d.sources = g.sources;
+  return d;
+}
+
+export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
+  const draft: GroupDraft = {
+    key: nextKey(),
+    question_type: g.question_type,
+    stimulus_type: g.stimulus_type,
+    title: g.title ?? "",
+    layout: g.layout,
+    glossary: g.glossary ?? [],
+    image_url: g.image_url,
+    passage_text: g.passage_text ?? "",
+    questions: [],
+    grade: [g.grade_min, g.grade_max],
+    program_link: null,
+    visibility: g.visibility,
+    sources: [],
+    serverError: null,
+    existingId: g.id,
+  };
+  draft.questions = g.questions.map((q) => ({
+    ...draftFromQuestion(q),
+    groupKey: draft.key,
+  }));
+  return draft;
+}
+
+/** 題組驗證：至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */
+export function validateGroupDraft(g: GroupDraft): string | null {
+  if (g.questions.length === 0) return "groupNeedsQuestions";
+  for (const q of g.questions) {
+    const err = validateDraft({ ...q, visibility: g.visibility });
+    if (err) return err;
+  }
+  if (g.visibility === null) return "visibilityRequired";
+  return null;
+}
+
+/** 題組送後端的 payload：小題不帶 question_type／歸屬／公開（跟隨題組） */
+export function toCreateGroupInput(
+  g: GroupDraft,
+  organizationId?: string,
+): QuestionGroupCreateInput {
+  return {
+    question_type: g.question_type,
+    stimulus_type: g.stimulus_type,
+    title: g.title.trim() || null,
+    passage_text: g.passage_text.trim() || null,
+    image_url: g.image_url,
+    layout: g.layout,
+    glossary: g.glossary.length > 0 ? g.glossary : null,
+    grade_min: g.grade[0],
+    grade_max: g.grade[1],
+    visibility: g.visibility ?? "private",
+    questions: g.questions.map((q, i) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { question_type, organization_id, school_id, visibility, ...rest } =
+        toCreateInput(q);
+      return { ...rest, group_order: i };
+    }),
+    organization_id: organizationId ?? null,
+  };
+}
+
+/** 單元內所有單題草稿（含題組小題），供批次語音／AI／重複偵測沿用單題邏輯 */
+export function unitQuestions(units: UnitDraft[]): QuestionDraft[] {
+  return units.flatMap((u) =>
+    u.kind === "single" ? [u.draft] : u.draft.questions,
+  );
+}
+
+/** 對單元內每個單題草稿套 fn（含題組小題），回傳新的單元陣列 */
+export function mapUnitQuestions(
+  units: UnitDraft[],
+  fn: (d: QuestionDraft) => QuestionDraft,
+): UnitDraft[] {
+  return units.map((u) =>
+    u.kind === "single"
+      ? { kind: "single", draft: fn(u.draft) }
+      : { kind: "group", draft: { ...u.draft, questions: u.draft.questions.map(fn) } },
+  );
+}
+
+/** 單元 key（單題 = draft.key；題組 = group key），DOM id 與 React key 共用 */
+export function unitKey(u: UnitDraft): string {
+  return u.draft.key;
+}
+
+export function unitHasContent(u: UnitDraft): boolean {
+  return u.kind === "single"
+    ? draftHasContent(u.draft)
+    : u.draft.questions.length > 0 ||
+        u.draft.passage_text.trim() !== "" ||
+        u.draft.image_url !== null;
 }
 
 // --------------------------------------------------------------------------- #

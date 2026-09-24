@@ -11,6 +11,8 @@ import type {
   ExamPoint,
   Question,
   QuestionCreateInput,
+  QuestionGroup,
+  QuestionGroupCreateInput,
   QuestionListParams,
   QuestionListResponse,
   QuestionSource,
@@ -593,6 +595,17 @@ class ApiClient {
 
   async deleteQuestion(questionId: number) {
     return this.delete<void>(`/api/question-bank/questions/${questionId}`);
+  }
+
+  // 題組（#1079）：整組一個交易建立；小題不可單獨建
+  async createQuestionGroup(data: QuestionGroupCreateInput) {
+    return this.post<QuestionGroup>("/api/question-bank/question-groups", data);
+  }
+
+  async getQuestionGroup(groupId: number) {
+    return this.get<QuestionGroup>(
+      `/api/question-bank/question-groups/${groupId}`,
+    );
   }
 
   async findSimilarQuestions(stem: string, excludeId?: number) {
