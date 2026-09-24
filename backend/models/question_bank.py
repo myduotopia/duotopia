@@ -161,6 +161,10 @@ class QuestionGroup(Base):
 
     整組公開／派發／刪除，不可單獨派其中一題。題組內題目的 visibility 跟隨
     題組（service 層同步）。考點掛在小題層，題組層不掛。
+
+    閱讀題組的主圖文排版存 ``layout``（rows → columns → blocks 的 JSON 樹），
+    單字註解存 ``glossary``；格式見 docs/design/question-bank-layout-samples/README.md。
+    ``passage_text`` 保留為 layout 的純文字副本（搜尋／重複偵測／AI 考點分析用）。
     """
 
     __tablename__ = "question_groups"
@@ -173,6 +177,10 @@ class QuestionGroup(Base):
     # 整段合併音檔（播放快取；segments 變動時重生成）
     audio_url = Column(Text, nullable=True)
     image_url = Column(Text, nullable=True)
+    # 排版樹：{"version": 1, "rows": [...]}；為 NULL 時退回 passage_text + image_url
+    layout = Column(JSONB, nullable=True)
+    # 單字註解：[{"word": "...", "zh": "..."}]
+    glossary = Column(JSONB, nullable=True)
     grade_min = Column(SmallInteger, nullable=True)
     grade_max = Column(SmallInteger, nullable=True)
 
