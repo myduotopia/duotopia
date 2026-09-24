@@ -545,9 +545,7 @@ describe("AI 套用（#1065）：只填空的", () => {
       ]),
     ];
     expect(toCreateGroupInput(g).passage_text).toBe(
-      "Vivaldi
-
-He wrote 500 pieces.",
+      "Vivaldi\n\nHe wrote 500 pieces.",
     );
   });
   it("toUpdateGroupInput：帶 existingId 的小題送 id，新小題不送；不含題型／歸屬", () => {
