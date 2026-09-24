@@ -703,14 +703,22 @@ export default function OrgMaterialsPage() {
               organizationId={selectedOrganization?.id}
               refreshKey={questionRefreshKey}
               onCreateQuestion={(type) =>
-              setQuestionDialog({ open: true, questions: null, createType: type })
-            }
+                setQuestionDialog({
+                  open: true,
+                  questions: null,
+                  createType: type,
+                })
+              }
               onSelectQuestion={(q) =>
                 setQuestionDialog({ open: true, questions: [q] })
               }
-            onSelectGroup={(g) =>
-              setQuestionDialog({ open: true, questions: null, groupId: g.id })
-            }
+              onSelectGroup={(g) =>
+                setQuestionDialog({
+                  open: true,
+                  questions: null,
+                  groupId: g.id,
+                })
+              }
               onBulkEdit={(qs) =>
                 setQuestionDialog({ open: true, questions: qs })
               }

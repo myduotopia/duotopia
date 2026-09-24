@@ -392,7 +392,10 @@ export function validateGroupDraft(g: GroupDraft): string | null {
   if (g.questions.length === 0) return "groupNeedsQuestions";
   const stemOptional = groupStemOptional(g);
   for (const q of g.questions) {
-    const err = validateDraft({ ...q, visibility: g.visibility }, { stemOptional });
+    const err = validateDraft(
+      { ...q, visibility: g.visibility },
+      { stemOptional },
+    );
     if (err) return err;
   }
   if (g.visibility === null) return "visibilityRequired";

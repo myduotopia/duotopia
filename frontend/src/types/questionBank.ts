@@ -320,7 +320,10 @@ export interface QuestionGroupCreateInput {
 
 /** PATCH 題組：group 欄位只送有改的；questions 給了就整份對齊（帶 id 更新、無 id 新增、缺席刪除） */
 export type QuestionGroupUpdateInput = Partial<
-  Omit<QuestionGroupCreateInput, "question_type" | "organization_id" | "school_id" | "questions">
+  Omit<
+    QuestionGroupCreateInput,
+    "question_type" | "organization_id" | "school_id" | "questions"
+  >
 > & {
   questions?: (QuestionGroupQuestionInput & { id?: number })[];
 };

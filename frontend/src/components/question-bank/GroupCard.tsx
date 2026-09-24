@@ -134,7 +134,9 @@ export default function GroupCard({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   // ---- 小題 ----
@@ -173,7 +175,9 @@ export default function GroupCard({
   // ---- 單字註解 ----
   const setGlossary = (glossary: GlossaryEntry[]) => patch({ glossary });
   const patchGlossary = (i: number, p: Partial<GlossaryEntry>) =>
-    setGlossary(draft.glossary.map((g, idx) => (idx === i ? { ...g, ...p } : g)));
+    setGlossary(
+      draft.glossary.map((g, idx) => (idx === i ? { ...g, ...p } : g)),
+    );
 
   const hasError = errorMessage !== null || draft.serverError !== null;
 
@@ -234,7 +238,9 @@ export default function GroupCard({
 
       {/* 年段 */}
       <div className="space-y-1">
-        <Label className="text-xs text-gray-600">{t("questionBank.form.grade")}</Label>
+        <Label className="text-xs text-gray-600">
+          {t("questionBank.form.grade")}
+        </Label>
         <GradeRangeSlider
           value={draft.grade}
           onChange={(grade) =>
@@ -289,7 +295,9 @@ export default function GroupCard({
             />
             <button
               type="button"
-              onClick={() => setGlossary(draft.glossary.filter((_, idx) => idx !== i))}
+              onClick={() =>
+                setGlossary(draft.glossary.filter((_, idx) => idx !== i))
+              }
               disabled={locked}
               className="text-gray-400 hover:text-red-600 disabled:opacity-40"
               aria-label={t("questionBank.group.glossary.remove")}
@@ -305,7 +313,9 @@ export default function GroupCard({
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-gray-600"
-            onClick={() => setGlossary([...draft.glossary, { word: "", zh: "" }])}
+            onClick={() =>
+              setGlossary([...draft.glossary, { word: "", zh: "" }])
+            }
             disabled={disabled}
             data-testid={`qg-${index}-glossary-add`}
           >
@@ -318,7 +328,9 @@ export default function GroupCard({
       {/* 小題 */}
       <div className="space-y-3 border-t border-gray-100 pt-3">
         <Label className="text-xs text-gray-600">
-          {t("questionBank.group.questions.title", { count: draft.questions.length })}
+          {t("questionBank.group.questions.title", {
+            count: draft.questions.length,
+          })}
         </Label>
         {draft.questions.length === 0 && (
           <p className="text-xs text-gray-400">
@@ -346,7 +358,9 @@ export default function GroupCard({
                     index={i}
                     draft={q}
                     onChange={(next) => updateQuestion(q.key, next)}
-                    onRemove={readOnly ? undefined : () => removeQuestion(q.key)}
+                    onRemove={
+                      readOnly ? undefined : () => removeQuestion(q.key)
+                    }
                     excludeId={q.existingId ?? undefined}
                     ttsSettings={ttsSettings}
                     programs={programs}

@@ -244,7 +244,9 @@ function ColumnEditor({
       ref={setNodeRef}
       className={cn(
         "min-w-0 rounded-md border border-dashed p-2 space-y-2 transition-colors",
-        isOver ? "border-blue-400 bg-blue-50/40" : "border-gray-300 bg-gray-50/60",
+        isOver
+          ? "border-blue-400 bg-blue-50/40"
+          : "border-gray-300 bg-gray-50/60",
       )}
       data-testid={testId}
     >
@@ -286,7 +288,9 @@ function ColumnEditor({
           {BLOCK_TYPES.map((type) => (
             <DropdownMenuItem
               key={type}
-              onSelect={() => setDoc(addBlock(doc, column.id, defaultBlock(type)))}
+              onSelect={() =>
+                setDoc(addBlock(doc, column.id, defaultBlock(type)))
+              }
               data-testid={`${testId}-add-${type}`}
             >
               {t(`questionBank.group.layout.block.${type}`)}
@@ -354,10 +358,15 @@ function RowEditor({
         <span>{t("questionBank.group.layout.ratio")}</span>
         <Select
           value={rowRatio(row)}
-          onValueChange={(v) => setDoc(setRowRatio(doc, row.id, v as ColumnRatio))}
+          onValueChange={(v) =>
+            setDoc(setRowRatio(doc, row.id, v as ColumnRatio))
+          }
           disabled={disabled}
         >
-          <SelectTrigger className="h-7 w-24 text-xs" data-testid={`${testId}-ratio`}>
+          <SelectTrigger
+            className="h-7 w-24 text-xs"
+            data-testid={`${testId}-ratio`}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -466,11 +475,15 @@ function SectionEditor({
         >
           <GripVertical size={14} />
         </button>
-        <span className="font-medium">{t("questionBank.group.layout.section")}</span>
+        <span className="font-medium">
+          {t("questionBank.group.layout.section")}
+        </span>
         <label className="flex items-center gap-1">
           <Checkbox
             checked={section.frame}
-            onCheckedChange={(c) => setDoc(setSectionFrame(doc, section.id, c === true))}
+            onCheckedChange={(c) =>
+              setDoc(setSectionFrame(doc, section.id, c === true))
+            }
             disabled={disabled}
             data-testid={`${testId}-frame`}
           />
@@ -543,12 +556,15 @@ export default function LayoutEditor({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const preview = useMemo(() => toLayoutDoc(doc), [doc]);
 
-  const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
+  const handleDragStart = (e: DragStartEvent) =>
+    setActiveId(String(e.active.id));
 
   /** 跨欄搬移在拖曳過程中就做（dnd-kit 多容器慣例），同欄排序留到 dragEnd */
   const handleDragOver = (e: DragOverEvent) => {
@@ -591,7 +607,8 @@ export default function LayoutEditor({
         if (target && target.id === col.id) {
           const oldIndex = col.blocks.findIndex((b) => b.id === blockId);
           const newIndex = col.blocks.findIndex((b) => b.id === rawId(o));
-          if (oldIndex !== newIndex) next = moveBlock(doc, blockId, col.id, newIndex);
+          if (oldIndex !== newIndex)
+            next = moveBlock(doc, blockId, col.id, newIndex);
         }
       }
     } else if (kindOf(a) === "row" && a !== o) {
@@ -626,9 +643,11 @@ export default function LayoutEditor({
   const activeBlock = useMemo(() => {
     if (!activeId || kindOf(activeId) !== "block") return null;
     const id = rawId(activeId);
-    return allColumns(doc)
-      .flatMap((c) => c.blocks)
-      .find((b) => b.id === id) ?? null;
+    return (
+      allColumns(doc)
+        .flatMap((c) => c.blocks)
+        .find((b) => b.id === id) ?? null
+    );
   }, [activeId, doc]);
 
   return (
@@ -714,7 +733,10 @@ export default function LayoutEditor({
             onValueChange={(v) => setNewRatio(v as ColumnRatio)}
             disabled={disabled}
           >
-            <SelectTrigger className="h-8 w-24 text-xs" data-testid={`${testId}-new-ratio`}>
+            <SelectTrigger
+              className="h-8 w-24 text-xs"
+              data-testid={`${testId}-new-ratio`}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -731,7 +753,9 @@ export default function LayoutEditor({
       {/* 右：即時預覽（同一個 renderer） */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs text-gray-600">
-          <span className="font-medium">{t("questionBank.group.layout.preview")}</span>
+          <span className="font-medium">
+            {t("questionBank.group.layout.preview")}
+          </span>
           <div className="flex rounded border border-gray-200">
             <button
               type="button"
@@ -769,7 +793,11 @@ export default function LayoutEditor({
           data-testid={`${testId}-preview`}
         >
           {preview ? (
-            <LayoutRenderer layout={preview} glossary={glossary} forceStack={mobilePreview} />
+            <LayoutRenderer
+              layout={preview}
+              glossary={glossary}
+              forceStack={mobilePreview}
+            />
           ) : (
             <p className="text-center text-xs text-gray-400">
               {t("questionBank.group.layout.empty")}

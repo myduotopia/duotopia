@@ -39,7 +39,10 @@ export interface LayoutRendererProps {
 }
 
 /** 行內節點 → React；供題幹／選項預覽共用 */
-export function renderInline(nodes: InlineNode[], keyPrefix = "i"): ReactNode[] {
+export function renderInline(
+  nodes: InlineNode[],
+  keyPrefix = "i",
+): ReactNode[] {
   return nodes.map((n, i) => {
     const key = `${keyPrefix}-${i}`;
     switch (n.type) {
@@ -90,7 +93,11 @@ function ImageBlock({
   const [open, setOpen] = useState(false);
   const align = block.align ?? "center";
   const justify =
-    align === "left" ? "items-start" : align === "right" ? "items-end" : "items-center";
+    align === "left"
+      ? "items-start"
+      : align === "right"
+        ? "items-end"
+        : "items-center";
   const img = (
     <img
       src={block.url}
@@ -213,7 +220,10 @@ function Row({
   const template = spans.map((s) => `minmax(0, ${s}fr)`).join(" ");
   return (
     <div
-      className={cn("grid gap-4", !forceStack && "md:[grid-template-columns:var(--qb-cols)]")}
+      className={cn(
+        "grid gap-4",
+        !forceStack && "md:[grid-template-columns:var(--qb-cols)]",
+      )}
       style={{ "--qb-cols": template } as React.CSSProperties}
       data-columns={row.columns.length}
     >
@@ -262,7 +272,10 @@ export default function LayoutRenderer({
   if (!layout || layout.rows.length === 0) return null;
   return (
     <div
-      className={cn("space-y-4 text-[15px] text-gray-900 break-words", className)}
+      className={cn(
+        "space-y-4 text-[15px] text-gray-900 break-words",
+        className,
+      )}
       data-testid="layout-renderer"
       data-stack={forceStack || undefined}
     >

@@ -135,7 +135,9 @@ export function layoutTexts(layout: LayoutDoc | null | undefined): string[] {
 }
 
 /** 純文字副本（passage_text）；與後端 layout_to_plain_text 相同規則 */
-export function layoutToPlainText(layout: LayoutDoc | null | undefined): string {
+export function layoutToPlainText(
+  layout: LayoutDoc | null | undefined,
+): string {
   return layoutTexts(layout)
     .map((t) => stripInlineMarkup(t).trim())
     .filter(Boolean)

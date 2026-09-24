@@ -810,7 +810,11 @@ function TeacherTemplateProgramsInner() {
             scope="mine"
             refreshKey={questionRefreshKey}
             onCreateQuestion={(type) =>
-              setQuestionDialog({ open: true, questions: null, createType: type })
+              setQuestionDialog({
+                open: true,
+                questions: null,
+                createType: type,
+              })
             }
             onSelectQuestion={(q) =>
               setQuestionDialog({ open: true, questions: [q] })

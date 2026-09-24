@@ -11,7 +11,14 @@
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bold, ImagePlus, Loader2, Plus, Trash2, Underline } from "lucide-react";
+import {
+  Bold,
+  ImagePlus,
+  Loader2,
+  Plus,
+  Trash2,
+  Underline,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -144,7 +151,9 @@ function TextBlockFields({
             : "questionBank.group.layout.paragraphPlaceholder",
         )}
         disabled={disabled}
-        className={block.type === "heading" ? "min-h-0 font-semibold" : "min-h-[96px]"}
+        className={
+          block.type === "heading" ? "min-h-0 font-semibold" : "min-h-[96px]"
+        }
         data-testid={`${testId}-text`}
       />
     </div>
@@ -201,7 +210,11 @@ function ImageBlockFields({
           {uploading ? (
             <Loader2 size={18} className="animate-spin" />
           ) : block.url ? (
-            <img src={block.url} alt="" className="h-full w-full object-contain" />
+            <img
+              src={block.url}
+              alt=""
+              className="h-full w-full object-contain"
+            />
           ) : (
             <span className="flex flex-col items-center gap-1 text-xs">
               <ImagePlus size={18} />
@@ -233,7 +246,10 @@ function ImageBlockFields({
             }
             disabled={disabled}
           >
-            <SelectTrigger className="h-8 text-xs" data-testid={`${testId}-align`}>
+            <SelectTrigger
+              className="h-8 text-xs"
+              data-testid={`${testId}-align`}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

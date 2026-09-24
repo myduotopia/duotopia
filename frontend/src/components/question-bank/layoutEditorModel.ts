@@ -128,10 +128,15 @@ export function findColumnOfBlock(
   doc: EditorDoc,
   blockId: string,
 ): EditorColumn | null {
-  return allColumns(doc).find((c) => c.blocks.some((b) => b.id === blockId)) ?? null;
+  return (
+    allColumns(doc).find((c) => c.blocks.some((b) => b.id === blockId)) ?? null
+  );
 }
 
-export function findColumn(doc: EditorDoc, columnId: string): EditorColumn | null {
+export function findColumn(
+  doc: EditorDoc,
+  columnId: string,
+): EditorColumn | null {
   return allColumns(doc).find((c) => c.id === columnId) ?? null;
 }
 
@@ -178,7 +183,12 @@ export function defaultBlock(type: LayoutBlock["type"]): EditorBlock {
     case "image":
       return { id, type: "image", url: "", alt: "" };
     case "dialogue":
-      return { id, type: "dialogue", frame: true, lines: [{ speaker: "", text: "" }] };
+      return {
+        id,
+        type: "dialogue",
+        frame: true,
+        lines: [{ speaker: "", text: "" }],
+      };
   }
 }
 
@@ -232,7 +242,10 @@ export function setRowRatio(
     const overflow = r.columns.slice(spans.length).flatMap((c) => c.blocks);
     if (overflow.length > 0) {
       const last = kept[kept.length - 1];
-      kept[kept.length - 1] = { ...last, blocks: [...last.blocks, ...overflow] };
+      kept[kept.length - 1] = {
+        ...last,
+        blocks: [...last.blocks, ...overflow],
+      };
     }
     return { ...r, columns: kept };
   });
@@ -271,7 +284,11 @@ export function setSectionFrame(
 }
 
 /** 最外層節點排序（列與 section 都可以拖） */
-export function moveTopLevel(doc: EditorDoc, from: number, to: number): EditorDoc {
+export function moveTopLevel(
+  doc: EditorDoc,
+  from: number,
+  to: number,
+): EditorDoc {
   if (from === to || from < 0 || to < 0 || from >= doc.rows.length) return doc;
   const rows = [...doc.rows];
   const [item] = rows.splice(from, 1);

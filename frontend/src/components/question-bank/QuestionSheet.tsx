@@ -180,7 +180,9 @@ export default function QuestionSheet({
   const isEdit = mode === "edit";
   const singleQuestion = isEdit ? existing[0] : null;
   /** 右欄是題組（新增題組或編輯題組）：一次只有一個單元，沒有「新增題目」與擷取 */
-  const groupMode = mode === "editGroup" || (mode === "create" && GROUP_TYPES.includes(createType));
+  const groupMode =
+    mode === "editGroup" ||
+    (mode === "create" && GROUP_TYPES.includes(createType));
 
   const [units, setUnits] = useState<UnitDraft[]>([single(emptyDraft())]);
   const [loadedGroup, setLoadedGroup] = useState<QuestionGroup | null>(null);
@@ -619,7 +621,8 @@ export default function QuestionSheet({
       }
       if (mode === "editGroup")
         toast.success(t("questionBank.messages.groupUpdated"));
-      else if (mode === "edit") toast.success(t("questionBank.messages.updated"));
+      else if (mode === "edit")
+        toast.success(t("questionBank.messages.updated"));
       else if (mode === "bulk")
         toast.success(
           t("questionBank.messages.bulkSaved", { updated, created }),
