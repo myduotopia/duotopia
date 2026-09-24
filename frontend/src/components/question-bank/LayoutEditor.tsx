@@ -15,7 +15,7 @@
  * 右側（寬螢幕）／下方（窄螢幕）即時預覽用共用 `LayoutRenderer`，可切桌機／手機寬度。
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closestCorners,
@@ -563,8 +563,12 @@ export default function LayoutEditor({
 
   const preview = useMemo(() => toLayoutDoc(doc), [doc]);
 
-  const handleDragStart = (e: DragStartEvent) =>
+  // 拖曳開始時快照：取消（Esc）要回到拖曳前的狀態，因為 dragOver 已改過 doc
+  const dragSnapshot = useRef<EditorDoc | null>(null);
+  const handleDragStart = (e: DragStartEvent) => {
+    dragSnapshot.current = doc;
     setActiveId(String(e.active.id));
+  };
 
   /** 跨欄搬移在拖曳過程中就做（dnd-kit 多容器慣例），同欄排序留到 dragEnd */
   const handleDragOver = (e: DragOverEvent) => {
@@ -591,6 +595,7 @@ export default function LayoutEditor({
 
   const handleDragEnd = (e: DragEndEvent) => {
     setActiveId(null);
+    dragSnapshot.current = null;
     const { active, over } = e;
     const a = String(active.id);
     if (!over) {
@@ -665,7 +670,9 @@ export default function LayoutEditor({
           onDragEnd={handleDragEnd}
           onDragCancel={() => {
             setActiveId(null);
-            onChange(toLayoutDoc(doc));
+            const before = dragSnapshot.current ?? doc;
+            dragSnapshot.current = null;
+            setDoc(before);
           }}
         >
           <SortableContext
