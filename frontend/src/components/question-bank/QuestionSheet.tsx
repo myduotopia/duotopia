@@ -707,7 +707,9 @@ export default function QuestionSheet({
             ? t("questionBank.group.titleCreate", { type: groupTypeLabel })
             : t("questionBank.form.titleCreate");
   const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
-  const canAddOrExtract = !effectiveReadOnly && mode === "create" && !groupMode;
+  // 新增與批次編輯可加題／擷取（行為同重構前）；單題編輯、題組模式不可
+  const canAddOrExtract =
+    !effectiveReadOnly && (mode === "create" || mode === "bulk") && !groupMode;
   const canDeleteNow =
     canDelete &&
     !effectiveReadOnly &&
