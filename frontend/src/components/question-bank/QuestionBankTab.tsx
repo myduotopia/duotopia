@@ -57,7 +57,10 @@ import {
 import {
   examPointLabel,
   type ExamPoint,
+  isGroupRow,
   type Question,
+  type QuestionGroupListRow,
+  type QuestionListItem,
   type QuestionType,
   type QuestionVisibility,
 } from "@/types/questionBank";
@@ -135,7 +138,12 @@ export default function QuestionBankTab({
 }: QuestionBankTabProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const [items, setItems] = useState<Question[]>([]);
+  // 列表列：單題 + 題組列（#1082 骨架：題組列先只顯示，勾選／快速編輯／批次動作只對單題）
+  const [items, setItems] = useState<QuestionListItem[]>([]);
+  const questionItems = useMemo(
+    () => items.filter((it): it is Question => !isGroupRow(it)),
+    [items],
+  );
   const [total, setTotal] = useState(0);
   // 頁碼／每頁筆數／題型／只看自己的 都存 URL query，重整與分享連結保留
   const [searchParams, setSearchParams] = useSearchParams();
@@ -290,9 +298,12 @@ export default function QuestionBankTab({
   );
 
   // ---- 勾選 ----
-  const allChecked = items.length > 0 && items.every((q) => checked.has(q.id));
+  const allChecked =
+    questionItems.length > 0 && questionItems.every((q) => checked.has(q.id));
   const toggleAll = () => {
-    setChecked(allChecked ? new Set() : new Set(items.map((q) => q.id)));
+    setChecked(
+      allChecked ? new Set() : new Set(questionItems.map((q) => q.id)),
+    );
   };
   const toggleOne = (id: number, on: boolean) => {
     setChecked((prev) => {
@@ -326,7 +337,7 @@ export default function QuestionBankTab({
   };
 
   // ---- 底部動作列 ----
-  const checkedItems = items.filter((q) => checked.has(q.id));
+  const checkedItems = questionItems.filter((q) => checked.has(q.id));
   const editableChecked = checkedItems.filter(canEdit);
   const checkedSameType =
     checkedItems.length > 0 &&
@@ -606,7 +617,17 @@ export default function QuestionBankTab({
               </tr>
             </thead>
             <tbody>
-              {items.map((q) => {
+              {items.map((item) => {
+                if (isGroupRow(item)) {
+                  return (
+                    <GroupRow
+                      key={`g-${item.id}`}
+                      row={item}
+                      typeLabel={typeLabel}
+                    />
+                  );
+                }
+                const q = item;
                 const e = currentEdit(q);
                 const dirty = q.id in edits;
                 const editable = canEdit(q);
@@ -785,7 +806,7 @@ export default function QuestionBankTab({
         onDelete={handleDelete}
         onDispatch={
           onDispatch
-            ? () => onDispatch(items.filter((q) => checked.has(q.id)))
+            ? () => onDispatch(questionItems.filter((q) => checked.has(q.id)))
             : undefined
         }
         onEdit={
@@ -881,6 +902,61 @@ function InlineVisibility({
 
 /** 選項全都短（≤ 12 字）且不超過 4 個 → 一列四格；否則兩欄 */
 const SHORT_OPTION_CHARS = 12;
+
+/** 題組列（#1082 骨架）：只顯示，不勾選、不快速編輯；完整列 UI 隨閱讀題組編輯器接上 */
+function GroupRow({
+  row,
+  typeLabel,
+}: {
+  row: QuestionGroupListRow;
+  typeLabel: (type: QuestionType) => string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <tr
+      className="border-t border-gray-100 align-top"
+      data-testid={`question-group-row-${row.id}`}
+    >
+      <td className="px-3 py-2.5">
+        <Checkbox
+          checked={false}
+          disabled
+          aria-label={t("questionBank.list.selectRow")}
+        />
+      </td>
+      <td className="px-4 py-2.5 text-gray-900">
+        <div className="line-clamp-2 break-words">
+          {row.title || row.preview}
+        </div>
+        <span className="text-xs text-gray-500">
+          {t("questionBank.list.groupQuestionCount", {
+            count: row.question_count,
+          })}
+        </span>
+        {!row.is_owner && (
+          <span className="ml-2 text-xs text-gray-400">
+            {row.is_platform
+              ? t("questionBank.owner.platform")
+              : t("questionBank.owner.other")}
+          </span>
+        )}
+      </td>
+      <td className="px-2 py-2.5 text-gray-600 hidden sm:table-cell truncate">
+        {typeLabel(row.question_type)}
+      </td>
+      <td className="px-2 py-2.5 text-gray-600 hidden lg:table-cell tabular-nums">
+        {formatGrade(row.grade_min, row.grade_max)}
+      </td>
+      <td className="px-4 py-2 hidden xl:table-cell" />
+      <td className="px-4 py-2 hidden md:table-cell">
+        <ChipCell labels={row.sources.map((x) => x.name)} />
+      </td>
+      <td className="px-4 py-2 hidden lg:table-cell text-gray-600">
+        {t(`questionBank.visibility.${row.visibility}`)}
+      </td>
+    </tr>
+  );
+}
 
 function OptionGrid({ options }: { options: Question["options"] }) {
   const oneRow =
