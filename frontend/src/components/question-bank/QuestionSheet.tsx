@@ -514,7 +514,9 @@ export default function QuestionSheet({
           const message =
             extractApiMessage(err) ?? t("questionBank.messages.saveFailed");
           setUnits(
-            remaining.map((r, i) => (i === 0 ? withServerError(r, message) : r)),
+            remaining.map((r, i) =>
+              i === 0 ? withServerError(r, message) : r,
+            ),
           );
           if (created + updated > 0) {
             toast.warning(

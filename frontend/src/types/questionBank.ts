@@ -54,7 +54,6 @@ export interface QuestionSourceCreateInput {
   organization_id?: string | null;
 }
 
-
 // ---- 題組（#1079 閱讀題組）----
 
 export type StimulusType = "passage" | "audio" | "dialogue" | "image" | "mixed";
@@ -209,7 +208,9 @@ export type QuestionListItem =
   | (Question & { kind?: "single" })
   | QuestionGroupListRow;
 
-export function isGroupRow(item: QuestionListItem): item is QuestionGroupListRow {
+export function isGroupRow(
+  item: QuestionListItem,
+): item is QuestionGroupListRow {
   return item.kind === "group";
 }
 

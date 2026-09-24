@@ -270,7 +270,6 @@ export function toUpdateInput(d: QuestionDraft): QuestionUpdateInput {
   return update;
 }
 
-
 // --------------------------------------------------------------------------- #
 // 題組草稿與「單元」（#1082 骨架；閱讀題組編輯器在下一段接上）
 // --------------------------------------------------------------------------- #
@@ -416,7 +415,10 @@ export function mapUnitQuestions(
   return units.map((u) =>
     u.kind === "single"
       ? { kind: "single", draft: fn(u.draft) }
-      : { kind: "group", draft: { ...u.draft, questions: u.draft.questions.map(fn) } },
+      : {
+          kind: "group",
+          draft: { ...u.draft, questions: u.draft.questions.map(fn) },
+        },
   );
 }
 

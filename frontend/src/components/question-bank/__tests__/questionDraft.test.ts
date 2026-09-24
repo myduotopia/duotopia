@@ -325,7 +325,8 @@ describe("題組草稿與單元（#1082 骨架）", () => {
     const next = mapUnitQuestions(units, (d) => ({ ...d, stem: "X" }));
     expect(next[0].kind === "single" && next[0].draft.stem).toBe("X");
     expect(
-      next[1].kind === "group" && next[1].draft.questions.every((q) => q.stem === "X"),
+      next[1].kind === "group" &&
+        next[1].draft.questions.every((q) => q.stem === "X"),
     ).toBe(true);
     // 原陣列不變
     expect(s.stem).toBe("");
