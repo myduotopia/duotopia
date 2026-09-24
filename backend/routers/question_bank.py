@@ -68,6 +68,12 @@ from services.question_bank_ai import (
     get_question_bank_ai_service,
     normalize_inputs,
 )
+from services.question_bank_layout import (
+    LayoutError,
+    layout_to_plain_text,
+    validate_glossary,
+    validate_layout,
+)
 from utils.permissions import (
     has_manage_materials_permission,
     has_read_org_materials_permission,
@@ -215,10 +221,76 @@ class QuestionGroupCreate(BaseModel):
             raise ValueError("grade_min 不可大於 grade_max")
         if self.organization_id and self.school_id:
             raise ValueError("organization_id 與 school_id 只能擇一")
-        if self.layout is not None and not isinstance(self.layout.get("rows"), list):
-            raise ValueError("layout.rows 必須是陣列")
+        _validate_layout_fields(self.layout, self.glossary)
         if not (self.passage_text or self.image_url or self.layout):
             raise ValueError("題組需要文章、圖片或排版內容")
+        return self
+
+
+def _validate_layout_fields(layout, glossary) -> None:
+    """layout / glossary 深度驗證；LayoutError 轉成 ValueError（Pydantic → 422）並帶路徑。"""
+    try:
+        validate_layout(layout)
+        validate_glossary(glossary)
+    except LayoutError as e:
+        raise ValueError(f"{e.path}: {e.message}") from e
+
+
+def _effective_passage_text(passage_text: Optional[str], layout) -> Optional[str]:
+    """老師沒填 passage_text 時，由 layout 的文字區塊拼出純文字副本（搜尋／AI 用）。"""
+    if passage_text:
+        return passage_text
+    derived = layout_to_plain_text(layout) if layout else ""
+    return derived or None
+
+
+class GroupQuestionUpdateIn(GroupQuestionIn):
+    """PATCH 題組時的小題：帶 id = 更新既有小題；沒 id = 新增；沒出現在清單的既有小題 = 軟刪除。"""
+
+    id: Optional[int] = None
+
+
+class QuestionGroupUpdate(BaseModel):
+    """整組替換：group 欄位只更新有給的；questions 若給就整份對齊（upsert + 軟刪除）。"""
+
+    stimulus_type: Optional[
+        Literal["passage", "audio", "dialogue", "image", "mixed"]
+    ] = None
+    title: Optional[str] = Field(None, max_length=200)
+    passage_text: Optional[str] = Field(None, max_length=20000)
+    image_url: Optional[str] = None
+    layout: Optional[dict] = None
+    glossary: Optional[List[dict]] = None
+    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
+    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
+    visibility: Optional[
+        Literal["private", "public", "organization_only", "individual_only"]
+    ] = None
+    questions: Optional[List[GroupQuestionUpdateIn]] = Field(
+        None, min_length=1, max_length=MAX_GROUP_QUESTIONS
+    )
+
+    @field_validator("title", "passage_text")
+    @classmethod
+    def _strip_opt(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if (
+            self.grade_min is not None
+            and self.grade_max is not None
+            and self.grade_min > self.grade_max
+        ):
+            raise ValueError("grade_min 不可大於 grade_max")
+        _validate_layout_fields(self.layout, self.glossary)
+        if self.questions is not None:
+            ids = [q.id for q in self.questions if q.id is not None]
+            if len(ids) != len(set(ids)):
+                raise ValueError("小題 id 重複")
         return self
 
 
@@ -839,7 +911,7 @@ def create_question_group(
     group = QuestionGroup(
         stimulus_type=payload.stimulus_type,
         title=payload.title,
-        passage_text=payload.passage_text,
+        passage_text=_effective_passage_text(payload.passage_text, payload.layout),
         image_url=payload.image_url,
         layout=payload.layout,
         glossary=payload.glossary,
@@ -905,6 +977,171 @@ def get_question_group(
     if g is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="題組不存在")
     return _group_out(db, g, teacher)
+
+
+def _require_editable_group(
+    db: Session, teacher: Teacher, group_id: int
+) -> QuestionGroup:
+    g = qbs.get_visible_group(db, teacher, group_id)
+    if g is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="題組不存在")
+    if not _can_edit(db, teacher, g):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有修改此題組的權限")
+    return g
+
+
+def _apply_group_question(
+    db: Session,
+    teacher: Teacher,
+    group: QuestionGroup,
+    question: Question,
+    qin: GroupQuestionIn,
+    order: int,
+    *,
+    is_new: bool,
+) -> None:
+    """把小題輸入套到 Question（新建或既有）：題型／公開／歸屬跟隨題組，年段未給時繼承。"""
+    question.stem = qin.stem
+    question.normalized_stem = qbs.normalize_stem(qin.stem)
+    question.explanation = qin.explanation
+    question.image_url = qin.image_url
+    question.stem_audio_url = qin.stem_audio_url
+    question.grade_min = qin.grade_min if qin.grade_min is not None else group.grade_min
+    question.grade_max = qin.grade_max if qin.grade_max is not None else group.grade_max
+    question.allow_multiple_answers = qin.allow_multiple_answers
+    question.show_stem_text = qin.show_stem_text
+    question.visibility = group.visibility
+    question.is_platform = group.is_platform
+    question.organization_id = group.organization_id
+    question.school_id = group.school_id
+    question.group_order = order
+    flush_db = None if is_new else db
+    qbs.replace_options(question, [o.model_dump() for o in qin.options], db=flush_db)
+    qbs.replace_exam_points(
+        db, question, qin.exam_point_ids, source=EXAM_POINT_LINK_SOURCE_MANUAL
+    )
+    qbs.replace_program_links(
+        question, [pl.model_dump() for pl in qin.program_links], db=flush_db
+    )
+    qbs.replace_sources(db, question, teacher, qin.source_ids)
+
+
+@router.patch("/question-groups/{group_id}")
+def update_question_group(
+    group_id: int,
+    payload: QuestionGroupUpdate,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """整組替換（單交易）：group 欄位只更新有給的；``questions`` 給了就整份對齊 ——
+    帶 id 的更新、沒 id 的新增、清單裡沒出現的既有小題軟刪除。任一步失敗整組 rollback。
+    """
+    g = _require_editable_group(db, teacher, group_id)
+    data = payload.model_dump(exclude_unset=True)
+    now = datetime.now(timezone.utc)
+    try:
+        for field in (
+            "stimulus_type",
+            "title",
+            "image_url",
+            "layout",
+            "glossary",
+            "grade_min",
+            "grade_max",
+            "visibility",
+        ):
+            if field in data:
+                setattr(g, field, data[field])
+        if "passage_text" in data:
+            # 老師明確給文字版（含清空 → 由 layout 重新拼）
+            g.passage_text = _effective_passage_text(data["passage_text"], g.layout)
+        elif "layout" in data:
+            # 只改排版：舊的純文字副本已過期，由新 layout 重拼
+            g.passage_text = _effective_passage_text(None, g.layout)
+        if (
+            g.grade_min is not None
+            and g.grade_max is not None
+            and g.grade_min > g.grade_max
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="grade_min 不可大於 grade_max",
+            )
+        if not (g.passage_text or g.image_url or g.layout):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="題組需要文章、圖片或排版內容",
+            )
+        qbs.enforce_platform_rules(g, teacher)
+
+        if payload.questions is not None:
+            existing = {q.id: q for q in g.questions if q.is_active}
+            wanted_ids = {q.id for q in payload.questions if q.id is not None}
+            unknown = wanted_ids - set(existing)
+            if unknown:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"小題不屬於此題組：{sorted(unknown)}",
+                )
+            for order, qin in enumerate(payload.questions):
+                if qin.id is not None:
+                    _apply_group_question(
+                        db, teacher, g, existing[qin.id], qin, order, is_new=False
+                    )
+                    existing[qin.id].updated_at = now
+                else:
+                    question = Question(
+                        question_type=g.questions[0].question_type
+                        if g.questions
+                        else "reading",
+                        teacher_id=teacher.id,
+                    )
+                    _apply_group_question(
+                        db, teacher, g, question, qin, order, is_new=True
+                    )
+                    g.questions.append(question)
+            for qid, q in existing.items():
+                if qid not in wanted_ids:
+                    q.is_active = False
+                    q.deleted_at = now
+        else:
+            # 只改題組欄位時，小題的公開／年段（未自訂者無法區分，統一跟隨）／歸屬仍要跟著題組
+            for q in g.questions:
+                if q.is_active:
+                    q.visibility = g.visibility
+                    q.is_platform = g.is_platform
+                    if "grade_min" in data:
+                        q.grade_min = g.grade_min
+                    if "grade_max" in data:
+                        q.grade_max = g.grade_max
+
+        g.updated_at = now
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    return _group_out(db, qbs.get_visible_group(db, teacher, g.id), teacher)
+
+
+@router.delete("/question-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_question_group(
+    group_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """軟刪除整組（group + 小題），保留已派發考卷的參照。"""
+    g = _require_editable_group(db, teacher, group_id)
+    now = datetime.now(timezone.utc)
+    g.is_active = False
+    g.deleted_at = now
+    for q in g.questions:
+        q.is_active = False
+        q.deleted_at = now
+    db.commit()
+    return None
 
 
 @router.get("/questions/{question_id}")

@@ -1242,3 +1242,174 @@ def test_list_mixed_singles_and_groups(test_client, teacher_a, exam_points):
     t2, p2 = rows(page=2, page_size=1)
     assert t1 == t2 == 2
     assert len(p1) == len(p2) == 1 and p1 != p2
+
+
+# ---------------------------------------------------------------- 題組 PATCH / DELETE（#1082）
+
+
+def test_create_group_derives_passage_text_and_validates_layout(test_client, teacher_a):
+    # 沒給 passage_text → 由 layout 文字區塊拼出純文字副本
+    g = _create_group(test_client, teacher_a, passage_text=None)
+    assert g["passage_text"] == "Antonio Vivaldi was a violin player."
+    # layout 深度驗證：壞的區塊要回 422 並指出路徑
+    bad = _group_payload(
+        layout={
+            "version": 1,
+            "rows": [{"columns": [{"span": 1, "blocks": [{"type": "video"}]}]}],
+        }
+    )
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    assert "layout.rows[0].columns[0].blocks[0].type" in resp.text
+    bad = _group_payload(glossary=[{"word": "x"}])
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    assert "glossary[0].zh" in resp.text
+
+
+def test_patch_group_upserts_questions_in_one_transaction(
+    test_client, shared_test_session, teacher_a, teacher_b, exam_points
+):
+    g = _create_group(test_client, teacher_a)
+    q1, q2 = g["questions"]
+    pp = exam_points["present_perfect"].id
+
+    # 更新 q2、刪 q1、新增 q3；改標題與 layout（passage_text 重拼）；公開改 public
+    payload = {
+        "title": "Vivaldi v2",
+        "visibility": "public",
+        "layout": {
+            "version": 1,
+            "rows": [
+                {
+                    "columns": [
+                        {
+                            "span": 1,
+                            "blocks": [
+                                {"type": "heading", "level": 2, "text": "Vivaldi"},
+                                {
+                                    "type": "paragraph",
+                                    "text": "He wrote **500** pieces.",
+                                },
+                            ],
+                        }
+                    ]
+                }
+            ],
+        },
+        "questions": [
+            {
+                "id": q2["id"],
+                "stem": "Updated second question?",
+                "options": [
+                    {"text": "yes", "is_correct": True},
+                    {"text": "no"},
+                ],
+                "exam_point_ids": [pp],
+            },
+            {
+                "stem": "Brand new third question?",
+                "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+            },
+        ],
+    }
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json=payload,
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    assert out["title"] == "Vivaldi v2"
+    assert out["passage_text"] == "Vivaldi\n\nHe wrote 500 pieces."
+    assert [q["stem"] for q in out["questions"]] == [
+        "Updated second question?",
+        "Brand new third question?",
+    ]
+    assert [q["group_order"] for q in out["questions"]] == [0, 1]
+    assert out["questions"][0]["id"] == q2["id"]
+    assert [ep["id"] for ep in out["questions"][0]["exam_points"]] == [pp]
+    # 小題公開跟隨題組
+    assert all(q["visibility"] == "public" for q in out["questions"])
+    # q1 軟刪除
+    s = shared_test_session
+    s.expire_all()
+    old = s.query(Question).filter(Question.id == q1["id"]).one()
+    assert old.is_active is False and old.deleted_at is not None
+    # 老師 B 現在看得到（public）但不能改
+    assert (
+        test_client.patch(
+            f"/api/question-bank/question-groups/{g['id']}",
+            json={"title": "hack"},
+            headers=_headers(teacher_b),
+        ).status_code
+        == 403
+    )
+    # 別組的小題 id → 422
+    other = _create_group(test_client, teacher_a, title="Other")
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={
+            "questions": [
+                {
+                    "id": other["questions"][0]["id"],
+                    "stem": "x",
+                    "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+                }
+            ]
+        },
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # 壞 layout → 422 且不留下半套改動
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"title": "should not persist", "layout": {"version": 1, "rows": "x"}},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    assert (
+        test_client.get(
+            f"/api/question-bank/question-groups/{g['id']}",
+            headers=_headers(teacher_a),
+        ).json()["title"]
+        == "Vivaldi v2"
+    )
+
+
+def test_delete_group_soft_deletes_questions(
+    test_client, shared_test_session, teacher_a, teacher_b
+):
+    g = _create_group(test_client, teacher_a)
+    assert (
+        test_client.delete(
+            f"/api/question-bank/question-groups/{g['id']}",
+            headers=_headers(teacher_b),
+        ).status_code
+        == 404
+    )
+    resp = test_client.delete(
+        f"/api/question-bank/question-groups/{g['id']}", headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 204
+    assert (
+        test_client.get(
+            f"/api/question-bank/question-groups/{g['id']}",
+            headers=_headers(teacher_a),
+        ).status_code
+        == 404
+    )
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    assert listing["total"] == 0
+    s = shared_test_session
+    s.expire_all()
+    assert all(
+        q.is_active is False
+        for q in s.query(Question).filter(Question.group_id == g["id"]).all()
+    )
