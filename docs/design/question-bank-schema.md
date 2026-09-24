@@ -85,12 +85,25 @@
 | title | varchar(200) | 題組標題（列表顯示用） |
 | passage_text | text | 文章；克漏字用 `{{1}}` `{{2}}` 標記空格 |
 | audio_url | text | 整段合併音檔（播放快取；segments 變動時重生成） |
-| image_url | text | |
+| image_url | text | 以圖為準的題組（海報／漫畫／地圖）整組原圖 |
+| layout | jsonb | 排版樹（#1081 加入，見下方「layout 格式」）；NULL 時退回 `passage_text` + `image_url` |
+| glossary | jsonb | 單字註解 `[{"word": "...", "zh": "..."}]`（#1081 加入） |
 | grade_min / grade_max | smallint | 題組層預設，小題可覆寫 |
 | teacher_id / organization_id / school_id / visibility / is_platform | | 與 `questions` 相同；**題組內題目的 visibility 跟隨題組**（應用層同步） |
 | is_active / deleted_at / created_at / updated_at | | |
 
 規則：題組整組公開／派發／刪除，不可單獨派其中一題。考點掛在小題層（`question_exam_points`），題組層不掛。
+
+#### layout 格式（#1079 閱讀題組）
+
+完整定義與五組驗收樣本見 [`question-bank-layout-samples/README.md`](./question-bank-layout-samples/README.md)。摘要：
+
+- `{"version": 1, "rows": [...]}`；`rows` 由上到下，每個 row 有 `columns`，每欄 `span` 為比例（允許 1:1、1:2、2:1、1:1:1），欄內是 `blocks`
+- `section`（`frame: true`）把一組 rows 框起來（兩篇並列的報導各一個 section）
+- 區塊：`heading`、`paragraph`（可含 `**粗體**`、`__底線__`、克漏字 `{{n}}`）、`image`、`dialogue`
+- 手機寬度時同一 row 的欄位依序上下堆疊，不做自由拉寬度；老師預覽、學生端、考卷共用同一個 renderer
+- 原卷「文繞圖」刻意改成「左文右圖 + 下一段全寬」
+- `passage_text` 為 layout 內所有文字區塊拼出的純文字副本，供搜尋、重複偵測、AI 考點分析；以圖為準的題組由 AI 擷取填入、老師可在「文字版」分頁修改
 
 ### `question_group_segments` — 題組素材分段（對話／獨白聽力）
 
