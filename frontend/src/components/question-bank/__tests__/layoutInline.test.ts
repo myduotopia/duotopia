@@ -62,6 +62,74 @@ describe("parseInline", () => {
       { type: "text", text: "{{x}} {{1" },
     ]);
   });
+
+  // ---- 降級行為鎖定（review #1082）：落單／交錯／跨行的標記都照原文輸出，不丟字 ----
+
+  it("single unmatched opening marker stays literal", () => {
+    expect(parseInline("**a")).toEqual([{ type: "text", text: "**a" }]);
+    expect(parseInline("a__")).toEqual([{ type: "text", text: "a__" }]);
+  });
+
+  it("interleaved markers: outer pair wins, inner unmatched stays literal", () => {
+    // `**a __b** c__`：** 配對到第二個 **；裡面的 __ 在範圍內找不到關閉 → 照原文；
+    // 外面剩下的 c__ 也照原文。原文字元一個不少。
+    const nodes = parseInline("**a __b** c__");
+    expect(nodes).toEqual([
+      { type: "bold", children: [{ type: "text", text: "a __b" }] },
+      { type: "text", text: " c__" },
+    ]);
+  });
+
+  it("marker pair spanning a newline still parses and keeps the br", () => {
+    expect(parseInline("**a\nb**")).toEqual([
+      {
+        type: "bold",
+        children: [
+          { type: "text", text: "a" },
+          { type: "br" },
+          { type: "text", text: "b" },
+        ],
+      },
+    ]);
+  });
+
+  it("non-numeric and empty blanks are literal text", () => {
+    expect(parseInline("{{abc}}")).toEqual([{ type: "text", text: "{{abc}}" }]);
+    expect(parseInline("{{}}")).toEqual([{ type: "text", text: "{{}}" }]);
+    expect(parseInline("{{ 1 }}")).toEqual([{ type: "text", text: "{{ 1 }}" }]);
+  });
+
+  it("same marker never nests: inner ** closes the outer", () => {
+    expect(parseInline("**a **b** c**")).toEqual([
+      { type: "bold", children: [{ type: "text", text: "a " }] },
+      { type: "text", text: "b" },
+      { type: "bold", children: [{ type: "text", text: " c" }] },
+    ]);
+  });
+
+  it("every input round-trips its characters (no text lost)", () => {
+    const flat = (ns: ReturnType<typeof parseInline>): string =>
+      ns
+        .map((n) => {
+          if (n.type === "text") return n.text;
+          if (n.type === "br") return "\n";
+          if (n.type === "blank") return `{{${n.n}}}`;
+          const m = n.type === "bold" ? "**" : "__";
+          return `${m}${flat(n.children)}${m}`;
+        })
+        .join("");
+    for (const s of [
+      "**a",
+      "a__",
+      "**a __b** c__",
+      "**a\nb**",
+      "{{abc}} {{}} {{40}}",
+      "**a **b** c**",
+      "__x__ ** __y",
+    ]) {
+      expect(flat(parseInline(s))).toBe(s);
+    }
+  });
 });
 
 describe("stripInlineMarkup / blank indexes", () => {
