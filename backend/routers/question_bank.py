@@ -38,7 +38,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, literal, or_, union_all
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -483,13 +483,17 @@ def _group_out(
 def _group_row_out(
     db: Session, g: QuestionGroup, teacher: Teacher, perm_cache: dict | None = None
 ) -> dict:
-    """列表的題組列：不帶小題內容，帶小題數與來源聯集。"""
+    """列表的題組列：不帶小題內容，帶小題數與來源／考點聯集。"""
     questions = [q for q in g.questions if q.is_active]
     sources: dict = {}
+    exam_points: dict = {}
     for q in questions:
         for link in q.source_links:
             if link.source is not None:
                 sources.setdefault(link.source.id, link.source)
+        for link in q.exam_point_links:
+            if link.exam_point is not None:
+                exam_points.setdefault(link.exam_point.id, link.exam_point)
     preview = (g.passage_text or "").strip()[:200]
     return {
         "kind": "group",
@@ -509,6 +513,7 @@ def _group_row_out(
         "is_owner": g.teacher_id == teacher.id,
         "can_edit": _can_edit(db, teacher, g, perm_cache),
         "sources": [_source_out(x) for x in sources.values()],
+        "exam_points": [_exam_point_out(x) for x in exam_points.values()],
         "created_at": g.created_at.isoformat() if g.created_at else None,
         "updated_at": g.updated_at.isoformat() if g.updated_at else None,
     }
@@ -591,11 +596,14 @@ def _load_options(query):
 
 
 def _load_group_rows(query):
-    """列表題組列只需要小題的題型／來源（不載選項）。"""
+    """列表題組列只需要小題的題型／來源／考點（不載選項）。"""
     return query.options(
         selectinload(QuestionGroup.questions)
         .selectinload(Question.source_links)
         .selectinload(QuestionSourceLink.source),
+        selectinload(QuestionGroup.questions)
+        .selectinload(Question.exam_point_links)
+        .selectinload(QuestionExamPoint.exam_point),
     )
 
 
@@ -645,13 +653,30 @@ def _grade_filter(query, model, grade_min, grade_max):
     return query
 
 
-def _order_key(x):
-    """單題與題組合併排序：updated_at desc（null 最後）、id desc。"""
-    return (
-        x.updated_at is None,
-        -(x.updated_at.timestamp()) if x.updated_at else 0,
-        -x.id,
+def _merged_page_keys(db: Session, singles, groups, page: int, page_size: int):
+    """單題與題組在 SQL 層合併分頁：回傳本頁的 [(kind, id)]，順序即顯示順序。
+
+    排序：updated_at desc（null 最後）、id desc、kind（同 updated_at／id 時單題在前）。
+    """
+    s_sel = singles.with_entities(
+        literal("single").label("kind"),
+        Question.id.label("id"),
+        Question.updated_at.label("updated_at"),
     )
+    g_sel = groups.with_entities(
+        literal("group").label("kind"),
+        QuestionGroup.id.label("id"),
+        QuestionGroup.updated_at.label("updated_at"),
+    )
+    u = union_all(s_sel.statement, g_sel.statement).subquery("merged")
+    rows = (
+        db.query(u.c.kind, u.c.id)
+        .order_by(u.c.updated_at.desc().nullslast(), u.c.id.desc(), u.c.kind.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return [(kind, i) for kind, i in rows]
 
 
 # ============ Endpoints ============
@@ -758,27 +783,13 @@ def list_questions(
         groups = groups.filter(or_(*group_hit))
 
     total = singles.count() + groups.count()
-    take = page * page_size
-    top_singles = (
-        singles.order_by(Question.updated_at.desc().nullslast(), Question.id.desc())
-        .limit(take)
-        .all()
-    )
-    top_groups = (
-        groups.order_by(
-            QuestionGroup.updated_at.desc().nullslast(), QuestionGroup.id.desc()
-        )
-        .limit(take)
-        .all()
-    )
-    merged = sorted(
-        [("single", x) for x in top_singles] + [("group", g) for g in top_groups],
-        key=lambda kv: _order_key(kv[1]),
-    )[(page - 1) * page_size : take]
+    # 分頁在 SQL 層合併：兩邊各投影成 (kind, id, updated_at) UNION ALL 後排序、offset/limit，
+    # 只取本頁的 (kind, id)；深頁不會把前面幾頁也抓回來（#1082 第 3 段）
+    merged = _merged_page_keys(db, singles, groups, page, page_size)
 
     # 只對本頁的列載入關聯（selectinload 批次查，不會 N+1）
-    single_ids = [x.id for kind, x in merged if kind == "single"]
-    group_ids = [g.id for kind, g in merged if kind == "group"]
+    single_ids = [i for kind, i in merged if kind == "single"]
+    group_ids = [i for kind, i in merged if kind == "group"]
     loaded_q = (
         {
             x.id: x
@@ -801,16 +812,18 @@ def list_questions(
     )
     perm_cache: dict = {}
     items = []
-    for kind, x in merged:
+    for kind, i in merged:
         if kind == "single":
+            if i not in loaded_q:
+                continue
             items.append(
                 {
                     "kind": "single",
-                    **_question_out(db, loaded_q[x.id], teacher, perm_cache),
+                    **_question_out(db, loaded_q[i], teacher, perm_cache),
                 }
             )
-        else:
-            items.append(_group_row_out(db, loaded_g[x.id], teacher, perm_cache))
+        elif i in loaded_g:
+            items.append(_group_row_out(db, loaded_g[i], teacher, perm_cache))
     return {
         "items": items,
         "total": total,

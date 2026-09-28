@@ -1244,6 +1244,31 @@ def test_list_mixed_singles_and_groups(test_client, teacher_a, exam_points):
     assert len(p1) == len(p2) == 1 and p1 != p2
 
 
+def test_list_merged_pagination_deep_page(test_client, teacher_a):
+    """SQL 層合併分頁：5 單題 + 2 題組，page_size=3 → 三頁 3/3/1，不重複不遺漏，順序穩定。"""
+    for i in range(5):
+        _create(test_client, teacher_a, stem=f"Deep page single {i}")
+    for i in range(2):
+        _create_group(test_client, teacher_a, **_group_payload(title=f"Deep group {i}"))
+
+    def rows(page):
+        res = test_client.get(
+            "/api/question-bank/questions",
+            params={"page": page, "page_size": 3},
+            headers=_headers(teacher_a),
+        ).json()
+        assert res["total"] == 7
+        return [(i.get("kind", "single"), i["id"]) for i in res["items"]]
+
+    p1, p2, p3, p4 = rows(1), rows(2), rows(3), rows(4)
+    assert len(p1) == 3 and len(p2) == 3 and len(p3) == 1 and p4 == []
+    all_rows = p1 + p2 + p3
+    assert len(set(all_rows)) == 7
+    assert {k for k, _ in all_rows} == {"single", "group"}
+    # 同一頁重打結果一致（排序穩定）
+    assert rows(3) == p3
+
+
 # ---------------------------------------------------------------- 題組 PATCH / DELETE（#1082）
 
 
