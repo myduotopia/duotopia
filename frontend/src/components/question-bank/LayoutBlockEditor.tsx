@@ -1,8 +1,8 @@
 /**
  * 區塊編輯器裡「一個區塊」的表單（Issue #1082；第 2 段修訂改成文件感）。
  *
- * - heading：無框線的大字輸入，聚焦才浮出層級（2/3）與粗體／底線
- * - paragraph：無框線、隨內容長高的 textarea；聚焦才浮出粗體／底線工具列
+ * - heading：無框線的大字輸入，聚焦才出現層級（2/3）與粗體／底線工具列（版面內，不浮出）
+ * - paragraph：無框線、隨內容長高的 textarea；聚焦才出現粗體／底線工具列（版面內，不浮出）
  *   （克漏字 `{{n}}` 由克漏字段接）
  * - image：上傳（與選項圖片同一條 uploadImageFile 路徑）＋尺寸（小／中／大／原始 → maxWidth）
  *   ／對齊／替代文字／圖說／框線
@@ -139,17 +139,16 @@ function TextBlockFields({
   const isHeading = block.type === "heading";
   return (
     <div
-      className="relative"
       onFocus={() => setFocused(true)}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null))
           setFocused(false);
       }}
     >
-      {/* 聚焦才浮出的工具列（不佔版面） */}
+      {/* 聚焦才出現的工具列：放在版面內（textarea 上方），文件第一個區塊也不會被裁切 */}
       {focused && !disabled && (
         <div
-          className="absolute -top-8 left-0 z-10 flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 shadow-sm"
+          className="mb-1 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 shadow-sm"
           data-testid={`${testId}-toolbar`}
         >
           {isHeading && (

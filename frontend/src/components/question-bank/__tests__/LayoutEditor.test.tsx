@@ -97,8 +97,10 @@ describe("LayoutEditor", () => {
       type: "paragraph",
       text: "Hello",
     });
-    // 聚焦時浮出粗體／底線工具列
-    expect(screen.getByTestId("le-block-0-toolbar")).toBeTruthy();
+    // 聚焦時出現粗體／底線工具列，且在版面內（不是 absolute 浮出，第一個區塊才不會被裁切）
+    const toolbar = screen.getByTestId("le-block-0-toolbar");
+    expect(toolbar).toBeTruthy();
+    expect(toolbar.className).not.toMatch(/absolute|-top-/);
   });
 
   it("區塊之間的「＋」：在 A 後插入標題 → A、標題、B 各獨占一行", async () => {
