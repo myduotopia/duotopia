@@ -47,6 +47,35 @@ describe("LayoutRenderer", () => {
     expect(span!.textContent).toBe("b");
   });
 
+  it("註解全空或只有空列時不渲染註解框；有有效項目才渲染", () => {
+    const { rerender } = render(
+      <LayoutRenderer layout={docWith("x")} glossary={[]} />,
+    );
+    expect(screen.queryByTestId("layout-glossary")).toBeNull();
+    rerender(
+      <LayoutRenderer
+        layout={docWith("x")}
+        glossary={[
+          { word: "", zh: "" },
+          { word: "timeline", zh: "" },
+        ]}
+      />,
+    );
+    expect(screen.queryByTestId("layout-glossary")).toBeNull();
+    rerender(
+      <LayoutRenderer
+        layout={docWith("x")}
+        glossary={[
+          { word: "", zh: "" },
+          { word: "timeline", zh: "時間軸" },
+        ]}
+      />,
+    );
+    const box = screen.getByTestId("layout-glossary");
+    expect(box.textContent).toContain("timeline");
+    expect(box.querySelectorAll(":scope > span")).toHaveLength(1);
+  });
+
   it("標題與對話文字也保留空格", () => {
     const layout: LayoutDoc = {
       version: 1,

@@ -11,7 +11,7 @@
  * 只負責欄位，不知道自己在哪一欄；拖曳把手、寬度、外框、刪除由 LayoutBlockChrome 包在外面。
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bold,
@@ -38,6 +38,7 @@ import type { LayoutBlock, LayoutDialogueLine } from "@/types/questionBank";
 import type { EditorBlock } from "./layoutEditorModel";
 import type { Marker } from "./layoutInline";
 import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
+import { DOC_TEXTAREA_CLASS, useAutoGrow } from "./useAutoGrow";
 
 export interface LayoutBlockEditorProps {
   block: EditorBlock;
@@ -122,16 +123,6 @@ function MarkupToolbar({
   );
 }
 
-/** 讓 textarea 隨內容長高（文件感：沒有捲軸、沒有固定高度） */
-function useAutoGrow(ref: React.RefObject<HTMLTextAreaElement>, value: string) {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [ref, value]);
-}
-
 function TextBlockFields({
   block,
   onChange,
@@ -203,7 +194,7 @@ function TextBlockFields({
         )}
         disabled={disabled}
         className={cn(
-          "min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0.5 shadow-none focus-visible:ring-0",
+          DOC_TEXTAREA_CLASS,
           isHeading
             ? block.level === 2
               ? "text-lg font-semibold"

@@ -13,7 +13,7 @@
  * `passage_text` 儲存時由 layout 拼出（questionDraft.toCreateGroupInput）。
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closestCenter,
@@ -45,6 +45,7 @@ import type { Program } from "@/types";
 import type { GlossaryEntry } from "@/types/questionBank";
 import LayoutEditor from "./LayoutEditor";
 import QuestionCard from "./QuestionCard";
+import { DOC_TEXTAREA_CLASS, useAutoGrow } from "./useAutoGrow";
 import {
   emptyGroupQuestion,
   glossaryToText,
@@ -114,7 +115,10 @@ function SortableQuestion({
   );
 }
 
-/** 單字註解文字框：本地保留字串（打到一半的行不會被丟掉），每次輸入同步 parse 回陣列 */
+/**
+ * 單字註解文字框：跟段落區塊一樣的無框、自動長高文字框，一行一筆「word 中文」。
+ * 本地保留字串（打到一半的行不會被丟掉），每次輸入同步 parse 回陣列。
+ */
 function GlossaryTextarea({
   entries,
   onChange,
@@ -127,17 +131,20 @@ function GlossaryTextarea({
   testId: string;
 }) {
   const { t } = useTranslation();
+  const ref = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(() => glossaryToText(entries));
+  useAutoGrow(ref, text);
   return (
     <Textarea
+      ref={ref}
       value={text}
       onChange={(e) => {
         setText(e.target.value);
         onChange(parseGlossaryText(e.target.value));
       }}
-      rows={4}
+      rows={1}
       placeholder={t("questionBank.group.glossary.placeholder")}
-      className="font-mono text-sm"
+      className={cn(DOC_TEXTAREA_CLASS, "text-sm leading-relaxed")}
       disabled={disabled}
       data-testid={testId}
     />
@@ -297,9 +304,6 @@ export default function GroupCard({
             disabled={locked}
             testId={`qg-${index}-glossary`}
           />
-          <p className="text-xs text-gray-400">
-            {t("questionBank.group.glossary.hint")}
-          </p>
         </div>
 
         {/* 小題：編號＋淡分隔線，不再每題一個外框 */}

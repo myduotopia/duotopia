@@ -279,6 +279,10 @@ export default function LayoutRenderer({
 }: LayoutRendererProps) {
   const { t } = useTranslation();
   if (!layout || layout.rows.length === 0) return null;
+  // 只有 word 與中文都非空的項目才算註解；全空（含編輯中留下的空列）就不畫框、不佔位
+  const glossaryEntries = (glossary ?? []).filter(
+    (g) => g.word.trim() && g.zh.trim(),
+  );
   return (
     <div
       className={cn(
@@ -291,13 +295,13 @@ export default function LayoutRenderer({
       {layout.rows.map((n, i) => (
         <Node key={i} node={n} forceStack={forceStack} zoomable={zoomable} />
       ))}
-      {glossary && glossary.length > 0 && (
+      {glossaryEntries.length > 0 && (
         <div
           className="flex flex-wrap gap-x-4 gap-y-1 rounded border border-gray-300 px-3 py-2 text-sm"
           data-testid="layout-glossary"
           aria-label={t("questionBank.group.glossary.title")}
         >
-          {glossary.map((g, i) => (
+          {glossaryEntries.map((g, i) => (
             <span key={i}>
               <span className="font-medium">{g.word}</span>{" "}
               <span className="text-gray-600">{g.zh}</span>
