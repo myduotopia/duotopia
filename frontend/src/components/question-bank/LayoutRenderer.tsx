@@ -8,9 +8,9 @@
  *   時欄位依序上下堆疊，不做橫向捲動
  * - section：`frame` 畫框線
  * - 區塊：heading（h2/h3）、paragraph、image（可點擊放大）、dialogue（說話者＋文字）
- * - 文字經 `parseInline` 成節點樹渲染：粗體、底線、`{{n}}` 畫成底線＋編號；
- *   不使用 dangerouslySetInnerHTML
- * - glossary 有值時渲染在底部框
+ * - 文字經 `parseInline` 成節點樹渲染：粗體、底線、雙底線、`{{n}}` 畫成底線＋編號；
+ *   不使用 dangerouslySetInnerHTML；文字元素 `whitespace-pre-wrap`，段落開頭與連續空格照原樣
+ * - glossary 有「word 與中文都非空」的項目時才渲染底部框；全空就不佔位
  */
 
 import { useState, type ReactNode } from "react";
@@ -152,17 +152,17 @@ function Block({ block, zoomable }: { block: LayoutBlock; zoomable: boolean }) {
   switch (block.type) {
     case "heading":
       return block.level === 2 ? (
-        <h2 className="text-lg font-bold leading-snug">
+        <h2 className="whitespace-pre-wrap text-lg font-bold leading-snug">
           <InlineText text={block.text} />
         </h2>
       ) : (
-        <h3 className="text-base font-semibold leading-snug">
+        <h3 className="whitespace-pre-wrap text-base font-semibold leading-snug">
           <InlineText text={block.text} />
         </h3>
       );
     case "paragraph":
       return (
-        <p className="leading-relaxed">
+        <p className="whitespace-pre-wrap leading-relaxed">
           <InlineText text={block.text} />
         </p>
       );
@@ -181,7 +181,7 @@ function Block({ block, zoomable }: { block: LayoutBlock; zoomable: boolean }) {
               <span className="shrink-0 font-medium text-gray-800">
                 <InlineText text={line.speaker} />:
               </span>
-              <span className="leading-relaxed">
+              <span className="whitespace-pre-wrap leading-relaxed">
                 <InlineText text={line.text} />
               </span>
             </div>
