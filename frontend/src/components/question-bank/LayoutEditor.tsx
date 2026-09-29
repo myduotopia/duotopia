@@ -243,9 +243,7 @@ function RowView({
                 framed={framed}
                 onToggleFrame={() => setDoc(toggleBlockFrame(doc, b.id))}
                 onRemove={() => setDoc(deleteBlock(doc, b.id))}
-                dropZone={
-                  dropTarget?.blockId === b.id ? dropTarget.zone : null
-                }
+                dropZone={dropTarget?.blockId === b.id ? dropTarget.zone : null}
                 isDragging={activeBlockId === b.id}
                 disabled={disabled}
                 testId={tid}
@@ -400,7 +398,9 @@ export default function LayoutEditor({
         key={n.id}
         className={cn(
           "rounded-md px-2 pt-2",
-          n.frame ? "border border-gray-400" : "border border-dashed border-gray-200",
+          n.frame
+            ? "border border-gray-400"
+            : "border border-dashed border-gray-200",
         )}
         data-testid={`${testId}-section`}
       >

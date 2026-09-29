@@ -629,7 +629,10 @@ describe("deriveStimulusType（#1082 修訂：素材類型由內容判定）", (
       "passage",
     );
     expect(
-      deriveStimulusType(rows([{ type: "paragraph" }, { type: "image" }]), null),
+      deriveStimulusType(
+        rows([{ type: "paragraph" }, { type: "image" }]),
+        null,
+      ),
     ).toBe("mixed");
   });
 

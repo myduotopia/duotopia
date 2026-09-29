@@ -270,9 +270,15 @@ function ImageBlockFields({
               ? cn("max-h-72", block.frame && "border border-gray-400 p-1")
               : "h-28 w-full border border-dashed border-gray-300 hover:border-blue-400",
           )}
-          style={block.url && block.maxWidth ? { maxWidth: block.maxWidth } : undefined}
+          style={
+            block.url && block.maxWidth
+              ? { maxWidth: block.maxWidth }
+              : undefined
+          }
           aria-label={t("questionBank.group.layout.imageUpload")}
-          title={block.url ? t("questionBank.group.layout.imageReplace") : undefined}
+          title={
+            block.url ? t("questionBank.group.layout.imageReplace") : undefined
+          }
           data-testid={`${testId}-upload`}
         >
           {uploading ? (

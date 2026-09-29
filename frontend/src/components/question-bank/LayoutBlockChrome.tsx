@@ -157,7 +157,10 @@ export default function LayoutBlockChrome({
                   <DropdownMenuItem
                     key={w}
                     onSelect={() => onWidthChange(w)}
-                    className={cn("font-mono text-xs", w === width && "font-bold")}
+                    className={cn(
+                      "font-mono text-xs",
+                      w === width && "font-bold",
+                    )}
                     data-testid={`${testId}-width-${w.replace("/", "-")}`}
                   >
                     {WIDTH_LABEL[w]}
