@@ -1,99 +1,72 @@
 /**
- * 題組主圖文的區塊編輯器（Issue #1082）。
+ * 題組主圖文的文件式區塊編輯器（Issue #1082 第 2 段修訂）。
  *
- * 資料模型就是 `LayoutDoc`（內部用帶 id 的 `EditorDoc`，見 layoutEditorModel）。
- * 操作：新增列（比例只能選 1 / 1:1 / 1:2 / 2:1 / 1:1:1）、欄內新增區塊（段落／標題／圖片／對話）、
- * 刪除、把列包成 section（框起來）／解開。
+ * 老師看到的是「一份文件」：段落接段落，沒有列／欄／比例這些概念。
+ * - 區塊之間 hover 出現「＋」可插入段落／標題／圖片／對話；文件最後固定有一個「＋」
+ * - 區塊 hover 才浮出工具（拖曳把手、寬度、外框、刪除），見 LayoutBlockChrome
+ * - 並排靠拖曳：拖到另一區塊的左／右半邊 → 並排（自動等分，一行最多三個）；
+ *   拖到上／下半邊 → 插在前／後、獨占一行。拖曳中目標對應的那一邊會高亮
+ * - 寬度（整行／2/3／1/2／1/3）只是微調，改一個同列另一個自動補滿
+ * - 預覽改成獨立 Dialog（LayoutPreviewDialog），可切電腦／手機
  *
- * 拖拉（@dnd-kit 多容器模式）：
- * - 列（含 section）可在最外層上下排序；section 內的列可在 section 內排序
- * - 區塊可在同欄內排序，也可拖到任何一欄（包含空欄）：`onDragOver` 跨容器搬移、
- *   `DragOverlay` 顯示拖曳中預覽
- * - 拖曳中只跟同類型的目標碰撞（拖區塊時只看區塊／欄，拖列時只看列），
- *   避免把列丟進欄裡
- *
- * 右側（寬螢幕）／下方（窄螢幕）即時預覽用共用 `LayoutRenderer`，可切桌機／手機寬度。
+ * 資料仍是 `LayoutDoc`（rows → columns(span) → blocks），由 layoutEditorModel 的純函式維護；
+ * 拖曳過程不改文件，只記錄落點，放下（dragEnd）才套用，取消就什麼都不動。
  */
 
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  closestCorners,
   DndContext,
   DragOverlay,
-  KeyboardSensor,
   PointerSensor,
-  useDroppable,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  BoxSelect,
-  GripVertical,
-  Monitor,
-  Plus,
-  Smartphone,
-  Trash2,
-} from "lucide-react";
+import { Eye, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type {
   GlossaryEntry,
   LayoutBlock,
   LayoutDoc,
 } from "@/types/questionBank";
+import LayoutBlockChrome, {
+  blockIdOf,
+  type DropZone,
+} from "./LayoutBlockChrome";
 import LayoutBlockEditor from "./LayoutBlockEditor";
-import LayoutRenderer from "./LayoutRenderer";
+import LayoutPreviewDialog from "./LayoutPreviewDialog";
 import {
-  COLUMN_RATIOS,
-  addBlock,
-  addRow,
-  allColumns,
+  appendBlock,
+  canPlaceBeside,
+  columnWidth,
   defaultBlock,
-  findColumn,
-  findColumnOfBlock,
-  moveBlock,
-  moveRowInSection,
-  moveTopLevel,
-  removeBlock,
-  removeRow,
-  rowRatio,
-  setRowRatio,
-  setSectionFrame,
+  deleteBlock,
+  insertBlockRow,
+  locateBlock,
+  placeAround,
+  placeBeside,
+  setBlockWidth,
   toEditorDoc,
   toLayoutDoc,
-  unwrapSection,
+  toggleBlockFrame,
   updateBlock,
-  wrapRowInSection,
-  type ColumnRatio,
+  widthOptionsFor,
   type EditorBlock,
-  type EditorColumn,
   type EditorDoc,
   type EditorRow,
   type EditorSection,
@@ -115,23 +88,30 @@ const BLOCK_TYPES: LayoutBlock["type"][] = [
   "dialogue",
 ];
 
-const rowDragId = (id: string) => `row:${id}`;
-const blockDragId = (id: string) => `block:${id}`;
-const colDropId = (id: string) => `col:${id}`;
-const kindOf = (id: string) => id.split(":")[0];
-const rawId = (id: string) => id.slice(id.indexOf(":") + 1);
+interface DropTarget {
+  blockId: string;
+  zone: DropZone;
+}
 
-/** 拖區塊時只跟區塊／欄碰撞；拖列時只跟列碰撞 */
-const sameKindCollision: CollisionDetection = (args) => {
-  const active = String(args.active.id);
-  const wanted = kindOf(active) === "block" ? ["block", "col"] : ["row"];
-  return closestCorners({
-    ...args,
-    droppableContainers: args.droppableContainers.filter((c) =>
-      wanted.includes(kindOf(String(c.id))),
-    ),
-  });
+/** 先用指標位置找落點，指標不在任何區塊上時退回矩形交集 */
+const blockCollision: CollisionDetection = (args) => {
+  const within = pointerWithin(args);
+  return within.length > 0 ? within : rectIntersection(args);
 };
+
+/** 由指標在目標矩形內的位置決定落點：左右 25% 為並排，其餘看上下半 */
+function zoneFor(
+  rect: { left: number; top: number; width: number; height: number },
+  x: number,
+  y: number,
+  allowSides: boolean,
+): DropZone {
+  const rx = (x - rect.left) / Math.max(rect.width, 1);
+  if (allowSides && rx < 0.25) return "left";
+  if (allowSides && rx > 0.75) return "right";
+  const ry = (y - rect.top) / Math.max(rect.height, 1);
+  return ry < 0.5 ? "before" : "after";
+}
 
 function blockSummary(block: EditorBlock, t: (k: string) => string): string {
   const label = t(`questionBank.group.layout.block.${block.type}`);
@@ -144,392 +124,143 @@ function blockSummary(block: EditorBlock, t: (k: string) => string): string {
   return short ? `${label}：${short}` : label;
 }
 
-// ---------------------------------------------------------------- 區塊卡
+// ---------------------------------------------------------------- 插入「＋」
 
-function SortableBlock({
-  block,
-  onChange,
-  onRemove,
+function AddBlockMenu({
+  onAdd,
   disabled,
   testId,
+  trigger,
 }: {
-  block: EditorBlock;
-  onChange: (patch: Partial<LayoutBlock>) => void;
-  onRemove: () => void;
+  onAdd: (type: LayoutBlock["type"]) => void;
   disabled: boolean;
   testId: string;
+  trigger: React.ReactNode;
 }) {
   const { t } = useTranslation();
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: blockDragId(block.id), disabled });
   return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      }}
-      className="rounded border border-gray-200 bg-white p-2"
-      data-testid={testId}
-      data-block-type={block.type}
-    >
-      <div className="mb-1.5 flex items-center gap-1 text-xs text-gray-500">
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          {...attributes}
-          {...listeners}
-          disabled={disabled}
-          className="cursor-grab touch-none text-gray-400 hover:text-gray-700 disabled:cursor-default"
-          title={t("questionBank.group.layout.dragBlock")}
-          aria-label={t("questionBank.group.layout.dragBlock")}
-          data-testid={`${testId}-handle`}
-        >
-          <GripVertical size={14} />
-        </button>
-        <span className="flex-1">
-          {t(`questionBank.group.layout.block.${block.type}`)}
-        </span>
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={disabled}
-          className="text-gray-400 hover:text-red-600 disabled:opacity-40"
-          aria-label={t("questionBank.group.layout.removeBlock")}
-          data-testid={`${testId}-remove`}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-      <LayoutBlockEditor
-        block={block}
-        onChange={onChange}
-        disabled={disabled}
-        testId={testId}
-      />
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={disabled}>
+        {trigger}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center">
+        {BLOCK_TYPES.map((type) => (
+          <DropdownMenuItem
+            key={type}
+            onSelect={() => onAdd(type)}
+            data-testid={`${testId}-${type}`}
+          >
+            {t(`questionBank.group.layout.block.${type}`)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
-// ---------------------------------------------------------------- 欄
-
-function ColumnEditor({
-  column,
-  doc,
-  setDoc,
+/** 兩個區塊之間的細線＋「＋」，hover 才顯示 */
+function Inserter({
+  onAdd,
   disabled,
   testId,
 }: {
-  column: EditorColumn;
-  doc: EditorDoc;
-  setDoc: (next: EditorDoc) => void;
+  onAdd: (type: LayoutBlock["type"]) => void;
   disabled: boolean;
   testId: string;
 }) {
   const { t } = useTranslation();
-  const { setNodeRef, isOver } = useDroppable({
-    id: colDropId(column.id),
-    disabled,
-  });
+  if (disabled) return <div className="h-2" />;
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "min-w-0 rounded-md border border-dashed p-2 space-y-2 transition-colors",
-        isOver
-          ? "border-blue-400 bg-blue-50/40"
-          : "border-gray-300 bg-gray-50/60",
-      )}
-      data-testid={testId}
-    >
-      <SortableContext
-        items={column.blocks.map((b) => blockDragId(b.id))}
-        strategy={verticalListSortingStrategy}
-      >
-        {column.blocks.map((b, i) => (
-          <SortableBlock
-            key={b.id}
-            block={b}
-            onChange={(patch) => setDoc(updateBlock(doc, b.id, patch))}
-            onRemove={() => setDoc(removeBlock(doc, b.id))}
-            disabled={disabled}
-            testId={`${testId}-block-${i}`}
-          />
-        ))}
-      </SortableContext>
-      {column.blocks.length === 0 && (
-        <p className="py-3 text-center text-xs text-gray-400">
-          {t("questionBank.group.layout.emptyColumn")}
-        </p>
-      )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
+    <div className="group/ins relative flex h-4 items-center justify-center">
+      <div className="absolute inset-x-2 top-1/2 h-px bg-transparent transition-colors group-hover/ins:bg-blue-200 group-focus-within/ins:bg-blue-200" />
+      <AddBlockMenu
+        onAdd={onAdd}
+        disabled={disabled}
+        testId={testId}
+        trigger={
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 w-full gap-1 text-xs text-gray-600"
-            disabled={disabled}
-            data-testid={`${testId}-add-block`}
+            className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-blue-300 bg-white text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 focus:opacity-100 group-hover/ins:opacity-100 data-[state=open]:opacity-100"
+            title={t("questionBank.group.layout.insertHere")}
+            aria-label={t("questionBank.group.layout.insertHere")}
+            data-testid={testId}
           >
             <Plus size={12} />
-            {t("questionBank.group.layout.addBlock")}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {BLOCK_TYPES.map((type) => (
-            <DropdownMenuItem
-              key={type}
-              onSelect={() =>
-                setDoc(addBlock(doc, column.id, defaultBlock(type)))
-              }
-              data-testid={`${testId}-add-${type}`}
-            >
-              {t(`questionBank.group.layout.block.${type}`)}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </button>
+        }
+      />
     </div>
   );
 }
 
 // ---------------------------------------------------------------- 列
 
-function RowEditor({
+function RowView({
   row,
   doc,
   setDoc,
+  framed,
+  dropTarget,
+  activeBlockId,
   disabled,
-  inSection,
+  indexOf,
   testId,
 }: {
   row: EditorRow;
   doc: EditorDoc;
   setDoc: (next: EditorDoc) => void;
+  framed: boolean;
+  dropTarget: DropTarget | null;
+  activeBlockId: string | null;
   disabled: boolean;
-  inSection: boolean;
+  indexOf: (blockId: string) => number;
   testId: string;
 }) {
-  const { t } = useTranslation();
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: rowDragId(row.id), disabled });
   const template = row.columns.map((c) => `minmax(0, ${c.span}fr)`).join(" ");
+  const options = widthOptionsFor(row);
   return (
     <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      }}
-      className="rounded-md border border-gray-200 bg-white p-2 space-y-2"
-      data-testid={testId}
-    >
-      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          {...attributes}
-          {...listeners}
-          disabled={disabled}
-          className="cursor-grab touch-none text-gray-400 hover:text-gray-700 disabled:cursor-default"
-          title={t("questionBank.group.layout.dragRow")}
-          aria-label={t("questionBank.group.layout.dragRow")}
-          data-testid={`${testId}-handle`}
-        >
-          <GripVertical size={14} />
-        </button>
-        <span>{t("questionBank.group.layout.ratio")}</span>
-        <Select
-          value={rowRatio(row)}
-          onValueChange={(v) =>
-            setDoc(setRowRatio(doc, row.id, v as ColumnRatio))
-          }
-          disabled={disabled}
-        >
-          <SelectTrigger
-            className="h-7 w-24 text-xs"
-            data-testid={`${testId}-ratio`}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {COLUMN_RATIOS.map((r) => (
-              <SelectItem key={r} value={r}>
-                {r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="flex-1" />
-        {!inSection && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs"
-            onClick={() => setDoc(wrapRowInSection(doc, row.id))}
-            disabled={disabled}
-            data-testid={`${testId}-wrap`}
-          >
-            <BoxSelect size={12} />
-            {t("questionBank.group.layout.wrap")}
-          </Button>
-        )}
-        <button
-          type="button"
-          onClick={() => setDoc(removeRow(doc, row.id))}
-          disabled={disabled}
-          className="text-gray-400 hover:text-red-600 disabled:opacity-40"
-          aria-label={t("questionBank.group.layout.removeRow")}
-          data-testid={`${testId}-remove`}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-      <div
-        className="grid gap-2 md:[grid-template-columns:var(--qb-cols)]"
-        style={{ "--qb-cols": template } as React.CSSProperties}
-      >
-        {row.columns.map((c, i) => (
-          <ColumnEditor
-            key={c.id}
-            column={c}
-            doc={doc}
-            setDoc={setDoc}
-            disabled={disabled}
-            testId={`${testId}-col-${i}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- section
-
-function SectionEditor({
-  section,
-  doc,
-  setDoc,
-  disabled,
-  testId,
-}: {
-  section: EditorSection;
-  doc: EditorDoc;
-  setDoc: (next: EditorDoc) => void;
-  disabled: boolean;
-  testId: string;
-}) {
-  const { t } = useTranslation();
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: rowDragId(section.id), disabled });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      }}
       className={cn(
-        "rounded-md border-2 p-2 space-y-2",
-        section.frame ? "border-gray-500" : "border-dashed border-gray-300",
+        "grid gap-3",
+        row.columns.length > 1 && "md:[grid-template-columns:var(--qb-cols)]",
       )}
-      data-testid={testId}
+      style={{ "--qb-cols": template } as React.CSSProperties}
+      data-testid={`${testId}-row`}
+      data-columns={row.columns.length}
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          {...attributes}
-          {...listeners}
-          disabled={disabled}
-          className="cursor-grab touch-none text-gray-400 hover:text-gray-700 disabled:cursor-default"
-          title={t("questionBank.group.layout.dragRow")}
-          aria-label={t("questionBank.group.layout.dragRow")}
-          data-testid={`${testId}-handle`}
-        >
-          <GripVertical size={14} />
-        </button>
-        <span className="font-medium">
-          {t("questionBank.group.layout.section")}
-        </span>
-        <label className="flex items-center gap-1">
-          <Checkbox
-            checked={section.frame}
-            onCheckedChange={(c) =>
-              setDoc(setSectionFrame(doc, section.id, c === true))
-            }
-            disabled={disabled}
-            data-testid={`${testId}-frame`}
-          />
-          {t("questionBank.group.layout.frame")}
-        </label>
-        <span className="flex-1" />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 text-xs"
-          onClick={() => setDoc(addRow(doc, "1", section.id))}
-          disabled={disabled}
-          data-testid={`${testId}-add-row`}
-        >
-          <Plus size={12} />
-          {t("questionBank.group.layout.addRow")}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() => setDoc(unwrapSection(doc, section.id))}
-          disabled={disabled}
-          data-testid={`${testId}-unwrap`}
-        >
-          {t("questionBank.group.layout.unwrap")}
-        </Button>
-      </div>
-      <SortableContext
-        items={section.rows.map((r) => rowDragId(r.id))}
-        strategy={verticalListSortingStrategy}
-      >
-        {section.rows.map((r, i) => (
-          <RowEditor
-            key={r.id}
-            row={r}
-            doc={doc}
-            setDoc={setDoc}
-            disabled={disabled}
-            inSection
-            testId={`${testId}-row-${i}`}
-          />
-        ))}
-      </SortableContext>
+      {row.columns.map((col) => (
+        <div key={col.id} className="min-w-0 space-y-2">
+          {col.blocks.map((b) => {
+            const i = indexOf(b.id);
+            const tid = `${testId}-block-${i}`;
+            return (
+              <LayoutBlockChrome
+                key={b.id}
+                blockId={b.id}
+                width={columnWidth(row, col.id)}
+                widthOptions={options}
+                onWidthChange={(w) => setDoc(setBlockWidth(doc, b.id, w))}
+                framed={framed}
+                onToggleFrame={() => setDoc(toggleBlockFrame(doc, b.id))}
+                onRemove={() => setDoc(deleteBlock(doc, b.id))}
+                dropZone={
+                  dropTarget?.blockId === b.id ? dropTarget.zone : null
+                }
+                isDragging={activeBlockId === b.id}
+                disabled={disabled}
+                testId={tid}
+              >
+                <LayoutBlockEditor
+                  block={b}
+                  onChange={(patch) => setDoc(updateBlock(doc, b.id, patch))}
+                  disabled={disabled}
+                  testId={tid}
+                />
+              </LayoutBlockChrome>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -545,273 +276,247 @@ export default function LayoutEditor({
 }: LayoutEditorProps) {
   const { t } = useTranslation();
   const [doc, setDocState] = useState<EditorDoc>(() => toEditorDoc(layout));
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [mobilePreview, setMobilePreview] = useState(false);
-  const [newRatio, setNewRatio] = useState<ColumnRatio>("1");
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const setDoc = (next: EditorDoc) => {
+    if (next === doc) return;
     setDocState(next);
     onChange(toLayoutDoc(next));
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const preview = useMemo(() => toLayoutDoc(doc), [doc]);
-
-  // 拖曳開始時快照：取消（Esc）要回到拖曳前的狀態，因為 dragOver 已改過 doc
-  const dragSnapshot = useRef<EditorDoc | null>(null);
-  const handleDragStart = (e: DragStartEvent) => {
-    dragSnapshot.current = doc;
-    setActiveId(String(e.active.id));
-  };
-
-  /** 跨欄搬移在拖曳過程中就做（dnd-kit 多容器慣例），同欄排序留到 dragEnd */
-  const handleDragOver = (e: DragOverEvent) => {
-    const { active, over } = e;
-    if (!over) return;
-    const a = String(active.id);
-    const o = String(over.id);
-    if (kindOf(a) !== "block") return;
-    const blockId = rawId(a);
-    const from = findColumnOfBlock(doc, blockId);
-    if (!from) return;
-    let toColumn: EditorColumn | null = null;
-    let toIndex: number | undefined;
-    if (kindOf(o) === "col") {
-      toColumn = findColumn(doc, rawId(o));
-    } else if (kindOf(o) === "block") {
-      toColumn = findColumnOfBlock(doc, rawId(o));
-      toIndex = toColumn?.blocks.findIndex((b) => b.id === rawId(o));
+  /** 全文件的區塊順序（給 data-testid 與拖曳預覽） */
+  const blockOrder = useMemo(() => {
+    const ids: string[] = [];
+    for (const n of doc.rows) {
+      for (const r of n.type === "section" ? n.rows : [n]) {
+        for (const c of r.columns) for (const b of c.blocks) ids.push(b.id);
+      }
     }
-    if (!toColumn || toColumn.id === from.id) return;
-    // 只在拖曳過程中更新內部狀態，不每次通知外層（dragEnd 才同步）
-    setDocState(moveBlock(doc, blockId, toColumn.id, toIndex));
-  };
+    return ids;
+  }, [doc]);
+  const indexOf = (id: string) => blockOrder.indexOf(id);
 
+  const addAt = (
+    type: LayoutBlock["type"],
+    anchor: { rowId: string; position: "before" | "after" } | null,
+  ) => setDoc(insertBlockRow(doc, defaultBlock(type), anchor));
+  const addAtEnd = (type: LayoutBlock["type"]) =>
+    setDoc(appendBlock(doc, defaultBlock(type)));
+
+  // ---- 拖曳：過程只算落點，放下才動文件 ----
+  const computeTarget = (
+    e: DragMoveEvent | DragOverEvent,
+  ): DropTarget | null => {
+    const { active, over, activatorEvent, delta } = e;
+    if (!over || over.id === active.id) return null;
+    const movingId = blockIdOf(String(active.id));
+    const targetId = blockIdOf(String(over.id));
+    const pointer = activatorEvent as PointerEvent | MouseEvent | null;
+    const x = (pointer?.clientX ?? over.rect.left) + delta.x;
+    const y = (pointer?.clientY ?? over.rect.top) + delta.y;
+    const zone = zoneFor(
+      over.rect,
+      x,
+      y,
+      canPlaceBeside(doc, movingId, targetId),
+    );
+    return { blockId: targetId, zone };
+  };
+  // 放下時要用「最後一次算出的落點」，不能靠 state（可能還沒重新 render）
+  const dropTargetRef = useRef<DropTarget | null>(null);
+  const updateTarget = (e: DragMoveEvent | DragOverEvent) => {
+    const next = computeTarget(e);
+    dropTargetRef.current = next;
+    setDropTarget((prev) =>
+      prev?.blockId === next?.blockId && prev?.zone === next?.zone
+        ? prev
+        : next,
+    );
+  };
+  const handleDragStart = (e: DragStartEvent) =>
+    setActiveBlockId(blockIdOf(String(e.active.id)));
+  const clearDrag = () => {
+    dropTargetRef.current = null;
+    setActiveBlockId(null);
+    setDropTarget(null);
+  };
   const handleDragEnd = (e: DragEndEvent) => {
-    setActiveId(null);
-    dragSnapshot.current = null;
-    const { active, over } = e;
-    const a = String(active.id);
-    if (!over) {
-      onChange(toLayoutDoc(doc));
-      return;
-    }
-    const o = String(over.id);
-    let next = doc;
-    if (kindOf(a) === "block") {
-      const blockId = rawId(a);
-      const col = findColumnOfBlock(doc, blockId);
-      if (col && kindOf(o) === "block" && o !== a) {
-        const target = findColumnOfBlock(doc, rawId(o));
-        if (target && target.id === col.id) {
-          const oldIndex = col.blocks.findIndex((b) => b.id === blockId);
-          const newIndex = col.blocks.findIndex((b) => b.id === rawId(o));
-          if (oldIndex !== newIndex)
-            next = moveBlock(doc, blockId, col.id, newIndex);
-        }
-      }
-    } else if (kindOf(a) === "row" && a !== o) {
-      const fromId = rawId(a);
-      const toId = rawId(o);
-      const topIds = doc.rows.map((n) => n.id);
-      const fromTop = topIds.indexOf(fromId);
-      const toTop = topIds.indexOf(toId);
-      if (fromTop >= 0 && toTop >= 0) {
-        next = moveTopLevel(doc, fromTop, toTop);
-      } else {
-        // section 內排序：兩者必須在同一個 section
-        const section = doc.rows.find(
-          (n): n is EditorSection =>
-            n.type === "section" &&
-            n.rows.some((r) => r.id === fromId) &&
-            n.rows.some((r) => r.id === toId),
-        );
-        if (section) {
-          next = moveRowInSection(
-            doc,
-            section.id,
-            section.rows.findIndex((r) => r.id === fromId),
-            section.rows.findIndex((r) => r.id === toId),
-          );
-        }
-      }
-    }
+    const target = dropTargetRef.current;
+    const movingId = blockIdOf(String(e.active.id));
+    clearDrag();
+    if (!target || target.blockId === movingId) return;
+    const next =
+      target.zone === "left" || target.zone === "right"
+        ? placeBeside(doc, movingId, target.blockId, target.zone)
+        : placeAround(doc, movingId, target.blockId, target.zone);
     setDoc(next);
   };
 
-  const activeBlock = useMemo(() => {
-    if (!activeId || kindOf(activeId) !== "block") return null;
-    const id = rawId(activeId);
+  const activeBlock = useMemo(
+    () => (activeBlockId ? locateBlock(doc, activeBlockId)?.block : null),
+    [activeBlockId, doc],
+  );
+  const preview = useMemo(() => toLayoutDoc(doc), [doc]);
+
+  /** 一列＋列後的「＋」；「＋」的 testid 用該列最後一個區塊的序號 */
+  const renderRow = (
+    row: EditorRow,
+    framed: boolean,
+    key: string,
+  ): React.ReactNode => {
+    const lastCol = row.columns[row.columns.length - 1];
+    const lastBlock = lastCol.blocks[lastCol.blocks.length - 1];
     return (
-      allColumns(doc)
-        .flatMap((c) => c.blocks)
-        .find((b) => b.id === id) ?? null
+      <div key={key}>
+        <RowView
+          row={row}
+          doc={doc}
+          setDoc={setDoc}
+          framed={framed}
+          dropTarget={dropTarget}
+          activeBlockId={activeBlockId}
+          disabled={disabled}
+          indexOf={indexOf}
+          testId={testId}
+        />
+        <Inserter
+          onAdd={(type) => addAt(type, { rowId: row.id, position: "after" })}
+          disabled={disabled}
+          testId={`${testId}-insert-after-${indexOf(lastBlock.id)}`}
+        />
+      </div>
     );
-  }, [activeId, doc]);
+  };
+
+  const renderNode = (n: EditorRow | EditorSection): React.ReactNode =>
+    n.type === "section" ? (
+      <div
+        key={n.id}
+        className={cn(
+          "rounded-md px-2 pt-2",
+          n.frame ? "border border-gray-400" : "border border-dashed border-gray-200",
+        )}
+        data-testid={`${testId}-section`}
+      >
+        {n.rows.map((r) => renderRow(r, true, r.id))}
+      </div>
+    ) : (
+      renderRow(n, false, n.id)
+    );
 
   return (
-    <div
-      className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
-      data-testid={testId}
-    >
-      {/* 左：結構編輯 */}
-      <div className="space-y-2">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={sameKindCollision}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => {
-            setActiveId(null);
-            const before = dragSnapshot.current ?? doc;
-            dragSnapshot.current = null;
-            setDoc(before);
-          }}
+    <div className="space-y-1" data-testid={testId}>
+      {/* 工具列：預覽 */}
+      <div className="flex items-center justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          onClick={() => setPreviewOpen(true)}
+          data-testid={`${testId}-preview-open`}
         >
-          <SortableContext
-            items={doc.rows.map((n) => rowDragId(n.id))}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-2">
-              {doc.rows.map((n, i) =>
-                n.type === "section" ? (
-                  <SectionEditor
-                    key={n.id}
-                    section={n}
-                    doc={doc}
-                    setDoc={setDoc}
-                    disabled={disabled}
-                    testId={`${testId}-node-${i}`}
-                  />
-                ) : (
-                  <RowEditor
-                    key={n.id}
-                    row={n}
-                    doc={doc}
-                    setDoc={setDoc}
-                    disabled={disabled}
-                    inSection={false}
-                    testId={`${testId}-node-${i}`}
-                  />
-                ),
-              )}
-            </div>
-          </SortableContext>
-          <DragOverlay dropAnimation={null}>
-            {activeBlock ? (
-              <div className="rounded border border-blue-400 bg-white px-2 py-1 text-xs shadow-lg">
-                {blockSummary(activeBlock, t)}
-              </div>
-            ) : activeId ? (
-              <div className="rounded border border-blue-400 bg-white px-2 py-1 text-xs shadow-lg">
-                {t("questionBank.group.layout.row")}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-
-        {doc.rows.length === 0 && (
-          <p className="rounded border border-dashed border-gray-300 py-4 text-center text-xs text-gray-400">
-            {t("questionBank.group.layout.empty")}
-          </p>
-        )}
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1 text-xs"
-            onClick={() => setDoc(addRow(doc, newRatio))}
-            disabled={disabled}
-            data-testid={`${testId}-add-row`}
-          >
-            <Plus size={14} />
-            {t("questionBank.group.layout.addRow")}
-          </Button>
-          <Select
-            value={newRatio}
-            onValueChange={(v) => setNewRatio(v as ColumnRatio)}
-            disabled={disabled}
-          >
-            <SelectTrigger
-              className="h-8 w-24 text-xs"
-              data-testid={`${testId}-new-ratio`}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {COLUMN_RATIOS.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <Eye size={13} />
+          {t("questionBank.group.layout.preview")}
+        </Button>
       </div>
 
-      {/* 右：即時預覽（同一個 renderer） */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs text-gray-600">
-          <span className="font-medium">
-            {t("questionBank.group.layout.preview")}
-          </span>
-          <div className="flex rounded border border-gray-200">
-            <button
-              type="button"
-              onClick={() => setMobilePreview(false)}
-              className={cn(
-                "flex items-center gap-1 px-2 py-1",
-                !mobilePreview ? "bg-gray-100 text-gray-900" : "text-gray-500",
-              )}
-              aria-pressed={!mobilePreview}
-              data-testid={`${testId}-preview-desktop`}
-            >
-              <Monitor size={12} />
-              {t("questionBank.group.layout.previewDesktop")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobilePreview(true)}
-              className={cn(
-                "flex items-center gap-1 px-2 py-1",
-                mobilePreview ? "bg-gray-100 text-gray-900" : "text-gray-500",
-              )}
-              aria-pressed={mobilePreview}
-              data-testid={`${testId}-preview-mobile`}
-            >
-              <Smartphone size={12} />
-              {t("questionBank.group.layout.previewMobile")}
-            </button>
-          </div>
-        </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={blockCollision}
+        onDragStart={handleDragStart}
+        onDragOver={updateTarget}
+        onDragMove={updateTarget}
+        onDragEnd={handleDragEnd}
+        onDragCancel={clearDrag}
+      >
         <div
-          className={cn(
-            "rounded-md border border-gray-200 bg-white p-4",
-            mobilePreview && "mx-auto w-[390px] max-w-full",
-          )}
-          data-testid={`${testId}-preview`}
+          className="rounded-md border border-gray-200 bg-white px-3 py-2"
+          data-testid={`${testId}-document`}
         >
-          {preview ? (
-            <LayoutRenderer
-              layout={preview}
-              glossary={glossary}
-              forceStack={mobilePreview}
-            />
+          {doc.rows.length === 0 ? (
+            <div className="py-6 text-center">
+              <p className="mb-3 text-sm text-gray-400">
+                {t("questionBank.group.layout.empty")}
+              </p>
+              <AddBlockMenu
+                onAdd={addAtEnd}
+                disabled={disabled}
+                testId={`${testId}-add`}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    disabled={disabled}
+                    data-testid={`${testId}-add`}
+                  >
+                    <Plus size={14} />
+                    {t("questionBank.group.layout.addBlock")}
+                  </Button>
+                }
+              />
+            </div>
           ) : (
-            <p className="text-center text-xs text-gray-400">
-              {t("questionBank.group.layout.empty")}
-            </p>
+            <>
+              <Inserter
+                onAdd={(type) =>
+                  addAt(type, { rowId: firstRowId(doc), position: "before" })
+                }
+                disabled={disabled}
+                testId={`${testId}-insert-first`}
+              />
+              {doc.rows.map(renderNode)}
+              {!disabled && (
+                <div className="flex justify-center pb-1 pt-1">
+                  <AddBlockMenu
+                    onAdd={addAtEnd}
+                    disabled={disabled}
+                    testId={`${testId}-add`}
+                    trigger={
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-500 hover:border-blue-300 hover:text-blue-600"
+                        data-testid={`${testId}-add`}
+                      >
+                        <Plus size={12} />
+                        {t("questionBank.group.layout.addBlock")}
+                      </button>
+                    }
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
-      </div>
+        <DragOverlay dropAnimation={null}>
+          {activeBlock ? (
+            <div className="rounded border border-blue-400 bg-white px-2 py-1 text-xs shadow-lg">
+              {blockSummary(activeBlock, t)}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      <LayoutPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        layout={preview}
+        glossary={glossary}
+        testId={`${testId}-preview`}
+      />
     </div>
   );
+}
+
+function firstRowId(doc: EditorDoc): string {
+  const n = doc.rows[0];
+  return n.type === "section" ? n.rows[0].id : n.id;
 }

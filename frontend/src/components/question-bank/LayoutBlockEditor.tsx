@@ -1,15 +1,17 @@
 /**
- * 區塊編輯器裡「一個區塊」的表單（Issue #1082）。
+ * 區塊編輯器裡「一個區塊」的表單（Issue #1082；第 2 段修訂改成文件感）。
  *
- * - heading：層級（2/3）＋文字
- * - paragraph：textarea，工具列插入 `**粗體**`／`__底線__` 標記（克漏字 `{{n}}` 由克漏字段接）
- * - image：上傳（與選項圖片同一條 uploadImageFile 路徑）＋替代文字／圖說／對齊／最大寬度／框線
+ * - heading：無框線的大字輸入，聚焦才浮出層級（2/3）與粗體／底線
+ * - paragraph：無框線、隨內容長高的 textarea；聚焦才浮出粗體／底線工具列
+ *   （克漏字 `{{n}}` 由克漏字段接）
+ * - image：上傳（與選項圖片同一條 uploadImageFile 路徑）＋尺寸（小／中／大／原始 → maxWidth）
+ *   ／對齊／替代文字／圖說／框線
  * - dialogue：說話者＋內容的行列表
  *
- * 只負責欄位，不知道自己在哪一欄；拖曳握把與刪除由 LayoutEditor 包在外面。
+ * 只負責欄位，不知道自己在哪一欄；拖曳把手、寬度、外框、刪除由 LayoutBlockChrome 包在外面。
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bold,
@@ -20,6 +22,7 @@ import {
   Underline,
 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -68,13 +71,16 @@ function MarkupToolbar({
   testId: string;
 }) {
   const { t } = useTranslation();
+  // mousedown 先擋掉，按鈕才不會把 textarea 的焦點搶走（工具列是聚焦才出現的）
+  const keepFocus = (e: React.MouseEvent) => e.preventDefault();
   return (
-    <div className="flex gap-1">
+    <div className="flex gap-0.5">
       <button
         type="button"
+        onMouseDown={keepFocus}
         onClick={() => onWrap("**")}
         disabled={disabled}
-        className="rounded border border-gray-200 p-1 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+        className="rounded p-1 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
         title={t("questionBank.group.layout.bold")}
         aria-label={t("questionBank.group.layout.bold")}
         data-testid={`${testId}-bold`}
@@ -83,9 +89,10 @@ function MarkupToolbar({
       </button>
       <button
         type="button"
+        onMouseDown={keepFocus}
         onClick={() => onWrap("__")}
         disabled={disabled}
-        className="rounded border border-gray-200 p-1 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+        className="rounded p-1 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
         title={t("questionBank.group.layout.underline")}
         aria-label={t("questionBank.group.layout.underline")}
         data-testid={`${testId}-underline`}
@@ -94,6 +101,16 @@ function MarkupToolbar({
       </button>
     </div>
   );
+}
+
+/** 讓 textarea 隨內容長高（文件感：沒有捲軸、沒有固定高度） */
+function useAutoGrow(ref: React.RefObject<HTMLTextAreaElement>, value: string) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [ref, value]);
 }
 
 function TextBlockFields({
@@ -109,6 +126,8 @@ function TextBlockFields({
 }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [focused, setFocused] = useState(false);
+  useAutoGrow(ref, block.text);
   const wrap = (marker: "**" | "__") => {
     const { next, cursor } = wrapSelection(ref.current, block.text, marker);
     onChange({ text: next });
@@ -117,47 +136,81 @@ function TextBlockFields({
       ref.current?.setSelectionRange(cursor, cursor);
     }, 0);
   };
+  const isHeading = block.type === "heading";
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        {block.type === "heading" && (
-          <Select
-            value={String(block.level)}
-            onValueChange={(v) => onChange({ level: Number(v) as 2 | 3 })}
-            disabled={disabled}
-          >
-            <SelectTrigger
-              className="h-7 w-20 text-xs"
-              data-testid={`${testId}-level`}
+    <div
+      className="relative"
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+          setFocused(false);
+      }}
+    >
+      {/* 聚焦才浮出的工具列（不佔版面） */}
+      {focused && !disabled && (
+        <div
+          className="absolute -top-8 left-0 z-10 flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1 py-0.5 shadow-sm"
+          data-testid={`${testId}-toolbar`}
+        >
+          {isHeading && (
+            <Select
+              value={String(block.level)}
+              onValueChange={(v) => onChange({ level: Number(v) as 2 | 3 })}
+              disabled={disabled}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="2">H2</SelectItem>
-              <SelectItem value="3">H3</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-        <MarkupToolbar onWrap={wrap} disabled={disabled} testId={testId} />
-      </div>
+              <SelectTrigger
+                className="h-6 w-16 border-0 text-xs shadow-none"
+                data-testid={`${testId}-level`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2">H2</SelectItem>
+                <SelectItem value="3">H3</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <MarkupToolbar onWrap={wrap} disabled={disabled} testId={testId} />
+        </div>
+      )}
       <Textarea
         ref={ref}
         value={block.text}
         onChange={(e) => onChange({ text: e.target.value })}
-        rows={block.type === "heading" ? 1 : 4}
+        rows={1}
         placeholder={t(
-          block.type === "heading"
+          isHeading
             ? "questionBank.group.layout.headingPlaceholder"
             : "questionBank.group.layout.paragraphPlaceholder",
         )}
         disabled={disabled}
-        className={
-          block.type === "heading" ? "min-h-0 font-semibold" : "min-h-[96px]"
-        }
+        className={cn(
+          "min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0.5 shadow-none focus-visible:ring-0",
+          isHeading
+            ? block.level === 2
+              ? "text-lg font-semibold"
+              : "text-base font-semibold"
+            : "text-sm leading-relaxed",
+        )}
         data-testid={`${testId}-text`}
       />
     </div>
   );
+}
+
+const IMAGE_SIZES: { key: string; maxWidth: number | undefined }[] = [
+  { key: "small", maxWidth: 240 },
+  { key: "medium", maxWidth: 480 },
+  { key: "large", maxWidth: 720 },
+  { key: "original", maxWidth: undefined },
+];
+
+function imageSizeKey(maxWidth: number | undefined): string {
+  if (maxWidth === undefined) return "original";
+  const hit = IMAGE_SIZES.find((s) => s.maxWidth === maxWidth);
+  if (hit) return hit.key;
+  // 舊資料的自訂數值：歸到最接近的一級
+  return maxWidth <= 300 ? "small" : maxWidth <= 600 ? "medium" : "large";
 }
 
 function ImageBlockFields({
@@ -198,13 +251,28 @@ function ImageBlockFields({
         }}
         data-testid={`${testId}-file`}
       />
-      <div className="flex items-start gap-3">
+      {/* 圖片本體：照對齊與尺寸顯示，跟預覽一致；還沒圖就是一個上傳區 */}
+      <div
+        className={cn(
+          "flex",
+          (block.align ?? "center") === "left" && "justify-start",
+          (block.align ?? "center") === "center" && "justify-center",
+          (block.align ?? "center") === "right" && "justify-end",
+        )}
+      >
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={disabled || uploading}
-          className="flex h-24 w-32 shrink-0 items-center justify-center overflow-hidden rounded border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+          className={cn(
+            "flex items-center justify-center overflow-hidden rounded text-gray-400 hover:text-blue-600 disabled:opacity-50",
+            block.url
+              ? cn("max-h-72", block.frame && "border border-gray-400 p-1")
+              : "h-28 w-full border border-dashed border-gray-300 hover:border-blue-400",
+          )}
+          style={block.url && block.maxWidth ? { maxWidth: block.maxWidth } : undefined}
           aria-label={t("questionBank.group.layout.imageUpload")}
+          title={block.url ? t("questionBank.group.layout.imageReplace") : undefined}
           data-testid={`${testId}-upload`}
         >
           {uploading ? (
@@ -212,8 +280,8 @@ function ImageBlockFields({
           ) : block.url ? (
             <img
               src={block.url}
-              alt=""
-              className="h-full w-full object-contain"
+              alt={block.alt ?? ""}
+              className="max-h-72 w-full object-contain"
             />
           ) : (
             <span className="flex flex-col items-center gap-1 text-xs">
@@ -222,75 +290,81 @@ function ImageBlockFields({
             </span>
           )}
         </button>
-        <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
-          <Input
-            value={block.alt ?? ""}
-            onChange={(e) => onChange({ alt: e.target.value })}
-            placeholder={t("questionBank.group.layout.imageAlt")}
-            className="h-8 text-xs"
-            disabled={disabled}
-            data-testid={`${testId}-alt`}
-          />
-          <Input
-            value={block.caption ?? ""}
-            onChange={(e) => onChange({ caption: e.target.value || undefined })}
-            placeholder={t("questionBank.group.layout.imageCaption")}
-            className="h-8 text-xs"
-            disabled={disabled}
-            data-testid={`${testId}-caption`}
-          />
-          <Select
-            value={block.align ?? "center"}
-            onValueChange={(v) =>
-              onChange({ align: v as "left" | "center" | "right" })
-            }
-            disabled={disabled}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={imageSizeKey(block.maxWidth)}
+          onValueChange={(v) =>
+            onChange({
+              maxWidth: IMAGE_SIZES.find((s) => s.key === v)?.maxWidth,
+            })
+          }
+          disabled={disabled}
+        >
+          <SelectTrigger
+            className="h-7 w-24 text-xs"
+            data-testid={`${testId}-size`}
           >
-            <SelectTrigger
-              className="h-8 text-xs"
-              data-testid={`${testId}-align`}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="left">
-                {t("questionBank.group.layout.alignLeft")}
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {IMAGE_SIZES.map((s) => (
+              <SelectItem key={s.key} value={s.key}>
+                {t(`questionBank.group.layout.imageSize.${s.key}`)}
               </SelectItem>
-              <SelectItem value="center">
-                {t("questionBank.group.layout.alignCenter")}
-              </SelectItem>
-              <SelectItem value="right">
-                {t("questionBank.group.layout.alignRight")}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={1}
-              max={2000}
-              value={block.maxWidth ?? ""}
-              onChange={(e) =>
-                onChange({
-                  maxWidth: e.target.value ? Number(e.target.value) : undefined,
-                })
-              }
-              placeholder={t("questionBank.group.layout.imageMaxWidth")}
-              className="h-8 text-xs"
-              disabled={disabled}
-              data-testid={`${testId}-max-width`}
-            />
-            <label className="flex shrink-0 items-center gap-1 text-xs text-gray-600">
-              <Checkbox
-                checked={block.frame ?? false}
-                onCheckedChange={(c) => onChange({ frame: c === true })}
-                disabled={disabled}
-                data-testid={`${testId}-frame`}
-              />
-              {t("questionBank.group.layout.imageFrame")}
-            </label>
-          </div>
-        </div>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={block.align ?? "center"}
+          onValueChange={(v) =>
+            onChange({ align: v as "left" | "center" | "right" })
+          }
+          disabled={disabled}
+        >
+          <SelectTrigger
+            className="h-7 w-20 text-xs"
+            data-testid={`${testId}-align`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="left">
+              {t("questionBank.group.layout.alignLeft")}
+            </SelectItem>
+            <SelectItem value="center">
+              {t("questionBank.group.layout.alignCenter")}
+            </SelectItem>
+            <SelectItem value="right">
+              {t("questionBank.group.layout.alignRight")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <label className="flex shrink-0 items-center gap-1 text-xs text-gray-600">
+          <Checkbox
+            checked={block.frame ?? false}
+            onCheckedChange={(c) => onChange({ frame: c === true })}
+            disabled={disabled}
+            data-testid={`${testId}-frame-image`}
+          />
+          {t("questionBank.group.layout.imageFrame")}
+        </label>
+        <Input
+          value={block.caption ?? ""}
+          onChange={(e) => onChange({ caption: e.target.value || undefined })}
+          placeholder={t("questionBank.group.layout.imageCaption")}
+          className="h-7 min-w-[8rem] flex-1 text-xs"
+          disabled={disabled}
+          data-testid={`${testId}-caption`}
+        />
+        <Input
+          value={block.alt ?? ""}
+          onChange={(e) => onChange({ alt: e.target.value })}
+          placeholder={t("questionBank.group.layout.imageAlt")}
+          className="h-7 min-w-[8rem] flex-1 text-xs"
+          disabled={disabled}
+          data-testid={`${testId}-alt`}
+        />
       </div>
     </div>
   );
