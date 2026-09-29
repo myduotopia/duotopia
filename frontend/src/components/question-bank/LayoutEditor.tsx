@@ -3,10 +3,10 @@
  *
  * 老師看到的是「一份文件」：段落接段落，沒有列／欄／比例這些概念。
  * - 區塊之間 hover 出現「＋」可插入段落／標題／圖片／對話；文件最後固定有一個「＋」
- * - 區塊 hover 才浮出工具（拖曳把手、寬度、外框、刪除），見 LayoutBlockChrome
- * - 並排靠拖曳：拖到另一區塊的左／右半邊 → 並排（自動等分，一行最多三個）；
- *   拖到上／下半邊 → 插在前／後、獨占一行。拖曳中目標對應的那一邊會高亮
- * - 寬度（整行／2/3／1/2／1/3）只是微調，改一個同列另一個自動補滿
+ * - 區塊 hover 才浮出工具（拖曳把手、外框、刪除），見 LayoutBlockChrome
+ * - 並排靠拖曳：拖到另一區塊的左／右半邊 → 並排（一行最多三個；圖＋文預設圖 1/3、文 2/3，
+ *   其餘等分）；拖到上／下半邊 → 插在前／後、獨占一行。拖曳中目標對應的那一邊會高亮
+ * - 並排比例靠拖曳欄間的分隔線微調（1/3、1/2、2/3），見 LayoutColumnDivider
  * - 預覽改成獨立 Dialog（LayoutPreviewDialog），可切電腦／手機
  *
  * 資料仍是 `LayoutDoc`（rows → columns(span) → blocks），由 layoutEditorModel 的純函式維護；
@@ -53,19 +53,16 @@ import LayoutPreviewDialog from "./LayoutPreviewDialog";
 import {
   appendBlock,
   canPlaceBeside,
-  columnWidth,
   defaultBlock,
   deleteBlock,
   insertBlockRow,
   locateBlock,
   placeAround,
   placeBeside,
-  setBlockWidth,
   toEditorDoc,
   toLayoutDoc,
   toggleBlockFrame,
   updateBlock,
-  widthOptionsFor,
   type EditorBlock,
   type EditorDoc,
   type EditorRow,
@@ -217,7 +214,6 @@ function RowView({
   testId: string;
 }) {
   const template = row.columns.map((c) => `minmax(0, ${c.span}fr)`).join(" ");
-  const options = widthOptionsFor(row);
   return (
     <div
       className={cn(
@@ -237,9 +233,6 @@ function RowView({
               <LayoutBlockChrome
                 key={b.id}
                 blockId={b.id}
-                width={columnWidth(row, col.id)}
-                widthOptions={options}
-                onWidthChange={(w) => setDoc(setBlockWidth(doc, b.id, w))}
                 framed={framed}
                 onToggleFrame={() => setDoc(toggleBlockFrame(doc, b.id))}
                 onRemove={() => setDoc(deleteBlock(doc, b.id))}

@@ -1,6 +1,7 @@
 /**
  * 區塊編輯器純操作（Issue #1082）：DB 格式 ↔ 編輯格式往返不失真、
- * 列／欄／區塊的新增刪除、比例切換併欄、section 包／解、區塊同欄與跨欄搬移。
+ * 列／欄／區塊的新增刪除、比例切換併欄、section 包／解、區塊同欄與跨欄搬移、
+ * 並排預設比例（圖 1/3、文 2/3）與欄間分隔線（setRowSplit）。
  */
 
 import { describe, it, expect } from "vitest";
@@ -11,7 +12,7 @@ import {
   appendBlock,
   blockCount,
   canPlaceBeside,
-  columnWidth,
+  defaultSpansFor,
   defaultBlock,
   deleteBlock,
   findColumnOfBlock,
@@ -24,7 +25,8 @@ import {
   removeBlock,
   removeRow,
   rowRatio,
-  setBlockWidth,
+  rowSplit,
+  setRowSplit,
   setRowRatio,
   singleImageDoc,
   toEditorDoc,
@@ -32,7 +34,6 @@ import {
   toLayoutDoc,
   unwrapSection,
   updateBlock,
-  widthOptionsFor,
   wrapRowInSection,
   type EditorBlock,
   type EditorRow,
@@ -310,32 +311,85 @@ describe("文件式操作（並排／寬度／插入）", () => {
     expect(doc.rows).toHaveLength(1);
   });
 
-  it("setBlockWidth：雙欄 2/3 → 另一欄 1/3；1/3 → 另一欄 2/3；單欄／三欄不變", () => {
+  it("setRowSplit：1 → [1,2]、2 → [1,1]、3 → [2,1]；rowSplit 反推；單欄／三欄不變", () => {
     let doc = toEditorDoc(twoBesideDoc());
-    const [l, r] = blockIds(doc);
     let row = doc.rows[0] as EditorRow;
-    expect(columnWidth(row, row.columns[0].id)).toBe("2/3");
-    expect(columnWidth(row, row.columns[1].id)).toBe("1/3");
-    expect(widthOptionsFor(row)).toEqual(["2/3", "1/2", "1/3"]);
+    expect(rowSplit(row)).toBe(3);
 
-    doc = setBlockWidth(doc, r, "2/3");
+    doc = setRowSplit(doc, row.id, 1);
     row = doc.rows[0] as EditorRow;
     expect(row.columns.map((c) => c.span)).toEqual([1, 2]);
-    doc = setBlockWidth(doc, l, "1/2");
+    expect(rowSplit(row)).toBe(1);
+    doc = setRowSplit(doc, row.id, 2);
     row = doc.rows[0] as EditorRow;
     expect(row.columns.map((c) => c.span)).toEqual([1, 1]);
-    expect(columnWidth(row, row.columns[0].id)).toBe("1/2");
+    expect(rowSplit(row)).toBe(2);
+    doc = setRowSplit(doc, row.id, 3);
+    row = doc.rows[0] as EditorRow;
+    expect(row.columns.map((c) => c.span)).toEqual([2, 1]);
 
     const single = toEditorDoc(threeParagraphs());
-    const sid = blockIds(single)[0];
-    expect(setBlockWidth(single, sid, "1/3")).toBe(single);
-    expect(widthOptionsFor(single.rows[0] as EditorRow)).toEqual(["full"]);
-    expect(
-      columnWidth(
-        single.rows[0] as EditorRow,
-        (single.rows[0] as EditorRow).columns[0].id,
-      ),
-    ).toBe("full");
+    const srow = single.rows[0] as EditorRow;
+    expect(rowSplit(srow)).toBeNull();
+    expect(setRowSplit(single, srow.id, 1)).toBe(single);
+
+    const three = toEditorDoc({
+      version: 1,
+      rows: [
+        {
+          columns: ["A", "B", "C"].map((text) => ({
+            span: 1,
+            blocks: [{ type: "paragraph", text }],
+          })),
+        },
+      ],
+    });
+    const trow = three.rows[0] as EditorRow;
+    expect(rowSplit(trow)).toBeNull();
+    expect(setRowSplit(three, trow.id, 3)).toBe(three);
+  });
+
+  it("defaultSpansFor：圖＋文 → [1,2]、文＋圖 → [2,1]、文＋文／圖＋圖 → [1,1]、三欄 → 全 1", () => {
+    const col = (b: EditorBlock) => ({ id: "c", span: 9, blocks: [b] });
+    const img = { ...defaultBlock("image"), url: "x.png" } as EditorBlock;
+    const txt = para("T");
+    expect(defaultSpansFor([col(img), col(txt)])).toEqual([1, 2]);
+    expect(defaultSpansFor([col(txt), col(img)])).toEqual([2, 1]);
+    expect(defaultSpansFor([col(txt), col(txt)])).toEqual([1, 1]);
+    expect(defaultSpansFor([col(img), col(img)])).toEqual([1, 1]);
+    expect(defaultSpansFor([col(txt), col(img), col(txt)])).toEqual([1, 1, 1]);
+    expect(defaultSpansFor([col(txt)])).toEqual([1]);
+  });
+
+  it("placeBeside 圖文並排預設：圖放到文左邊 → [1,2]；右邊 → [2,1]；拖走後剩餘依同規則", () => {
+    let doc = toEditorDoc({
+      version: 1,
+      rows: [
+        { columns: [{ span: 1, blocks: [{ type: "paragraph", text: "T" }] }] },
+        { columns: [{ span: 1, blocks: [{ type: "image", url: "i.png" }] }] },
+        { columns: [{ span: 1, blocks: [{ type: "paragraph", text: "U" }] }] },
+      ],
+    });
+    const [t, i, u] = blockIds(doc);
+    doc = placeBeside(doc, i, t, "left");
+    expect((doc.rows[0] as EditorRow).columns.map((x) => x.span)).toEqual([
+      1, 2,
+    ]);
+    doc = placeBeside(doc, i, t, "right");
+    expect((doc.rows[0] as EditorRow).columns.map((x) => x.span)).toEqual([
+      2, 1,
+    ]);
+    // 第三個進來 → 三等分
+    doc = placeBeside(doc, u, i, "right");
+    expect((doc.rows[0] as EditorRow).columns.map((x) => x.span)).toEqual([
+      1, 1, 1,
+    ]);
+    // 拖走 U → 剩「文＋圖」→ [2,1]
+    doc = placeAround(doc, u, t, "after");
+    expect(rowTexts(toLayoutDoc(doc))).toEqual([["T", "i.png"], ["U"]]);
+    expect((doc.rows[0] as EditorRow).columns.map((x) => x.span)).toEqual([
+      2, 1,
+    ]);
   });
 
   it("insertBlockRow：錨點前／後、section 內維持在 section 裡；appendBlock 接最後", () => {

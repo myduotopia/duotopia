@@ -2,7 +2,7 @@
  * 文件式編輯器裡「一個區塊」的外殼（Issue #1082 第 2 段修訂）。
  *
  * 平常沒有框線、沒有格子，看起來就是文章的一段；滑鼠移上去（或內部聚焦）才浮出
- * 右上角工具：拖曳把手、寬度（只在並排列出現）、加／移除外框、刪除。
+ * 右上角工具：拖曳把手、加／移除外框、刪除（並排比例改拖欄間分隔線，見 LayoutColumnDivider）。
  * 拖曳中作為落點時，依 `zone` 在左／右／上／下畫出高亮，讓老師放下前就知道結果。
  *
  * 拖曳用 dnd-kit：把手是 draggable、整塊是 droppable（同一個 `block:<id>` id，
@@ -15,13 +15,6 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { BoxSelect, GripVertical, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { WidthOption } from "./layoutEditorModel";
 
 export type DropZone = "left" | "right" | "before" | "after";
 
@@ -29,19 +22,8 @@ export const blockDragId = (id: string) => `block:${id}`;
 export const blockIdOf = (dragId: string) =>
   dragId.slice(dragId.indexOf(":") + 1);
 
-const WIDTH_LABEL: Record<WidthOption, string> = {
-  full: "1/1",
-  "2/3": "2/3",
-  "1/2": "1/2",
-  "1/3": "1/3",
-};
-
 export interface LayoutBlockChromeProps {
   blockId: string;
-  /** 目前寬度與可選寬度（單欄列只有 full → 不顯示寬度按鈕） */
-  width: WidthOption;
-  widthOptions: WidthOption[];
-  onWidthChange: (w: WidthOption) => void;
   /** 所在列是否已框起來 */
   framed: boolean;
   onToggleFrame: () => void;
@@ -56,9 +38,6 @@ export interface LayoutBlockChromeProps {
 
 export default function LayoutBlockChrome({
   blockId,
-  width,
-  widthOptions,
-  onWidthChange,
   framed,
   onToggleFrame,
   onRemove,
@@ -139,36 +118,6 @@ export default function LayoutBlockChrome({
           >
             <GripVertical size={14} />
           </button>
-          {widthOptions.length > 1 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="rounded px-1.5 py-0.5 font-mono text-[11px] text-gray-600 hover:bg-gray-100"
-                  title={t("questionBank.group.layout.width")}
-                  aria-label={t("questionBank.group.layout.width")}
-                  data-testid={`${testId}-width`}
-                >
-                  {WIDTH_LABEL[width]}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[6rem]">
-                {widthOptions.map((w) => (
-                  <DropdownMenuItem
-                    key={w}
-                    onSelect={() => onWidthChange(w)}
-                    className={cn(
-                      "font-mono text-xs",
-                      w === width && "font-bold",
-                    )}
-                    data-testid={`${testId}-width-${w.replace("/", "-")}`}
-                  >
-                    {WIDTH_LABEL[w]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
           <button
             type="button"
             onClick={onToggleFrame}

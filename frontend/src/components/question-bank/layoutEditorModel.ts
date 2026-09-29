@@ -8,7 +8,8 @@
  * 欄位比例只允許 README 定義的四種：1:1、1:2、2:1、1:1:1（單欄 = 1）。
  *
  * 老師看到的是「文件」：只有區塊，沒有列／欄。並排靠拖曳（`placeBeside`）自動產生欄，
- * 寬度用 `setBlockWidth`（整行／2/3／1/2／1/3）微調；拖走後 `detachBlock` 讓剩下的欄撐滿。
+ * 比例由 `defaultSpansFor` 決定（圖＋文 → 圖 1/3、文 2/3；其餘等分），之後可拖欄間分隔線
+ * 用 `setRowSplit`（左欄 1/3／1/2／2/3）微調；拖走後 `detachBlock` 讓剩下的欄依同一規則撐滿。
  * 不變式：並排列裡一欄一區塊；多區塊的欄只出現在單欄列（舊資料），對它只允許插在前後、
  * 不再分欄。
  */
@@ -385,8 +386,13 @@ export function singleImageDoc(url: string, alt = ""): EditorDoc {
 
 export const MAX_COLUMNS = 3;
 
-/** 老師看到的寬度：由欄 span 佔該列總和的比例推得 */
-export type WidthOption = "full" | "2/3" | "1/2" | "1/3";
+/** 雙欄列的分割位置：左欄佔 1/3、1/2、2/3（span 分別為 [1,2]、[1,1]、[2,1]） */
+export type SplitPosition = 1 | 2 | 3;
+export const SPLIT_SPANS: Record<SplitPosition, [number, number]> = {
+  1: [1, 2],
+  2: [1, 1],
+  3: [2, 1],
+};
 
 export interface BlockLocation {
   row: EditorRow;
@@ -419,27 +425,37 @@ export function locateBlock(
   return null;
 }
 
-/** 欄在列中的寬度（span / 總和 → 最接近的選項） */
-export function columnWidth(row: EditorRow, columnId: string): WidthOption {
+/** 雙欄列目前的分割位置（左欄比例 → 最接近的 1/3、1/2、2/3）；非雙欄回 null */
+export function rowSplit(row: EditorRow): SplitPosition | null {
+  if (row.columns.length !== 2) return null;
   const total = row.columns.reduce((n, c) => n + c.span, 0) || 1;
-  const col = row.columns.find((c) => c.id === columnId);
-  if (!col || row.columns.length === 1) return "full";
-  const frac = col.span / total;
-  if (frac >= 0.6) return "2/3";
-  if (frac >= 0.45) return "1/2";
-  return "1/3";
+  const frac = row.columns[0].span / total;
+  if (frac >= 0.6) return 3;
+  if (frac >= 0.45) return 2;
+  return 1;
 }
 
-/** 這一列裡可以選的寬度：單欄只有整行、雙欄三種、三欄只有 1/3 */
-export function widthOptionsFor(row: EditorRow): WidthOption[] {
-  if (row.columns.length <= 1) return ["full"];
-  if (row.columns.length === 2) return ["2/3", "1/2", "1/3"];
-  return ["1/3"];
+/** 並排時的預設比例：圖＋文 → 圖 1、文 2；其餘等分（三欄一律 1:1:1） */
+export function defaultSpansFor(columns: EditorColumn[]): number[] {
+  if (columns.length !== 2) return columns.map(() => 1);
+  const kind = (c: EditorColumn) =>
+    c.blocks.length === 1 && c.blocks[0].type === "image" ? "image" : "text";
+  const [a, b] = columns.map(kind);
+  if (a === "image" && b === "text") return [1, 2];
+  if (a === "text" && b === "image") return [2, 1];
+  return [1, 1];
 }
 
-/** 列裡的欄等分（2 欄 → 1:1、3 欄 → 1:1:1、1 欄 → 1） */
-function equalizeSpans(row: EditorRow): EditorRow {
-  return { ...row, columns: row.columns.map((c) => ({ ...c, span: 1 })) };
+function applySpans(row: EditorRow, spans: number[]): EditorRow {
+  return {
+    ...row,
+    columns: row.columns.map((c, i) => ({ ...c, span: spans[i] ?? 1 })),
+  };
+}
+
+/** 列裡的欄依內容重新分配比例（欄數變動後用） */
+function autoSpans(row: EditorRow): EditorRow {
+  return applySpans(row, defaultSpansFor(row.columns));
 }
 
 function replaceRow(doc: EditorDoc, row: EditorRow): EditorDoc {
@@ -453,7 +469,7 @@ function compact(doc: EditorDoc): EditorDoc {
     if (columns.length === 0) return null;
     return columns.length === r.columns.length
       ? r
-      : equalizeSpans({ ...r, columns });
+      : autoSpans({ ...r, columns });
   };
   const rows: EditorNode[] = [];
   for (const n of doc.rows) {
@@ -545,7 +561,7 @@ export function canPlaceBeside(
   return cols < MAX_COLUMNS;
 }
 
-/** 拖到某區塊的左／右邊：變成並排，欄位自動等分 */
+/** 拖到某區塊的左／右邊：變成並排，比例依 `defaultSpansFor` */
 export function placeBeside(
   doc: EditorDoc,
   movingId: string,
@@ -564,7 +580,7 @@ export function placeBeside(
     span: 1,
     blocks: [block],
   });
-  return replaceRow(without, equalizeSpans({ ...target.row, columns }));
+  return replaceRow(without, autoSpans({ ...target.row, columns }));
 }
 
 /**
@@ -594,23 +610,19 @@ export function placeAround(
   return insertBlockRow(without, block, { rowId: target.row.id, position });
 }
 
-/** 寬度微調：改一欄，同列另一欄自動補到整行（只有雙欄能調） */
-export function setBlockWidth(
+/** 拖欄間分隔線：設定雙欄列的分割位置（非雙欄列不動） */
+export function setRowSplit(
   doc: EditorDoc,
-  blockId: string,
-  width: WidthOption,
+  rowId: string,
+  pos: SplitPosition,
 ): EditorDoc {
-  const loc = locateBlock(doc, blockId);
-  if (!loc || loc.row.columns.length !== 2) return doc;
-  const mine = width === "2/3" ? 2 : 1;
-  const other = width === "1/3" ? 2 : 1;
-  return replaceRow(doc, {
-    ...loc.row,
-    columns: loc.row.columns.map((c) => ({
-      ...c,
-      span: c.id === loc.column.id ? mine : other,
-    })),
+  let changed = false;
+  const next = mapRows(doc, (r) => {
+    if (r.id !== rowId || r.columns.length !== 2) return r;
+    changed = true;
+    return applySpans(r, SPLIT_SPANS[pos]);
   });
+  return changed ? next : doc;
 }
 
 /** 區塊所在的列包成 section（框起來）；已在 section 內則解開 */

@@ -2,7 +2,7 @@
  * LayoutEditor 元件測試（Issue #1082 第 2 段修訂：文件式編輯器）。
  *
  * jsdom 不測拖拉（dnd-kit 需要真實座標），只測：
- * 空狀態「新增區塊」、區塊之間的「＋」插入、輸入段落、寬度微調（雙欄才有）、
+ * 空狀態「新增區塊」、區塊之間的「＋」插入、輸入段落、
  * 加／移除外框、刪除區塊（收掉空欄）、預覽 Dialog 與手機切換、沒有「新增列／比例」、disabled。
  * 每步都檢查 onChange 收到的 LayoutDoc。
  */
@@ -123,36 +123,6 @@ describe("LayoutEditor", () => {
     await user.click(await screen.findByTestId("le-insert-first-paragraph"));
     expect(rowTexts(lastLayout(onChange))[0]).toEqual([""]);
     expect(lastLayout(onChange)?.rows).toHaveLength(4);
-  });
-
-  it("寬度：雙欄的區塊才有寬度鈕；選 2/3 → 另一欄自動 1/3；單欄沒有寬度鈕", async () => {
-    const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
-    );
-    expect(screen.getByTestId("le-row")).toHaveAttribute("data-columns", "2");
-    await user.click(screen.getByTestId("le-block-0-width"));
-    await user.click(await screen.findByTestId("le-block-0-width-2-3"));
-    let row = lastLayout(onChange)?.rows[0] as LayoutRow;
-    expect(row.columns.map((c) => c.span)).toEqual([2, 1]);
-    expect(screen.getByTestId("le-block-0-width")).toHaveTextContent("2/3");
-    expect(screen.getByTestId("le-block-1-width")).toHaveTextContent("1/3");
-
-    await user.click(screen.getByTestId("le-block-1-width"));
-    await user.click(await screen.findByTestId("le-block-1-width-2-3"));
-    row = lastLayout(onChange)?.rows[0] as LayoutRow;
-    expect(row.columns.map((c) => c.span)).toEqual([1, 2]);
-
-    const { unmount } = render(
-      <LayoutEditor
-        layout={twoParagraphsDoc()}
-        onChange={vi.fn()}
-        testId="single"
-      />,
-    );
-    expect(screen.queryByTestId("single-block-0-width")).toBeNull();
-    unmount();
   });
 
   it("外框：按一次 → 該列包成 section（有框線）；再按 → 解開", async () => {
