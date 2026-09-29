@@ -160,9 +160,7 @@ describe("GroupCard", () => {
     expect(screen.queryByTestId("qg-0-glossary-add")).toBeNull();
     // 跟段落一樣的無框文字框，沒有說明文字
     expect(box.className).toContain("border-0");
-    expect(
-      screen.queryByText("questionBank.group.glossary.hint"),
-    ).toBeNull();
+    expect(screen.queryByText("questionBank.group.glossary.hint")).toBeNull();
   });
 
   it("題組卡有淡外框與標題列（編號＋題型＋標題）", async () => {

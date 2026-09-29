@@ -142,7 +142,10 @@ describe("parseInline", () => {
       {
         type: "bold",
         children: [
-          { type: "doubleUnderline", children: [{ type: "text", text: "both" }] },
+          {
+            type: "doubleUnderline",
+            children: [{ type: "text", text: "both" }],
+          },
         ],
       },
     ]);

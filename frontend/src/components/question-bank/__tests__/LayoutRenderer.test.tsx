@@ -21,15 +21,15 @@ vi.mock("react-i18next", () => ({
 function docWith(text: string): LayoutDoc {
   return {
     version: 1,
-    rows: [
-      { columns: [{ span: 1, blocks: [{ type: "paragraph", text }] }] },
-    ],
+    rows: [{ columns: [{ span: 1, blocks: [{ type: "paragraph", text }] }] }],
   };
 }
 
 describe("LayoutRenderer", () => {
   it("段落開頭兩個空格與換行後的兩個空格都保留", () => {
-    render(<LayoutRenderer layout={docWith("  First line.\n  Second line.")} />);
+    render(
+      <LayoutRenderer layout={docWith("  First line.\n  Second line.")} />,
+    );
     const p = screen.getByTestId("layout-renderer").querySelector("p");
     expect(p).not.toBeNull();
     expect(p!.className).toContain("whitespace-pre-wrap");
