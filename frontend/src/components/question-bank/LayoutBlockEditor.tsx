@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { LayoutBlock, LayoutDialogueLine } from "@/types/questionBank";
 import type { EditorBlock } from "./layoutEditorModel";
+import type { Marker } from "./layoutInline";
 import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
 
 export interface LayoutBlockEditorProps {
@@ -49,7 +50,7 @@ export interface LayoutBlockEditorProps {
 function wrapSelection(
   el: HTMLTextAreaElement | null,
   value: string,
-  marker: "**" | "__",
+  marker: Marker,
 ): { next: string; cursor: number } {
   const start = el?.selectionStart ?? value.length;
   const end = el?.selectionEnd ?? value.length;
@@ -66,7 +67,7 @@ function MarkupToolbar({
   disabled,
   testId,
 }: {
-  onWrap: (marker: "**" | "__") => void;
+  onWrap: (marker: Marker) => void;
   disabled?: boolean;
   testId: string;
 }) {
@@ -99,6 +100,24 @@ function MarkupToolbar({
       >
         <Underline size={14} />
       </button>
+      <button
+        type="button"
+        onMouseDown={keepFocus}
+        onClick={() => onWrap("==")}
+        disabled={disabled}
+        className="relative rounded p-1 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
+        title={t("questionBank.group.layout.doubleUnderline")}
+        aria-label={t("questionBank.group.layout.doubleUnderline")}
+        data-testid={`${testId}-double-underline`}
+      >
+        <Underline size={14} />
+        <span
+          aria-hidden
+          className="absolute -right-0.5 -top-0.5 text-[9px] font-bold leading-none"
+        >
+          2
+        </span>
+      </button>
     </div>
   );
 }
@@ -128,7 +147,7 @@ function TextBlockFields({
   const ref = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
   useAutoGrow(ref, block.text);
-  const wrap = (marker: "**" | "__") => {
+  const wrap = (marker: Marker) => {
     const { next, cursor } = wrapSelection(ref.current, block.text, marker);
     onChange({ text: next });
     window.setTimeout(() => {

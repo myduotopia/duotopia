@@ -6098,6 +6098,7 @@
         },
         "bold": "Bold",
         "underline": "Underline",
+        "doubleUnderline": "Double underline",
         "headingPlaceholder": "Heading text",
         "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
         "imageUpload": "Upload image",

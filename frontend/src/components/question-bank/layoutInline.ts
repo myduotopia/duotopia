@@ -2,7 +2,7 @@
  * 題組排版的行內標記解析與純文字副本（Issue #1082）。
  *
  * 行內 markdown 子集（老師預覽＝學生端＝考卷共用）：
- *   `**粗體**`、`__底線__`、`{{n}}`（克漏字空格，畫成底線＋編號）、`\n`（換行）
+ *   `**粗體**`、`__底線__`、`==雙底線==`、`{{n}}`（克漏字空格，畫成底線＋編號）、`\n`（換行）
  * 不引入 markdown 套件、不產生 HTML 字串：解析成節點樹交給 React 渲染，
  * 所以永遠不需要 dangerouslySetInnerHTML。
  *
@@ -16,20 +16,31 @@ export type InlineNode =
   | { type: "text"; text: string }
   | { type: "bold"; children: InlineNode[] }
   | { type: "underline"; children: InlineNode[] }
+  | { type: "doubleUnderline"; children: InlineNode[] }
   | { type: "blank"; n: number }
   | { type: "br" };
 
 const BLANK_RE = /\{\{(\d+)\}\}/g;
 
 /**
- * 解析一段文字。`**` / `__` 成對才算標記，落單的照原文輸出；
- * 允許粗體內含底線（反之亦然），同種標記不巢狀。
+ * 解析一段文字。`**` / `__` / `==` 成對才算標記，落單的照原文輸出；
+ * 允許不同標記互相包含，同種標記不巢狀。
  */
 export function parseInline(text: string): InlineNode[] {
   return parseRange(text, 0, text.length, null);
 }
 
-type Marker = "**" | "__";
+export type Marker = "**" | "__" | "==";
+
+const MARKER_NODE: Record<Marker, "bold" | "underline" | "doubleUnderline"> = {
+  "**": "bold",
+  __: "underline",
+  "==": "doubleUnderline",
+};
+
+function isMarker(two: string): two is Marker {
+  return two === "**" || two === "__" || two === "==";
+}
 
 function parseRange(
   text: string,
@@ -48,14 +59,14 @@ function parseRange(
   let i = start;
   while (i < end) {
     const two = text.slice(i, i + 2);
-    if (two === "**" || two === "__") {
-      const marker = two as Marker;
+    if (isMarker(two)) {
+      const marker = two;
       // 只有在（本範圍內）找得到成對的關閉標記才當標記；同種標記不巢狀
       const close = text.indexOf(marker, i + 2);
       if (close !== -1 && close < end && marker !== closing) {
         flush();
         nodes.push({
-          type: marker === "**" ? "bold" : "underline",
+          type: MARKER_NODE[marker],
           children: parseRange(text, i + 2, close, marker),
         });
         i = close + marker.length;
@@ -90,7 +101,11 @@ function parseRange(
 
 /** 去掉行內標記；`{{n}}` → `____` */
 export function stripInlineMarkup(text: string): string {
-  return text.replace(/\*\*/g, "").replace(/__/g, "").replace(BLANK_RE, "____");
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/==/g, "")
+    .replace(BLANK_RE, "____");
 }
 
 /** 行內標記裡出現的克漏字編號（依出現順序、去重） */

@@ -6142,6 +6142,7 @@
         },
         "bold": "粗體",
         "underline": "底線",
+        "doubleUnderline": "雙底線",
         "headingPlaceholder": "標題文字",
         "paragraphPlaceholder": "段落內容（**粗體**、__底線__）",
         "imageUpload": "上傳圖片",

@@ -56,6 +56,15 @@ export function renderInline(
             {renderInline(n.children, key)}
           </span>
         );
+      case "doubleUnderline":
+        return (
+          <span
+            key={key}
+            className="underline decoration-double decoration-1 underline-offset-2"
+          >
+            {renderInline(n.children, key)}
+          </span>
+        );
       case "blank":
         return (
           <span

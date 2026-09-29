@@ -114,7 +114,8 @@ describe("parseInline", () => {
           if (n.type === "text") return n.text;
           if (n.type === "br") return "\n";
           if (n.type === "blank") return `{{${n.n}}}`;
-          const m = n.type === "bold" ? "**" : "__";
+          const m =
+            n.type === "bold" ? "**" : n.type === "underline" ? "__" : "==";
           return `${m}${flat(n.children)}${m}`;
         })
         .join("");
@@ -126,15 +127,38 @@ describe("parseInline", () => {
       "{{abc}} {{}} {{40}}",
       "**a **b** c**",
       "__x__ ** __y",
+      "==a== b==",
+      "**x ==y** z==",
     ]) {
       expect(flat(parseInline(s))).toBe(s);
     }
+  });
+
+  it("== is a double underline; can nest with bold/underline; unmatched stays text", () => {
+    expect(parseInline("see ==this== and **==both==**")).toEqual([
+      { type: "text", text: "see " },
+      { type: "doubleUnderline", children: [{ type: "text", text: "this" }] },
+      { type: "text", text: " and " },
+      {
+        type: "bold",
+        children: [
+          { type: "doubleUnderline", children: [{ type: "text", text: "both" }] },
+        ],
+      },
+    ]);
+    expect(parseInline("a == b")).toEqual([{ type: "text", text: "a == b" }]);
+    expect(parseInline("==a ==b== c==")).toEqual([
+      { type: "doubleUnderline", children: [{ type: "text", text: "a " }] },
+      { type: "text", text: "b" },
+      { type: "doubleUnderline", children: [{ type: "text", text: " c" }] },
+    ]);
   });
 });
 
 describe("stripInlineMarkup / blank indexes", () => {
   it("strips markers and replaces blanks", () => {
     expect(stripInlineMarkup("a **b** __c__ {{2}}")).toBe("a b c ____");
+    expect(stripInlineMarkup("==d== e")).toBe("d e");
     expect(inlineBlankIndexes("{{40}} x {{41}} {{40}}")).toEqual([40, 41]);
   });
 });

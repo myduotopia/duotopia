@@ -38,6 +38,15 @@ describe("LayoutRenderer", () => {
     expect(p!.querySelectorAll("br")).toHaveLength(1);
   });
 
+  it("==雙底線== 渲染成 decoration-double 的 span", () => {
+    render(<LayoutRenderer layout={docWith("a ==b== c")} />);
+    const span = screen
+      .getByTestId("layout-renderer")
+      .querySelector("span.decoration-double");
+    expect(span).not.toBeNull();
+    expect(span!.textContent).toBe("b");
+  });
+
   it("標題與對話文字也保留空格", () => {
     const layout: LayoutDoc = {
       version: 1,
