@@ -435,9 +435,7 @@ export function parseGlossaryText(text: string): GlossaryEntry[] {
 }
 
 export function glossaryToText(entries: GlossaryEntry[]): string {
-  return entries
-    .map((e) => (e.zh ? `${e.word} ${e.zh}` : e.word))
-    .join("\n");
+  return entries.map((e) => (e.zh ? `${e.word} ${e.zh}` : e.word)).join("\n");
 }
 
 /** 題組驗證：主圖文、排版填完、至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */

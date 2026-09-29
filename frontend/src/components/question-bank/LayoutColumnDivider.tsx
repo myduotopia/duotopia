@@ -58,10 +58,7 @@ export default function LayoutColumnDivider({
     if (!dragging) return;
     const rect = rowRef.current?.getBoundingClientRect();
     if (!rect || rect.width <= 0) return;
-    const frac = Math.min(
-      1,
-      Math.max(0, (e.clientX - rect.left) / rect.width),
-    );
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     emit(splitFromFraction(frac));
   };
   const onPointerUp = (e: PointerEvent<HTMLButtonElement>) => {
@@ -73,7 +70,8 @@ export default function LayoutColumnDivider({
   };
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     let next: SplitPosition | null = null;
-    if (e.key === "ArrowLeft") next = Math.max(1, position - 1) as SplitPosition;
+    if (e.key === "ArrowLeft")
+      next = Math.max(1, position - 1) as SplitPosition;
     else if (e.key === "ArrowRight")
       next = Math.min(3, position + 1) as SplitPosition;
     else if (e.key === "Home") next = 1;
