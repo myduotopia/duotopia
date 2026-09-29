@@ -45,6 +45,7 @@ interface ApiItem {
   example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  example_sentence_translation?: string | null; // Issue #1088
 }
 
 // Deterministic PRNG seeded per item, mirroring the backend's
@@ -68,21 +69,38 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return out;
 }
 
+// 選項／正解文字：與 backend/utils/distractors.py `answer_text_for_item` 對齊。
+// Issue #1088: 開例句 → 例句中的實際字形（cloze_answer，缺則退回 text）；
+// 否則 showImage=true → 英文 text；false → 翻譯。
+function answerOf(
+  item: ApiItem,
+  showImage: boolean,
+  showExample: boolean,
+): string {
+  if (showExample) return item.cloze_answer || item.text;
+  return showImage ? item.text : item.translation || "";
+}
+
 function buildOptions(
   current: ApiItem,
   pool: ApiItem[],
   showImage: boolean,
+  showExample = false,
 ): QuizOption[] {
-  // 與 WordSelectionPreview / backend distractors.py 對齊：
-  // showImage=true → 題目顯示圖+翻譯、選項用英文；反之選項用翻譯
-  const correctText = showImage ? current.text : current.translation || "";
+  const correctText = answerOf(current, showImage, showExample);
+  const seen = new Set<string>([correctText.trim().toLowerCase()]);
   const distractorPool = pool
     .filter((p) => p.id !== current.id)
     .map((p) => ({
-      text: showImage ? p.text : p.translation || "",
+      text: answerOf(p, showImage, showExample),
       image_url: p.image_url ?? null,
     }))
-    .filter((o) => o.text);
+    .filter((o) => {
+      const key = o.text.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   const distractors = seededShuffle(distractorPool, current.id).slice(0, 3);
   const all: QuizOption[] = [
     { text: correctText, image_url: current.image_url ?? null },
@@ -110,6 +128,7 @@ interface QuizWord {
   example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  example_sentence_translation?: string | null; // Issue #1088
 }
 
 // 後端 /preview/selection-quiz-start 回傳的題目形狀（#861 D）：已含全單字集、
@@ -128,6 +147,7 @@ interface ServerQuizWord {
   example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  example_sentence_translation?: string | null; // Issue #1088
 }
 
 export default function WordSelectionQuizPreview({
@@ -201,27 +221,27 @@ export default function WordSelectionQuizPreview({
         example_sentence_audio_url: w.example_sentence_audio_url,
         cloze_answer: w.cloze_answer,
         blanked_sentence: w.blanked_sentence,
+        example_sentence_translation: w.example_sentence_translation,
       }));
     }
-    // contentId 路徑：前端組選項。選項語言由 show_image 決定；
-    // Issue #967: 例句題型（show_example_sentence）一律英文選項。
-    const englishOptions =
-      settings.show_image !== false || settings.show_example_sentence === true;
+    // contentId 路徑：前端組選項。Issue #1088: 例句題型正解／選項用例句實際字形。
+    const showImage = settings.show_image !== false;
+    const showExample = settings.show_example_sentence === true;
     return items.map((item, idx) => {
-      const correctText = englishOptions ? item.text : item.translation || "";
       return {
         content_item_id: item.id,
         text: item.text,
         translation: item.translation || "",
-        correct_text: correctText,
+        correct_text: answerOf(item, showImage, showExample),
         audio_url: item.audio_url,
         image_url: item.image_url,
-        options: buildOptions(item, items, englishOptions),
+        options: buildOptions(item, items, showImage, showExample),
         question_number: idx + 1,
         example_sentence: item.example_sentence,
         example_sentence_audio_url: item.example_sentence_audio_url,
         cloze_answer: item.cloze_answer,
         blanked_sentence: item.blanked_sentence,
+        example_sentence_translation: item.example_sentence_translation,
       };
     });
   }, [
