@@ -18,7 +18,12 @@ import {
   type QuestionType,
   type QuestionVisibility,
 } from "@/types/questionBank";
-import { ChipCell, formatGrade, InlineVisibility, OptionGrid } from "./listCells";
+import {
+  ChipCell,
+  formatGrade,
+  InlineVisibility,
+  OptionGrid,
+} from "./listCells";
 import { searchSources } from "./sourcesCombobox";
 
 /** 列表可快速編輯的三個欄位 */

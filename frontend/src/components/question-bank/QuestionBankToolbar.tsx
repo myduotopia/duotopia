@@ -156,7 +156,9 @@ export default function QuestionBankToolbar({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("questionBank.list.typeAll")}</SelectItem>
+            <SelectItem value="all">
+              {t("questionBank.list.typeAll")}
+            </SelectItem>
             {TYPE_FILTERS.map((type) => (
               <SelectItem key={type} value={type}>
                 {filterTypeLabel(type)}
