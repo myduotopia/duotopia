@@ -6170,8 +6170,7 @@
       },
       "glossary": {
         "title": "單字註解",
-        "placeholder": "timeline 時間軸
-compose 作曲",
+        "placeholder": "timeline 時間軸\ncompose 作曲",
         "hint": "一行一個單字：英文、空格、中文"
       },
       "questions": {

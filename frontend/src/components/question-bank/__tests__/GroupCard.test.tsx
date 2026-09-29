@@ -152,8 +152,7 @@ describe("GroupCard", () => {
       { word: "timeline", zh: "時間軸" },
     ]);
     // 文字框保留打到一半的內容
-    expect(box).toHaveValue("timeline 時間軸
-compose");
+    expect(box).toHaveValue("timeline 時間軸\ncompose");
 
     await user.clear(box);
     draft = lastDraft(onDraft);

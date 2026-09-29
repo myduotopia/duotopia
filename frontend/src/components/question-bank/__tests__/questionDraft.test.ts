@@ -656,11 +656,9 @@ describe("deriveStimulusType（#1082 修訂：素材類型由內容判定）", (
 describe("單字註解文字框 parse／format", () => {
   it("parseGlossaryText：半形／全形空格、多段中文、無中文、空行", () => {
     expect(
-      parseGlossaryText("timeline 時間軸
-compose　作曲 譜曲
-
-weak
-  spaced   虛弱的  "),
+      parseGlossaryText(
+        "timeline 時間軸\ncompose\u3000作曲 譜曲\n\nweak\n  spaced   虛弱的  ",
+      ),
     ).toEqual([
       { word: "timeline", zh: "時間軸" },
       { word: "compose", zh: "作曲 譜曲" },
@@ -676,8 +674,7 @@ weak
       { word: "compose", zh: "作曲" },
     ];
     const text = glossaryToText(entries);
-    expect(text).toBe("timeline 時間軸
-compose 作曲");
+    expect(text).toBe("timeline 時間軸\ncompose 作曲");
     expect(parseGlossaryText(text)).toEqual(entries);
     expect(glossaryToText([{ word: "weak", zh: "" }])).toBe("weak");
   });

@@ -426,10 +426,9 @@ export function cleanGlossary(
  * 沒有第二段 → zh 空字串（送出前由 cleanGlossary 丟掉）；空白行保留為空列，方便打字中途。
  */
 export function parseGlossaryText(text: string): GlossaryEntry[] {
-  return text.split(/?
-/).map((line) => {
+  return text.split(/\r?\n/).map((line) => {
     const trimmed = line.trim();
-    const m = trimmed.match(/^(\S+)[\s　]+(.*)$/);
+    const m = trimmed.match(/^(\S+)[\s\u3000]+(.*)$/);
     if (m) return { word: m[1], zh: m[2].trim() };
     return { word: trimmed, zh: "" };
   });
@@ -438,8 +437,7 @@ export function parseGlossaryText(text: string): GlossaryEntry[] {
 export function glossaryToText(entries: GlossaryEntry[]): string {
   return entries
     .map((e) => (e.zh ? `${e.word} ${e.zh}` : e.word))
-    .join("
-");
+    .join("\n");
 }
 
 /** 題組驗證：主圖文、排版填完、至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */

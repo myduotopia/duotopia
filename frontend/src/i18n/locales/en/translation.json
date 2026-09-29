@@ -6126,8 +6126,7 @@
       },
       "glossary": {
         "title": "Glossary",
-        "placeholder": "timeline 時間軸
-compose 作曲",
+        "placeholder": "timeline 時間軸\ncompose 作曲",
         "hint": "One entry per line: word, space, meaning"
       },
       "questions": {
