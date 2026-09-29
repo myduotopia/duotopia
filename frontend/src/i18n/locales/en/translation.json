@@ -6067,7 +6067,11 @@
       "examPointClear": "Clear exam point filter",
       "bulkEdit": "Edit",
       "bulkEditTypeMismatch": "Questions of different types can't be edited together",
-      "bulkEditNoPermission": "No permission to edit the selected questions"
+      "bulkEditNoPermission": "No permission to edit the selected questions",
+      "deleteGroup": "Delete group",
+      "confirmDeleteWithGroups": "Delete {{count}} question(s) and {{groups}} group(s) (all sub-questions)? Assigned papers are not affected.",
+      "groupDeleted": "Group deleted",
+      "groupDeleteFailed": "Failed to delete the group"
     },
     "group": {
       "titleCreate": "New {{type}}",
@@ -6139,6 +6143,9 @@
       "render": {
         "zoomImage": "Zoom image"
       }
+    },
+    "groupTypes": {
+      "reading": "Reading group"
     }
   },
   "orgMaterials": {

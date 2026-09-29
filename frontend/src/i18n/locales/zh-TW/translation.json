@@ -6111,7 +6111,11 @@
       "examPointClear": "清除考點篩選",
       "bulkEdit": "編輯",
       "bulkEditTypeMismatch": "題型不同的題目無法一起編輯",
-      "bulkEditNoPermission": "勾選的題目沒有編輯權限"
+      "bulkEditNoPermission": "勾選的題目沒有編輯權限",
+      "deleteGroup": "刪除題組",
+      "confirmDeleteWithGroups": "確定刪除 {{count}} 題與 {{groups}} 個題組（含所有小題）？已派發的考卷不受影響。",
+      "groupDeleted": "題組已刪除",
+      "groupDeleteFailed": "刪除題組失敗"
     },
     "group": {
       "titleCreate": "新增{{type}}",
@@ -6183,6 +6187,9 @@
       "render": {
         "zoomImage": "放大圖片"
       }
+    },
+    "groupTypes": {
+      "reading": "閱讀題組"
     }
   },
   "orgMaterials": {

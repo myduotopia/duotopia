@@ -199,6 +199,8 @@ export interface QuestionGroupListRow {
   can_edit: boolean;
   /** 題組內小題的來源聯集 */
   sources: QuestionSource[];
+  /** 題組內小題的考點聯集（列表顯示用；舊回應可能沒有） */
+  exam_points?: QuestionExamPointRef[];
   created_at: string | null;
   updated_at: string | null;
 }

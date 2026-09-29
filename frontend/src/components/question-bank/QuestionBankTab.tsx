@@ -14,6 +14,9 @@
  * 工具列：搜尋（題幹＋來源）、題型下拉、考點多選（OR，`ep=1,2`）、只看自己的、每頁筆數；
  * 全部存 URL query。考點目錄 mount 時抓一次，重整後用 id 對回名稱。
  * 點題目文字仍開編輯面板（onSelectQuestion）；題組列點標題開題組面板（onSelectGroup）。
+ * 題組列（#1082）：可勾選（與單題分開存 id）、公開可快速改（updateQuestionGroup）、
+ * 批次刪除含題組（deleteQuestionGroup）、列尾「刪除題組」Dialog 確認；批次編輯／派發只對單題。
+ * 題型篩選與題組列的題型顯示「閱讀題組」（groupTypeLabel），新增清單仍顯示「閱讀測驗」。
  *
  * 拆檔（#1082）：QuestionBankToolbar（工具列）、QuestionRow（單題列）、GroupRow（題組列）、
  * QuestionBankPagination（分頁列）、listCells（共用格子）。此檔只持有狀態與資料流。
@@ -33,6 +36,7 @@ import {
   type QuestionGroupListRow,
   type QuestionListItem,
   type QuestionType,
+  type QuestionVisibility,
 } from "@/types/questionBank";
 import QuestionBulkBar from "./QuestionBulkBar";
 import QuestionBankToolbar, { TYPE_FILTERS } from "./QuestionBankToolbar";
@@ -83,10 +87,15 @@ export default function QuestionBankTab({
   onBulkEdit,
 }: QuestionBankTabProps) {
   const { t } = useTranslation();
-  // 列表列：單題 + 題組列（#1082 骨架：題組列先只顯示，勾選／快速編輯／批次動作只對單題）
+  // 列表列：單題 + 題組列（#1082）。題組列可勾選、快速改公開、批次刪除；
+  // 批次編輯／派發仍只對單題（題組整組操作在面板內）
   const [items, setItems] = useState<QuestionListItem[]>([]);
   const questionItems = useMemo(
     () => items.filter((it): it is Question => !isGroupRow(it)),
+    [items],
+  );
+  const groupItems = useMemo(
+    () => items.filter((it): it is QuestionGroupListRow => isGroupRow(it)),
     [items],
   );
   const [total, setTotal] = useState(0);
@@ -145,12 +154,23 @@ export default function QuestionBankTab({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  // 快速編輯：只存改過的列；勾選集合
+  // 快速編輯：只存改過的列；勾選集合（單題與題組分開存，id 空間不同）
   const [edits, setEdits] = useState<Record<number, RowEdit>>({});
+  const [groupEdits, setGroupEdits] = useState<
+    Record<number, QuestionVisibility>
+  >({});
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [checkedGroups, setCheckedGroups] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const dirtyCount = Object.keys(edits).length;
+  const dirtyCount =
+    Object.keys(edits).length + Object.keys(groupEdits).length;
+  const clearSelection = () => {
+    setEdits({});
+    setGroupEdits({});
+    setChecked(new Set());
+    setCheckedGroups(new Set());
+  };
   const confirmDiscard = useCallback(
     () =>
       dirtyCount === 0 || window.confirm(t("questionBank.list.unsavedConfirm")),
@@ -209,7 +229,9 @@ export default function QuestionBankTab({
       setTotal(res.total);
       // 換頁／重載後清掉編輯狀態（換頁前已 confirm 過）
       setEdits({});
+      setGroupEdits({});
       setChecked(new Set());
+      setCheckedGroups(new Set());
     } catch (err) {
       console.error("Failed to load question bank", err);
       toast.error(t("questionBank.messages.loadFailed"));
@@ -234,6 +256,12 @@ export default function QuestionBankTab({
     () => (type: QuestionType) => t(`questionBank.types.${type}`),
     [t],
   );
+  // 題組類題型在列表與篩選裡顯示「閱讀題組」，新增清單仍顯示「閱讀測驗」
+  const groupTypeLabel = useMemo(
+    () => (type: QuestionType) =>
+      type === "reading" ? t("questionBank.groupTypes.reading") : typeLabel(type),
+    [t, typeLabel],
+  );
 
   const createSource = useMemo(
     () => makeCreateSource(organizationId),
@@ -242,20 +270,28 @@ export default function QuestionBankTab({
 
   // ---- 勾選 ----
   const allChecked =
-    questionItems.length > 0 && questionItems.every((q) => checked.has(q.id));
+    items.length > 0 &&
+    questionItems.every((q) => checked.has(q.id)) &&
+    groupItems.every((g) => checkedGroups.has(g.id));
   const toggleAll = () => {
-    setChecked(
-      allChecked ? new Set() : new Set(questionItems.map((q) => q.id)),
-    );
+    if (allChecked) {
+      setChecked(new Set());
+      setCheckedGroups(new Set());
+    } else {
+      setChecked(new Set(questionItems.map((q) => q.id)));
+      setCheckedGroups(new Set(groupItems.map((g) => g.id)));
+    }
   };
-  const toggleOne = (id: number, on: boolean) => {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
+  const toggleIn =
+    (setter: typeof setChecked) => (id: number, on: boolean) =>
+      setter((prev) => {
+        const next = new Set(prev);
+        if (on) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+  const toggleOne = toggleIn(setChecked);
+  const toggleGroup = toggleIn(setCheckedGroups);
 
   // ---- 快速編輯：改了就勾選 ----
   // 後端算好的 can_edit（建立者本人，或機構擁有人／教材管理者）
@@ -268,6 +304,13 @@ export default function QuestionBankTab({
       [q.id]: { ...(prev[q.id] ?? editFromQuestion(q)), ...patch },
     }));
     setChecked((prev) => new Set(prev).add(q.id));
+  };
+  const patchGroupVisibility = (
+    g: QuestionGroupListRow,
+    visibility: QuestionVisibility,
+  ) => {
+    setGroupEdits((prev) => ({ ...prev, [g.id]: visibility }));
+    setCheckedGroups((prev) => new Set(prev).add(g.id));
   };
 
   const changePage = (next: number) => {
@@ -290,26 +333,40 @@ export default function QuestionBankTab({
 
   const handleSave = async () => {
     const ids = Object.keys(edits).map(Number);
-    if (ids.length === 0) return;
+    const groupIds = Object.keys(groupEdits).map(Number);
+    if (ids.length === 0 && groupIds.length === 0) return;
     setBulkBusy(true);
     try {
-      const results = await Promise.allSettled(
-        ids.map((id) => {
-          const e = edits[id];
-          return apiClient.updateQuestion(id, {
-            exam_point_ids: e.exam_points.map((ep) => ep.id),
-            source_ids: e.sources.map((s) => s.id),
-            visibility: e.visibility,
-          });
-        }),
-      );
+      const [results, groupResults] = await Promise.all([
+        Promise.allSettled(
+          ids.map((id) => {
+            const e = edits[id];
+            return apiClient.updateQuestion(id, {
+              exam_point_ids: e.exam_points.map((ep) => ep.id),
+              source_ids: e.sources.map((s) => s.id),
+              visibility: e.visibility,
+            });
+          }),
+        ),
+        Promise.allSettled(
+          groupIds.map((id) =>
+            apiClient.updateQuestionGroup(id, { visibility: groupEdits[id] }),
+          ),
+        ),
+      ]);
       const failed = ids.filter((_, i) => results[i].status === "rejected");
-      const okCount = ids.length - failed.length;
+      const failedGroups = groupIds.filter(
+        (_, i) => groupResults[i].status === "rejected",
+      );
+      const okCount =
+        ids.length + groupIds.length - failed.length - failedGroups.length;
       if (okCount > 0)
         toast.success(t("questionBank.list.saved", { count: okCount }));
-      if (failed.length > 0) {
+      if (failed.length > 0 || failedGroups.length > 0) {
         toast.error(
-          t("questionBank.list.saveFailed", { count: failed.length }),
+          t("questionBank.list.saveFailed", {
+            count: failed.length + failedGroups.length,
+          }),
         );
         // 失敗的保留編輯狀態，成功的清掉
         setEdits((prev) =>
@@ -317,7 +374,15 @@ export default function QuestionBankTab({
             Object.entries(prev).filter(([id]) => failed.includes(Number(id))),
           ),
         );
+        setGroupEdits((prev) =>
+          Object.fromEntries(
+            Object.entries(prev).filter(([id]) =>
+              failedGroups.includes(Number(id)),
+            ),
+          ),
+        );
         setChecked(new Set(failed));
+        setCheckedGroups(new Set(failedGroups));
         // 重新抓成功那些的最新值
         const res = await apiClient.listQuestions(listParams);
         setItems(res.items);
@@ -332,30 +397,63 @@ export default function QuestionBankTab({
 
   const handleDelete = async () => {
     const ids = Array.from(checked);
-    if (ids.length === 0) return;
-    if (
-      !window.confirm(
-        t("questionBank.list.confirmDelete", { count: ids.length }),
-      )
-    )
-      return;
+    const groupIds = Array.from(checkedGroups);
+    if (ids.length === 0 && groupIds.length === 0) return;
+    const message =
+      groupIds.length > 0
+        ? t("questionBank.list.confirmDeleteWithGroups", {
+            count: ids.length,
+            groups: groupIds.length,
+          })
+        : t("questionBank.list.confirmDelete", { count: ids.length });
+    if (!window.confirm(message)) return;
     setBulkBusy(true);
     try {
-      const results = await Promise.allSettled(
-        ids.map((id) => apiClient.deleteQuestion(id)),
-      );
+      const results = await Promise.allSettled([
+        ...ids.map((id) => apiClient.deleteQuestion(id)),
+        ...groupIds.map((id) => apiClient.deleteQuestionGroup(id)),
+      ]);
       const failedCount = results.filter((r) => r.status === "rejected").length;
       if (failedCount > 0) {
         toast.error(
           t("questionBank.list.deleteFailed", { count: failedCount }),
         );
       } else {
-        toast.success(t("questionBank.list.deleted", { count: ids.length }));
+        toast.success(
+          t("questionBank.list.deleted", {
+            count: ids.length + groupIds.length,
+          }),
+        );
       }
       // 刪掉的列不需要保留編輯狀態
-      setEdits({});
-      setChecked(new Set());
+      clearSelection();
       await load();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  /** 列表端刪除單一題組（GroupRow 的 Dialog 已確認過） */
+  const handleDeleteGroup = async (g: QuestionGroupListRow) => {
+    setBulkBusy(true);
+    try {
+      await apiClient.deleteQuestionGroup(g.id);
+      toast.success(t("questionBank.list.groupDeleted"));
+      setGroupEdits((prev) => {
+        const next = { ...prev };
+        delete next[g.id];
+        return next;
+      });
+      setCheckedGroups((prev) => {
+        const next = new Set(prev);
+        next.delete(g.id);
+        return next;
+      });
+      await load();
+    } catch (err) {
+      console.error("Failed to delete question group", err);
+      toast.error(t("questionBank.list.groupDeleteFailed"));
+      throw err;
     } finally {
       setBulkBusy(false);
     }
@@ -368,7 +466,7 @@ export default function QuestionBankTab({
         canCreate={canCreate}
         onCreate={handleCreate}
         typeLabel={typeLabel}
-        filterTypeLabel={typeLabel}
+        filterTypeLabel={groupTypeLabel}
         search={search}
         onChangeSearch={changeSearch}
         typeFilter={typeFilter}
@@ -449,8 +547,14 @@ export default function QuestionBankTab({
                   <GroupRow
                     key={`g-${item.id}`}
                     row={item}
-                    typeLabel={typeLabel}
+                    typeLabel={groupTypeLabel}
+                    checked={checkedGroups.has(item.id)}
+                    editedVisibility={groupEdits[item.id]}
+                    busy={bulkBusy}
+                    onToggle={(on) => toggleGroup(item.id, on)}
+                    onChangeVisibility={(v) => patchGroupVisibility(item, v)}
                     onSelect={onSelectGroup}
+                    onDelete={handleDeleteGroup}
                   />
                 ) : (
                   <QuestionRow
@@ -489,7 +593,7 @@ export default function QuestionBankTab({
       />
 
       <QuestionBulkBar
-        selectedCount={checked.size}
+        selectedCount={checked.size + checkedGroups.size}
         dirtyCount={dirtyCount}
         onSave={handleSave}
         onDelete={handleDelete}
@@ -499,7 +603,10 @@ export default function QuestionBankTab({
             : undefined
         }
         onEdit={
-          onBulkEdit && checkedSameType && editableChecked.length > 0
+          onBulkEdit &&
+          checkedSameType &&
+          checkedGroups.size === 0 &&
+          editableChecked.length > 0
             ? () => {
                 if (!confirmDiscard()) return;
                 onBulkEdit(editableChecked);
@@ -507,7 +614,7 @@ export default function QuestionBankTab({
             : undefined
         }
         editDisabledReason={
-          !checkedSameType
+          !checkedSameType || checkedGroups.size > 0
             ? t("questionBank.list.bulkEditTypeMismatch")
             : editableChecked.length === 0
               ? t("questionBank.list.bulkEditNoPermission")
@@ -515,8 +622,7 @@ export default function QuestionBankTab({
         }
         onClear={() => {
           if (!confirmDiscard()) return;
-          setEdits({});
-          setChecked(new Set());
+          clearSelection();
         }}
         busy={bulkBusy}
       />
