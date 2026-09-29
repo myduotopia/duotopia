@@ -6129,7 +6129,7 @@
         "frame": "框線",
         "frameRow": "加外框",
         "unframe": "移除外框",
-        "width": "寬度",
+        "resizeColumns": "拖曳調整欄寬（1/3、1/2、2/3）",
         "addBlock": "新增區塊",
         "insertHere": "在這裡插入",
         "removeBlock": "刪除區塊",

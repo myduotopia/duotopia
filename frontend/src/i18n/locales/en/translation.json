@@ -6085,7 +6085,7 @@
         "frame": "Border",
         "frameRow": "Add border",
         "unframe": "Remove border",
-        "width": "Width",
+        "resizeColumns": "Drag to resize columns (1/3, 1/2, 2/3)",
         "addBlock": "Add block",
         "insertHere": "Insert here",
         "removeBlock": "Remove block",

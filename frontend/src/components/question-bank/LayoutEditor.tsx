@@ -49,6 +49,7 @@ import LayoutBlockChrome, {
   type DropZone,
 } from "./LayoutBlockChrome";
 import LayoutBlockEditor from "./LayoutBlockEditor";
+import LayoutColumnDivider from "./LayoutColumnDivider";
 import LayoutPreviewDialog from "./LayoutPreviewDialog";
 import {
   appendBlock,
@@ -59,6 +60,8 @@ import {
   locateBlock,
   placeAround,
   placeBeside,
+  rowSplit,
+  setRowSplit,
   toEditorDoc,
   toLayoutDoc,
   toggleBlockFrame,
@@ -214,18 +217,29 @@ function RowView({
   testId: string;
 }) {
   const template = row.columns.map((c) => `minmax(0, ${c.span}fr)`).join(" ");
+  const rowRef = useRef<HTMLDivElement>(null);
+  const split = rowSplit(row);
   return (
     <div
+      ref={rowRef}
       className={cn(
-        "grid gap-3",
+        "group/row relative grid gap-3",
         row.columns.length > 1 && "md:[grid-template-columns:var(--qb-cols)]",
       )}
       style={{ "--qb-cols": template } as React.CSSProperties}
       data-testid={`${testId}-row`}
       data-columns={row.columns.length}
     >
-      {row.columns.map((col) => (
-        <div key={col.id} className="min-w-0 space-y-2">
+      {row.columns.map((col, ci) => (
+        <div key={col.id} className="relative min-w-0 space-y-2">
+          {ci === 0 && split !== null && !disabled && (
+            <LayoutColumnDivider
+              position={split}
+              onChange={(pos) => setDoc(setRowSplit(doc, row.id, pos))}
+              rowRef={rowRef}
+              testId={`${testId}-row-divider`}
+            />
+          )}
           {col.blocks.map((b) => {
             const i = indexOf(b.id);
             const tid = `${testId}-block-${i}`;

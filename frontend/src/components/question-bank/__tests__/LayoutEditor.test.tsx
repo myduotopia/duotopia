@@ -2,13 +2,13 @@
  * LayoutEditor 元件測試（Issue #1082 第 2 段修訂：文件式編輯器）。
  *
  * jsdom 不測拖拉（dnd-kit 需要真實座標），只測：
- * 空狀態「新增區塊」、區塊之間的「＋」插入、輸入段落、
+ * 空狀態「新增區塊」、區塊之間的「＋」插入、輸入段落、欄寬分隔線（雙欄才有；鍵盤與指標吸附）、
  * 加／移除外框、刪除區塊（收掉空欄）、預覽 Dialog 與手機切換、沒有「新增列／比例」、disabled。
  * 每步都檢查 onChange 收到的 LayoutDoc。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import LayoutEditor from "../LayoutEditor";
@@ -123,6 +123,71 @@ describe("LayoutEditor", () => {
     await user.click(await screen.findByTestId("le-insert-first-paragraph"));
     expect(rowTexts(lastLayout(onChange))[0]).toEqual([""]);
     expect(lastLayout(onChange)?.rows).toHaveLength(4);
+  });
+
+  it("欄寬分隔線：雙欄才有；→ 變 2:1、← 兩次變 1:2；拖到 5/6 處吸附 2:1；單欄／三欄沒有", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
+    );
+    expect(screen.getByTestId("le-row")).toHaveAttribute("data-columns", "2");
+    expect(screen.queryByTestId("le-block-0-width")).toBeNull();
+    const divider = screen.getByTestId("le-row-divider");
+    expect(divider).toHaveAttribute("aria-valuenow", "2");
+
+    divider.focus();
+    await user.keyboard("{ArrowRight}");
+    let row = lastLayout(onChange)?.rows[0] as LayoutRow;
+    expect(row.columns.map((c) => c.span)).toEqual([2, 1]);
+    expect(screen.getByTestId("le-row-divider")).toHaveAttribute(
+      "aria-valuenow",
+      "3",
+    );
+    await user.keyboard("{ArrowLeft}{ArrowLeft}");
+    row = lastLayout(onChange)?.rows[0] as LayoutRow;
+    expect(row.columns.map((c) => c.span)).toEqual([1, 2]);
+
+    // 指標拖曳：列寬 300，拖到 x=250（5/6）→ 左欄 2/3
+    const rowEl = screen.getByTestId("le-row");
+    rowEl.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 300, height: 100 }) as DOMRect;
+    const d = screen.getByTestId("le-row-divider");
+    d.setPointerCapture = vi.fn();
+    d.hasPointerCapture = () => true;
+    d.releasePointerCapture = vi.fn();
+    fireEvent.pointerDown(d, { pointerId: 1, clientX: 100 });
+    fireEvent.pointerMove(d, { pointerId: 1, clientX: 250 });
+    fireEvent.pointerUp(d, { pointerId: 1, clientX: 250 });
+    row = lastLayout(onChange)?.rows[0] as LayoutRow;
+    expect(row.columns.map((c) => c.span)).toEqual([2, 1]);
+
+    const { unmount } = render(
+      <LayoutEditor
+        layout={twoParagraphsDoc()}
+        onChange={vi.fn()}
+        testId="single"
+      />,
+    );
+    expect(screen.queryByTestId("single-row-divider")).toBeNull();
+    unmount();
+
+    const three: LayoutDoc = {
+      version: 1,
+      rows: [
+        {
+          columns: ["a", "b", "c"].map((text) => ({
+            span: 1,
+            blocks: [{ type: "paragraph", text }],
+          })),
+        },
+      ],
+    };
+    const r3 = render(
+      <LayoutEditor layout={three} onChange={vi.fn()} testId="three" />,
+    );
+    expect(screen.queryByTestId("three-row-divider")).toBeNull();
+    r3.unmount();
   });
 
   it("外框：按一次 → 該列包成 section（有框線）；再按 → 解開", async () => {
