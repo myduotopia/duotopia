@@ -160,6 +160,17 @@ describe("GroupCard", () => {
     expect(screen.queryByTestId("qg-0-glossary-add")).toBeNull();
   });
 
+  it("題組卡有淡外框與標題列（編號＋題型＋標題）", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} />);
+    const root = screen.getByTestId("qb-group-card-0");
+    expect(root.className).toMatch(/border/);
+    const header = screen.getByTestId("qg-0-header");
+    expect(header).toHaveTextContent("1. questionBank.groupTypes.reading");
+    await user.type(screen.getByTestId("qg-0-title"), "Vivaldi");
+    expect(screen.getByTestId("qg-0-header")).toHaveTextContent("Vivaldi");
+  });
+
   it("沒有素材類型下拉；小題以 compact（不包外框）呈現", async () => {
     const user = userEvent.setup();
     render(<Harness initial={emptyGroupDraft()} />);

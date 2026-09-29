@@ -1,7 +1,7 @@
 /**
  * 右欄的題組卡（Issue #1082：閱讀題組；克漏字同一張卡，差異只在小題）。
  *
- * 第 2 段修訂後的樣子：像一份文件，不包外框
+ * 修訂後的樣子：淡外框＋標題列（一個面板多個題組時分得開），內容像一份文件
  * |題組標題|
  * |年段|
  * |主圖文（LayoutEditor：文件式區塊編輯器，預覽另開 Dialog）|
@@ -34,6 +34,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -206,22 +207,31 @@ export default function GroupCard({
   return (
     <div
       id={`question-card-${draft.key}`}
-      className={`space-y-4 bg-white p-4 ${
-        hasError ? "border-l-2 border-red-300" : ""
-      }`}
+      className={cn(
+        "rounded-lg border bg-white",
+        hasError ? "border-red-300" : "border-gray-200",
+      )}
       data-testid={`qb-group-card-${index}`}
     >
-      {/* 標題列 */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700">
-          {index + 1}. {t(`questionBank.types.${draft.question_type}`)}
+      {/* 標題列：淡底，一個面板多個題組時用來分隔 */}
+      <div
+        className="flex items-center justify-between rounded-t-lg border-b border-gray-200 bg-gray-50 px-4 py-2"
+        data-testid={`qg-${index}-header`}
+      >
+        <span className="min-w-0 truncate text-sm font-semibold text-gray-700">
+          {index + 1}. {t(`questionBank.groupTypes.${draft.question_type}`)}
+          {draft.title && (
+            <span className="ml-2 font-normal text-gray-500">
+              {draft.title}
+            </span>
+          )}
         </span>
         {onRemove && !readOnly && (
           <button
             type="button"
             onClick={onRemove}
             disabled={disabled}
-            className="text-gray-400 hover:text-red-600"
+            className="shrink-0 text-gray-400 hover:text-red-600"
             aria-label={t("questionBank.form.removeQuestion")}
             data-testid={`qg-${index}-remove`}
           >
@@ -230,143 +240,145 @@ export default function GroupCard({
         )}
       </div>
 
-      {/* 題組標題 */}
-      <Input
-        value={draft.title}
-        onChange={(e) => patch({ title: e.target.value, serverError: null })}
-        placeholder={t("questionBank.group.titlePlaceholder")}
-        className="h-9"
-        disabled={locked}
-        data-testid={`qg-${index}-title`}
-      />
-
-      {/* 年段 */}
-      <div className="space-y-1">
-        <Label className="text-xs text-gray-600">
-          {t("questionBank.form.grade")}
-        </Label>
-        <GradeRangeSlider
-          value={draft.grade}
-          onChange={(grade) =>
-            patch({
-              grade,
-              questions: draft.questions.map((q) => ({ ...q, grade })),
-            })
-          }
+      <div className="space-y-4 p-4">
+        {/* 題組標題 */}
+        <Input
+          value={draft.title}
+          onChange={(e) => patch({ title: e.target.value, serverError: null })}
+          placeholder={t("questionBank.group.titlePlaceholder")}
+          className="h-9"
           disabled={locked}
-          compact
-          data-testid={`qg-${index}-grade`}
+          data-testid={`qg-${index}-title`}
         />
-      </div>
 
-      {/* 主圖文 */}
-      <div className="space-y-1">
-        <Label className="text-xs text-gray-600">
-          {t("questionBank.group.layout.title")}
-        </Label>
-        <LayoutEditor
-          key={draft.key}
-          layout={draft.layout}
-          onChange={(layout) => patch({ layout, serverError: null })}
-          glossary={draft.glossary}
-          disabled={locked}
-          testId={`qg-${index}-layout`}
-        />
-      </div>
+        {/* 年段 */}
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-600">
+            {t("questionBank.form.grade")}
+          </Label>
+          <GradeRangeSlider
+            value={draft.grade}
+            onChange={(grade) =>
+              patch({
+                grade,
+                questions: draft.questions.map((q) => ({ ...q, grade })),
+              })
+            }
+            disabled={locked}
+            compact
+            data-testid={`qg-${index}-grade`}
+          />
+        </div>
 
-      {/* 單字註解：一個文字框，一行一筆 */}
-      <div className="space-y-1.5">
-        <Label className="text-xs text-gray-600">
-          {t("questionBank.group.glossary.title")}
-        </Label>
-        <GlossaryTextarea
-          key={draft.key}
-          entries={draft.glossary}
-          onChange={setGlossary}
-          disabled={locked}
-          testId={`qg-${index}-glossary`}
-        />
-        <p className="text-xs text-gray-400">
-          {t("questionBank.group.glossary.hint")}
-        </p>
-      </div>
+        {/* 主圖文 */}
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-600">
+            {t("questionBank.group.layout.title")}
+          </Label>
+          <LayoutEditor
+            key={draft.key}
+            layout={draft.layout}
+            onChange={(layout) => patch({ layout, serverError: null })}
+            glossary={draft.glossary}
+            disabled={locked}
+            testId={`qg-${index}-layout`}
+          />
+        </div>
 
-      {/* 小題：編號＋淡分隔線，不再每題一個外框 */}
-      <div className="space-y-2 border-t border-gray-200 pt-3">
-        <Label className="text-xs text-gray-600">
-          {t("questionBank.group.questions.title", {
-            count: draft.questions.length,
-          })}
-        </Label>
-        {draft.questions.length === 0 && (
+        {/* 單字註解：一個文字框，一行一筆 */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-gray-600">
+            {t("questionBank.group.glossary.title")}
+          </Label>
+          <GlossaryTextarea
+            key={draft.key}
+            entries={draft.glossary}
+            onChange={setGlossary}
+            disabled={locked}
+            testId={`qg-${index}-glossary`}
+          />
           <p className="text-xs text-gray-400">
-            {t("questionBank.group.questions.empty")}
+            {t("questionBank.group.glossary.hint")}
+          </p>
+        </div>
+
+        {/* 小題：編號＋淡分隔線，不再每題一個外框 */}
+        <div className="space-y-2 border-t border-gray-200 pt-3">
+          <Label className="text-xs text-gray-600">
+            {t("questionBank.group.questions.title", {
+              count: draft.questions.length,
+            })}
+          </Label>
+          {draft.questions.length === 0 && (
+            <p className="text-xs text-gray-400">
+              {t("questionBank.group.questions.empty")}
+            </p>
+          )}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onQuestionDragEnd}
+          >
+            <SortableContext
+              items={draft.questions.map((q) => q.key)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="divide-y divide-gray-100">
+                {draft.questions.map((q, i) => (
+                  <SortableQuestion
+                    key={q.key}
+                    id={q.key}
+                    disabled={locked}
+                    handleLabel={t("questionBank.group.questions.drag")}
+                  >
+                    <QuestionCard
+                      index={i}
+                      draft={q}
+                      onChange={(next) => updateQuestion(q.key, next)}
+                      onRemove={
+                        readOnly ? undefined : () => removeQuestion(q.key)
+                      }
+                      excludeId={q.existingId ?? undefined}
+                      ttsSettings={ttsSettings}
+                      programs={programs}
+                      errorMessage={
+                        questionErrors[i]
+                          ? t(`questionBank.form.errors.${questionErrors[i]}`)
+                          : null
+                      }
+                      readOnly={readOnly}
+                      disabled={disabled}
+                      stemOptional={draft.question_type === "cloze"}
+                      testIdPrefix={`qg-${index}-q`}
+                      compact
+                    />
+                  </SortableQuestion>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          {!readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5"
+              onClick={addQuestion}
+              disabled={disabled}
+              data-testid={`qg-${index}-add-question`}
+            >
+              <Plus size={14} />
+              {t("questionBank.group.questions.add")}
+            </Button>
+          )}
+        </div>
+
+        {(errorMessage || draft.serverError) && (
+          <p className="text-xs text-red-600" data-testid={`qg-${index}-error`}>
+            {draft.serverError ?? errorMessage}
           </p>
         )}
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={onQuestionDragEnd}
-        >
-          <SortableContext
-            items={draft.questions.map((q) => q.key)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="divide-y divide-gray-100">
-              {draft.questions.map((q, i) => (
-                <SortableQuestion
-                  key={q.key}
-                  id={q.key}
-                  disabled={locked}
-                  handleLabel={t("questionBank.group.questions.drag")}
-                >
-                  <QuestionCard
-                    index={i}
-                    draft={q}
-                    onChange={(next) => updateQuestion(q.key, next)}
-                    onRemove={
-                      readOnly ? undefined : () => removeQuestion(q.key)
-                    }
-                    excludeId={q.existingId ?? undefined}
-                    ttsSettings={ttsSettings}
-                    programs={programs}
-                    errorMessage={
-                      questionErrors[i]
-                        ? t(`questionBank.form.errors.${questionErrors[i]}`)
-                        : null
-                    }
-                    readOnly={readOnly}
-                    disabled={disabled}
-                    stemOptional={draft.question_type === "cloze"}
-                    testIdPrefix={`qg-${index}-q`}
-                    compact
-                  />
-                </SortableQuestion>
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-        {!readOnly && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5"
-            onClick={addQuestion}
-            disabled={disabled}
-            data-testid={`qg-${index}-add-question`}
-          >
-            <Plus size={14} />
-            {t("questionBank.group.questions.add")}
-          </Button>
-        )}
       </div>
-
-      {(errorMessage || draft.serverError) && (
-        <p className="text-xs text-red-600" data-testid={`qg-${index}-error`}>
-          {draft.serverError ?? errorMessage}
-        </p>
-      )}
     </div>
   );
 }
