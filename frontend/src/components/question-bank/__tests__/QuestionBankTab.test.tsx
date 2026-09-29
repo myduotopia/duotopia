@@ -16,6 +16,7 @@ import QuestionBankTab from "../QuestionBankTab";
 import type {
   Question,
   QuestionGroupListRow,
+  QuestionListItem,
   QuestionListResponse,
 } from "@/types/questionBank";
 
@@ -160,12 +161,11 @@ function renderTab(ui: React.ReactElement, initialEntries: string[] = ["/"]) {
 }
 
 function respond(
-  items: Question[],
+  items: QuestionListItem[],
   total = items.length,
 ): QuestionListResponse {
   return { items, total, page: 1, page_size: 20 };
 }
-
 
 function makeGroupRow(
   overrides: Partial<QuestionGroupListRow> = {},
@@ -250,6 +250,8 @@ describe("QuestionBankTab 題組列（#1082）", () => {
     const user = userEvent.setup();
     renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByTestId("question-group-row-101");
+    // Radix Select 開啟時會對選項呼叫 scrollIntoView，jsdom 沒有
+    Element.prototype.scrollIntoView = vi.fn();
     await user.click(screen.getByTestId("qb-group-101-visibility-display"));
     await user.click(
       await screen.findByTestId("qb-group-101-visibility-option-public"),

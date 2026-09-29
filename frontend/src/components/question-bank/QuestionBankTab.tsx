@@ -163,8 +163,7 @@ export default function QuestionBankTab({
   const [checkedGroups, setCheckedGroups] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const dirtyCount =
-    Object.keys(edits).length + Object.keys(groupEdits).length;
+  const dirtyCount = Object.keys(edits).length + Object.keys(groupEdits).length;
   const clearSelection = () => {
     setEdits({});
     setGroupEdits({});
@@ -259,7 +258,9 @@ export default function QuestionBankTab({
   // 題組類題型在列表與篩選裡顯示「閱讀題組」，新增清單仍顯示「閱讀測驗」
   const groupTypeLabel = useMemo(
     () => (type: QuestionType) =>
-      type === "reading" ? t("questionBank.groupTypes.reading") : typeLabel(type),
+      type === "reading"
+        ? t("questionBank.groupTypes.reading")
+        : typeLabel(type),
     [t, typeLabel],
   );
 
@@ -282,14 +283,13 @@ export default function QuestionBankTab({
       setCheckedGroups(new Set(groupItems.map((g) => g.id)));
     }
   };
-  const toggleIn =
-    (setter: typeof setChecked) => (id: number, on: boolean) =>
-      setter((prev) => {
-        const next = new Set(prev);
-        if (on) next.add(id);
-        else next.delete(id);
-        return next;
-      });
+  const toggleIn = (setter: typeof setChecked) => (id: number, on: boolean) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   const toggleOne = toggleIn(setChecked);
   const toggleGroup = toggleIn(setCheckedGroups);
 
