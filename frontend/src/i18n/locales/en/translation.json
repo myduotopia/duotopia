@@ -6087,18 +6087,14 @@
       },
       "layout": {
         "title": "Passage layout",
-        "addRow": "Add row",
-        "ratio": "Columns",
-        "row": "Row",
-        "section": "Box",
-        "wrap": "Box it",
-        "unwrap": "Unbox",
         "frame": "Border",
-        "removeRow": "Remove row",
+        "frameRow": "Add border",
+        "unframe": "Remove border",
+        "width": "Width",
         "addBlock": "Add block",
+        "insertHere": "Insert here",
         "removeBlock": "Remove block",
-        "dragBlock": "Drag block",
-        "dragRow": "Drag row",
+        "dragBlock": "Drag block (drop beside another to place side by side)",
         "block": {
           "heading": "Heading",
           "paragraph": "Paragraph",
@@ -6110,9 +6106,15 @@
         "headingPlaceholder": "Heading text",
         "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
         "imageUpload": "Upload image",
+        "imageReplace": "Click to replace image",
         "imageAlt": "Alt text",
         "imageCaption": "Caption",
-        "imageMaxWidth": "Max width (px)",
+        "imageSize": {
+          "small": "Small",
+          "medium": "Medium",
+          "large": "Large",
+          "original": "Original"
+        },
         "imageFrame": "Border",
         "alignLeft": "Left",
         "alignCenter": "Center",
@@ -6122,10 +6124,10 @@
         "addLine": "Add line",
         "removeLine": "Remove line",
         "preview": "Preview",
+        "previewHint": "What students will see; switch between desktop and mobile width",
         "previewDesktop": "Desktop",
         "previewMobile": "Mobile",
-        "empty": "Nothing yet — click “Add row” to start",
-        "emptyColumn": "Drop blocks here or add one"
+        "empty": "Nothing yet — click “Add block” to start writing"
       },
       "glossary": {
         "title": "Glossary",
