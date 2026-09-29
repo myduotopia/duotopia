@@ -32,6 +32,47 @@ def text_field_for_show_image(
     return "text" if show_image else "translation"
 
 
+def answer_text_for_item(
+    item: Any, show_image: bool, show_example_sentence: bool = False
+) -> str:
+    """Effective option / answer VALUE for a ContentItem (Issue #1088).
+
+    「顯示例句」開啟時，題目是挖空例句，正解必須是例句裡實際出現的字形
+    （persisted ``cloze_answer``，如 tell → "told me"），找不到才退回 ``text``。
+    未開例句時回傳與 ``text_field_for_show_image`` 相同欄位的值，行為不變。
+    比對請一律 ``.strip().lower()``（cloze 字形保留句中原大小寫）。
+    """
+    if show_example_sentence:
+        from utils.cloze import extract_cloze_for_item  # local import: avoid cycle
+
+        cloze = extract_cloze_for_item(item)
+        if cloze and cloze[1]:
+            return cloze[1]
+        return getattr(item, "text", None) or ""
+    field = text_field_for_show_image(show_image, False)
+    return getattr(item, field, None) or ""
+
+
+def build_answer_pool(
+    items: Iterable, show_image: bool, show_example_sentence: bool = False
+) -> List[Distractor]:
+    """Option pool (text + image) for every item, deduped case-insensitively.
+
+    Used as the distractor source for word_selection when stored distractors
+    are not applicable (e.g. 顯示例句 → cloze 字形, Issue #1088).
+    """
+    pool: List[Distractor] = []
+    seen = set()
+    for it in items:
+        text = answer_text_for_item(it, show_image, show_example_sentence)
+        key = text.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        pool.append({"text": text, "image_url": getattr(it, "image_url", None)})
+    return pool
+
+
 def normalize_distractors(value: Any) -> List[Distractor]:
     """Coerce a stored distractors value into the canonical object shape.
 

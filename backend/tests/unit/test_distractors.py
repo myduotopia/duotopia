@@ -4,6 +4,8 @@ import random
 from types import SimpleNamespace
 
 from utils.distractors import (
+    answer_text_for_item,
+    build_answer_pool,
     distractor_text,
     make_distractor,
     normalize_distractors,
@@ -214,3 +216,54 @@ class TestRegenerateWordSelectionDistractors:
 
         for item in items:
             assert len(item.distractors) == 3
+
+
+class TestAnswerTextForItem:
+    """Issue #1088: 開例句時正解／選項改用例句中的實際字形。"""
+
+    def _item(self, **kw):
+        base = dict(
+            text="tell",
+            translation="告訴",
+            example_sentence="He told me her name.",
+            cloze_answer="told me",
+            image_url=None,
+        )
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    def test_show_example_uses_persisted_cloze_form(self):
+        assert answer_text_for_item(self._item(), True, True) == "told me"
+        assert answer_text_for_item(self._item(), False, True) == "told me"
+
+    def test_show_example_persisted_not_in_sentence_falls_back_to_text(self):
+        item = self._item(cloze_answer="spoke", example_sentence="He said hi.")
+        # 存的字形不在句中、原形也不在句中 → 退回 text
+        assert answer_text_for_item(item, True, True) == "tell"
+
+    def test_show_example_empty_cloze_finds_inflected_form(self):
+        item = self._item(
+            text="cup", cloze_answer="", example_sentence="I have two cups."
+        )
+        assert answer_text_for_item(item, True, True) == "cups"
+
+    def test_show_example_off_is_unchanged(self):
+        assert answer_text_for_item(self._item(), True, False) == "tell"
+        assert answer_text_for_item(self._item(), False, False) == "告訴"
+
+    def test_build_answer_pool_dedupes_case_insensitively(self):
+        items = [
+            self._item(text="tell", cloze_answer="told me"),
+            self._item(text="say", cloze_answer="Told me"),
+            self._item(text="run", cloze_answer="ran", example_sentence="I ran."),
+        ]
+        pool = build_answer_pool(items, True, True)
+        assert [p["text"] for p in pool] == ["told me", "ran"]
+
+    def test_build_answer_pool_off_matches_legacy_fields(self):
+        items = [
+            self._item(text="a", translation="甲"),
+            self._item(text="b", translation="乙"),
+        ]
+        assert [p["text"] for p in build_answer_pool(items, False, False)] == ["甲", "乙"]
+        assert [p["text"] for p in build_answer_pool(items, True, False)] == ["a", "b"]

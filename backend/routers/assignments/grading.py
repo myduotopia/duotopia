@@ -477,24 +477,33 @@ def _build_quiz_submission(
         .all()
     )
 
-    def _fallback_correct(item: ContentItem) -> str:
-        # 學生若漏答某題（無 PracticeAnswer），仍從題目本身推導正解讓老師看得到
-        if practice_mode == "word_cloze_quiz":
-            return item.cloze_answer or item.text or ""
-        return item.text or ""
-
     # #1045 題目區：函式內 import 避免 students.quiz_assignments ↔ assignments 循環
     from routers.students.quiz_assignments import (
         _build_selection_options,
         _example_cloze_fields,
         _load_quiz_items,
     )
+    from utils.distractors import answer_text_for_item
 
     parent = (
         db.query(Assignment)
         .filter(Assignment.id == student_assignment.assignment_id)
         .first()
     )
+
+    def _fallback_correct(item: ContentItem) -> str:
+        # 學生若漏答某題（無 PracticeAnswer），仍從題目本身推導正解讓老師看得到
+        if practice_mode == "word_cloze_quiz":
+            return item.cloze_answer or item.text or ""
+        if practice_mode == "word_selection_quiz" and parent is not None:
+            # Issue #1088: 與學生端同一套規則（開例句 → cloze 字形）
+            return answer_text_for_item(
+                item,
+                parent.show_image if parent.show_image is not None else True,
+                bool(getattr(parent, "show_example_sentence", False)),
+            )
+        return item.text or ""
+
     # 舊資料（無 options_shown）fallback：以與 start 相同的 seed 重建選項
     fallback_options: Dict[int, List[Dict[str, Any]]] = {}
     if practice_mode == "word_selection_quiz" and parent is not None:

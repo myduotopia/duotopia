@@ -40,7 +40,11 @@ from models import (
     PracticeSession,
     StudentAssignment,
 )
-from utils.distractors import normalize_distractors, text_field_for_show_image
+from utils.distractors import (
+    answer_text_for_item,
+    build_answer_pool,
+    normalize_distractors,
+)
 
 from .dependencies import get_current_student
 
@@ -493,16 +497,13 @@ def _build_selection_options(
     # Issue #967: 例句題型選項一律英文。且例句時不可用 stored distractors —— 它們依
     # show_image 分語言儲存，show_image=關 時是中文，會出現「正解英文＋干擾中文」，
     # 改用英文 pool 現組（pool＝其他單字的英文 text，與 stored 同來源、品質等價）。
+    # Issue #1088: 例句題型的正解／干擾一律用例句中的實際字形（cloze_answer，
+    # 如 tell → "told me"），pool 以小寫去重避免同字形重複出現。
     show_example = bool(getattr(assignment, "show_example_sentence", False))
-    answer_key = text_field_for_show_image(show_image, show_example)
-
-    pool = [
-        {
-            "text": getattr(it, answer_key) or "",
-            "image_url": it.image_url,
-        }
-        for it in items
-    ]
+    answer_by_id = {
+        it.id: answer_text_for_item(it, show_image, show_example) for it in items
+    }
+    pool = build_answer_pool(items, show_image, show_example)
 
     options_by_item: Dict[int, List[Dict[str, Any]]] = {}
     for item in items:
@@ -511,7 +512,7 @@ def _build_selection_options(
         # silently miss the option the student actually picked, and the options
         # would reshuffle on every refresh (Issue #828 review feedback).
         rng = random.Random(item.id)
-        correct_text = getattr(item, answer_key) or ""
+        correct_text = answer_by_id[item.id]
         stored = normalize_distractors(item.distractors)
         if not show_example and len(stored) >= 3:
             distractors = list(stored[:3])
@@ -555,14 +556,12 @@ async def start_word_selection_quiz(
     options_by_item = _build_selection_options(items, assignment)
 
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(
-        show_image, bool(getattr(assignment, "show_example_sentence", False))
-    )
+    show_example = bool(getattr(assignment, "show_example_sentence", False))
 
     existing = _existing_answers_for_session(db, session.id)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
-        correct = getattr(item, answer_key) or ""
+        correct = answer_text_for_item(item, show_image, show_example)
         prior = existing.get(item.id)
         return {
             "content_item_id": item.id,
@@ -632,10 +631,9 @@ async def submit_word_selection_quiz_answer(
     # selected option against the item's answer text, same field/normalisation as
     # _build_selection_options uses to build the correct option.
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(
-        show_image, bool(getattr(assignment, "show_example_sentence", False))
+    correct_text = answer_text_for_item(
+        item, show_image, bool(getattr(assignment, "show_example_sentence", False))
     )
-    correct_text = getattr(item, answer_key) or ""
     is_correct = request.selected_answer.strip().lower() == correct_text.strip().lower()
 
     # #1045: 記下學生作答當下看到的選項（文字＋順序），批改頁優先顯示這份，
@@ -804,7 +802,7 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     from utils.cloze import extract_cloze_for_item, collapse_to_single_blank
 
     cloze = extract_cloze_for_item(item)
-    # 刻意不送 example_sentence_translation：翻譯會直接講出該單字洩漏答案。
+    # Issue #1088: 開例句時前端要在例句下顯示例句翻譯（比照單字克漏字），故照送。
     # Issue #967: 例句題型即「例句就是題目」，開播放音檔時改播例句音檔，故送
     # example_sentence_audio_url。已知取捨：例句音檔會唸出整句（含挖空單字），
     # 可能透露答案 —— 依產品決策照送（老師自行決定是否同時開播放音檔）。
@@ -819,6 +817,7 @@ def _example_cloze_fields(item: ContentItem) -> Dict[str, Any]:
     # Issue #860: 收合成單一格 —— 選擇題顯示格數等於洩漏答案字數。
     return {
         "example_sentence": item.example_sentence or "",
+        "example_sentence_translation": item.example_sentence_translation or "",
         "example_sentence_audio_url": item.example_sentence_audio_url,
         "cloze_answer": cloze[1] if cloze else "",
         "blanked_sentence": collapse_to_single_blank(cloze[0]) if cloze else "",
@@ -838,12 +837,10 @@ def build_selection_quiz_payload(assignment: Assignment, db: Session) -> Dict[st
     items = _load_quiz_items(db, assignment, bool(assignment.shuffle_questions))
     options_by_item = _build_selection_options(items, assignment)
     show_image = assignment.show_image if assignment.show_image is not None else True
-    answer_key = text_field_for_show_image(
-        show_image, bool(getattr(assignment, "show_example_sentence", False))
-    )
+    show_example = bool(getattr(assignment, "show_example_sentence", False))
 
     def builder(item: ContentItem) -> Dict[str, Any]:
-        correct = getattr(item, answer_key) or ""
+        correct = answer_text_for_item(item, show_image, show_example)
         return {
             "content_item_id": item.id,
             "text": item.text,
@@ -1348,6 +1345,8 @@ def _build_review_response(
         "score": sa.score if sa.score is not None else 0,
         "status": sa.status.value if sa.status else None,
         "submitted_at": sa.submitted_at.isoformat() if sa.submitted_at else None,
+        # Issue #1088: 複盤頁需要 show_example_sentence 等設定決定要不要渲染挖空例句
+        **_common_settings(assignment),
     }
 
 
@@ -1367,9 +1366,15 @@ async def review_word_selection_quiz(
         show_image = (
             assignment.show_image if assignment.show_image is not None else True
         )
+        # Issue #1088: 之前漏傳 show_example → 開例句＋關圖片時正解變翻譯、
+        # 選項卻是英文，複盤頁沒有任何選項被標成正解。改用 helper 一次算好。
+        show_example = bool(getattr(assignment, "show_example_sentence", False))
         return {
             "options_by_item": _build_selection_options(items, assignment),
-            "answer_key": text_field_for_show_image(show_image),
+            "correct_by_item": {
+                it.id: answer_text_for_item(it, show_image, show_example)
+                for it in items
+            },
         }
 
     def build_item(
@@ -1377,13 +1382,30 @@ async def review_word_selection_quiz(
         prior: Optional[PracticeAnswer],
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
-        correct = getattr(item, context["answer_key"]) or ""
+        correct = context["correct_by_item"].get(item.id, "")
         student_answer = (
             prior.answer_data.get("selected_answer")
             if prior and prior.answer_data
             else None
         )
-        options = list(context["options_by_item"].get(item.id, []))
+        # Issue #1088: 與批改頁一致，優先用學生作答當下存的 options_shown／
+        # correct_text，老師事後改設定（或本次改成 cloze 字形）不影響舊 session。
+        stored_options = (
+            prior.answer_data.get("options_shown")
+            if prior and prior.answer_data
+            else None
+        )
+        stored_correct = (
+            prior.answer_data.get("correct_text")
+            if prior and prior.answer_data
+            else None
+        )
+        if stored_options:
+            options = list(stored_options)
+            if stored_correct:
+                correct = stored_correct
+        else:
+            options = list(context["options_by_item"].get(item.id, []))
         # Safety net: options are deterministic now, but a session answered
         # before that fix (or with edited distractors) might have a pick not in
         # the list — inject it so the frontend "你選的" highlight never misses.
