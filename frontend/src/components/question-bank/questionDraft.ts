@@ -438,6 +438,35 @@ export function validateGroupDraft(g: GroupDraft): string | null {
   return null;
 }
 
+/**
+ * 素材類型不再讓老師選，由內容判定：只有圖片區塊 → image、沒有圖片 → passage、
+ * 圖文都有 → mixed；沒有排版時看有沒有整組圖片（以圖為準）。
+ */
+export function deriveStimulusType(
+  layout: LayoutDoc | null,
+  imageUrl: string | null,
+): StimulusType {
+  if (!layout || layout.rows.length === 0) {
+    return imageUrl ? "image" : "passage";
+  }
+  let images = 0;
+  let texts = 0;
+  for (const node of layout.rows) {
+    const rows = node.type === "section" ? node.rows : [node];
+    for (const row of rows) {
+      for (const col of row.columns) {
+        for (const b of col.blocks) {
+          if (b.type === "image") images += 1;
+          else texts += 1;
+        }
+      }
+    }
+  }
+  if (images > 0 && texts === 0) return "image";
+  if (images === 0) return "passage";
+  return "mixed";
+}
+
 /** 純文字副本：有排版就由排版拼；沒有（或排版沒有文字）才用老師手打的文字版 */
 export function groupPassageText(g: GroupDraft): string | null {
   const derived = layoutToPlainText(g.layout);
@@ -459,7 +488,7 @@ export function toCreateGroupInput(
 ): QuestionGroupCreateInput {
   return {
     question_type: g.question_type,
-    stimulus_type: g.stimulus_type,
+    stimulus_type: deriveStimulusType(g.layout, g.image_url),
     title: g.title.trim() || null,
     passage_text: groupPassageText(g),
     image_url: g.image_url,
@@ -476,7 +505,7 @@ export function toCreateGroupInput(
 /** 編輯既有題組的 PATCH payload：整組欄位 + 小題整份對齊（帶 existingId 的更新、其餘新增） */
 export function toUpdateGroupInput(g: GroupDraft): QuestionGroupUpdateInput {
   return {
-    stimulus_type: g.stimulus_type,
+    stimulus_type: deriveStimulusType(g.layout, g.image_url),
     title: g.title.trim() || null,
     passage_text: groupPassageText(g),
     image_url: g.image_url,

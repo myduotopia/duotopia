@@ -71,6 +71,8 @@ export interface QuestionCardProps {
   stemOptional?: boolean;
   /** data-testid 前綴；題組內的小題用 `qg-<n>-q` 避免與外層單題撞名 */
   testIdPrefix?: string;
+  /** 題組內的小題：不畫外框，只靠編號與上方淡分隔線區隔（單題流程不用） */
+  compact?: boolean;
 }
 
 function absoluteAudioUrl(url: string): string {
@@ -90,6 +92,7 @@ export default function QuestionCard({
   disabled = false,
   stemOptional = false,
   testIdPrefix = "qc",
+  compact = false,
 }: QuestionCardProps) {
   const { t } = useTranslation();
   const [ttsBusy, setTtsBusy] = useState(false);
@@ -228,10 +231,17 @@ export default function QuestionCard({
   return (
     <div
       id={`question-card-${draft.key}`}
-      className={`rounded-lg border bg-white p-4 space-y-3 ${
-        hasError ? "border-red-300" : "border-gray-200"
-      }`}
+      className={
+        compact
+          ? `space-y-3 bg-white pt-4 ${
+              hasError ? "border-l-2 border-red-300 pl-3" : ""
+            }`
+          : `rounded-lg border bg-white p-4 space-y-3 ${
+              hasError ? "border-red-300" : "border-gray-200"
+            }`
+      }
       data-testid={`question-card-${index}`}
+      data-compact={compact || undefined}
     >
       {/* 卡片標題列 */}
       <div className="flex items-center justify-between">

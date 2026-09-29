@@ -1,12 +1,14 @@
 /**
  * 右欄的題組卡（Issue #1082：閱讀題組；克漏字同一張卡，差異只在小題）。
  *
- * |題組標題｜素材類型（文章／圖片／混合）|
+ * 第 2 段修訂後的樣子：像一份文件，不包外框
+ * |題組標題|
  * |年段|
- * |主圖文區塊編輯器（LayoutEditor：結構 + 即時預覽）|
+ * |主圖文（LayoutEditor：文件式區塊編輯器，預覽另開 Dialog）|
  * |單字註解（word／中文 列表）|
- * |小題列表：沿用 QuestionCard，可拖曳排序（group_order）、新增／刪除|
+ * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
+ * 素材類型不讓老師選：儲存時由內容判定（questionDraft.deriveStimulusType）。
  * 小題的考點、來源、教材關聯仍在各自的 QuestionCard；公開設定與年段跟隨題組（左欄套用）。
  * `passage_text` 儲存時由 layout 拼出（questionDraft.toCreateGroupInput）。
  */
@@ -35,17 +37,10 @@ import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import type { Program } from "@/types";
-import type { GlossaryEntry, StimulusType } from "@/types/questionBank";
+import type { GlossaryEntry } from "@/types/questionBank";
 import LayoutEditor from "./LayoutEditor";
 import QuestionCard from "./QuestionCard";
 import {
@@ -67,8 +62,6 @@ export interface GroupCardProps {
   readOnly?: boolean;
   disabled?: boolean;
 }
-
-const STIMULUS_OPTIONS: StimulusType[] = ["passage", "image", "mixed"];
 
 function SortableQuestion({
   id,
@@ -184,8 +177,8 @@ export default function GroupCard({
   return (
     <div
       id={`question-card-${draft.key}`}
-      className={`rounded-lg border bg-white p-4 space-y-4 ${
-        hasError ? "border-red-300" : "border-gray-200"
+      className={`space-y-4 bg-white p-4 ${
+        hasError ? "border-l-2 border-red-300" : ""
       }`}
       data-testid={`qb-group-card-${index}`}
     >
@@ -208,33 +201,15 @@ export default function GroupCard({
         )}
       </div>
 
-      {/* 題組標題 / 素材類型 */}
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px]">
-        <Input
-          value={draft.title}
-          onChange={(e) => patch({ title: e.target.value, serverError: null })}
-          placeholder={t("questionBank.group.titlePlaceholder")}
-          className="h-9"
-          disabled={locked}
-          data-testid={`qg-${index}-title`}
-        />
-        <Select
-          value={draft.stimulus_type}
-          onValueChange={(v) => patch({ stimulus_type: v as StimulusType })}
-          disabled={locked}
-        >
-          <SelectTrigger className="h-9" data-testid={`qg-${index}-stimulus`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STIMULUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>
-                {t(`questionBank.group.stimulus.${s}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* 題組標題 */}
+      <Input
+        value={draft.title}
+        onChange={(e) => patch({ title: e.target.value, serverError: null })}
+        placeholder={t("questionBank.group.titlePlaceholder")}
+        className="h-9"
+        disabled={locked}
+        data-testid={`qg-${index}-title`}
+      />
 
       {/* 年段 */}
       <div className="space-y-1">
@@ -325,8 +300,8 @@ export default function GroupCard({
         )}
       </div>
 
-      {/* 小題 */}
-      <div className="space-y-3 border-t border-gray-100 pt-3">
+      {/* 小題：編號＋淡分隔線，不再每題一個外框 */}
+      <div className="space-y-2 border-t border-gray-200 pt-3">
         <Label className="text-xs text-gray-600">
           {t("questionBank.group.questions.title", {
             count: draft.questions.length,
@@ -346,7 +321,7 @@ export default function GroupCard({
             items={draft.questions.map((q) => q.key)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-3">
+            <div className="divide-y divide-gray-100">
               {draft.questions.map((q, i) => (
                 <SortableQuestion
                   key={q.key}
@@ -373,6 +348,7 @@ export default function GroupCard({
                     disabled={disabled}
                     stemOptional={draft.question_type === "cloze"}
                     testIdPrefix={`qg-${index}-q`}
+                    compact
                   />
                 </SortableQuestion>
               ))}

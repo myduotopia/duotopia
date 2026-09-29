@@ -6124,11 +6124,6 @@
       "loading": "載入題組中…",
       "loadFailed": "載入題組失敗",
       "confirmDelete": "確定要刪除整個題組（含所有小題）嗎？已派發的考卷不受影響。",
-      "stimulus": {
-        "passage": "文章",
-        "image": "圖片",
-        "mixed": "圖文混合"
-      },
       "layout": {
         "title": "主圖文排版",
         "frame": "框線",

@@ -6080,11 +6080,6 @@
       "loading": "Loading group…",
       "loadFailed": "Failed to load the group",
       "confirmDelete": "Delete the whole group (all sub-questions)? Assigned papers are not affected.",
-      "stimulus": {
-        "passage": "Passage",
-        "image": "Image",
-        "mixed": "Mixed"
-      },
       "layout": {
         "title": "Passage layout",
         "frame": "Border",

@@ -34,6 +34,7 @@ import {
   updateBlock,
   widthOptionsFor,
   wrapRowInSection,
+  type EditorBlock,
   type EditorRow,
 } from "../layoutEditorModel";
 import type { LayoutDoc, LayoutRow } from "@/types/questionBank";
@@ -62,6 +63,12 @@ function twoBesideDoc(): LayoutDoc {
     ],
   };
 }
+
+/** 純函式測試用：一段文字區塊 */
+const para = (text: string): EditorBlock => {
+  const b = defaultBlock("paragraph");
+  return { ...b, text } as EditorBlock;
+};
 
 const rowTexts = (doc: LayoutDoc | null): string[][] =>
   (doc?.rows ?? []).map((n) =>
@@ -239,7 +246,7 @@ describe("文件式操作（並排／寬度／插入）", () => {
       1, 1, 1,
     ]);
 
-    doc = appendBlock(doc, { ...defaultBlock("paragraph"), text: "D" });
+    doc = appendBlock(doc, para("D"));
     [a, b, c] = blockIds(doc);
     const d = blockIds(doc)[3];
     expect(canPlaceBeside(doc, d, a)).toBe(false);
@@ -334,7 +341,7 @@ describe("文件式操作（並排／寬度／插入）", () => {
   it("insertBlockRow：錨點前／後、section 內維持在 section 裡；appendBlock 接最後", () => {
     let doc = toEditorDoc(sample);
     const sectionRowId = (doc.rows[1] as { rows: EditorRow[] }).rows[0].id;
-    doc = insertBlockRow(doc, { ...defaultBlock("paragraph"), text: "S" }, {
+    doc = insertBlockRow(doc, para("S"), {
       rowId: sectionRowId,
       position: "after",
     });
@@ -343,12 +350,12 @@ describe("文件式操作（並排／寬度／插入）", () => {
     expect(section.rows).toHaveLength(2);
     expect(section.rows[1].columns[0].blocks[0]).toMatchObject({ text: "S" });
 
-    doc = insertBlockRow(doc, { ...defaultBlock("paragraph"), text: "T" }, {
+    doc = insertBlockRow(doc, para("T"), {
       rowId: doc.rows[0].id,
       position: "before",
     });
     expect(rowTexts(toLayoutDoc(doc))[0]).toEqual(["T"]);
-    doc = appendBlock(doc, { ...defaultBlock("paragraph"), text: "U" });
+    doc = appendBlock(doc, para("U"));
     const texts = rowTexts(toLayoutDoc(doc));
     expect(texts[texts.length - 1]).toEqual(["U"]);
   });
