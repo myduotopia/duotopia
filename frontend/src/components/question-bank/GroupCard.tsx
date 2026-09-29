@@ -5,7 +5,7 @@
  * |題組標題|
  * |年段|
  * |主圖文（LayoutEditor：文件式區塊編輯器，預覽另開 Dialog）|
- * |單字註解（word／中文 列表）|
+ * |單字註解（一個文字框，一行一筆「word 中文」）|
  * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
  * 素材類型不讓老師選：儲存時由內容判定（questionDraft.deriveStimulusType）。
@@ -13,7 +13,7 @@
  * `passage_text` 儲存時由 layout 拼出（questionDraft.toCreateGroupInput）。
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closestCenter,
@@ -37,6 +37,7 @@ import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import type { Program } from "@/types";
@@ -45,6 +46,8 @@ import LayoutEditor from "./LayoutEditor";
 import QuestionCard from "./QuestionCard";
 import {
   emptyGroupQuestion,
+  glossaryToText,
+  parseGlossaryText,
   validateDraft,
   type GroupDraft,
   type QuestionDraft,
@@ -110,6 +113,36 @@ function SortableQuestion({
   );
 }
 
+/** 單字註解文字框：本地保留字串（打到一半的行不會被丟掉），每次輸入同步 parse 回陣列 */
+function GlossaryTextarea({
+  entries,
+  onChange,
+  disabled,
+  testId,
+}: {
+  entries: GlossaryEntry[];
+  onChange: (entries: GlossaryEntry[]) => void;
+  disabled: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(() => glossaryToText(entries));
+  return (
+    <Textarea
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(parseGlossaryText(e.target.value));
+      }}
+      rows={4}
+      placeholder={t("questionBank.group.glossary.placeholder")}
+      className="font-mono text-sm"
+      disabled={disabled}
+      data-testid={testId}
+    />
+  );
+}
+
 export default function GroupCard({
   index,
   draft,
@@ -167,10 +200,6 @@ export default function GroupCard({
 
   // ---- 單字註解 ----
   const setGlossary = (glossary: GlossaryEntry[]) => patch({ glossary });
-  const patchGlossary = (i: number, p: Partial<GlossaryEntry>) =>
-    setGlossary(
-      draft.glossary.map((g, idx) => (idx === i ? { ...g, ...p } : g)),
-    );
 
   const hasError = errorMessage !== null || draft.serverError !== null;
 
@@ -245,59 +274,21 @@ export default function GroupCard({
         />
       </div>
 
-      {/* 單字註解 */}
+      {/* 單字註解：一個文字框，一行一筆 */}
       <div className="space-y-1.5">
         <Label className="text-xs text-gray-600">
           {t("questionBank.group.glossary.title")}
         </Label>
-        {draft.glossary.map((g, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <Input
-              value={g.word}
-              onChange={(e) => patchGlossary(i, { word: e.target.value })}
-              placeholder={t("questionBank.group.glossary.word")}
-              className="h-8 text-sm"
-              disabled={locked}
-              data-testid={`qg-${index}-glossary-word-${i}`}
-            />
-            <Input
-              value={g.zh}
-              onChange={(e) => patchGlossary(i, { zh: e.target.value })}
-              placeholder={t("questionBank.group.glossary.zh")}
-              className="h-8 text-sm"
-              disabled={locked}
-              data-testid={`qg-${index}-glossary-zh-${i}`}
-            />
-            <button
-              type="button"
-              onClick={() =>
-                setGlossary(draft.glossary.filter((_, idx) => idx !== i))
-              }
-              disabled={locked}
-              className="text-gray-400 hover:text-red-600 disabled:opacity-40"
-              aria-label={t("questionBank.group.glossary.remove")}
-              data-testid={`qg-${index}-glossary-remove-${i}`}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-        {!readOnly && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 text-xs text-gray-600"
-            onClick={() =>
-              setGlossary([...draft.glossary, { word: "", zh: "" }])
-            }
-            disabled={disabled}
-            data-testid={`qg-${index}-glossary-add`}
-          >
-            <Plus size={12} />
-            {t("questionBank.group.glossary.add")}
-          </Button>
-        )}
+        <GlossaryTextarea
+          key={draft.key}
+          entries={draft.glossary}
+          onChange={setGlossary}
+          disabled={locked}
+          testId={`qg-${index}-glossary`}
+        />
+        <p className="text-xs text-gray-400">
+          {t("questionBank.group.glossary.hint")}
+        </p>
       </div>
 
       {/* 小題：編號＋淡分隔線，不再每題一個外框 */}

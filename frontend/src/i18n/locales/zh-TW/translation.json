@@ -6170,10 +6170,9 @@
       },
       "glossary": {
         "title": "單字註解",
-        "word": "單字",
-        "zh": "中文",
-        "add": "新增註解",
-        "remove": "刪除註解"
+        "placeholder": "timeline 時間軸
+compose 作曲",
+        "hint": "一行一個單字：英文、空格、中文"
       },
       "questions": {
         "title": "小題（{{count}}）",

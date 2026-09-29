@@ -421,6 +421,27 @@ export function cleanGlossary(
   return kept.length > 0 ? kept : null;
 }
 
+/**
+ * 單字註解文字框 ↔ 陣列：一行一筆「word 中文」，第一段空白（含全形空白）之後全是中文。
+ * 沒有第二段 → zh 空字串（送出前由 cleanGlossary 丟掉）；空白行保留為空列，方便打字中途。
+ */
+export function parseGlossaryText(text: string): GlossaryEntry[] {
+  return text.split(/?
+/).map((line) => {
+    const trimmed = line.trim();
+    const m = trimmed.match(/^(\S+)[\s　]+(.*)$/);
+    if (m) return { word: m[1], zh: m[2].trim() };
+    return { word: trimmed, zh: "" };
+  });
+}
+
+export function glossaryToText(entries: GlossaryEntry[]): string {
+  return entries
+    .map((e) => (e.zh ? `${e.word} ${e.zh}` : e.word))
+    .join("
+");
+}
+
 /** 題組驗證：主圖文、排版填完、至少一個小題、每個小題合法、公開必選。回傳 i18n key 或 null */
 export function validateGroupDraft(g: GroupDraft): string | null {
   if (!groupHasStimulus(g)) return "groupNeedsContent";

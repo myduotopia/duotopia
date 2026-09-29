@@ -27,6 +27,8 @@ import {
   validateDraft,
   validateGroupDraft,
   type UnitDraft,
+  glossaryToText,
+  parseGlossaryText,
 } from "../questionDraft";
 import type { ExamPoint, Question } from "@/types/questionBank";
 
@@ -648,5 +650,35 @@ describe("deriveStimulusType（#1082 修訂：素材類型由內容判定）", (
     g.layout = rows([{ type: "image" }]);
     expect(toCreateGroupInput(g).stimulus_type).toBe("image");
     expect(toUpdateGroupInput(g).stimulus_type).toBe("image");
+  });
+});
+
+describe("單字註解文字框 parse／format", () => {
+  it("parseGlossaryText：半形／全形空格、多段中文、無中文、空行", () => {
+    expect(
+      parseGlossaryText("timeline 時間軸
+compose　作曲 譜曲
+
+weak
+  spaced   虛弱的  "),
+    ).toEqual([
+      { word: "timeline", zh: "時間軸" },
+      { word: "compose", zh: "作曲 譜曲" },
+      { word: "", zh: "" },
+      { word: "weak", zh: "" },
+      { word: "spaced", zh: "虛弱的" },
+    ]);
+  });
+
+  it("glossaryToText 與 parseGlossaryText 往返；沒中文的只剩單字", () => {
+    const entries = [
+      { word: "timeline", zh: "時間軸" },
+      { word: "compose", zh: "作曲" },
+    ];
+    const text = glossaryToText(entries);
+    expect(text).toBe("timeline 時間軸
+compose 作曲");
+    expect(parseGlossaryText(text)).toEqual(entries);
+    expect(glossaryToText([{ word: "weak", zh: "" }])).toBe("weak");
   });
 });

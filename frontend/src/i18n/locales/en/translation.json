@@ -6126,10 +6126,9 @@
       },
       "glossary": {
         "title": "Glossary",
-        "word": "Word",
-        "zh": "Meaning",
-        "add": "Add entry",
-        "remove": "Remove entry"
+        "placeholder": "timeline 時間軸
+compose 作曲",
+        "hint": "One entry per line: word, space, meaning"
       },
       "questions": {
         "title": "Sub-questions ({{count}})",

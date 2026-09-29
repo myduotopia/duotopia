@@ -2,7 +2,7 @@
  * GroupCard 元件測試（Issue #1082 第 3 段；第 2 段修訂加：無素材類型下拉、小題 compact）。
  *
  * LayoutEditor 與 QuestionCard 各自有測試，這裡以 stub 取代，只測題組卡本身：
- * 標題／單字註解增刪改、空白註解列送出前被丟掉、小題新增／刪除、
+ * 標題／單字註解文字框（一行一筆）、沒中文的行送出前被丟掉、小題新增／刪除、
  * `layoutIncomplete` 讓 validateGroupDraft 阻擋儲存、錯誤訊息顯示、readOnly。
  */
 
@@ -134,32 +134,31 @@ function Harness({
 }
 
 describe("GroupCard", () => {
-  it("標題輸入、單字註解新增／編輯／刪除；空白註解列送出前被丟掉", async () => {
+  it("標題輸入、單字註解文字框一行一筆；沒中文的行送出前被丟掉", async () => {
     const onDraft = vi.fn();
     const user = userEvent.setup();
     render(<Harness initial={emptyGroupDraft()} onDraft={onDraft} />);
 
     await user.type(screen.getByTestId("qg-0-title"), "Vivaldi");
-    await user.click(screen.getByTestId("qg-0-glossary-add"));
-    await user.click(screen.getByTestId("qg-0-glossary-add"));
-    await user.type(screen.getByTestId("qg-0-glossary-word-0"), "timeline");
-    await user.type(screen.getByTestId("qg-0-glossary-zh-0"), "時間軸");
-    // 第二列留空
+    const box = screen.getByTestId("qg-0-glossary");
+    await user.type(box, "timeline 時間軸{enter}compose");
     let draft = lastDraft(onDraft);
     expect(draft.title).toBe("Vivaldi");
     expect(draft.glossary).toEqual([
       { word: "timeline", zh: "時間軸" },
-      { word: "", zh: "" },
+      { word: "compose", zh: "" },
     ]);
     expect(toCreateGroupInput(draft).glossary).toEqual([
       { word: "timeline", zh: "時間軸" },
     ]);
+    // 文字框保留打到一半的內容
+    expect(box).toHaveValue("timeline 時間軸
+compose");
 
-    await user.click(screen.getByTestId("qg-0-glossary-remove-0"));
+    await user.clear(box);
     draft = lastDraft(onDraft);
-    expect(draft.glossary).toEqual([{ word: "", zh: "" }]);
-    // 只剩空白列 → glossary 送 null
     expect(toCreateGroupInput(draft).glossary).toBeNull();
+    expect(screen.queryByTestId("qg-0-glossary-add")).toBeNull();
   });
 
   it("沒有素材類型下拉；小題以 compact（不包外框）呈現", async () => {
