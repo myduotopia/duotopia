@@ -61,9 +61,10 @@ function parseRange(
     const two = text.slice(i, i + 2);
     if (isMarker(two)) {
       const marker = two;
-      // 只有在（本範圍內）找得到成對的關閉標記才當標記；同種標記不巢狀
+      // 只有在（本範圍內）找得到成對的關閉標記才當標記；同種標記不巢狀；
+      // 中間沒有內容（`====`、`****`、`__`）不算標記，照字面輸出，避免吞字
       const close = text.indexOf(marker, i + 2);
-      if (close !== -1 && close < end && marker !== closing) {
+      if (close !== -1 && close > i + 2 && close < end && marker !== closing) {
         flush();
         nodes.push({
           type: MARKER_NODE[marker],
@@ -77,9 +78,11 @@ function parseRange(
       continue;
     }
     if (text[i] === "{" && text[i + 1] === "{") {
-      BLANK_RE.lastIndex = i;
-      const m = BLANK_RE.exec(text);
-      if (m && m.index === i) {
+      // 用區域 sticky regex，不共用 BLANK_RE 的 lastIndex（matchAll 會沿用它）
+      const blankAt = /\{\{(\d+)\}\}/y;
+      blankAt.lastIndex = i;
+      const m = blankAt.exec(text);
+      if (m) {
         flush();
         nodes.push({ type: "blank", n: Number(m[1]) });
         i += m[0].length;
@@ -99,13 +102,22 @@ function parseRange(
   return nodes;
 }
 
-/** 去掉行內標記；`{{n}}` → `____` */
+/**
+ * 去掉行內標記；`{{n}}` → `____`。
+ * 以 parseInline 的節點重建純文字，所以規則與渲染一致：只有真正成對且有內容的
+ * 標記會被去掉，落單或空內容的 `**`／`__`／`==` 照字面保留。
+ */
 export function stripInlineMarkup(text: string): string {
-  return text
-    .replace(/\*\*/g, "")
-    .replace(/__/g, "")
-    .replace(/==/g, "")
-    .replace(BLANK_RE, "____");
+  const flat = (nodes: InlineNode[]): string =>
+    nodes
+      .map((n) => {
+        if (n.type === "text") return n.text;
+        if (n.type === "br") return "\n";
+        if (n.type === "blank") return "____";
+        return flat(n.children);
+      })
+      .join("");
+  return flat(parseInline(text));
 }
 
 /** 行內標記裡出現的克漏字編號（依出現順序、去重） */

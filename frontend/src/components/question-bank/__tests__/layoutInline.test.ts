@@ -129,9 +129,29 @@ describe("parseInline", () => {
       "__x__ ** __y",
       "==a== b==",
       "**x ==y** z==",
+      "====",
+      "****",
+      "__",
+      "======",
+      "===foo===",
     ]) {
       expect(flat(parseInline(s))).toBe(s);
     }
+  });
+
+  it("empty-content markers (====, ****, __) are literal text, not empty nodes", () => {
+    expect(parseInline("====")).toEqual([{ type: "text", text: "====" }]);
+    expect(parseInline("****")).toEqual([{ type: "text", text: "****" }]);
+    expect(parseInline("__")).toEqual([{ type: "text", text: "__" }]);
+    expect(parseInline("======")).toEqual([{ type: "text", text: "======" }]);
+    // 前兩個 = 開啟、後面第一個成對且有內容的 == 關閉，多出的一個 = 照字面
+    expect(parseInline("===foo===")).toEqual([
+      { type: "doubleUnderline", children: [{ type: "text", text: "=foo" }] },
+      { type: "text", text: "=" },
+    ]);
+    expect(parseInline("a ==== b")).toEqual([
+      { type: "text", text: "a ==== b" },
+    ]);
   });
 
   it("== is a double underline; can nest with bold/underline; unmatched stays text", () => {
@@ -163,6 +183,16 @@ describe("stripInlineMarkup / blank indexes", () => {
     expect(stripInlineMarkup("a **b** __c__ {{2}}")).toBe("a b c ____");
     expect(stripInlineMarkup("==d== e")).toBe("d e");
     expect(inlineBlankIndexes("{{40}} x {{41}} {{40}}")).toEqual([40, 41]);
+  });
+
+  it("keeps empty-content or unmatched markers as literal text", () => {
+    expect(stripInlineMarkup("====")).toBe("====");
+    expect(stripInlineMarkup("****")).toBe("****");
+    expect(stripInlineMarkup("__")).toBe("__");
+    expect(stripInlineMarkup("======")).toBe("======");
+    expect(stripInlineMarkup("===foo===")).toBe("=foo=");
+    expect(stripInlineMarkup("**a")).toBe("**a");
+    expect(stripInlineMarkup("line1\nline2")).toBe("line1\nline2");
   });
 });
 
