@@ -780,9 +780,11 @@ export default function QuestionSheet({
             </Button>
           </div>
         </div>
+        {/* 儲存鈕 disabled 的原因：緊接在標題列下方、醒目色，老師不用 hover 也看得到 */}
         {validationMessage && (
           <p
-            className="px-6 py-1.5 text-xs text-gray-500 bg-gray-50 border-b border-gray-100 shrink-0"
+            className="px-6 py-1.5 text-xs font-medium text-amber-800 bg-amber-50 border-b border-amber-100 shrink-0"
+            role="status"
             data-testid="qb-validation"
           >
             {validationMessage}
