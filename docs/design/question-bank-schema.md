@@ -105,6 +105,14 @@
 - 原卷「文繞圖」刻意改成「左文右圖 + 下一段全寬」
 - `passage_text` 為 layout 內所有文字區塊拼出的純文字副本，供搜尋、重複偵測、AI 考點分析；以圖為準的題組由 AI 擷取填入、老師可在「文字版」分頁修改
 
+#### 題組端點與列表（#1082）
+
+- `POST /api/question-bank/question-groups`：題組 + 小題 + 選項／考點／教材／來源同一個交易，任何失敗整組 rollback；小題的題型／公開／歸屬跟隨題組，年段未給時繼承
+- `GET /api/question-bank/question-groups/{id}`、`PATCH …/{id}`（整組替換：小題帶 id 更新、無 id 新增、缺席軟刪；未知 id → 422）、`DELETE …/{id}`（整組含小題軟刪除）；可見／可編輯規則與單題相同
+- `layout`／`glossary` 由 `backend/services/question_bank_layout.py` 深度驗證（區塊型別、必要欄位、數量與長度上限），不合格回 422 並指出路徑；五組樣本 JSON 為正向測試資料
+- `GET /api/question-bank/questions` 回傳單題與題組列混合：每列帶 `kind: "single" | "group"`，題組列含 `title`、`preview`（文章前 200 字）、`question_count`、小題來源與考點的聯集；小題不單獨出現。分頁在 SQL 層合併（單題／題組各投影 `(kind, id, updated_at)` UNION ALL 後排序 `updated_at desc nullslast, id desc`，offset/limit 只取本頁鍵，再各自 selectinload），`total` = 兩邊 count 相加
+- 列表對題組的操作：勾選、公開快速改（`PATCH` 只帶 `visibility`）、批次刪除、列尾刪除；批次編輯與派發只對單題
+
 ### `question_group_segments` — 題組素材分段（對話／獨白聽力）
 
 對話聽力有 2-3 位角色穿插說話，每一句是一段、各自有音檔與語音角色。獨白 = 只有一段的特例。文章閱讀的 `passage_text` 仍放題組層，不拆段。
