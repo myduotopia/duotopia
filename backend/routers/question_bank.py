@@ -27,18 +27,19 @@
 ``POST /question-groups`` 一次建立（group + 小題 + 選項／考點／來源同一交易）；
 小題的 visibility／歸屬跟隨題組，不做重複偵測（同一篇文章的問法常重複）。
 AI 作答／考點分析輸入可帶 ``passage``（題組主圖文純文字）。
+
+#1082 第 3 段拆檔：Pydantic schemas 與可建立題型常數在 ``routers/question_bank_schemas.py``；
+序列化、``_can_edit`` 權限與列表查詢輔助（含 SQL 層合併分頁）在 ``routers/question_bank_common.py``。
 """
 
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import and_, func, literal, or_, union_all
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -55,628 +56,52 @@ from models.question_bank import (
     EXAM_POINT_LINK_SOURCE_MANUAL,
     GRADE_MAX,
     GRADE_MIN,
-    QUESTION_TYPE_MULTIPLE_CHOICE,
     QUESTION_TYPES,
     STIMULUS_TYPES,
 )
 from routers.teachers import get_current_teacher
 from services import question_bank_service as qbs
 from services.question_bank_ai import (
-    MAX_QUESTIONS_PER_CALL,
     QuestionBankAIError,
     QuestionBankAIOutputError,
     get_question_bank_ai_service,
     normalize_inputs,
 )
-from services.question_bank_layout import (
-    LayoutError,
-    layout_to_plain_text,
-    validate_glossary,
-    validate_layout,
-)
 from utils.permissions import (
-    has_manage_materials_permission,
     has_read_org_materials_permission,
-    has_school_materials_permission,
+)
+from routers.question_bank_schemas import (
+    AiQuestionsIn,
+    GROUP_CREATABLE_TYPES,
+    GroupQuestionIn,
+    ProgramLinksReplace,
+    QuestionCreate,
+    QuestionGroupCreate,
+    QuestionGroupUpdate,
+    QuestionUpdate,
+    SINGLE_CREATABLE_TYPES,
+    SourceCreate,
+    _effective_passage_text,
+    _validate_options,
+)
+from routers.question_bank_common import (
+    _can_edit,
+    _exam_point_out,
+    _grade_filter,
+    _group_out,
+    _group_row_out,
+    _load_group_rows,
+    _load_options,
+    _merged_page_keys,
+    _parse_uuid,
+    _question_out,
+    _require_editable,
+    _scope_filter,
+    _similar_out,
+    _source_out,
 )
 
 router = APIRouter(prefix="/api/question-bank", tags=["question-bank"])
-
-# 可建立的題型：單題端點只收 multiple_choice；reading 只能經題組端點建（#1082）
-SINGLE_CREATABLE_TYPES = (QUESTION_TYPE_MULTIPLE_CHOICE,)
-GROUP_CREATABLE_TYPES = ("reading",)
-CREATABLE_TYPES = SINGLE_CREATABLE_TYPES + GROUP_CREATABLE_TYPES
-MAX_GROUP_QUESTIONS = 20
-MIN_OPTIONS = 2
-MAX_OPTIONS = 6
-
-
-# ============ Schemas ============
-
-
-class OptionIn(BaseModel):
-    """選項：文字可空（純圖選項），但文字／圖片／語音至少一個。"""
-
-    text: str = Field("", max_length=1000)
-    is_correct: bool = False
-    audio_url: Optional[str] = None
-    image_url: Optional[str] = None
-
-    @field_validator("text")
-    @classmethod
-    def _strip(cls, v: str) -> str:
-        return (v or "").strip()
-
-    @model_validator(mode="after")
-    def _has_content(self):
-        if not (self.text or self.image_url or self.audio_url):
-            raise ValueError("選項需要文字或圖片")
-        return self
-
-
-class ProgramLinkIn(BaseModel):
-    program_id: int
-    lesson_id: Optional[int] = None
-
-
-class QuestionBase(BaseModel):
-    # 題幹可空（純圖題），但 stem / image_url / stem_audio_url 至少一個
-    stem: str = Field("", max_length=5000)
-    explanation: Optional[str] = Field(None, max_length=5000)
-    image_url: Optional[str] = None
-    stem_audio_url: Optional[str] = None
-    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    allow_multiple_answers: bool = False
-    show_stem_text: bool = True
-    visibility: Literal[
-        "private", "public", "organization_only", "individual_only"
-    ] = "private"
-    exam_point_ids: List[int] = Field(default_factory=list)
-    program_links: List[ProgramLinkIn] = Field(default_factory=list)
-    source_ids: List[int] = Field(default_factory=list)
-
-    @field_validator("stem")
-    @classmethod
-    def _strip_stem(cls, v: str) -> str:
-        return (v or "").strip()
-
-    @model_validator(mode="after")
-    def _grade_range(self):
-        if (
-            self.grade_min is not None
-            and self.grade_max is not None
-            and self.grade_min > self.grade_max
-        ):
-            raise ValueError("grade_min 不可大於 grade_max")
-        if not (self.stem or self.image_url or self.stem_audio_url):
-            raise ValueError("題目需要文字或圖片")
-        return self
-
-
-class QuestionCreate(QuestionBase):
-    question_type: Literal["multiple_choice"] = QUESTION_TYPE_MULTIPLE_CHOICE
-    options: List[OptionIn] = Field(..., min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)
-    # 歸屬：都不給 = 自己的題庫；給 organization_id = 機構題庫；給 school_id = 學校題庫
-    organization_id: Optional[str] = None
-    school_id: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _answers(self):
-        _validate_options(self.options, self.allow_multiple_answers)
-        if self.organization_id and self.school_id:
-            raise ValueError("organization_id 與 school_id 只能擇一")
-        return self
-
-
-class GroupQuestionIn(QuestionBase):
-    """題組小題：與單題相同，但 question_type／歸屬／visibility 由題組決定。"""
-
-    options: List[OptionIn] = Field(..., min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)
-    # 不給就照陣列順序
-    group_order: Optional[int] = Field(None, ge=0)
-
-    @model_validator(mode="after")
-    def _answers(self):
-        _validate_options(self.options, self.allow_multiple_answers)
-        return self
-
-
-class QuestionGroupCreate(BaseModel):
-    """題組：主圖文 + 小題，一次建立。layout 深度驗證在閱讀題組編輯器那段再做。"""
-
-    question_type: Literal["reading"] = "reading"
-    stimulus_type: Literal["passage", "audio", "dialogue", "image", "mixed"] = "passage"
-    title: Optional[str] = Field(None, max_length=200)
-    passage_text: Optional[str] = Field(None, max_length=20000)
-    image_url: Optional[str] = None
-    layout: Optional[dict] = None
-    glossary: Optional[List[dict]] = None
-    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    visibility: Literal[
-        "private", "public", "organization_only", "individual_only"
-    ] = "private"
-    questions: List[GroupQuestionIn] = Field(
-        ..., min_length=1, max_length=MAX_GROUP_QUESTIONS
-    )
-    organization_id: Optional[str] = None
-    school_id: Optional[str] = None
-
-    @field_validator("title", "passage_text")
-    @classmethod
-    def _strip_opt(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        v = v.strip()
-        return v or None
-
-    @model_validator(mode="after")
-    def _check(self):
-        if (
-            self.grade_min is not None
-            and self.grade_max is not None
-            and self.grade_min > self.grade_max
-        ):
-            raise ValueError("grade_min 不可大於 grade_max")
-        if self.organization_id and self.school_id:
-            raise ValueError("organization_id 與 school_id 只能擇一")
-        _validate_layout_fields(self.layout, self.glossary)
-        if not (self.passage_text or self.image_url or self.layout):
-            raise ValueError("題組需要文章、圖片或排版內容")
-        return self
-
-
-def _validate_layout_fields(layout, glossary) -> None:
-    """layout / glossary 深度驗證；LayoutError 轉成 ValueError（Pydantic → 422）並帶路徑。"""
-    try:
-        validate_layout(layout)
-        validate_glossary(glossary)
-    except LayoutError as e:
-        raise ValueError(f"{e.path}: {e.message}") from e
-
-
-def _effective_passage_text(passage_text: Optional[str], layout) -> Optional[str]:
-    """老師沒填 passage_text 時，由 layout 的文字區塊拼出純文字副本（搜尋／AI 用）。"""
-    if passage_text:
-        return passage_text
-    derived = layout_to_plain_text(layout) if layout else ""
-    return derived or None
-
-
-class GroupQuestionUpdateIn(GroupQuestionIn):
-    """PATCH 題組時的小題：帶 id = 更新既有小題；沒 id = 新增；沒出現在清單的既有小題 = 軟刪除。"""
-
-    id: Optional[int] = None
-
-
-class QuestionGroupUpdate(BaseModel):
-    """整組替換：group 欄位只更新有給的；questions 若給就整份對齊（upsert + 軟刪除）。"""
-
-    stimulus_type: Optional[
-        Literal["passage", "audio", "dialogue", "image", "mixed"]
-    ] = None
-    title: Optional[str] = Field(None, max_length=200)
-    passage_text: Optional[str] = Field(None, max_length=20000)
-    image_url: Optional[str] = None
-    layout: Optional[dict] = None
-    glossary: Optional[List[dict]] = None
-    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    visibility: Optional[
-        Literal["private", "public", "organization_only", "individual_only"]
-    ] = None
-    questions: Optional[List[GroupQuestionUpdateIn]] = Field(
-        None, min_length=1, max_length=MAX_GROUP_QUESTIONS
-    )
-
-    @field_validator("title", "passage_text")
-    @classmethod
-    def _strip_opt(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        v = v.strip()
-        return v or None
-
-    @model_validator(mode="after")
-    def _check(self):
-        if (
-            self.grade_min is not None
-            and self.grade_max is not None
-            and self.grade_min > self.grade_max
-        ):
-            raise ValueError("grade_min 不可大於 grade_max")
-        _validate_layout_fields(self.layout, self.glossary)
-        if self.questions is not None:
-            ids = [q.id for q in self.questions if q.id is not None]
-            if len(ids) != len(set(ids)):
-                raise ValueError("小題 id 重複")
-        return self
-
-
-class QuestionUpdate(BaseModel):
-    """PATCH：全部選填；有給 options 就整批覆寫。"""
-
-    stem: Optional[str] = Field(None, max_length=5000)
-    explanation: Optional[str] = Field(None, max_length=5000)
-    image_url: Optional[str] = None
-    stem_audio_url: Optional[str] = None
-    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    allow_multiple_answers: Optional[bool] = None
-    show_stem_text: Optional[bool] = None
-    visibility: Optional[
-        Literal["private", "public", "organization_only", "individual_only"]
-    ] = None
-    options: Optional[List[OptionIn]] = Field(
-        None, min_length=MIN_OPTIONS, max_length=MAX_OPTIONS
-    )
-    exam_point_ids: Optional[List[int]] = None
-    program_links: Optional[List[ProgramLinkIn]] = None
-    source_ids: Optional[List[int]] = None
-
-    @field_validator("stem")
-    @classmethod
-    def _strip_stem(cls, v: Optional[str]) -> Optional[str]:
-        return None if v is None else v.strip()
-
-
-class ProgramLinksReplace(BaseModel):
-    program_links: List[ProgramLinkIn]
-
-
-class AiQuestionIn(BaseModel):
-    """AI 作答／考點分析的單題輸入；key 由前端給，回傳時帶回對應。"""
-
-    key: str = Field(..., min_length=1, max_length=64)
-    stem: str = Field(..., min_length=1, max_length=2000)
-    options: List[str] = Field(..., min_length=2, max_length=6)
-    # 題組小題：主圖文純文字，附在題目前給模型（#1082）
-    passage: Optional[str] = Field(None, max_length=6000)
-
-
-class AiQuestionsIn(BaseModel):
-    questions: List[AiQuestionIn] = Field(
-        ..., min_length=1, max_length=MAX_QUESTIONS_PER_CALL
-    )
-
-
-class SourceCreate(BaseModel):
-    """老師在可打字下拉直接新增來源。"""
-
-    source_type: Literal["exam", "publisher"]
-    name: str = Field(..., min_length=1, max_length=200)
-    year: Optional[int] = Field(None, ge=1900, le=2200)
-    # 給 organization_id = 建成機構來源（需為該機構 active 成員）；不給 = 個人來源
-    organization_id: Optional[str] = None
-
-    @field_validator("name")
-    @classmethod
-    def _strip(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("來源名稱不可為空")
-        return v
-
-
-def _validate_options(options: List[OptionIn], allow_multiple: bool) -> None:
-    correct = sum(1 for o in options if o.is_correct)
-    if correct == 0:
-        raise ValueError("至少要勾選一個正確答案")
-    if not allow_multiple and correct > 1:
-        raise ValueError("單選題只能有一個正確答案（或開啟允許複選）")
-
-
-# ============ Serializers ============
-
-
-def _exam_point_out(ep: ExamPoint) -> dict:
-    return {
-        "id": ep.id,
-        "code": ep.code,
-        "parent_id": ep.parent_id,
-        "names": ep.names or {},
-        "status": ep.status,
-        "order_index": ep.order_index,
-        "aliases": [a.alias for a in (ep.aliases or [])],
-    }
-
-
-def _source_out(s: QuestionSource) -> dict:
-    return {
-        "id": s.id,
-        "source_type": s.source_type,
-        "name": s.name,
-        "year": s.year,
-        "organization_id": str(s.organization_id) if s.organization_id else None,
-        "teacher_id": s.teacher_id,
-    }
-
-
-def _question_out(
-    db: Session, q: Question, teacher: Teacher, perm_cache: dict | None = None
-) -> dict:
-    return {
-        "id": q.id,
-        "question_type": q.question_type,
-        "stem": q.stem,
-        "explanation": q.explanation,
-        "image_url": q.image_url,
-        "stem_audio_url": q.stem_audio_url,
-        "grade_min": q.grade_min,
-        "grade_max": q.grade_max,
-        "allow_multiple_answers": q.allow_multiple_answers,
-        "show_stem_text": q.show_stem_text,
-        "visibility": q.visibility,
-        "is_platform": q.is_platform,
-        "teacher_id": q.teacher_id,
-        "organization_id": str(q.organization_id) if q.organization_id else None,
-        "school_id": str(q.school_id) if q.school_id else None,
-        "group_id": q.group_id,
-        "group_order": q.group_order,
-        "is_owner": q.teacher_id == teacher.id,
-        "can_edit": _can_edit(db, teacher, q, perm_cache),
-        "options": [
-            {
-                "id": o.id,
-                "order_index": o.order_index,
-                "text": o.text,
-                "is_correct": o.is_correct,
-                "audio_url": o.audio_url,
-                "image_url": o.image_url,
-            }
-            for o in q.options
-        ],
-        "exam_points": [
-            {
-                "id": link.exam_point.id,
-                "code": link.exam_point.code,
-                "names": link.exam_point.names or {},
-                "source": link.source,
-            }
-            for link in q.exam_point_links
-            if link.exam_point is not None
-        ],
-        "program_links": [
-            {"program_id": pl.program_id, "lesson_id": pl.lesson_id}
-            for pl in q.program_links
-        ],
-        "sources": [
-            _source_out(link.source)
-            for link in q.source_links
-            if link.source is not None
-        ],
-        "created_at": q.created_at.isoformat() if q.created_at else None,
-        "updated_at": q.updated_at.isoformat() if q.updated_at else None,
-    }
-
-
-def _group_out(
-    db: Session, g: QuestionGroup, teacher: Teacher, perm_cache: dict | None = None
-) -> dict:
-    questions = [q for q in g.questions if q.is_active]
-    return {
-        "id": g.id,
-        "question_type": questions[0].question_type if questions else "reading",
-        "stimulus_type": g.stimulus_type,
-        "title": g.title,
-        "passage_text": g.passage_text,
-        "image_url": g.image_url,
-        "audio_url": g.audio_url,
-        "layout": g.layout,
-        "glossary": g.glossary,
-        "grade_min": g.grade_min,
-        "grade_max": g.grade_max,
-        "visibility": g.visibility,
-        "is_platform": g.is_platform,
-        "teacher_id": g.teacher_id,
-        "organization_id": str(g.organization_id) if g.organization_id else None,
-        "school_id": str(g.school_id) if g.school_id else None,
-        "is_owner": g.teacher_id == teacher.id,
-        "can_edit": _can_edit(db, teacher, g, perm_cache),
-        "questions": [_question_out(db, q, teacher, perm_cache) for q in questions],
-        "created_at": g.created_at.isoformat() if g.created_at else None,
-        "updated_at": g.updated_at.isoformat() if g.updated_at else None,
-    }
-
-
-def _group_row_out(
-    db: Session, g: QuestionGroup, teacher: Teacher, perm_cache: dict | None = None
-) -> dict:
-    """列表的題組列：不帶小題內容，帶小題數與來源／考點聯集。"""
-    questions = [q for q in g.questions if q.is_active]
-    sources: dict = {}
-    exam_points: dict = {}
-    for q in questions:
-        for link in q.source_links:
-            if link.source is not None:
-                sources.setdefault(link.source.id, link.source)
-        for link in q.exam_point_links:
-            if link.exam_point is not None:
-                exam_points.setdefault(link.exam_point.id, link.exam_point)
-    preview = (g.passage_text or "").strip()[:200]
-    return {
-        "kind": "group",
-        "id": g.id,
-        "question_type": questions[0].question_type if questions else "reading",
-        "stimulus_type": g.stimulus_type,
-        "title": g.title,
-        "preview": preview,
-        "question_count": len(questions),
-        "grade_min": g.grade_min,
-        "grade_max": g.grade_max,
-        "visibility": g.visibility,
-        "is_platform": g.is_platform,
-        "teacher_id": g.teacher_id,
-        "organization_id": str(g.organization_id) if g.organization_id else None,
-        "school_id": str(g.school_id) if g.school_id else None,
-        "is_owner": g.teacher_id == teacher.id,
-        "can_edit": _can_edit(db, teacher, g, perm_cache),
-        "sources": [_source_out(x) for x in sources.values()],
-        "exam_points": [_exam_point_out(x) for x in exam_points.values()],
-        "created_at": g.created_at.isoformat() if g.created_at else None,
-        "updated_at": g.updated_at.isoformat() if g.updated_at else None,
-    }
-
-
-def _similar_out(q: Question, teacher: Teacher) -> dict:
-    return {
-        "id": q.id,
-        "stem": q.stem,
-        "visibility": q.visibility,
-        "is_platform": q.is_platform,
-        "is_owner": q.teacher_id == teacher.id,
-    }
-
-
-# ============ Permission helpers ============
-
-
-def _parse_uuid(value: Optional[str], field: str) -> Optional[uuid.UUID]:
-    if not value:
-        return None
-    try:
-        return uuid.UUID(value)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field}"
-        )
-
-
-def _can_edit(
-    db: Session,
-    teacher: Teacher,
-    q: Question | QuestionGroup,
-    perm_cache: dict | None = None,
-) -> bool:
-    """建立者本人一律可編輯／刪除自己建的題／題組（含建到機構／學校題庫的）。
-
-    機構／學校題庫裡別人建的題：只有機構擁有人或有教材管理權限的管理者可以
-    （使用者定案：成員可刪改自建題，擁有人／管理者權限不變）。
-    perm_cache 由列表傳入，同一 request 內依 (kind, id) 快取，避免每題重查 Casbin。
-    """
-    if q.teacher_id == teacher.id:
-        return True
-    if q.organization_id is not None:
-        key = ("org", q.organization_id)
-        checker = has_manage_materials_permission
-        target = q.organization_id
-    elif q.school_id is not None:
-        key = ("school", q.school_id)
-        checker = has_school_materials_permission
-        target = q.school_id
-    else:
-        return False
-    if perm_cache is not None and key in perm_cache:
-        return perm_cache[key]
-    ok = checker(teacher.id, target, db)
-    if perm_cache is not None:
-        perm_cache[key] = ok
-    return ok
-
-
-def _require_editable(db: Session, teacher: Teacher, question_id: int) -> Question:
-    q = qbs.get_visible_question(db, teacher, question_id)
-    if q is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="題目不存在")
-    if not _can_edit(db, teacher, q):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有修改此題目的權限")
-    return q
-
-
-def _load_options(query):
-    return query.options(
-        selectinload(Question.options),
-        selectinload(Question.exam_point_links).selectinload(
-            QuestionExamPoint.exam_point
-        ),
-        selectinload(Question.program_links),
-        selectinload(Question.source_links).selectinload(QuestionSourceLink.source),
-    )
-
-
-def _load_group_rows(query):
-    """列表題組列只需要小題的題型／來源／考點（不載選項）。"""
-    return query.options(
-        selectinload(QuestionGroup.questions)
-        .selectinload(Question.source_links)
-        .selectinload(QuestionSourceLink.source),
-        selectinload(QuestionGroup.questions)
-        .selectinload(Question.exam_point_links)
-        .selectinload(QuestionExamPoint.exam_point),
-    )
-
-
-def _scope_filter(query, model, scope, only_own, organization_id, school_id, teacher):
-    """列表 scope：questions / question_groups 欄位同名，共用。"""
-    if scope == "mine":
-        own = and_(
-            model.teacher_id == teacher.id,
-            model.organization_id.is_(None),
-            model.school_id.is_(None),
-        )
-        return query.filter(own if only_own else or_(own, model.visibility == "public"))
-    if scope == "organization":
-        org_uuid = _parse_uuid(organization_id, "organization_id")
-        if org_uuid is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="organization_id required for organization scope",
-            )
-        org_own = model.organization_id == org_uuid
-        return query.filter(
-            org_own if only_own else or_(org_own, model.visibility == "public")
-        )
-    if scope == "school":
-        school_uuid = _parse_uuid(school_id, "school_id")
-        if school_uuid is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="school_id required for school scope",
-            )
-        return query.filter(model.school_id == school_uuid)
-    if scope == "platform":
-        return query.filter(model.is_platform.is_(True))
-    return query
-
-
-def _grade_filter(query, model, grade_min, grade_max):
-    """年級：範圍有交集（沒設年級的不會被排除）。"""
-    if grade_min is not None:
-        query = query.filter(
-            or_(model.grade_max.is_(None), model.grade_max >= grade_min)
-        )
-    if grade_max is not None:
-        query = query.filter(
-            or_(model.grade_min.is_(None), model.grade_min <= grade_max)
-        )
-    return query
-
-
-def _merged_page_keys(db: Session, singles, groups, page: int, page_size: int):
-    """單題與題組在 SQL 層合併分頁：回傳本頁的 [(kind, id)]，順序即顯示順序。
-
-    排序：updated_at desc（null 最後）、id desc、kind（同 updated_at／id 時單題在前）。
-    """
-    s_sel = singles.with_entities(
-        literal("single").label("kind"),
-        Question.id.label("id"),
-        Question.updated_at.label("updated_at"),
-    )
-    g_sel = groups.with_entities(
-        literal("group").label("kind"),
-        QuestionGroup.id.label("id"),
-        QuestionGroup.updated_at.label("updated_at"),
-    )
-    u = union_all(s_sel.statement, g_sel.statement).subquery("merged")
-    rows = (
-        db.query(u.c.kind, u.c.id)
-        .order_by(u.c.updated_at.desc().nullslast(), u.c.id.desc(), u.c.kind.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return [(kind, i) for kind, i in rows]
 
 
 # ============ Endpoints ============
