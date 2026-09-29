@@ -1,5 +1,5 @@
 /**
- * 題庫 tab（Issue #1061 / #1063）。
+ * 題庫 tab（Issue #1061 / #1063 / #1082）。
  *
  * 嵌在「我的教材」與「機構教材」頁的 tab 裡，同一元件靠 `scope` 切換：
  * - scope="mine"          → 老師自己的題庫
@@ -13,94 +13,37 @@
  * - 有未儲存修改時換頁／搜尋前 confirm
  * 工具列：搜尋（題幹＋來源）、題型下拉、考點多選（OR，`ep=1,2`）、只看自己的、每頁筆數；
  * 全部存 URL query。考點目錄 mount 時抓一次，重整後用 id 對回名稱。
- * 點題目文字仍開編輯面板（onSelectQuestion）。
+ * 點題目文字仍開編輯面板（onSelectQuestion）；題組列點標題開題組面板（onSelectGroup）。
+ *
+ * 拆檔（#1082）：QuestionBankToolbar（工具列）、QuestionRow（單題列）、GroupRow（題組列）、
+ * QuestionBankPagination（分頁列）、listCells（共用格子）。此檔只持有狀態與資料流。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Search,
-  X,
-} from "lucide-react";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 
 import { apiClient } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useSearchParams } from "react-router-dom";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
-import { CreatableCombobox } from "@/components/shared/CreatableCombobox";
-import ExamPointPicker from "@/components/shared/ExamPointPicker";
-import {
-  VisibilitySelect,
-  visibilityLabelKey,
-} from "@/components/shared/VisibilitySelect";
-import {
-  examPointLabel,
   type ExamPoint,
   isGroupRow,
   type Question,
   type QuestionGroupListRow,
   type QuestionListItem,
   type QuestionType,
-  type QuestionVisibility,
 } from "@/types/questionBank";
 import QuestionBulkBar from "./QuestionBulkBar";
+import QuestionBankToolbar, { TYPE_FILTERS } from "./QuestionBankToolbar";
+import QuestionBankPagination, {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZES,
+} from "./QuestionBankPagination";
+import QuestionRow, { type RowEdit } from "./QuestionRow";
+import GroupRow from "./GroupRow";
 import { examPointsFromQuestion } from "./questionDraft";
-import {
-  makeCreateSource,
-  searchSources,
-  sourceToItem,
-} from "./sourcesCombobox";
-
-const PAGE_SIZES = [20, 50, 100] as const;
-const DEFAULT_PAGE_SIZE = 20;
-const CREATE_TYPES_ORDER: QuestionType[] = [
-  "multiple_choice",
-  "reading",
-  "cloze",
-  "fill_in",
-  "listening",
-  "listening_image",
-];
-/** 題型下拉的選項順序（同新增清單） */
-const TYPE_FILTERS: QuestionType[] = CREATE_TYPES_ORDER;
-
-/** 「新增題目 ▽」的題型清單；選擇題與閱讀題組可用（#1082），其餘後續題型接上 */
-const CREATE_TYPES: { type: QuestionType; enabled: boolean }[] = [
-  { type: "multiple_choice", enabled: true },
-  { type: "reading", enabled: true },
-  { type: "cloze", enabled: false },
-  { type: "fill_in", enabled: false },
-  { type: "listening", enabled: false },
-  { type: "listening_image", enabled: false },
-];
-
-/** 列表可快速編輯的三個欄位 */
-interface RowEdit {
-  exam_points: ExamPoint[];
-  sources: ComboboxItem[];
-  visibility: QuestionVisibility;
-}
+import { makeCreateSource, sourceToItem } from "./sourcesCombobox";
 
 function editFromQuestion(q: Question): RowEdit {
   return {
@@ -139,8 +82,7 @@ export default function QuestionBankTab({
   onDispatch,
   onBulkEdit,
 }: QuestionBankTabProps) {
-  const { t, i18n } = useTranslation();
-  const lang = i18n.language;
+  const { t } = useTranslation();
   // 列表列：單題 + 題組列（#1082 骨架：題組列先只顯示，勾選／快速編輯／批次動作只對單題）
   const [items, setItems] = useState<QuestionListItem[]>([]);
   const questionItems = useMemo(
@@ -279,8 +221,6 @@ export default function QuestionBankTab({
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const handleCreate = (type: QuestionType) => {
     if (onCreateQuestion) {
@@ -421,156 +361,40 @@ export default function QuestionBankTab({
     }
   };
 
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-
   return (
     <div className="space-y-4 pb-20" data-testid="question-bank-tab">
-      {/* ── Toolbar ── */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        {/* 標題由上方的 tab 擔任（MaterialsPageTabs），這裡不再重複 */}
-        <div className="hidden lg:block flex-1" />
-        <div className="flex items-center gap-3">
-          {canCreate && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-[13px]"
-                  data-testid="question-bank-add"
-                >
-                  <Plus size={16} />
-                  <span className="hidden sm:inline">
-                    {t("questionBank.buttons.addQuestion")}
-                  </span>
-                  <ChevronDown size={14} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {CREATE_TYPES.map(({ type, enabled }) => (
-                  <DropdownMenuItem
-                    key={type}
-                    disabled={!enabled}
-                    onSelect={() => handleCreate(type)}
-                    data-testid={`question-bank-add-${type}`}
-                  >
-                    {typeLabel(type)}
-                    {!enabled && (
-                      <span className="ml-2 text-xs text-gray-400">
-                        {t("questionBank.comingSoon")}
-                      </span>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <div className="relative flex-1 md:w-60 md:flex-none">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <Input
-              placeholder={t("questionBank.searchPlaceholder")}
-              value={search}
-              onChange={(e) => changeSearch(e.target.value)}
-              className="pl-8 h-9 text-[13px] border-gray-200 rounded-lg"
-              data-testid="question-bank-search"
-            />
-          </div>
-          <Select
-            value={typeFilter || "all"}
-            onValueChange={(v) => {
-              if (!confirmDiscard()) return;
-              setQuery({ type: v === "all" ? null : v, page: null });
-            }}
-          >
-            <SelectTrigger
-              className="h-9 w-32 text-[13px]"
-              data-testid="question-bank-type-filter"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                {t("questionBank.list.typeAll")}
-              </SelectItem>
-              {TYPE_FILTERS.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {typeLabel(type)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {/* 考點多選 filter：trigger 對齊題型下拉；有選取時顯示前兩個名稱 + N */}
-          <div className="flex items-center gap-1">
-            <ExamPointPicker
-              value={selectedExamPoints}
-              onChange={(next) => {
-                if (!confirmDiscard()) return;
-                setQuery({
-                  ep: next.length ? next.map((ep) => ep.id).join(",") : null,
-                  page: null,
-                });
-              }}
-              compact
-              renderTrigger={() => (
-                <div
-                  className={`flex h-9 max-w-[220px] items-center gap-1 rounded-md border border-input bg-background px-3 text-[13px] ${
-                    examPointIds.length > 0 ? "text-gray-900" : "text-gray-500"
-                  }`}
-                >
-                  <span className="truncate">
-                    {selectedExamPoints.length === 0
-                      ? examPointIds.length > 0
-                        ? t("questionBank.list.examPointSelected", {
-                            count: examPointIds.length,
-                          })
-                        : t("questionBank.list.examPointAll")
-                      : selectedExamPoints
-                          .slice(0, 2)
-                          .map((ep) => examPointLabel(ep, lang))
-                          .join("、") +
-                        (selectedExamPoints.length > 2
-                          ? ` +${selectedExamPoints.length - 2}`
-                          : "")}
-                  </span>
-                  <ChevronDown size={14} className="shrink-0 opacity-50" />
-                </div>
-              )}
-              data-testid="qb-exam-point-filter"
-            />
-            {examPointIds.length > 0 && (
-              <button
-                type="button"
-                className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                aria-label={t("questionBank.list.examPointClear")}
-                title={t("questionBank.list.examPointClear")}
-                onClick={() => {
-                  if (!confirmDiscard()) return;
-                  setQuery({ ep: null, page: null });
-                }}
-                data-testid="qb-exam-point-clear"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap">
-            <Switch
-              checked={onlyOwn}
-              onCheckedChange={(v) => {
-                if (!confirmDiscard()) return;
-                setQuery({ own: v ? "1" : null, page: null });
-              }}
-              data-testid="question-bank-only-own"
-            />
-            {scope === "organization"
-              ? t("questionBank.list.onlyOrg")
-              : t("questionBank.list.onlyOwn")}
-          </label>
-        </div>
-      </div>
+      <QuestionBankToolbar
+        scope={scope}
+        canCreate={canCreate}
+        onCreate={handleCreate}
+        typeLabel={typeLabel}
+        filterTypeLabel={typeLabel}
+        search={search}
+        onChangeSearch={changeSearch}
+        typeFilter={typeFilter}
+        onChangeTypeFilter={(type) => {
+          if (!confirmDiscard()) return;
+          setQuery({ type: type || null, page: null });
+        }}
+        examPointIds={examPointIds}
+        selectedExamPoints={selectedExamPoints}
+        onChangeExamPoints={(next) => {
+          if (!confirmDiscard()) return;
+          setQuery({
+            ep: next.length ? next.map((ep) => ep.id).join(",") : null,
+            page: null,
+          });
+        }}
+        onClearExamPoints={() => {
+          if (!confirmDiscard()) return;
+          setQuery({ ep: null, page: null });
+        }}
+        onlyOwn={onlyOwn}
+        onChangeOnlyOwn={(v) => {
+          if (!confirmDiscard()) return;
+          setQuery({ own: v ? "1" : null, page: null });
+        }}
+      />
 
       {/* ── List ── */}
       {loading ? (
@@ -620,188 +444,49 @@ export default function QuestionBankTab({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
-                if (isGroupRow(item)) {
-                  return (
-                    <GroupRow
-                      key={`g-${item.id}`}
-                      row={item}
-                      typeLabel={typeLabel}
-                      onSelect={onSelectGroup}
-                    />
-                  );
-                }
-                const q = item;
-                const e = currentEdit(q);
-                const dirty = q.id in edits;
-                const editable = canEdit(q);
-                return (
-                  <tr
-                    key={q.id}
-                    className={`border-t border-gray-100 align-top ${
-                      dirty ? "bg-yellow-50" : ""
-                    }`}
-                    data-testid={`question-row-${q.id}`}
-                    data-dirty={dirty || undefined}
-                  >
-                    <td className="px-3 py-2.5">
-                      <Checkbox
-                        checked={checked.has(q.id)}
-                        onCheckedChange={(c) => toggleOne(q.id, c === true)}
-                        aria-label={t("questionBank.list.selectRow")}
-                        data-testid={`qb-check-${q.id}`}
-                      />
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-900">
-                      <button
-                        type="button"
-                        onClick={() => onSelectQuestion?.(q)}
-                        className={`text-left w-full ${
-                          onSelectQuestion
-                            ? "hover:underline"
-                            : "cursor-default"
-                        }`}
-                        data-testid={`qb-stem-${q.id}`}
-                      >
-                        <div className="line-clamp-2 break-words">{q.stem}</div>
-                        {q.question_type === "multiple_choice" &&
-                          q.options.length > 0 && (
-                            <OptionGrid options={q.options} />
-                          )}
-                      </button>
-                      {!q.is_owner && (
-                        <span className="text-xs text-gray-400">
-                          {q.is_platform
-                            ? t("questionBank.owner.platform")
-                            : t("questionBank.owner.other")}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2.5 text-gray-600 hidden sm:table-cell truncate">
-                      {typeLabel(q.question_type)}
-                    </td>
-                    <td className="px-2 py-2.5 text-gray-600 hidden lg:table-cell tabular-nums">
-                      {formatGrade(q.grade_min, q.grade_max)}
-                    </td>
-                    <td
-                      className="px-4 py-2 hidden xl:table-cell"
-                      onClick={stop}
-                    >
-                      <ExamPointPicker
-                        value={e.exam_points}
-                        onChange={(exam_points) => patchRow(q, { exam_points })}
-                        disabled={!editable || bulkBusy}
-                        compact
-                        closeOnSelect
-                        renderTrigger={() => (
-                          <ChipCell
-                            labels={e.exam_points.map((ep) =>
-                              examPointLabel(ep, lang),
-                            )}
-                          />
-                        )}
-                        data-testid={`qb-row-${q.id}-exam-points`}
-                      />
-                    </td>
-                    <td
-                      className="px-4 py-2 hidden md:table-cell"
-                      onClick={stop}
-                    >
-                      <CreatableCombobox
-                        value={e.sources}
-                        onChange={(sources) => patchRow(q, { sources })}
-                        onSearch={searchSources}
-                        onCreate={createSource}
-                        disabled={!editable || bulkBusy}
-                        triggerLabel={t("questionBank.form.batch.pickSources")}
-                        searchPlaceholder={t(
-                          "questionBank.form.batch.sourceSearchPlaceholder",
-                        )}
-                        emptyText={t("questionBank.form.batch.noSources")}
-                        createLabel={(name) =>
-                          t("questionBank.form.batch.createSource", { name })
-                        }
-                        closeOnSelect
-                        renderTrigger={() => (
-                          <ChipCell labels={e.sources.map((x) => x.label)} />
-                        )}
-                        data-testid={`qb-row-${q.id}-sources`}
-                      />
-                    </td>
-                    <td
-                      className="px-4 py-2 hidden lg:table-cell"
-                      onClick={stop}
-                    >
-                      <InlineVisibility
-                        value={e.visibility}
-                        onChange={(visibility) => patchRow(q, { visibility })}
-                        scope={q.organization_id ? "organization" : "personal"}
-                        disabled={!editable || bulkBusy}
-                        testId={`qb-row-${q.id}-visibility`}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
+              {items.map((item) =>
+                isGroupRow(item) ? (
+                  <GroupRow
+                    key={`g-${item.id}`}
+                    row={item}
+                    typeLabel={typeLabel}
+                    onSelect={onSelectGroup}
+                  />
+                ) : (
+                  <QuestionRow
+                    key={item.id}
+                    q={item}
+                    edit={currentEdit(item)}
+                    dirty={item.id in edits}
+                    editable={canEdit(item)}
+                    checked={checked.has(item.id)}
+                    busy={bulkBusy}
+                    typeLabel={typeLabel}
+                    createSource={createSource}
+                    onToggle={(on) => toggleOne(item.id, on)}
+                    onPatch={(patch) => patchRow(item, patch)}
+                    onSelect={onSelectQuestion}
+                  />
+                ),
+              )}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* ── Pagination ── */}
-      {(total > pageSize || pageSize !== DEFAULT_PAGE_SIZE) && (
-        <div className="flex items-center justify-end gap-2 text-sm text-gray-600">
-          <Select
-            value={String(pageSize)}
-            onValueChange={(v) => {
-              if (!confirmDiscard()) return;
-              setQuery({
-                size: v === String(DEFAULT_PAGE_SIZE) ? null : v,
-                page: null,
-              });
-            }}
-          >
-            <SelectTrigger
-              className="h-8 w-28 text-xs"
-              data-testid="question-bank-page-size"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZES.map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {t("questionBank.list.pageSize", { count: n })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span>
-            {t("questionBank.pagination", {
-              page,
-              totalPages,
-              total,
-            })}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => changePage(page - 1)}
-            aria-label={t("questionBank.buttons.prevPage")}
-          >
-            <ChevronLeft size={16} />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => changePage(page + 1)}
-            aria-label={t("questionBank.buttons.nextPage")}
-          >
-            <ChevronRight size={16} />
-          </Button>
-        </div>
-      )}
+      <QuestionBankPagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onChangePage={changePage}
+        onChangePageSize={(size) => {
+          if (!confirmDiscard()) return;
+          setQuery({
+            size: size === DEFAULT_PAGE_SIZE ? null : String(size),
+            page: null,
+          });
+        }}
+      />
 
       <QuestionBulkBar
         selectedCount={checked.size}
@@ -837,171 +522,4 @@ export default function QuestionBankTab({
       />
     </div>
   );
-}
-
-/** 表格格子的純顯示：chip 列；沒有值顯示「—」。點整格才開選單（由外層 renderTrigger 包） */
-function ChipCell({ labels }: { labels: string[] }) {
-  if (labels.length === 0) return <span className="text-gray-300 px-1">—</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {labels.map((l, i) => (
-        <span
-          key={`${l}-${i}`}
-          className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 max-w-full truncate"
-          title={l}
-        >
-          {l}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** 公開設定：平常顯示文字，點了才出現下拉（自動展開），選完或關閉就回純顯示 */
-function InlineVisibility({
-  value,
-  onChange,
-  scope,
-  disabled,
-  testId,
-}: {
-  value: QuestionVisibility;
-  onChange: (v: QuestionVisibility) => void;
-  scope: "personal" | "organization";
-  disabled: boolean;
-  testId: string;
-}) {
-  const { t } = useTranslation();
-  const [editing, setEditing] = useState(false);
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setEditing(true)}
-        className="text-left w-full rounded px-1 py-0.5 hover:bg-gray-100 disabled:cursor-default disabled:hover:bg-transparent"
-        data-testid={`${testId}-display`}
-      >
-        {t(visibilityLabelKey(value, scope))}
-      </button>
-    );
-  }
-  return (
-    <VisibilitySelect
-      value={value}
-      onChange={(v) => {
-        onChange(v);
-        setEditing(false);
-      }}
-      scope={scope}
-      disabled={disabled}
-      defaultOpen
-      onOpenChange={(open) => {
-        if (!open) setEditing(false);
-      }}
-      data-testid={testId}
-    />
-  );
-}
-
-/** 選項全都短（≤ 12 字）且不超過 4 個 → 一列四格；否則兩欄 */
-const SHORT_OPTION_CHARS = 12;
-
-/** 題組列（#1082）：點標題開題組編輯面板；不勾選、不快速編輯（整組操作在面板內） */
-function GroupRow({
-  row,
-  typeLabel,
-  onSelect,
-}: {
-  row: QuestionGroupListRow;
-  typeLabel: (type: QuestionType) => string;
-  onSelect?: (row: QuestionGroupListRow) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <tr
-      className="border-t border-gray-100 align-top"
-      data-testid={`question-group-row-${row.id}`}
-    >
-      <td className="px-3 py-2.5">
-        <Checkbox
-          checked={false}
-          disabled
-          aria-label={t("questionBank.list.selectRow")}
-        />
-      </td>
-      <td className="px-4 py-2.5 text-gray-900">
-        <button
-          type="button"
-          onClick={() => onSelect?.(row)}
-          className={`text-left w-full ${onSelect ? "hover:underline" : "cursor-default"}`}
-          data-testid={`qb-group-title-${row.id}`}
-        >
-          <div className="line-clamp-2 break-words">
-            {row.title || row.preview || typeLabel(row.question_type)}
-          </div>
-        </button>
-        <span className="text-xs text-gray-500">
-          {t("questionBank.list.groupQuestionCount", {
-            count: row.question_count,
-          })}
-        </span>
-        {!row.is_owner && (
-          <span className="ml-2 text-xs text-gray-400">
-            {row.is_platform
-              ? t("questionBank.owner.platform")
-              : t("questionBank.owner.other")}
-          </span>
-        )}
-      </td>
-      <td className="px-2 py-2.5 text-gray-600 hidden sm:table-cell truncate">
-        {typeLabel(row.question_type)}
-      </td>
-      <td className="px-2 py-2.5 text-gray-600 hidden lg:table-cell tabular-nums">
-        {formatGrade(row.grade_min, row.grade_max)}
-      </td>
-      <td className="px-4 py-2 hidden xl:table-cell" />
-      <td className="px-4 py-2 hidden md:table-cell">
-        <ChipCell labels={row.sources.map((x) => x.name)} />
-      </td>
-      <td className="px-4 py-2 hidden lg:table-cell text-gray-600">
-        {t(`questionBank.visibility.${row.visibility}`)}
-      </td>
-    </tr>
-  );
-}
-
-function OptionGrid({ options }: { options: Question["options"] }) {
-  const oneRow =
-    options.length <= 4 &&
-    options.every((o) => o.text.trim().length <= SHORT_OPTION_CHARS);
-  return (
-    <div
-      className={`mt-1 grid gap-x-3 gap-y-0.5 text-xs text-gray-600 ${
-        oneRow ? "grid-cols-4" : "grid-cols-2"
-      }`}
-      data-testid="qb-option-grid"
-      data-layout={oneRow ? "1x4" : "2x2"}
-    >
-      {options.map((o, i) => (
-        <span key={o.id} className="truncate" title={o.text}>
-          {String.fromCharCode(65 + i)}.{" "}
-          {o.is_correct ? (
-            <span className="rounded bg-yellow-100 px-1 text-yellow-900">
-              {o.text || (o.image_url ? "🖼" : "")}
-            </span>
-          ) : (
-            o.text || (o.image_url ? "🖼" : "")
-          )}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** 年級只顯示數字（中英文相同）：7–9、7、不限 — */
-function formatGrade(min: number | null, max: number | null): string {
-  if (min === null && max === null) return "—";
-  if (min !== null && max !== null && min !== max) return `${min}–${max}`;
-  return String(min ?? max);
 }
