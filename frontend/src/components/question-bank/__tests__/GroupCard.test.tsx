@@ -1,5 +1,5 @@
 /**
- * GroupCard 元件測試（Issue #1082 第 3 段）。
+ * GroupCard 元件測試（Issue #1082 第 3 段；第 2 段修訂加：無素材類型下拉、小題 compact）。
  *
  * LayoutEditor 與 QuestionCard 各自有測試，這裡以 stub 取代，只測題組卡本身：
  * 標題／單字註解增刪改、空白註解列送出前被丟掉、小題新增／刪除、
@@ -65,8 +65,16 @@ vi.mock("../LayoutEditor", () => ({
 }));
 
 vi.mock("../QuestionCard", () => ({
-  default: ({ index, onRemove }: { index: number; onRemove?: () => void }) => (
-    <div data-testid={`qc-stub-${index}`}>
+  default: ({
+    index,
+    onRemove,
+    compact,
+  }: {
+    index: number;
+    onRemove?: () => void;
+    compact?: boolean;
+  }) => (
+    <div data-testid={`qc-stub-${index}`} data-compact={compact || undefined}>
       question-card-stub
       {onRemove && (
         <button
@@ -152,6 +160,17 @@ describe("GroupCard", () => {
     expect(draft.glossary).toEqual([{ word: "", zh: "" }]);
     // 只剩空白列 → glossary 送 null
     expect(toCreateGroupInput(draft).glossary).toBeNull();
+  });
+
+  it("沒有素材類型下拉；小題以 compact（不包外框）呈現", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} />);
+    expect(screen.queryByTestId("qg-0-stimulus")).toBeNull();
+    await user.click(screen.getByTestId("qg-0-add-question"));
+    expect(await screen.findByTestId("qc-stub-0")).toHaveAttribute(
+      "data-compact",
+      "true",
+    );
   });
 
   it("新增小題 → 出現小題卡並帶題組年段；刪除小題 → 移除", async () => {

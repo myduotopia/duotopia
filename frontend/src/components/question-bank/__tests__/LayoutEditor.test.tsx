@@ -1,13 +1,14 @@
 /**
- * LayoutEditor 元件測試（Issue #1082 第 3 段）。
+ * LayoutEditor 元件測試（Issue #1082 第 2 段修訂：文件式編輯器）。
  *
- * jsdom 不測拖拉（dnd-kit 需要真實座標），只測結構操作與預覽：
- * 新增列／區塊、輸入段落、改比例（多欄→少欄區塊合併）、包成 section／解開、
- * 桌機／手機預覽切換。每步都檢查 onChange 收到的 LayoutDoc。
+ * jsdom 不測拖拉（dnd-kit 需要真實座標），只測：
+ * 空狀態「新增區塊」、區塊之間的「＋」插入、輸入段落、寬度微調（雙欄才有）、
+ * 加／移除外框、刪除區塊（收掉空欄）、預覽 Dialog 與手機切換、沒有「新增列／比例」、disabled。
+ * 每步都檢查 onChange 收到的 LayoutDoc。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import LayoutEditor from "../LayoutEditor";
@@ -33,162 +34,211 @@ function lastLayout(onChange: ReturnType<typeof vi.fn>): LayoutDoc | null {
   return calls[calls.length - 1][0] as LayoutDoc | null;
 }
 
+function twoParagraphsDoc(): LayoutDoc {
+  return {
+    version: 1,
+    rows: ["A", "B"].map((text) => ({
+      columns: [{ span: 1, blocks: [{ type: "paragraph", text }] }],
+    })),
+  };
+}
+
 function twoColumnDoc(): LayoutDoc {
   return {
     version: 1,
     rows: [
       {
         columns: [
-          {
-            span: 1,
-            blocks: [{ type: "paragraph", text: "left" }],
-          },
-          {
-            span: 1,
-            blocks: [{ type: "paragraph", text: "right" }],
-          },
+          { span: 1, blocks: [{ type: "paragraph", text: "left" }] },
+          { span: 1, blocks: [{ type: "paragraph", text: "right" }] },
         ],
       },
     ],
   };
 }
 
+const rowTexts = (doc: LayoutDoc | null): string[][] =>
+  (doc?.rows ?? []).map((n) =>
+    (n.type === "section" ? n.rows[0] : n).columns.map((c) =>
+      c.blocks.map((b) => ("text" in b ? b.text : "img")).join("+"),
+    ),
+  );
+
 describe("LayoutEditor", () => {
   beforeEach(() => {
-    // Radix Select 在 jsdom 缺的 API：scrollIntoView／pointer capture
+    // Radix Select／Dialog 在 jsdom 缺的 API：scrollIntoView／pointer capture
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.releasePointerCapture = vi.fn();
   });
 
-  it("空排版：新增列 → 一列一欄；新增段落區塊並輸入文字 → onChange 帶區塊內容", async () => {
+  it("空排版：只有一個空狀態；「新增區塊 → 段落」→ 一列一欄一段落；輸入文字 → onChange", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<LayoutEditor layout={null} onChange={onChange} testId="le" />);
-    // 編輯區與預覽區各一個空狀態
     expect(screen.getAllByText("questionBank.group.layout.empty")).toHaveLength(
-      2,
+      1,
     );
+    // 沒有「新增列」與比例選單
+    expect(screen.queryByTestId("le-add-row")).toBeNull();
+    expect(screen.queryByTestId("le-new-ratio")).toBeNull();
 
-    await user.click(screen.getByTestId("le-add-row"));
+    await user.click(screen.getByTestId("le-add"));
+    await user.click(await screen.findByTestId("le-add-paragraph"));
     let doc = lastLayout(onChange);
-    // 只有空列 → toLayoutDoc 仍回傳一列（空欄）
     expect(doc?.rows).toHaveLength(1);
-    expect((doc?.rows[0] as LayoutRow).columns).toHaveLength(1);
+    const col = (doc?.rows[0] as LayoutRow).columns;
+    expect(col).toHaveLength(1);
+    expect(col[0].blocks).toEqual([{ type: "paragraph", text: "" }]);
 
-    await user.click(screen.getByTestId("le-node-0-col-0-add-block"));
-    await user.click(
-      await screen.findByTestId("le-node-0-col-0-add-paragraph"),
-    );
-    doc = lastLayout(onChange);
-    const col = (doc?.rows[0] as LayoutRow).columns[0];
-    expect(col.blocks).toEqual([{ type: "paragraph", text: "" }]);
-
-    await user.type(
-      screen.getByTestId("le-node-0-col-0-block-0-text"),
-      "Hello",
-    );
+    await user.type(screen.getByTestId("le-block-0-text"), "Hello");
     doc = lastLayout(onChange);
     expect((doc?.rows[0] as LayoutRow).columns[0].blocks[0]).toEqual({
       type: "paragraph",
       text: "Hello",
     });
+    // 聚焦時浮出粗體／底線工具列
+    expect(screen.getByTestId("le-block-0-toolbar")).toBeTruthy();
   });
 
-  it("改比例：1:1 → 1 時第二欄的區塊併到第一欄，不遺失；再改 1:2 → 兩欄 span 1／2", async () => {
+  it("區塊之間的「＋」：在 A 後插入標題 → A、標題、B 各獨占一行", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <LayoutEditor
+        layout={twoParagraphsDoc()}
+        onChange={onChange}
+        testId="le"
+      />,
+    );
+    await user.click(screen.getByTestId("le-insert-after-0"));
+    await user.click(await screen.findByTestId("le-insert-after-0-heading"));
+    expect(rowTexts(lastLayout(onChange))).toEqual([["A"], [""], ["B"]]);
+    expect(
+      (lastLayout(onChange)?.rows[1] as LayoutRow).columns[0].blocks[0],
+    ).toMatchObject({ type: "heading", level: 2 });
+
+    // 最前面也能插
+    await user.click(screen.getByTestId("le-insert-first"));
+    await user.click(await screen.findByTestId("le-insert-first-paragraph"));
+    expect(rowTexts(lastLayout(onChange))[0]).toEqual([""]);
+    expect(lastLayout(onChange)?.rows).toHaveLength(4);
+  });
+
+  it("寬度：雙欄的區塊才有寬度鈕；選 2/3 → 另一欄自動 1/3；單欄沒有寬度鈕", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(
       <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
     );
-    expect(screen.getByTestId("le-node-0-col-1")).toBeTruthy();
-
-    await user.click(screen.getByTestId("le-node-0-ratio"));
-    await user.click(await screen.findByRole("option", { name: "1" }));
+    expect(screen.getByTestId("le-row")).toHaveAttribute("data-columns", "2");
+    await user.click(screen.getByTestId("le-block-0-width"));
+    await user.click(await screen.findByTestId("le-block-0-width-2-3"));
     let row = lastLayout(onChange)?.rows[0] as LayoutRow;
-    expect(row.columns).toHaveLength(1);
-    expect(
-      row.columns[0].blocks.map((b) => (b as { text: string }).text),
-    ).toEqual(["left", "right"]);
+    expect(row.columns.map((c) => c.span)).toEqual([2, 1]);
+    expect(screen.getByTestId("le-block-0-width")).toHaveTextContent("2/3");
+    expect(screen.getByTestId("le-block-1-width")).toHaveTextContent("1/3");
 
-    await user.click(screen.getByTestId("le-node-0-ratio"));
-    await user.click(await screen.findByRole("option", { name: "1:2" }));
+    await user.click(screen.getByTestId("le-block-1-width"));
+    await user.click(await screen.findByTestId("le-block-1-width-2-3"));
     row = lastLayout(onChange)?.rows[0] as LayoutRow;
     expect(row.columns.map((c) => c.span)).toEqual([1, 2]);
-    expect(row.columns[1].blocks).toEqual([]);
+
+    const { unmount } = render(
+      <LayoutEditor
+        layout={twoParagraphsDoc()}
+        onChange={vi.fn()}
+        testId="single"
+      />,
+    );
+    expect(screen.queryByTestId("single-block-0-width")).toBeNull();
+    unmount();
   });
 
-  it("包成 section → rows[0] 變 section 且含原列；框線可切換；解開 → 回到一般列", async () => {
+  it("外框：按一次 → 該列包成 section（有框線）；再按 → 解開", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(
-      <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
+      <LayoutEditor
+        layout={twoParagraphsDoc()}
+        onChange={onChange}
+        testId="le"
+      />,
     );
-    await user.click(screen.getByTestId("le-node-0-wrap"));
+    await user.click(screen.getByTestId("le-block-0-frame"));
     let node = lastLayout(onChange)?.rows[0];
     expect(node?.type).toBe("section");
-    if (node?.type !== "section") throw new Error("expected section");
-    expect(node.rows).toHaveLength(1);
-    expect(node.rows[0].columns).toHaveLength(2);
-    // 包起來預設有框線；取消勾選 → frame=false
-    expect(node.frame).toBe(true);
+    expect(node?.type === "section" && node.frame).toBe(true);
+    expect(screen.getByTestId("le-section")).toBeTruthy();
+    expect(screen.getByTestId("le-block-0-frame")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // B 不在框裡
+    expect(screen.getByTestId("le-block-1-frame")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
-    await user.click(screen.getByTestId("le-node-0-frame"));
-    node = lastLayout(onChange)?.rows[0];
-    expect(node?.type === "section" && node.frame).toBe(false);
-
-    // section 內的列不能再包一層
-    expect(screen.queryByTestId("le-node-0-row-0-wrap")).toBeNull();
-
-    await user.click(screen.getByTestId("le-node-0-unwrap"));
+    await user.click(screen.getByTestId("le-block-0-frame"));
     node = lastLayout(onChange)?.rows[0];
     expect(node?.type).not.toBe("section");
-    expect((node as LayoutRow).columns).toHaveLength(2);
+    expect(rowTexts(lastLayout(onChange))).toEqual([["A"], ["B"]]);
   });
 
-  it("刪除區塊／刪除列；全部刪光 → onChange(null)", async () => {
+  it("刪除：雙欄刪一個 → 剩下的撐滿整行；全部刪光 → onChange(null) 回到空狀態", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(
       <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
     );
-    await user.click(screen.getByTestId("le-node-0-col-1-block-0-remove"));
-    let row = lastLayout(onChange)?.rows[0] as LayoutRow;
-    expect(row.columns[1].blocks).toEqual([]);
+    await user.click(screen.getByTestId("le-block-1-remove"));
+    const row = lastLayout(onChange)?.rows[0] as LayoutRow;
+    expect(row.columns).toHaveLength(1);
+    expect(row.columns[0].span).toBe(1);
+    expect(screen.getByTestId("le-row")).toHaveAttribute("data-columns", "1");
+    expect(screen.queryByTestId("le-block-0-width")).toBeNull();
 
-    await user.click(screen.getByTestId("le-node-0-remove"));
+    await user.click(screen.getByTestId("le-block-0-remove"));
     expect(lastLayout(onChange)).toBeNull();
+    expect(screen.getByTestId("le-add")).toBeTruthy();
     expect(screen.getAllByText("questionBank.group.layout.empty")).toHaveLength(
-      2,
+      1,
     );
   });
 
-  it("預覽：預設桌機；切手機 → aria-pressed 與 390px 容器；預覽內容用同一份資料", async () => {
+  it("預覽：編輯區沒有常駐預覽；按「預覽」開 Dialog，預設電腦、切手機；預覽不回寫", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(
       <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
     );
-    const preview = screen.getByTestId("le-preview");
+    expect(screen.queryByTestId("le-preview")).toBeNull();
+
+    await user.click(screen.getByTestId("le-preview-open"));
+    const preview = await screen.findByTestId("le-preview");
     expect(preview).toHaveTextContent("left");
     expect(preview).toHaveTextContent("right");
+    expect(preview).toHaveAttribute("data-mode", "desktop");
     expect(screen.getByTestId("le-preview-desktop")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(preview.className).not.toContain("w-[390px]");
 
     await user.click(screen.getByTestId("le-preview-mobile"));
-    expect(screen.getByTestId("le-preview-mobile")).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByTestId("le-preview")).toHaveAttribute(
+      "data-mode",
+      "mobile",
     );
     expect(screen.getByTestId("le-preview").className).toContain("w-[390px]");
-    // 預覽不會回寫 layout
+    // 手機模式下 renderer 強制堆疊
+    expect(
+      within(screen.getByTestId("le-preview")).getByTestId("layout-renderer"),
+    ).toHaveAttribute("data-stack", "true");
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("disabled：所有操作鍵停用", () => {
+  it("disabled：新增鈕停用、區塊沒有工具列、「＋」不出現", () => {
     render(
       <LayoutEditor
         layout={twoColumnDoc()}
@@ -197,9 +247,9 @@ describe("LayoutEditor", () => {
         testId="le"
       />,
     );
-    expect(screen.getByTestId("le-add-row")).toBeDisabled();
-    expect(screen.getByTestId("le-node-0-wrap")).toBeDisabled();
-    expect(screen.getByTestId("le-node-0-remove")).toBeDisabled();
-    expect(screen.getByTestId("le-node-0-col-0-add-block")).toBeDisabled();
+    expect(screen.queryByTestId("le-add")).toBeNull();
+    expect(screen.queryByTestId("le-block-0-tools")).toBeNull();
+    expect(screen.queryByTestId("le-insert-after-1")).toBeNull();
+    expect(screen.getByTestId("le-block-0-text")).toBeDisabled();
   });
 });

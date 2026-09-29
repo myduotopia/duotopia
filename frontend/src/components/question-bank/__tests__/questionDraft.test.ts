@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 import {
   BASE_OPTION_SLOTS,
   batchDefaultsFromQuestion,
+  deriveStimulusType,
   draftFromQuestion,
   emptyBatchDefaults,
   emptyDraft,
@@ -602,5 +603,47 @@ describe("AI 套用（#1065）：只填空的", () => {
     const inputs = toAiInputs(unitQuestions(units), map);
     expect(inputs[0].passage).toBe("The passage.");
     expect(inputs[1]).not.toHaveProperty("passage");
+  });
+});
+
+describe("deriveStimulusType（#1082 修訂：素材類型由內容判定）", () => {
+  const rows = (blocks: { type: "paragraph" | "image" }[]) => ({
+    version: 1 as const,
+    rows: blocks.map((b) => ({
+      columns: [
+        {
+          span: 1,
+          blocks: [
+            b.type === "image"
+              ? { type: "image" as const, url: "x.png" }
+              : { type: "paragraph" as const, text: "t" },
+          ],
+        },
+      ],
+    })),
+  });
+
+  it("只有圖片 → image；只有文字 → passage；圖文都有 → mixed", () => {
+    expect(deriveStimulusType(rows([{ type: "image" }]), null)).toBe("image");
+    expect(deriveStimulusType(rows([{ type: "paragraph" }]), null)).toBe(
+      "passage",
+    );
+    expect(
+      deriveStimulusType(rows([{ type: "paragraph" }, { type: "image" }]), null),
+    ).toBe("mixed");
+  });
+
+  it("沒有排版：有整組圖片 → image，否則 passage", () => {
+    expect(deriveStimulusType(null, "poster.png")).toBe("image");
+    expect(deriveStimulusType(null, null)).toBe("passage");
+    expect(deriveStimulusType({ version: 1, rows: [] }, null)).toBe("passage");
+  });
+
+  it("送後端的 payload 用判定值，不用草稿裡的 stimulus_type", () => {
+    const g = emptyGroupDraft("reading");
+    g.stimulus_type = "passage";
+    g.layout = rows([{ type: "image" }]);
+    expect(toCreateGroupInput(g).stimulus_type).toBe("image");
+    expect(toUpdateGroupInput(g).stimulus_type).toBe("image");
   });
 });
