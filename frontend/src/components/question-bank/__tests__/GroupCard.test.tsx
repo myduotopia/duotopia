@@ -93,6 +93,11 @@ const tts: TTSSettingsState = {
   speed: 1,
 } as unknown as TTSSettingsState;
 
+function lastDraft(onDraft: ReturnType<typeof vi.fn>): GroupDraft {
+  const calls = onDraft.mock.calls;
+  return calls[calls.length - 1][0] as GroupDraft;
+}
+
 /** 受控包裝：把 onChange 寫回 state，讓卡片像在 sheet 裡一樣可互動 */
 function Harness({
   initial,
@@ -132,7 +137,7 @@ describe("GroupCard", () => {
     await user.type(screen.getByTestId("qg-0-glossary-word-0"), "timeline");
     await user.type(screen.getByTestId("qg-0-glossary-zh-0"), "時間軸");
     // 第二列留空
-    let draft: GroupDraft = onDraft.mock.calls.at(-1)![0];
+    let draft = lastDraft(onDraft);
     expect(draft.title).toBe("Vivaldi");
     expect(draft.glossary).toEqual([
       { word: "timeline", zh: "時間軸" },
@@ -143,7 +148,7 @@ describe("GroupCard", () => {
     ]);
 
     await user.click(screen.getByTestId("qg-0-glossary-remove-0"));
-    draft = onDraft.mock.calls.at(-1)![0];
+    draft = lastDraft(onDraft);
     expect(draft.glossary).toEqual([{ word: "", zh: "" }]);
     // 只剩空白列 → glossary 送 null
     expect(toCreateGroupInput(draft).glossary).toBeNull();
@@ -158,14 +163,14 @@ describe("GroupCard", () => {
 
     await user.click(screen.getByTestId("qg-0-add-question"));
     expect(await screen.findByTestId("qc-stub-0")).toBeTruthy();
-    let draft: GroupDraft = onDraft.mock.calls.at(-1)![0];
+    let draft = lastDraft(onDraft);
     expect(draft.questions).toHaveLength(1);
     expect(draft.questions[0].groupKey).toBe(draft.key);
     expect(draft.questions[0].grade).toEqual([7, 9]);
     expect(screen.getByText("sub-questions 1")).toBeTruthy();
 
     await user.click(screen.getByTestId("qc-stub-0-remove"));
-    draft = onDraft.mock.calls.at(-1)![0];
+    draft = lastDraft(onDraft);
     expect(draft.questions).toHaveLength(0);
   });
 
@@ -183,7 +188,7 @@ describe("GroupCard", () => {
       "0",
     );
     await user.click(screen.getByTestId("qg-0-layout-stub"));
-    const draft: GroupDraft = onDraft.mock.calls.at(-1)![0];
+    const draft = lastDraft(onDraft);
     expect(draft.layout?.rows).toHaveLength(1);
     expect(draft.serverError).toBeNull();
   });
@@ -237,6 +242,17 @@ describe("validateGroupDraft（儲存前的阻擋）", () => {
     q.stem = "Q1";
     q.options[0] = { text: "A", is_correct: true, image_url: null };
     q.options[1] = { text: "B", is_correct: false, image_url: null };
+    q.exam_points = [
+      {
+        id: 3,
+        code: "grammar.tense.present_perfect",
+        parent_id: null,
+        names: { "zh-TW": "現在完成式" },
+        status: "active",
+        order_index: 0,
+        aliases: [],
+      },
+    ];
     g.questions = [q];
     return g;
   }

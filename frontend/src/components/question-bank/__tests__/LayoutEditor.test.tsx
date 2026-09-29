@@ -55,15 +55,20 @@ function twoColumnDoc(): LayoutDoc {
 
 describe("LayoutEditor", () => {
   beforeEach(() => {
-    // Radix Select 開啟時對選項呼叫 scrollIntoView，jsdom 沒有
+    // Radix Select 在 jsdom 缺的 API：scrollIntoView／pointer capture
     Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.releasePointerCapture = vi.fn();
   });
 
   it("空排版：新增列 → 一列一欄；新增段落區塊並輸入文字 → onChange 帶區塊內容", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<LayoutEditor layout={null} onChange={onChange} testId="le" />);
-    expect(screen.getByText("questionBank.group.layout.empty")).toBeTruthy();
+    // 編輯區與預覽區各一個空狀態
+    expect(screen.getAllByText("questionBank.group.layout.empty")).toHaveLength(
+      2,
+    );
 
     await user.click(screen.getByTestId("le-add-row"));
     let doc = lastLayout(onChange);
@@ -113,7 +118,7 @@ describe("LayoutEditor", () => {
     expect(row.columns[1].blocks).toEqual([]);
   });
 
-  it("包成 section → rows[0] 變 section 且含原列；勾框線；解開 → 回到一般列", async () => {
+  it("包成 section → rows[0] 變 section 且含原列；框線可切換；解開 → 回到一般列", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(
@@ -125,10 +130,12 @@ describe("LayoutEditor", () => {
     if (node?.type !== "section") throw new Error("expected section");
     expect(node.rows).toHaveLength(1);
     expect(node.rows[0].columns).toHaveLength(2);
+    // 包起來預設有框線；取消勾選 → frame=false
+    expect(node.frame).toBe(true);
 
     await user.click(screen.getByTestId("le-node-0-frame"));
     node = lastLayout(onChange)?.rows[0];
-    expect(node?.type === "section" && node.frame).toBe(true);
+    expect(node?.type === "section" && node.frame).toBe(false);
 
     // section 內的列不能再包一層
     expect(screen.queryByTestId("le-node-0-row-0-wrap")).toBeNull();
@@ -151,7 +158,9 @@ describe("LayoutEditor", () => {
 
     await user.click(screen.getByTestId("le-node-0-remove"));
     expect(lastLayout(onChange)).toBeNull();
-    expect(screen.getByText("questionBank.group.layout.empty")).toBeTruthy();
+    expect(screen.getAllByText("questionBank.group.layout.empty")).toHaveLength(
+      2,
+    );
   });
 
   it("預覽：預設桌機；切手機 → aria-pressed 與 390px 容器；預覽內容用同一份資料", async () => {
