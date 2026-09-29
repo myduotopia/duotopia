@@ -6,6 +6,11 @@
  * 所有操作都是純函式回傳新物件，方便測試，也讓 React 狀態更新單純。
  *
  * 欄位比例只允許 README 定義的四種：1:1、1:2、2:1、1:1:1（單欄 = 1）。
+ *
+ * 老師看到的是「文件」：只有區塊，沒有列／欄。並排靠拖曳（`placeBeside`）自動產生欄，
+ * 寬度用 `setBlockWidth`（整行／2/3／1/2／1/3）微調；拖走後 `detachBlock` 讓剩下的欄撐滿。
+ * 不變式：並排列裡一欄一區塊；多區塊的欄只出現在單欄列（舊資料），對它只允許插在前後、
+ * 不再分欄。
  */
 
 import type {
@@ -374,4 +379,245 @@ export function singleImageDoc(url: string, alt = ""): EditorDoc {
     { id: newId("b"), type: "image", url, alt, align: "center" },
   ];
   return { rows: [row] };
+}
+
+// ---- 文件式操作（#1082 第 2 段修訂：沒有列／欄概念，只有區塊與並排） ----
+
+export const MAX_COLUMNS = 3;
+
+/** 老師看到的寬度：由欄 span 佔該列總和的比例推得 */
+export type WidthOption = "full" | "2/3" | "1/2" | "1/3";
+
+export interface BlockLocation {
+  row: EditorRow;
+  column: EditorColumn;
+  block: EditorBlock;
+  /** 所在 section（最外層的列為 null） */
+  sectionId: string | null;
+}
+
+export function locateBlock(
+  doc: EditorDoc,
+  blockId: string,
+): BlockLocation | null {
+  for (const n of doc.rows) {
+    const rows = n.type === "section" ? n.rows : [n];
+    for (const row of rows) {
+      for (const column of row.columns) {
+        const block = column.blocks.find((b) => b.id === blockId);
+        if (block) {
+          return {
+            row,
+            column,
+            block,
+            sectionId: n.type === "section" ? n.id : null,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** 欄在列中的寬度（span / 總和 → 最接近的選項） */
+export function columnWidth(row: EditorRow, columnId: string): WidthOption {
+  const total = row.columns.reduce((n, c) => n + c.span, 0) || 1;
+  const col = row.columns.find((c) => c.id === columnId);
+  if (!col || row.columns.length === 1) return "full";
+  const frac = col.span / total;
+  if (frac >= 0.6) return "2/3";
+  if (frac >= 0.45) return "1/2";
+  return "1/3";
+}
+
+/** 這一列裡可以選的寬度：單欄只有整行、雙欄三種、三欄只有 1/3 */
+export function widthOptionsFor(row: EditorRow): WidthOption[] {
+  if (row.columns.length <= 1) return ["full"];
+  if (row.columns.length === 2) return ["2/3", "1/2", "1/3"];
+  return ["1/3"];
+}
+
+/** 列裡的欄等分（2 欄 → 1:1、3 欄 → 1:1:1、1 欄 → 1） */
+function equalizeSpans(row: EditorRow): EditorRow {
+  return { ...row, columns: row.columns.map((c) => ({ ...c, span: 1 })) };
+}
+
+function replaceRow(doc: EditorDoc, row: EditorRow): EditorDoc {
+  return mapRows(doc, (r) => (r.id === row.id ? row : r));
+}
+
+/** 移除空欄、空列、空 section；剩下的欄等分撐滿 */
+function compact(doc: EditorDoc): EditorDoc {
+  const cleanRow = (r: EditorRow): EditorRow | null => {
+    const columns = r.columns.filter((c) => c.blocks.length > 0);
+    if (columns.length === 0) return null;
+    return columns.length === r.columns.length
+      ? r
+      : equalizeSpans({ ...r, columns });
+  };
+  const rows: EditorNode[] = [];
+  for (const n of doc.rows) {
+    if (n.type === "row") {
+      const r = cleanRow(n);
+      if (r) rows.push(r);
+      continue;
+    }
+    const inner = n.rows.map(cleanRow).filter((r): r is EditorRow => !!r);
+    if (inner.length > 0) rows.push({ ...n, rows: inner });
+  }
+  return { rows };
+}
+
+/** 把區塊從文件拿出來（原欄空了就收掉、剩餘欄撐滿） */
+export function detachBlock(
+  doc: EditorDoc,
+  blockId: string,
+): { doc: EditorDoc; block: EditorBlock | null } {
+  const loc = locateBlock(doc, blockId);
+  if (!loc) return { doc, block: null };
+  return { doc: compact(removeBlock(doc, blockId)), block: loc.block };
+}
+
+/** 刪除區塊並收掉空欄／空列（老師按刪除用這個，不留空格子） */
+export function deleteBlock(doc: EditorDoc, blockId: string): EditorDoc {
+  return detachBlock(doc, blockId).doc;
+}
+
+function singleBlockRow(block: EditorBlock): EditorRow {
+  return {
+    id: newId("r"),
+    type: "row",
+    columns: [{ id: newId("c"), span: 1, blocks: [block] }],
+  };
+}
+
+/**
+ * 以「獨占一行」插入區塊：`anchor` 列的前／後（留在同一個 section 內），
+ * 沒有錨點就接在最後。
+ */
+export function insertBlockRow(
+  doc: EditorDoc,
+  block: EditorBlock,
+  anchor?: { rowId: string; position: "before" | "after" } | null,
+): EditorDoc {
+  const row = singleBlockRow(block);
+  if (!anchor) return { rows: [...doc.rows, row] };
+  const at = (idx: number) => (anchor.position === "before" ? idx : idx + 1);
+  const topIdx = doc.rows.findIndex((n) => n.id === anchor.rowId);
+  if (topIdx >= 0) {
+    const rows = [...doc.rows];
+    rows.splice(at(topIdx), 0, row);
+    return { rows };
+  }
+  return {
+    rows: doc.rows.map((n) => {
+      if (n.type !== "section") return n;
+      const idx = n.rows.findIndex((r) => r.id === anchor.rowId);
+      if (idx < 0) return n;
+      const rows = [...n.rows];
+      rows.splice(at(idx), 0, row);
+      return { ...n, rows };
+    }),
+  };
+}
+
+/** 接在文件最後（「＋」按鈕） */
+export function appendBlock(doc: EditorDoc, block: EditorBlock): EditorDoc {
+  return insertBlockRow(doc, block, null);
+}
+
+/**
+ * 能不能把 `movingId` 放到 `targetId` 的左／右邊：
+ * 目標欄只有一個區塊（舊資料多區塊欄不再分欄）、目標列扣掉搬走的那個後未滿 3 欄。
+ */
+export function canPlaceBeside(
+  doc: EditorDoc,
+  movingId: string,
+  targetId: string,
+): boolean {
+  if (movingId === targetId) return false;
+  const target = locateBlock(doc, targetId);
+  const moving = locateBlock(doc, movingId);
+  if (!target || !moving) return false;
+  if (target.column.blocks.length !== 1) return false;
+  const sameRow = moving.row.id === target.row.id;
+  const cols = target.row.columns.length - (sameRow ? 1 : 0);
+  return cols < MAX_COLUMNS;
+}
+
+/** 拖到某區塊的左／右邊：變成並排，欄位自動等分 */
+export function placeBeside(
+  doc: EditorDoc,
+  movingId: string,
+  targetId: string,
+  side: "left" | "right",
+): EditorDoc {
+  if (!canPlaceBeside(doc, movingId, targetId)) return doc;
+  const { doc: without, block } = detachBlock(doc, movingId);
+  if (!block) return doc;
+  const target = locateBlock(without, targetId);
+  if (!target) return doc;
+  const idx = target.row.columns.findIndex((c) => c.id === target.column.id);
+  const columns = [...target.row.columns];
+  columns.splice(side === "left" ? idx : idx + 1, 0, {
+    id: newId("c"),
+    span: 1,
+    blocks: [block],
+  });
+  return replaceRow(without, equalizeSpans({ ...target.row, columns }));
+}
+
+/**
+ * 拖到某區塊的上／下方：目標在多區塊欄（舊資料）→ 插進同一欄的前／後；
+ * 否則以獨占一行插在目標列的前／後。
+ */
+export function placeAround(
+  doc: EditorDoc,
+  movingId: string,
+  targetId: string,
+  position: "before" | "after",
+): EditorDoc {
+  if (movingId === targetId) return doc;
+  const { doc: without, block } = detachBlock(doc, movingId);
+  if (!block) return doc;
+  const target = locateBlock(without, targetId);
+  if (!target) return doc;
+  if (target.column.blocks.length > 1) {
+    const i = target.column.blocks.findIndex((b) => b.id === targetId);
+    return addBlock(
+      without,
+      target.column.id,
+      block,
+      position === "before" ? i : i + 1,
+    );
+  }
+  return insertBlockRow(without, block, { rowId: target.row.id, position });
+}
+
+/** 寬度微調：改一欄，同列另一欄自動補到整行（只有雙欄能調） */
+export function setBlockWidth(
+  doc: EditorDoc,
+  blockId: string,
+  width: WidthOption,
+): EditorDoc {
+  const loc = locateBlock(doc, blockId);
+  if (!loc || loc.row.columns.length !== 2) return doc;
+  const mine = width === "2/3" ? 2 : 1;
+  const other = width === "1/3" ? 2 : 1;
+  return replaceRow(doc, {
+    ...loc.row,
+    columns: loc.row.columns.map((c) => ({
+      ...c,
+      span: c.id === loc.column.id ? mine : other,
+    })),
+  });
+}
+
+/** 區塊所在的列包成 section（框起來）；已在 section 內則解開 */
+export function toggleBlockFrame(doc: EditorDoc, blockId: string): EditorDoc {
+  const loc = locateBlock(doc, blockId);
+  if (!loc) return doc;
+  return loc.sectionId
+    ? unwrapSection(doc, loc.sectionId)
+    : wrapRowInSection(doc, loc.row.id);
 }
