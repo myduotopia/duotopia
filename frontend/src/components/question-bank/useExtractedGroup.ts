@@ -18,7 +18,11 @@ import type { MagicPasteGroupResult } from "@/components/shared/MagicPasteInput"
 
 import { cropImageFile } from "./cropImage";
 import { groupDraftFromExtracted } from "./extractedGroup";
-import { unitHasContent, type GroupDraft, type UnitDraft } from "./questionDraft";
+import {
+  unitHasContent,
+  type GroupDraft,
+  type UnitDraft,
+} from "./questionDraft";
 import { uploadImageFile } from "./uploadImageFile";
 
 export interface PendingGroupExtract {

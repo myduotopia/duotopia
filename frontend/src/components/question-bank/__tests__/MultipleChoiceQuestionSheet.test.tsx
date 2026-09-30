@@ -582,10 +582,12 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(
       ((await screen.findByTestId("qg-0-title")) as HTMLInputElement).value,
     ).toBe("Lantern");
-    expect((screen.getByTestId("qc-0-stem") as HTMLTextAreaElement).value).toBe(
-      "What is the purpose?",
-    );
-    expect(document.querySelector('img[src="https://cdn/crop.png"]')).toBeTruthy();
+    expect(
+      (screen.getByTestId("qg-0-q-0-stem") as HTMLTextAreaElement).value,
+    ).toBe("What is the purpose?");
+    expect(
+      document.querySelector('img[src="https://cdn/crop.png"]'),
+    ).toBeTruthy();
     expect(toast.success).toHaveBeenCalledWith(
       "contentEditor.magicPaste.insertedGroup",
     );

@@ -828,7 +828,10 @@ export default function QuestionSheet({
             if (!o) groupExtract.cancelPending();
           }}
         >
-          <DialogContent className="max-w-sm" data-testid="qb-extract-overwrite">
+          <DialogContent
+            className="max-w-sm"
+            data-testid="qb-extract-overwrite"
+          >
             <DialogHeader>
               <DialogTitle>
                 {t("questionBank.group.extract.overwriteTitle")}
@@ -880,7 +883,9 @@ export default function QuestionSheet({
                   canExtract && !groupMode ? handleInsertExtracted : undefined
                 }
                 onInsertExtractedGroup={
-                  canExtract && groupMode ? groupExtract.onInsertGroup : undefined
+                  canExtract && groupMode
+                    ? groupExtract.onInsertGroup
+                    : undefined
                 }
                 batch={batch}
                 onBatchChange={applyBatch}
