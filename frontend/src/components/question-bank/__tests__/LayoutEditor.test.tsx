@@ -341,4 +341,33 @@ describe("LayoutEditor", () => {
     expect(screen.queryByTestId("le-insert-after-1")).toBeNull();
     expect(screen.getByTestId("le-block-0-text")).toBeDisabled();
   });
+
+  it("父層換掉 layout（例如 AI 擷取整份填入）→ 編輯器跟著重設；自己 onChange 回來的不重設", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <LayoutEditor layout={null} onChange={onChange} testId="le" />,
+    );
+    expect(screen.queryByTestId("le-block-0-text")).toBeNull();
+
+    // 外部塞進兩欄文件 → 兩個段落出現
+    rerender(
+      <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
+    );
+    expect(
+      (screen.getByTestId("le-block-0-text") as HTMLTextAreaElement).value,
+    ).toBe("left");
+    expect(
+      (screen.getByTestId("le-block-1-text") as HTMLTextAreaElement).value,
+    ).toBe("right");
+
+    // 自己打字 → onChange 的物件被父層原樣傳回來，不會把游標／內容洗掉
+    await user.type(screen.getByTestId("le-block-0-text"), "!");
+    const emitted = lastLayout(onChange);
+    rerender(<LayoutEditor layout={emitted} onChange={onChange} testId="le" />);
+    expect(
+      (screen.getByTestId("le-block-0-text") as HTMLTextAreaElement).value,
+    ).toBe("left!");
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
 });

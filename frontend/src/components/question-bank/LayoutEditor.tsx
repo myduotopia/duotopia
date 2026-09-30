@@ -15,7 +15,7 @@
  * 拖曳過程不改文件，只記錄落點，放下（dragEnd）才套用，取消就什麼都不動。
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DndContext,
@@ -292,10 +292,23 @@ export default function LayoutEditor({
   const uploadRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  // 最後一次送出去的 layout；父層換了別的 layout（例如 AI 擷取整份填入）才重設編輯狀態，
+  // 自己 onChange 回來的同一個物件不會觸發重設
+  const lastEmittedRef = useRef<LayoutDoc | null>(layout);
+  useEffect(() => {
+    if (layout !== lastEmittedRef.current) {
+      lastEmittedRef.current = layout;
+      setDocState(toEditorDoc(layout));
+      setActiveBlockId(null);
+    }
+  }, [layout]);
+
   const setDoc = (next: EditorDoc) => {
     if (next === doc) return;
     setDocState(next);
-    onChange(toLayoutDoc(next));
+    const out = toLayoutDoc(next);
+    lastEmittedRef.current = out;
+    onChange(out);
   };
 
   const sensors = useSensors(
