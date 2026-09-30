@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink, Megaphone, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,11 @@ interface ReleaseAnnouncementEditorProps {
   olderDrafts: ReleaseAnnouncement[];
   busy: boolean;
   onSave: (update: ReleaseAnnouncementUpdate) => void;
-  onPublish: (channels: PublishChannel[]) => void;
+  /** 有未儲存的修改時一併帶上，由頁面先儲存再發布 */
+  onPublish: (
+    channels: PublishChannel[],
+    pendingUpdate: ReleaseAnnouncementUpdate,
+  ) => void;
   onMerge: (sourceIds: number[]) => void;
   onDiscard: () => void;
 }
@@ -42,6 +46,12 @@ function toForm(announcement: ReleaseAnnouncement): FormState {
   }, {} as FormState);
 }
 
+/** 空白代表不帶圖；有值就必須是 https（LINE hero 只收 https） */
+function isValidImageUrl(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === "" || trimmed.startsWith("https://");
+}
+
 const CHANNEL_STATUS_LABEL: Record<ChannelStatus, string> = {
   pending: "未發布",
   published: "已發布",
@@ -64,6 +74,10 @@ function StatusBadge({ status }: { status: ChannelStatus }) {
   );
 }
 
+/**
+ * 編輯區只在初次掛載時從 announcement 帶入表單；切換公告或合併後內容改變時，
+ * 由頁面換 key 讓它重新掛載，避免儲存 / 發布後的列更新覆蓋編輯中的內容。
+ */
 export default function ReleaseAnnouncementEditor({
   announcement,
   olderDrafts,
@@ -81,17 +95,6 @@ export default function ReleaseAnnouncementEditor({
   const [showMerge, setShowMerge] = useState(false);
   const [mergeIds, setMergeIds] = useState<number[]>([]);
 
-  // 切換到另一則公告時重置表單與勾選狀態
-  useEffect(() => {
-    setForm(toForm(announcement));
-    setChannels({
-      line: announcement.line_status !== "published",
-      website: announcement.website_status !== "published",
-    });
-    setShowMerge(false);
-    setMergeIds([]);
-  }, [announcement]);
-
   const dirtyUpdate = useMemo<ReleaseAnnouncementUpdate>(() => {
     const update: ReleaseAnnouncementUpdate = {};
     FIELDS.forEach((field) => {
@@ -105,12 +108,18 @@ export default function ReleaseAnnouncementEditor({
   const setField = (field: (typeof FIELDS)[number], value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const selectedChannels = (Object.keys(channels) as PublishChannel[]).filter(
-    (channel) => channels[channel],
-  );
-
   const linePublished = announcement.line_status === "published";
   const websitePublished = announcement.website_status === "published";
+
+  // 已發布的通道即使仍勾選也不再送出
+  const selectedChannels = (Object.keys(channels) as PublishChannel[]).filter(
+    (channel) =>
+      channels[channel] &&
+      !(channel === "line" ? linePublished : websitePublished),
+  );
+
+  const imageUrlValid = isValidImageUrl(form.image_url);
+  const hasUnsaved = Object.keys(dirtyUpdate).length > 0;
 
   return (
     <div className="space-y-6">
@@ -173,8 +182,14 @@ export default function ReleaseAnnouncementEditor({
               <Input
                 id="image_url"
                 value={form.image_url}
+                aria-invalid={!imageUrlValid}
                 onChange={(e) => setField("image_url", e.target.value)}
               />
+              {!imageUrlValid && (
+                <p className="mt-1 text-xs text-red-600">
+                  圖片網址必須以 https:// 開頭
+                </p>
+              )}
             </div>
           </div>
 
@@ -187,7 +202,7 @@ export default function ReleaseAnnouncementEditor({
               bodyZh={form.line_message_zh}
               titleEn={form.article_title_en}
               bodyEn={form.line_message_en}
-              imageUrl={form.image_url || null}
+              imageUrl={imageUrlValid && form.image_url ? form.image_url : null}
               linkUrl={announcement.published_blog_url}
             />
           </div>
@@ -401,17 +416,17 @@ export default function ReleaseAnnouncementEditor({
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={busy || Object.keys(dirtyUpdate).length === 0}
+            disabled={busy || !hasUnsaved || !imageUrlValid}
             onClick={() => onSave(dirtyUpdate)}
           >
             儲存草稿
           </Button>
           <Button
-            disabled={busy || selectedChannels.length === 0}
-            onClick={() => onPublish(selectedChannels)}
+            disabled={busy || selectedChannels.length === 0 || !imageUrlValid}
+            onClick={() => onPublish(selectedChannels, dirtyUpdate)}
           >
             <Send className="mr-2 h-4 w-4" />
-            發布
+            {hasUnsaved ? "儲存並發布" : "發布"}
           </Button>
           <Button variant="ghost" disabled={busy} onClick={onDiscard}>
             <Trash2 className="mr-2 h-4 w-4" />

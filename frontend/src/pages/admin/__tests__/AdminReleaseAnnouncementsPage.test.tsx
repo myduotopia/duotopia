@@ -154,6 +154,130 @@ describe("AdminReleaseAnnouncementsPage (issue #804)", () => {
     expect(mockApi.publish.mock.calls[0][1]).toEqual(["website"]);
   });
 
+  it("有未儲存的修改時，發布會先儲存再發布", async () => {
+    mockApi.update.mockResolvedValue({
+      data: draft({ line_message_zh: "發布前改的文案" }),
+    });
+    mockApi.publish.mockResolvedValue({
+      data: draft({
+        line_message_zh: "發布前改的文案",
+        line_status: "published",
+        website_status: "published",
+        status: "published",
+      }),
+    });
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    fireEvent.change(screen.getByLabelText("LINE 文案（中文）"), {
+      target: { value: "發布前改的文案" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /發布/ }));
+
+    await waitFor(() => expect(mockApi.publish).toHaveBeenCalledTimes(1));
+    expect(mockApi.update).toHaveBeenCalledTimes(1);
+    expect(mockApi.update.mock.calls[0][1]).toEqual({
+      line_message_zh: "發布前改的文案",
+    });
+    expect(mockApi.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockApi.publish.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("發布前儲存失敗就不發布", async () => {
+    mockApi.update.mockRejectedValue(new Error("boom"));
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    fireEvent.change(screen.getByLabelText("LINE 文案（中文）"), {
+      target: { value: "改過的文案" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /發布/ }));
+
+    await waitFor(() => expect(mockApi.update).toHaveBeenCalledTimes(1));
+    expect(mockApi.publish).not.toHaveBeenCalled();
+  });
+
+  it("發布失敗後保留編輯中的內容，不整頁重新載入", async () => {
+    mockApi.publish.mockRejectedValue(new Error("LINE down"));
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    fireEvent.change(screen.getByLabelText("文章標題（中文）"), {
+      target: { value: "還沒存的標題" },
+    });
+    // 標題改動會先存；update 回傳原草稿，確認編輯區不被列更新覆蓋
+    mockApi.update.mockResolvedValue({ data: draft() });
+    fireEvent.click(screen.getByRole("button", { name: /發布/ }));
+
+    await waitFor(() => expect(mockApi.list).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("載入中…")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("文章標題（中文）")).toHaveValue(
+      "還沒存的標題",
+    );
+  });
+
+  it("圖片網址不是 https 時不能儲存或發布", async () => {
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    fireEvent.change(screen.getByLabelText("公告圖片網址"), {
+      target: { value: "http://cdn/banner.png" },
+    });
+
+    expect(
+      screen.getByText(/圖片網址必須以 https:\/\/ 開頭/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "儲存草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /發布/ })).toBeDisabled();
+  });
+
+  it("捨棄後自動選取下一則", async () => {
+    const other = draft({
+      id: 2,
+      source_ref: "next999",
+      release_title: "Release: [Bug]: 修正錄音 (Fixes #816)",
+      line_message_zh: "下一則的文案",
+    });
+    mockApi.list.mockResolvedValue({ data: [draft(), other] });
+    mockApi.discard.mockResolvedValue({ data: draft({ status: "discarded" }) });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+    fireEvent.click(screen.getByRole("button", { name: /捨棄/ }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("LINE 文案（中文）")).toHaveValue(
+        "下一則的文案",
+      ),
+    );
+  });
+
+  it("合併後編輯區顯示合併後的內容", async () => {
+    const older = draft({
+      id: 2,
+      source_ref: "old999",
+      release_title: "Release: [Bug]: 修正錄音 (Fixes #816)",
+    });
+    mockApi.list.mockResolvedValue({ data: [draft(), older] });
+    mockApi.merge.mockResolvedValue({
+      data: draft({ line_message_zh: "合併後的文案" }),
+    });
+
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+    fireEvent.click(screen.getByRole("button", { name: "載入舊草稿" }));
+    fireEvent.click(await screen.findByLabelText(/修正錄音/));
+    fireEvent.click(screen.getByRole("button", { name: "併入這一則" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("LINE 文案（中文）")).toHaveValue(
+        "合併後的文案",
+      ),
+    );
+  });
+
   it("已發布的通道顯示狀態並不再重複勾選", async () => {
     mockApi.list.mockResolvedValue({
       data: [

@@ -43,24 +43,30 @@ export default function AdminReleaseAnnouncementsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // 合併後內容由後端改寫，遞增讓編輯區重新掛載帶入新內容
+  const [formRevision, setFormRevision] = useState(0);
 
-  const fetchAnnouncements = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await releaseAnnouncementApi.list(token);
-      const rows = Array.isArray(res.data) ? res.data : [];
-      setAnnouncements(rows);
-      setSelectedId((prev) =>
-        prev && rows.some((row) => row.id === prev)
-          ? prev
-          : (rows[0]?.id ?? null),
-      );
-    } catch {
-      toast.error("載入更新公告失敗");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+  /** silent：背景重新整理，不切換整頁 loading（避免編輯區卸載丟失內容） */
+  const fetchAnnouncements = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        const res = await releaseAnnouncementApi.list(token);
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setAnnouncements(rows);
+        setSelectedId((prev) =>
+          prev && rows.some((row) => row.id === prev)
+            ? prev
+            : (rows[0]?.id ?? null),
+        );
+      } catch {
+        toast.error("載入更新公告失敗");
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [token],
+  );
 
   useEffect(() => {
     if (token) fetchAnnouncements();
@@ -103,9 +109,27 @@ export default function AdminReleaseAnnouncementsPage() {
     }
   };
 
-  const handlePublish = async (channels: PublishChannel[]) => {
+  const handlePublish = async (
+    channels: PublishChannel[],
+    pendingUpdate: ReleaseAnnouncementUpdate,
+  ) => {
     if (!selected) return;
     setBusy(true);
+    // 後端發布的是已儲存的內容：有未儲存的修改先存，存失敗就不發
+    if (Object.keys(pendingUpdate).length > 0) {
+      try {
+        const saved = await releaseAnnouncementApi.update(
+          selected.id,
+          pendingUpdate,
+          token,
+        );
+        replaceRow(saved.data);
+      } catch {
+        toast.error("儲存失敗，未發布");
+        setBusy(false);
+        return;
+      }
+    }
     try {
       const res = await releaseAnnouncementApi.publish(
         selected.id,
@@ -126,8 +150,8 @@ export default function AdminReleaseAnnouncementsPage() {
       }
     } catch {
       toast.error("發布失敗");
-      // 失敗時後端已記錄各通道狀態，重新載入取得最新錯誤訊息
-      fetchAnnouncements();
+      // 失敗時後端已記錄各通道狀態，背景重新載入取得最新錯誤訊息
+      fetchAnnouncements({ silent: true });
     } finally {
       setBusy(false);
     }
@@ -146,6 +170,7 @@ export default function AdminReleaseAnnouncementsPage() {
       setAnnouncements((prev) =>
         prev.filter((row) => !sourceIds.includes(row.id)),
       );
+      setFormRevision((prev) => prev + 1);
       toast.success("已併入這一則");
     } catch {
       toast.error("合併失敗");
@@ -160,8 +185,9 @@ export default function AdminReleaseAnnouncementsPage() {
     setBusy(true);
     try {
       await releaseAnnouncementApi.discard(selected.id, token);
-      setAnnouncements((prev) => prev.filter((row) => row.id !== selected.id));
-      setSelectedId(null);
+      const remaining = announcements.filter((row) => row.id !== selected.id);
+      setAnnouncements(remaining);
+      setSelectedId(remaining[0]?.id ?? null);
       toast.success("已捨棄");
     } catch {
       toast.error("捨棄失敗");
@@ -231,6 +257,7 @@ export default function AdminReleaseAnnouncementsPage() {
             {/* 編輯與發布 */}
             {selected && (
               <ReleaseAnnouncementEditor
+                key={`${selected.id}-${formRevision}`}
                 announcement={selected}
                 olderDrafts={olderDrafts}
                 busy={busy}
