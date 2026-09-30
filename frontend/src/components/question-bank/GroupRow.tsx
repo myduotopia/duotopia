@@ -97,11 +97,14 @@ export default function GroupRow({
           className={`text-left w-full ${onSelect ? "hover:underline" : "cursor-default"}`}
           data-testid={`qb-group-title-${row.id}`}
         >
-          <div className="line-clamp-2 break-words">
+          {/* 有標題時標題是視覺主體，預覽退為單行淡字（#1084） */}
+          <div
+            className={`line-clamp-2 break-words ${row.title ? "font-medium" : ""}`}
+          >
             {row.title || preview || typeLabel(row.question_type)}
           </div>
           {row.title && preview && (
-            <div className="mt-0.5 line-clamp-2 break-words text-xs text-gray-500">
+            <div className="mt-0.5 line-clamp-1 break-words text-xs text-gray-400">
               {preview}
             </div>
           )}
