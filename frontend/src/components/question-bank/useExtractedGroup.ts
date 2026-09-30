@@ -125,7 +125,9 @@ export function useExtractedGroup({ units, replaceGroup, t }: Options) {
       // 對話框開著時老師可能改了公開／來源／年段：以最新草稿為底
       const target = findGroupUnit(unitsRef.current, p.key);
       if (!target) {
-        console.warn("[useExtractedGroup] group unit disappeared before confirm");
+        console.warn(
+          "[useExtractedGroup] group unit disappeared before confirm",
+        );
         toast.error(t("contentEditor.magicPaste.extractFailed"));
         return;
       }

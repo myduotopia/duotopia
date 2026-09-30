@@ -103,9 +103,9 @@ describe("useExtractedGroup", () => {
     expect(next.questions[0].visibility).toBe("public");
     expect(next.title).toBe("Vivaldi");
     expect(result.current.pending).toBeNull();
+    // 測試用的 t 只回 key（第二個參數被 t 吃掉）
     expect(toastMock.success).toHaveBeenCalledWith(
       "contentEditor.magicPaste.insertedGroup",
-      { count: 1 },
     );
   });
 
