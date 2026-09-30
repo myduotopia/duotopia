@@ -6,7 +6,7 @@
  *   裁圖用（實際裁切在 cropImage.ts）
  * - `paragraphsToLayout`：散文段落 → 單欄多段落的 layout
  * - `groupDraftFromExtracted`：以既有（通常是空的）GroupDraft 為底，填入標題／排版／文字版／
- *   註解／小題；保留 key、公開設定、來源、年段等左欄已定的值
+ *   註解／小題；保留 key、公開設定、來源、年段等左欄已定的值；AI 沒給標題時保留既有標題
  *
  * kind=text：排版 = 段落區塊，文字版由排版推導（edited=false）
  * kind=image：排版 = 一張裁好的圖（沒圖就 null），文字版 = 圖內文字（edited=true，老師可修）
@@ -99,7 +99,8 @@ export function groupDraftFromExtracted(
   base: GroupDraft,
   imageUrl: string | null,
 ): GroupDraft {
-  const title = result.title.trim();
+  // 擷取到非空標題才覆蓋；否則保留老師已打的標題（重新擷取時不清掉）
+  const title = result.title.trim() || base.title;
   const questions = extractedQuestionsToGroup(result.questions, base);
   const glossary = result.glossary
     .map((g) => ({ word: g.word.trim(), zh: g.zh.trim() }))

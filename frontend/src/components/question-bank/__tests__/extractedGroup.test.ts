@@ -165,6 +165,29 @@ describe("groupDraftFromExtracted", () => {
     expect(noImage.passage_text_edited).toBe(true);
   });
 
+  it("標題：AI 有給就用；沒給（空白）保留老師已打的標題", () => {
+    const base = { ...emptyGroupDraft("reading"), title: "老師打的" };
+    expect(groupDraftFromExtracted(baseResult(), base, null).title).toBe(
+      "Vivaldi",
+    );
+    expect(
+      groupDraftFromExtracted(baseResult({ title: "  " }), base, null).title,
+    ).toBe("老師打的");
+    const img = baseResult({
+      title: "",
+      stimulus: {
+        kind: "image",
+        paragraphs: [],
+        text: "poster",
+        box_2d: [0, 0, 500, 500],
+        page: null,
+      },
+    });
+    expect(groupDraftFromExtracted(img, base, "https://cdn/x.png").title).toBe(
+      "老師打的",
+    );
+  });
+
   it("text 但 AI 沒切段落只給整段文字：文字版用它、排版留空", () => {
     const result = baseResult({
       stimulus: {

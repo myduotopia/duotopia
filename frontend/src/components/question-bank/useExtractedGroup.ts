@@ -2,7 +2,9 @@
  * 題組模式的考卷擷取接線（Issue #1084 第 1 段）。
  *
  * MagicPasteInput（reading_group）擷取完 → 本 hook：
- * 1. 找到右側唯一的題組單元；已有內容就先開覆蓋確認（`pending`），空的直接套用
+ * 1. 找到右側唯一的題組單元；已有內容就先開覆蓋確認（`pending`，只記 key，確認時以最新草稿
+ *    為底，對話框開著時老師改的公開／來源／年段不會被舊快照蓋掉），空的直接套用；
+ *    找不到題組單元時 toast 錯誤（不靜默丟掉）
  * 2. kind=image：圖片檔依 box_2d 裁圖（`cropImageFile`）→ 上傳；裁不出來就整張圖上傳並提示；
  *    PDF 無法裁圖 → 不放圖，提示老師在排版另外上傳素材圖
  * 3. `groupDraftFromExtracted` 填進題組草稿（保留 key／公開／來源／年段）
@@ -28,7 +30,18 @@ import { uploadImageFile } from "./uploadImageFile";
 export interface PendingGroupExtract {
   result: MagicPasteGroupResult;
   file: File;
-  base: GroupDraft;
+  /** 要覆蓋的題組單元 key；確認時以最新草稿為底，不用擷取當下的快照 */
+  key: string;
+}
+
+function findGroupUnit(
+  units: UnitDraft[],
+  key?: string,
+): { kind: "group"; draft: GroupDraft } | undefined {
+  return units.find(
+    (u): u is { kind: "group"; draft: GroupDraft } =>
+      u.kind === "group" && (key === undefined || u.draft.key === key),
+  );
 }
 
 interface Options {
@@ -86,20 +99,22 @@ export function useExtractedGroup({ units, replaceGroup, t }: Options) {
   /** 交給 MagicPasteInput 的回呼：擷取完（AI 已回）才會被叫到 */
   const onInsertGroup = useCallback(
     (result: MagicPasteGroupResult, file: File): Promise<void> => {
-      const target = unitsRef.current.find(
-        (u): u is { kind: "group"; draft: GroupDraft } => u.kind === "group",
-      );
-      if (!target) return Promise.resolve();
-      const base = target.draft;
+      const target = findGroupUnit(unitsRef.current);
+      if (!target) {
+        // 正常 gating 下不會發生；若發生要讓老師知道結果被丟掉了
+        console.warn("[useExtractedGroup] no group unit to receive extraction");
+        toast.error(t("contentEditor.magicPaste.extractFailed"));
+        return Promise.resolve();
+      }
       if (unitHasContent(target)) {
         return new Promise<void>((resolve) => {
           resolveRef.current = resolve;
-          setPending({ result, file, base });
+          setPending({ result, file, key: target.draft.key });
         });
       }
-      return apply(result, file, base);
+      return apply(result, file, target.draft);
     },
-    [apply],
+    [apply, t],
   );
 
   const confirmPending = useCallback(async () => {
@@ -107,12 +122,19 @@ export function useExtractedGroup({ units, replaceGroup, t }: Options) {
     if (!p) return;
     setPending(null);
     try {
-      await apply(p.result, p.file, p.base);
+      // 對話框開著時老師可能改了公開／來源／年段：以最新草稿為底
+      const target = findGroupUnit(unitsRef.current, p.key);
+      if (!target) {
+        console.warn("[useExtractedGroup] group unit disappeared before confirm");
+        toast.error(t("contentEditor.magicPaste.extractFailed"));
+        return;
+      }
+      await apply(p.result, p.file, target.draft);
     } finally {
       resolveRef.current?.();
       resolveRef.current = null;
     }
-  }, [apply, pending]);
+  }, [apply, pending, t]);
 
   return {
     extracting,
