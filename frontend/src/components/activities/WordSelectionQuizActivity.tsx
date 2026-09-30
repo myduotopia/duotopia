@@ -198,6 +198,7 @@ export default function WordSelectionQuizActivity({
   // Issue #1088: review 回應附 show_example_sentence（直接進複盤頁時 settings 仍是預設值）
   type SelectionReviewPayload = QuizReviewPayload<SelectionReviewWord> & {
     show_example_sentence?: boolean;
+    play_audio?: boolean;
   };
   const [reviewData, setReviewData] = useState<SelectionReviewPayload | null>(
     null,
@@ -580,6 +581,8 @@ export default function WordSelectionQuizActivity({
           // Issue #1088: 開例句時複盤頁也顯示挖空例句＋翻譯（不顯示單字，否則洩題）
           const showSentence =
             reviewData.show_example_sentence ?? settings.show_example_sentence;
+          // Issue #1088 第 9 項：播放音檔模式下例句翻譯會洩答案 → 不顯示
+          const hideTranslation = reviewData.play_audio ?? settings.play_audio;
           const reviewBlanked = showSentence
             ? w.blanked_sentence ||
               buildBlankedSentence(w.example_sentence, w.cloze_answer, w.text)
@@ -599,7 +602,7 @@ export default function WordSelectionQuizActivity({
                     <p className="quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none">
                       <ClozeBlankText text={reviewBlanked} />
                     </p>
-                    {w.example_sentence_translation && (
+                    {!hideTranslation && w.example_sentence_translation && (
                       <p className="quiz-translation-font text-gray-500 mt-1 select-none">
                         {w.example_sentence_translation}
                       </p>
@@ -889,11 +892,13 @@ export default function WordSelectionQuizActivity({
                   <p className="quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none">
                     <ClozeBlankText text={blankedText} />
                   </p>
-                  {currentWord.example_sentence_translation && (
-                    <p className="quiz-translation-font text-gray-500 mt-2 select-none">
-                      {currentWord.example_sentence_translation}
-                    </p>
-                  )}
+                  {/* Issue #1088 第 9 項：播放音檔（聽音選字）時翻譯會洩答案 → 不顯示 */}
+                  {!settings.play_audio &&
+                    currentWord.example_sentence_translation && (
+                      <p className="quiz-translation-font text-gray-500 mt-2 select-none">
+                        {currentWord.example_sentence_translation}
+                      </p>
+                    )}
                 </div>
               )}
 

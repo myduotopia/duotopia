@@ -1086,7 +1086,8 @@ export default function WordSelectionActivity({
               <p className="quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none">
                 <ClozeBlankText text={blankedText} />
               </p>
-              {currentWord.example_sentence_translation && (
+              {/* Issue #1088 第 9 項：播放音檔（聽音選字）時翻譯會洩答案 → 不顯示 */}
+              {!playAudio && currentWord.example_sentence_translation && (
                 <p className="quiz-translation-font text-gray-500 mt-2 select-none">
                   {currentWord.example_sentence_translation}
                 </p>
