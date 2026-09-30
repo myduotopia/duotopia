@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import LayoutRenderer from "../LayoutRenderer";
 import type { LayoutDoc } from "@/types/questionBank";
@@ -105,5 +106,50 @@ describe("LayoutRenderer", () => {
       s.className.includes("whitespace-pre-wrap"),
     );
     expect(spans.some((s) => s.textContent === "  Hi there")).toBe(true);
+  });
+
+  it("圖片可點擊放大（#1083 以圖為準，手機必要）：桌機與堆疊模式都有放大鈕，點了開 Dialog", async () => {
+    const user = userEvent.setup();
+    const layout: LayoutDoc = {
+      version: 1,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [
+                { type: "image", url: "http://x/poster.png", alt: "Poster" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const { unmount } = render(<LayoutRenderer layout={layout} />);
+    const zoom = screen.getByRole("button", {
+      name: "questionBank.group.render.zoomImage",
+    });
+    expect(zoom.className).toContain("cursor-zoom-in");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(zoom);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelector("img")?.getAttribute("src")).toBe(
+      "http://x/poster.png",
+    );
+    unmount();
+
+    render(<LayoutRenderer layout={layout} forceStack />);
+    expect(
+      screen.getByRole("button", {
+        name: "questionBank.group.render.zoomImage",
+      }),
+    ).toBeTruthy();
+    // 關掉放大：預覽／學生端以外（例如考卷）不給放大鈕
+    const r = render(<LayoutRenderer layout={layout} zoomable={false} />);
+    expect(
+      within(r.container).queryByRole("button", {
+        name: "questionBank.group.render.zoomImage",
+      }),
+    ).toBeNull();
   });
 });

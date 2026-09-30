@@ -1438,3 +1438,104 @@ def test_delete_group_soft_deletes_questions(
         q.is_active is False
         for q in s.query(Question).filter(Question.group_id == g["id"]).all()
     )
+
+
+# ---------------------------------------------------------------- 以圖為準（#1083）
+
+
+def _image_layout(url="http://x/poster.png"):
+    return {
+        "version": 1,
+        "rows": [
+            {
+                "columns": [
+                    {
+                        "span": 1,
+                        "blocks": [{"type": "image", "url": url, "align": "center"}],
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def test_create_image_only_group_stores_image_stimulus(test_client, teacher_a):
+    # 海報／漫畫：layout 只有一張圖；推導不出文字 → passage_text 為空
+    g = _create_group(
+        test_client,
+        teacher_a,
+        stimulus_type="image",
+        passage_text=None,
+        layout=_image_layout(),
+    )
+    assert g["stimulus_type"] == "image"
+    assert g["passage_text"] is None
+    assert g["layout"]["rows"][0]["columns"][0]["blocks"][0]["type"] == "image"
+
+
+def test_teacher_passage_text_wins_over_layout_derivation(test_client, teacher_a):
+    # 文字版：有送 passage_text 就存老師的（搜尋與 AI 用），不被 layout 推導覆蓋
+    g = _create_group(
+        test_client,
+        teacher_a,
+        stimulus_type="image",
+        passage_text="Happy Town Lantern Festival 2026\nDate: February 28",
+        layout=_image_layout(),
+    )
+    assert g["passage_text"] == "Happy Town Lantern Festival 2026\nDate: February 28"
+    # 列表關鍵字搜尋能命中文字版
+    page = test_client.get(
+        "/api/question-bank/questions",
+        params={"q": "Lantern Festival"},
+        headers=_headers(teacher_a),
+    ).json()
+    assert any(
+        row.get("kind") == "group" and row["id"] == g["id"] for row in page["items"]
+    )
+    # PATCH 只送 layout（不送 passage_text）→ 依現行規則重推導（前端一律兩者都送，鎖住行為）
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"layout": _group_payload()["layout"]},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["passage_text"] == "Antonio Vivaldi was a violin player."
+    # PATCH 兩者都送 → 老師的
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"layout": _group_payload()["layout"], "passage_text": "teacher copy"},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["passage_text"] == "teacher copy"
+
+
+def test_sub_question_with_image_and_empty_stem(test_client, teacher_a):
+    # 題本 33 題：題幹是一張文氏圖，文字可空
+    questions = [
+        {
+            "stem": "",
+            "image_url": "http://x/venn.png",
+            "options": [
+                {"text": "A new soccer player", "is_correct": True},
+                {"text": "Very confident in himself"},
+            ],
+        }
+    ]
+    g = _create_group(test_client, teacher_a, questions=questions)
+    q = g["questions"][0]
+    assert q["stem"] == ""
+    assert q["image_url"] == "http://x/venn.png"
+    # 沒題幹也沒圖 → 422
+    bad = _group_payload(
+        questions=[
+            {
+                "stem": "",
+                "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+            }
+        ]
+    )
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
