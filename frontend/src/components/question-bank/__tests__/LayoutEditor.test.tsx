@@ -8,11 +8,29 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import LayoutEditor from "../LayoutEditor";
 import type { LayoutDoc, LayoutRow } from "@/types/questionBank";
+
+const uploadMock = vi.fn<(file: File) => Promise<string | null>>();
+vi.mock("../uploadImageFile", async () => {
+  const actual =
+    await vi.importActual<typeof import("../uploadImageFile")>(
+      "../uploadImageFile",
+    );
+  return {
+    ...actual,
+    uploadImageFile: (file: File) => uploadMock(file),
+  };
+});
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -273,6 +291,38 @@ describe("LayoutEditor", () => {
       within(screen.getByTestId("le-preview")).getByTestId("layout-renderer"),
     ).toHaveAttribute("data-stack", "true");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("空狀態「上傳圖片」（#1083 以圖為準）：上傳成功 → 一列一欄一張原圖；失敗不動文件", async () => {
+    const onChange = vi.fn();
+    render(<LayoutEditor layout={null} onChange={onChange} testId="le" />);
+    const input = screen.getByTestId("le-upload-image-file") as HTMLInputElement;
+    expect(screen.getByTestId("le-upload-image")).toBeTruthy();
+
+    uploadMock.mockResolvedValueOnce(null);
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], "bad.txt", { type: "text/plain" })] },
+    });
+    await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(1));
+    expect(onChange).not.toHaveBeenCalled();
+
+    uploadMock.mockResolvedValueOnce("http://x/poster.png");
+    fireEvent.change(input, {
+      target: {
+        files: [new File(["x"], "poster.png", { type: "image/png" })],
+      },
+    });
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const doc = lastLayout(onChange);
+    expect(doc?.rows).toHaveLength(1);
+    const cols = (doc?.rows[0] as LayoutRow).columns;
+    expect(cols).toHaveLength(1);
+    expect(cols[0].blocks).toEqual([
+      { type: "image", url: "http://x/poster.png", alt: "", align: "center" },
+    ]);
+    // 有內容後空狀態的入口消失，改成一般的區塊編輯
+    expect(screen.queryByTestId("le-upload-image")).toBeNull();
+    expect(screen.getByTestId("le-block-0-tools")).toBeTruthy();
   });
 
   it("disabled：新增鈕停用、區塊沒有工具列、「＋」不出現", () => {

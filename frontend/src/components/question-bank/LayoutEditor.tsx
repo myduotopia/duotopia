@@ -8,6 +8,8 @@
  *   其餘等分）；拖到上／下半邊 → 插在前／後、獨占一行。拖曳中目標對應的那一邊會高亮
  * - 並排比例靠拖曳欄間的分隔線微調（1/3、1/2、2/3），見 LayoutColumnDivider
  * - 預覽改成獨立 Dialog（LayoutPreviewDialog），可切電腦／手機
+ * - 空狀態除了「新增區塊」還有「上傳圖片」（#1083 以圖為準：海報／漫畫／地圖整張當素材，
+ *   layout 只有一張原始尺寸的圖；素材類型由內容自動判定為 image）
  *
  * 資料仍是 `LayoutDoc`（rows → columns(span) → blocks），由 layoutEditorModel 的純函式維護；
  * 拖曳過程不改文件，只記錄落點，放下（dragEnd）才套用，取消就什麼都不動。
@@ -29,7 +31,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Eye, Plus } from "lucide-react";
+import { Eye, ImagePlus, Loader2, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -62,6 +64,7 @@ import {
   placeBeside,
   rowSplit,
   setRowSplit,
+  singleImageDoc,
   toEditorDoc,
   toLayoutDoc,
   toggleBlockFrame,
@@ -72,6 +75,7 @@ import {
   type EditorSection,
 } from "./layoutEditorModel";
 import { stripInlineMarkup } from "./layoutInline";
+import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
 
 export interface LayoutEditorProps {
   layout: LayoutDoc | null;
@@ -284,6 +288,9 @@ export default function LayoutEditor({
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // 空狀態的「上傳圖片」入口（#1083 以圖為準：海報／漫畫／地圖整張當素材）
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const setDoc = (next: EditorDoc) => {
     if (next === doc) return;
@@ -313,6 +320,16 @@ export default function LayoutEditor({
   ) => setDoc(insertBlockRow(doc, defaultBlock(type), anchor));
   const addAtEnd = (type: LayoutBlock["type"]) =>
     setDoc(appendBlock(doc, defaultBlock(type)));
+  /** 整張圖當素材：上傳成功 → 一列一欄一張圖（原始尺寸、置中、無框） */
+  const uploadWholeImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const url = await uploadImageFile(file, t);
+      if (url) setDoc(singleImageDoc(url));
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // ---- 拖曳：過程只算落點，放下才動文件 ----
   const computeTarget = (
@@ -452,24 +469,56 @@ export default function LayoutEditor({
               <p className="mb-3 text-sm text-gray-400">
                 {t("questionBank.group.layout.empty")}
               </p>
-              <AddBlockMenu
-                onAdd={addAtEnd}
-                disabled={disabled}
-                testId={`${testId}-add`}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1"
-                    disabled={disabled}
-                    data-testid={`${testId}-add`}
-                  >
-                    <Plus size={14} />
-                    {t("questionBank.group.layout.addBlock")}
-                  </Button>
-                }
-              />
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <AddBlockMenu
+                  onAdd={addAtEnd}
+                  disabled={disabled}
+                  testId={`${testId}-add`}
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      disabled={disabled}
+                      data-testid={`${testId}-add`}
+                    >
+                      <Plus size={14} />
+                      {t("questionBank.group.layout.addBlock")}
+                    </Button>
+                  }
+                />
+                {/* 以圖為準：海報／漫畫／地圖整張上傳，layout 只有一張圖 */}
+                <input
+                  ref={uploadRef}
+                  type="file"
+                  accept={VALID_IMAGE_TYPES.join(",")}
+                  className="hidden"
+                  disabled={disabled || uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadWholeImage(f);
+                    e.target.value = "";
+                  }}
+                  data-testid={`${testId}-upload-image-file`}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={disabled || uploading}
+                  onClick={() => uploadRef.current?.click()}
+                  data-testid={`${testId}-upload-image`}
+                >
+                  {uploading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <ImagePlus size={14} />
+                  )}
+                  {t("questionBank.group.layout.uploadWholeImage")}
+                </Button>
+              </div>
             </div>
           ) : (
             <>

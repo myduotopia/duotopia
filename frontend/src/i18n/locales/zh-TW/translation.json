@@ -6167,7 +6167,8 @@
         "previewHint": "學生看到的畫面；切換電腦／手機寬度",
         "previewDesktop": "電腦",
         "previewMobile": "手機",
-        "empty": "還沒有內容，按「新增區塊」開始寫"
+        "empty": "還沒有內容：「新增區塊」開始寫，或上傳整張圖片（海報／漫畫／地圖）",
+        "uploadWholeImage": "上傳圖片"
       },
       "glossary": {
         "title": "單字註解",

@@ -6123,7 +6123,8 @@
         "previewHint": "What students will see; switch between desktop and mobile width",
         "previewDesktop": "Desktop",
         "previewMobile": "Mobile",
-        "empty": "Nothing yet — click “Add block” to start writing"
+        "empty": "Nothing yet — “Add block” to start writing, or upload a whole image (poster / comic / map)",
+        "uploadWholeImage": "Upload image"
       },
       "glossary": {
         "title": "Glossary",
