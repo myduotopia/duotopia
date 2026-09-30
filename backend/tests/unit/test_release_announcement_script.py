@@ -264,6 +264,7 @@ class TestProductionPayload:
         "title": "Release: staging → main（#1046 班級分組、#1051 例句翻譯）",
         "base": "main",
         "body": "",
+        "author_association": "COLLABORATOR",
     }
 
     def _payload(self, gh):
@@ -286,6 +287,34 @@ class TestProductionPayload:
         assert result["issue_numbers"] == "1046"
         assert result["pr_number"] == 1072
         assert result["release_title"] == self.RELEASE_PR["title"]
+
+    def test_block_without_issue_marker_uses_pr_commits(self):
+        """有人把 issues 標記刪掉時，改從 PR 的 commit 找 issue，而不是直接略過"""
+        pr = {**self.RELEASE_PR, "body": ra.render_block(CONTENT)}
+        gh = FakeGitHub(
+            commit_prs={"merge-sha": [pr]},
+            pr_commits={1072: ["Release: 班級分組 (Fixes #1046) (#1053)"]},
+            labels={1046: BOTH},
+        )
+        result = self._payload(gh)
+        assert result["content"] == CONTENT
+        assert result["issue_numbers"] == "1046"
+
+    def test_pr_from_outside_contributor_ignores_block(self):
+        """release PR 作者不是團隊成員 → 不採用描述內容，改走標籤 + Vertex"""
+        pr = {
+            **self.RELEASE_PR,
+            "body": ra.render_block(CONTENT, issues=[1046]),
+            "author_association": "CONTRIBUTOR",
+        }
+        gh = FakeGitHub(
+            commit_prs={"merge-sha": [pr]},
+            pr_commits={1072: ["Release: 班級分組 (Fixes #1046) (#1053)"]},
+            labels={1046: BOTH},
+        )
+        result = self._payload(gh)
+        assert "content" not in result
+        assert result["issue_numbers"] == "1046"
 
     def test_block_issues_are_rechecked_against_labels(self):
         """統整區塊寫好後 issue 若被拿掉標籤，就不再列入"""
@@ -340,6 +369,7 @@ class TestProductionPayload:
             "title": "hotfix(#1047): Azure Speech SDK",
             "base": "main",
             "body": "",
+            "author_association": "OWNER",
         }
         gh = FakeGitHub(
             commit_prs={"merge-sha": [hotfix]},

@@ -65,27 +65,32 @@ jobs:
           INPUT_TITLE: ${{ inputs.release_title }}
           INPUT_SHA: ${{ inputs.commit_sha }}
           INPUT_ENV: ${{ inputs.environment }}
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          GIT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        # 所有可能由使用者控制的值（手動輸入、分支名稱）都經 env 傳入，不直接內插進 shell
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             ENVIRONMENT="$INPUT_ENV"
             COMMIT_SHA="$INPUT_SHA"
             MESSAGE="$INPUT_TITLE"
           else
-            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            if [ "$GIT_REF" = "refs/heads/main" ]; then
               ENVIRONMENT="production"
             else
               ENVIRONMENT="staging"
             fi
-            COMMIT_SHA="${{ github.sha }}"
+            COMMIT_SHA="$GIT_SHA"
             MESSAGE="$COMMIT_MESSAGE"
           fi
 
           {
             echo "environment=$ENVIRONMENT"
             echo "commit_sha=$COMMIT_SHA"
-            echo "branch=${{ github.ref_name }}"
+            echo "branch=$REF_NAME"
           } >> "$GITHUB_OUTPUT"
 
           # commit message 可能多行、含特殊字元，用 heredoc 形式寫入 output。
@@ -146,6 +151,8 @@ jobs:
         env:
           BACKEND_URL: ${{ steps.info.outputs.environment == 'production' && secrets.PRODUCTION_BACKEND_URL || secrets.STAGING_BACKEND_URL }}
           RELEASE_WEBHOOK_SECRET: ${{ secrets.RELEASE_WEBHOOK_SECRET }}
+          ENVIRONMENT: ${{ steps.info.outputs.environment }}
+          COMMIT_SHA: ${{ steps.info.outputs.commit_sha }}
         run: |
           set -euo pipefail
 
@@ -158,7 +165,7 @@ jobs:
           # （以及選填的 content）；去掉 CI 專用欄位後直接送出
           jq 'del(.message)' payload.json > request.json
 
-          echo "📢 產生更新公告草稿：${{ steps.info.outputs.environment }} / ${{ steps.info.outputs.commit_sha }}"
+          echo "📢 產生更新公告草稿：$ENVIRONMENT / $COMMIT_SHA"
 
           # Cloud Run min-instances=0 時第一次請求可能 cold start，重試 3 次
           for attempt in 1 2 3; do
@@ -188,12 +195,14 @@ jobs:
         if: always()
         env:
           RESULT: ${{ steps.payload.outputs.result }}
+          ENVIRONMENT: ${{ steps.info.outputs.environment }}
+          COMMIT_SHA: ${{ steps.info.outputs.commit_sha }}
         run: |
           {
             echo "### 📢 更新公告草稿"
             echo ""
-            echo "- 環境：\`${{ steps.info.outputs.environment }}\`"
-            echo "- Commit：\`${{ steps.info.outputs.commit_sha }}\`"
+            echo "- 環境：\`$ENVIRONMENT\`"
+            echo "- Commit：\`$COMMIT_SHA\`"
             echo "- 結果：${RESULT:-（未執行）}"
             echo ""
             echo "草稿不會自動對外發布，請到後台選擇發布通道。"

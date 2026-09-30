@@ -258,11 +258,20 @@ def build_ci_payload(
         if release_pr:
             base["release_title"] = release_pr["title"]
             base["pr_number"] = release_pr["number"]
-            parsed = parse_block(release_pr.get("body"))
+            messages = [
+                release_pr["title"],
+                *gh.pr_commit_messages(release_pr["number"]),
+            ]
+            pr_issues = list(
+                dict.fromkeys(n for msg in messages for n in extract_issue_numbers(msg))
+            )
+            # 只採用團隊成員開的 PR 描述（公開 repo，fork PR 作者也能改自己的描述）
+            trusted = release_pr.get("author_association") in TRUSTED_ASSOCIATIONS
+            parsed = parse_block(release_pr.get("body")) if trusted else None
             if parsed and is_complete(parsed["content"]):
-                # 區塊寫好後標籤仍可能被拿掉：重新確認，一個都不符合就不發
-                issues = parsed["issues"] or extract_issue_numbers(release_pr["title"])
-                eligible = _eligible_issues(gh, issues)
+                # 區塊寫好後標籤仍可能被拿掉：重新確認，一個都不符合就不發。
+                # issues 標記被刪掉時改用 PR 內 commit 找到的 issue
+                eligible = _eligible_issues(gh, parsed["issues"] or pr_issues)
                 if not eligible:
                     return {"skip": REASON_NO_ELIGIBLE_ISSUE}
                 return {
@@ -270,14 +279,7 @@ def build_ci_payload(
                     "issue_numbers": ",".join(map(str, eligible)),
                     "content": parsed["content"],
                 }
-            messages = [
-                release_pr["title"],
-                *gh.pr_commit_messages(release_pr["number"]),
-            ]
-            issues = list(
-                dict.fromkeys(n for msg in messages for n in extract_issue_numbers(msg))
-            )
-            return _payload_for_issues(gh, issues, base)
+            return _payload_for_issues(gh, pr_issues, base)
 
     pr_number = _pr_number_from_title(title)
     if pr_number:
@@ -346,6 +348,7 @@ class GhCli:
                 "title": pr["title"],
                 "body": pr.get("body") or "",
                 "base": pr["base"]["ref"],
+                "author_association": pr.get("author_association"),
             }
             for pr in self._api(f"commits/{sha}/pulls") or []
         ]
