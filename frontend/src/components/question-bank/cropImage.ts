@@ -13,7 +13,12 @@ type Drawable = ImageBitmap | HTMLImageElement;
 
 async function loadDrawable(
   file: File,
-): Promise<{ source: Drawable; width: number; height: number; release: () => void }> {
+): Promise<{
+  source: Drawable;
+  width: number;
+  height: number;
+  release: () => void;
+}> {
   if (typeof createImageBitmap === "function") {
     const bitmap = await createImageBitmap(file);
     return {

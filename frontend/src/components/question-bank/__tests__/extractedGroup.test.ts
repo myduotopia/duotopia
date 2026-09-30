@@ -18,7 +18,11 @@ const baseResult = (
   title: " Vivaldi ",
   stimulus: {
     kind: "text",
-    paragraphs: ["Antonio Vivaldi was a violin player.", " ", "Sadly, he died poor."],
+    paragraphs: [
+      "Antonio Vivaldi was a violin player.",
+      " ",
+      "Sadly, he died poor.",
+    ],
     text: "",
     box_2d: null,
     page: null,
@@ -171,7 +175,11 @@ describe("groupDraftFromExtracted", () => {
         page: null,
       },
     });
-    const draft = groupDraftFromExtracted(result, emptyGroupDraft("reading"), null);
+    const draft = groupDraftFromExtracted(
+      result,
+      emptyGroupDraft("reading"),
+      null,
+    );
     expect(draft.layout).toBeNull();
     expect(draft.passage_text).toBe("whole passage");
     expect(draft.passage_text_edited).toBe(true);
