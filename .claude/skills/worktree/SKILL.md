@@ -367,7 +367,15 @@ git push -u origin "$BRANCH_NAME"
 1. Create PR to staging: `gh pr create --base staging`
 2. Wait for CI/CD checks
 3. [For issues: Request case owner testing]
+4. [📣 If the issue has the `📣 announce` label: after it gets `✅ tested-in-staging`,
+   run `/announce #<NUM>` before the auto-created Release PR is merged]
 ```
+
+### 4.7 Release announcement reminder (issue mode only)
+
+Check the issue labels (`gh issue view <NUM> --json labels`). If it has `📣 announce`,
+include step 4 above in the completion report. Do **not** run `/announce` yet when the
+issue lacks `✅ tested-in-staging` — the announce skill refuses untested issues.
 
 ---
 

@@ -6,7 +6,7 @@ production 環境改推給指定測試帳號（push），避免測試訊息轟�
 本 service 只負責「呼叫 LINE API 與組裝訊息」，不碰 DB；發布結果的記錄
 由 ReleaseAnnouncementService 負責，以維持單一職責與可測試性。
 
-憑證來自 core.config.settings（LINE_CHANNEL_ACCESS_TOKEN / LINE_TEST_USER_ID），
+憑證來自 core.config.settings（LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN / LINE_ANNOUNCE_TEST_USER_ID），
 與 CI 通知共用同一個 channel（GCP Secret Manager: line-channel-access-token）。
 """
 
@@ -47,9 +47,9 @@ class LinePublishService:
 
     @staticmethod
     def _require_token() -> str:
-        token = settings.LINE_CHANNEL_ACCESS_TOKEN
+        token = settings.LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN
         if not token:
-            raise LineConfigError("缺少 LINE 設定：LINE_CHANNEL_ACCESS_TOKEN")
+            raise LineConfigError("尚未設定官方帳號：LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN")
         return token
 
     @staticmethod
@@ -104,7 +104,7 @@ class LinePublishService:
     async def push(cls, to: str, messages: List[Dict[str, Any]]) -> Optional[str]:
         """推播給單一使用者（非 production 環境用來驗證訊息外觀）。"""
         if not to:
-            raise LineConfigError("缺少 LINE 設定：LINE_TEST_USER_ID")
+            raise LineConfigError("尚未設定測試收件人：LINE_ANNOUNCE_TEST_USER_ID")
         if not messages:
             raise LinePublishError("訊息內容不可為空")
         return await cls._post("/message/push", {"to": to, "messages": messages})

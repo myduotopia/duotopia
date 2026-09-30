@@ -85,10 +85,14 @@ class Settings:
     )
 
     # LINE 官方帳號（issue #804 — 自動發布更新公告）
-    # 與 CI 通知共用同一個 channel（Secret Manager: line-channel-access-token）
-    LINE_CHANNEL_ACCESS_TOKEN: Optional[str] = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-    # 非 production 環境「發布 LINE」時的收件人（開發者本人），不做 broadcast
-    LINE_TEST_USER_ID: Optional[str] = os.getenv("LINE_TEST_USER_ID")
+    # 必須是 Duotopia 官方帳號的 Messaging API token：production 會 broadcast
+    # 給這個帳號的所有好友。刻意不與 CI 通知 bot 共用，避免廣播到錯的帳號。
+    LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN: Optional[str] = os.getenv(
+        "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN"
+    )
+    # 非 production 環境「發布 LINE」時的收件人（測試者本人），不做 broadcast。
+    # LINE user ID 依 provider 而不同，必須是官方帳號同一個 provider 底下的 ID
+    LINE_ANNOUNCE_TEST_USER_ID: Optional[str] = os.getenv("LINE_ANNOUNCE_TEST_USER_ID")
     # 更新公告的樣板圖（先用官網 OG 圖佔位，換圖不用改程式）
     RELEASE_ANNOUNCEMENT_BANNER_URL: Optional[str] = os.getenv(
         "RELEASE_ANNOUNCEMENT_BANNER_URL"

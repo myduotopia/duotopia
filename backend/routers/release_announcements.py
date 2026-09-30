@@ -15,6 +15,7 @@
 import logging
 import secrets
 from typing import List, Literal, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -52,6 +53,17 @@ EDITABLE_STATUSES = (STATUS_DRAFT, STATUS_PARTIALLY_PUBLISHED)
 # ============ Schemas ============
 
 
+class AnnouncementContent(BaseModel):
+    """/announce 寫在 issue 留言或 PR 描述的雙語內容（由 CI 帶來）。"""
+
+    line_message_zh: Optional[str] = None
+    line_message_en: Optional[str] = None
+    article_title_zh: Optional[str] = None
+    article_body_zh: Optional[str] = None
+    article_title_en: Optional[str] = None
+    article_body_en: Optional[str] = None
+
+
 class ReleaseWebhookRequest(BaseModel):
     source_ref: str = Field(..., max_length=100)  # commit sha
     release_title: str
@@ -59,6 +71,8 @@ class ReleaseWebhookRequest(BaseModel):
     source_branch: Optional[str] = Field(None, max_length=100)
     pr_number: Optional[int] = None
     issue_numbers: Optional[str] = Field(None, max_length=200)
+    # 有帶且必要欄位齊全 → 直接用，不呼叫 Vertex AI
+    content: Optional[AnnouncementContent] = None
 
 
 class ReleaseWebhookResponse(BaseModel):
@@ -81,8 +95,10 @@ class ReleaseAnnouncementUpdate(BaseModel):
     def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
         # 空白代表清除圖片（service 會存成 NULL）；有值就必須是 https，
         # 否則 LINE hero 會被拒收，官網也會出現混合內容
-        if value and value.strip() and not value.strip().startswith("https://"):
-            raise ValueError("圖片網址必須以 https:// 開頭")
+        if value and value.strip():
+            parsed = urlparse(value.strip())
+            if parsed.scheme != "https" or not parsed.netloc:
+                raise ValueError("圖片網址必須是 https:// 開頭的完整網址")
         return value
 
 
@@ -214,6 +230,7 @@ async def create_release_announcement(
         source_branch=body.source_branch,
         pr_number=body.pr_number,
         issue_numbers=body.issue_numbers,
+        content=body.content.model_dump() if body.content else None,
     )
     return ReleaseWebhookResponse(
         id=announcement.id, created=created, status=announcement.status
