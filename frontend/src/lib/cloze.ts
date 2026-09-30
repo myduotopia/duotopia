@@ -137,3 +137,18 @@ export function buildBlankedSentence(
   const [start, end, matched] = match;
   return sentence.slice(0, start) + buildBlank(matched) + sentence.slice(end);
 }
+
+/**
+ * Issue #1088：老師改例句後同步挖空字（純函式，VocabularySetPanel.handleUpdateRow 用）。
+ * 規則：原挖空字仍在新例句中 → 保留（採句中實際字形）；已對不上 → 取消，改由單字本身
+ * 在句中找（含 apple→apples 前綴、片語不做前綴猜測），找不到留空由老師重選。
+ */
+export function reconcileClozeAnswer(
+  row: { text?: string | null; cloze_answer?: string | null },
+  newSentence: string | null | undefined,
+): string {
+  const keep = findClozeMatch(row.cloze_answer, newSentence);
+  if (keep) return keep[2];
+  const fromWord = findClozeMatch(row.text, newSentence);
+  return fromWord ? fromWord[2] : "";
+}

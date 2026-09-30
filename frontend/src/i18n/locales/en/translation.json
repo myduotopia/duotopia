@@ -5103,7 +5103,8 @@
       "usePhrase": "Add answer",
       "hint": "Double-click a word to set it; for a phrase, select it then click Add answer",
       "noSelection": "Please select some text in the sentence first",
-      "selectionNotInSentence": "The selected text must come from the example sentence"
+      "selectionNotInSentence": "The selected text must come from the example sentence",
+      "staleHint": "Not found in the example sentence — please reselect"
     }
   },
   "wordReading": {

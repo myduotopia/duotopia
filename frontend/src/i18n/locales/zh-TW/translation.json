@@ -5116,7 +5116,8 @@
       "usePhrase": "新增答案",
       "hint": "單字點兩下即成為答案；片語請圈選後按「新增答案」",
       "noSelection": "請先在例句中選取文字",
-      "selectionNotInSentence": "選取的文字必須來自例句"
+      "selectionNotInSentence": "選取的文字必須來自例句",
+      "staleHint": "例句中找不到此挖空字，請重新選取"
     }
   },
   "wordReading": {

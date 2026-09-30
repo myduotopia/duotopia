@@ -267,9 +267,12 @@ def resolve_cloze_answer_on_save(
 ) -> Optional[str]:
     """Determine the ``cloze_answer`` value to persist on a save.
 
-    Rules (per Issue #632 Q2):
-    1. If client explicitly sends a non-empty ``incoming_answer``, honor it.
-       (Teacher override.)
+    Rules (per Issue #632 Q2, tightened in Issue #1088):
+    1. If client sends a non-empty ``incoming_answer`` that can still be found
+       in the current sentence (``find_cloze_match``), honor it. (Teacher
+       override.) A value that no longer appears in the sentence — e.g. the
+       teacher rewrote the sentence and the UI still carried the old answer —
+       falls through instead of being persisted blindly.
     2. If ``existing_answer`` is still present in the current sentence, keep
        it. (Teacher's manual override survives unrelated edits.)
     3. Otherwise, auto-extract from ``base_word`` + ``example_sentence``.
@@ -278,7 +281,9 @@ def resolve_cloze_answer_on_save(
     example = (example_sentence or "").strip()
 
     if incoming_answer is not None and incoming_answer.strip():
-        return incoming_answer.strip()
+        incoming = incoming_answer.strip()
+        if not example or find_cloze_match(incoming, example):
+            return incoming
 
     if existing_answer and existing_answer.strip() and example:
         if find_cloze_match(existing_answer.strip(), example):

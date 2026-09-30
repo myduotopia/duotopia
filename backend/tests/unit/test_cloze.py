@@ -126,6 +126,44 @@ class TestResolveOnSave:
         )
         assert result == "cups"
 
+    # Issue #1088：改例句後前端仍帶回舊挖空字 → 不採用，往規則 2／3 走
+    def test_incoming_not_in_sentence_is_ignored(self):
+        result = resolve_cloze_answer_on_save(
+            base_word="play",
+            example_sentence="I like playing basketball.",
+            incoming_answer="play basketball",
+            existing_answer="play basketball",
+        )
+        assert result == "playing"
+
+    def test_incoming_not_in_sentence_and_no_match_gives_none(self):
+        result = resolve_cloze_answer_on_save(
+            base_word="swim",
+            example_sentence="He swam across.",
+            incoming_answer="swimming",
+            existing_answer="swimming",
+        )
+        assert result is None
+
+    # Issue #1088：update 時老師重選（有效 incoming）要覆蓋 DB 舊值，即使舊值仍在句中
+    def test_valid_incoming_overrides_existing_on_update(self):
+        result = resolve_cloze_answer_on_save(
+            base_word="tell",
+            example_sentence="He told me her name.",
+            incoming_answer="told me",
+            existing_answer="told",
+        )
+        assert result == "told me"
+
+    def test_incoming_case_insensitive_match_keeps_incoming_form(self):
+        result = resolve_cloze_answer_on_save(
+            base_word="tell",
+            example_sentence="Told me twice.",
+            incoming_answer="told me",
+            existing_answer=None,
+        )
+        assert result == "told me"
+
 
 class TestComputeClozeAnswer:
     def test_returns_only_answer(self):

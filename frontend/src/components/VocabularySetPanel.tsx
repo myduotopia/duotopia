@@ -44,6 +44,7 @@ import {
   deriveClozeAnswer,
 } from "@/utils/magicPasteHelpers";
 import { retryAudioUpload } from "@/utils/retryHelper";
+import { findClozeMatch, reconcileClozeAnswer } from "@/lib/cloze";
 import {
   TTS_ACCENTS,
   TTS_GENDERS,
@@ -1275,9 +1276,13 @@ export function ClozeAnswerEditor({
 
   const answer = (value || "").trim();
   const lowerSentence = sentence.toLowerCase();
-  const matchStart = answer ? lowerSentence.indexOf(answer.toLowerCase()) : -1;
-  const matchEnd = matchStart >= 0 ? matchStart + answer.length : -1;
+  // Issue #1088: 高亮改用 findClozeMatch（整字比對，與後端／挖空同語意）；找不到＝
+  // 挖空字已對不上例句（例句改過），chip 顯示警示請老師重選。
+  const match = answer ? findClozeMatch(answer, sentence) : null;
+  const matchStart = match ? match[0] : -1;
+  const matchEnd = match ? match[1] : -1;
   const hasHighlight = matchStart >= 0;
+  const isStale = !!answer && !hasHighlight;
 
   // 取得目前選取的文字，驗證它確實出現在例句中後設為答案（保留例句原始大小寫）。
   const commitSelection = (showErrors: boolean): boolean => {
@@ -1313,10 +1318,20 @@ export function ClozeAnswerEditor({
         </span>
         {answer ? (
           <span
-            className="text-xs px-2 py-0.5 rounded bg-purple-200 text-purple-800 font-semibold"
+            className={
+              isStale
+                ? "text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold border border-amber-300"
+                : "text-xs px-2 py-0.5 rounded bg-purple-200 text-purple-800 font-semibold"
+            }
             data-testid="cloze-current"
+            data-stale={isStale ? "true" : undefined}
           >
             {answer}
+            {isStale && (
+              <span className="ml-1 font-normal" data-testid="cloze-stale-hint">
+                {t("vocabularySet.cloze.staleHint")}
+              </span>
+            )}
             {!disabled && (
               <button
                 type="button"
@@ -2439,6 +2454,11 @@ const VocabularySetPanel = forwardRef<
   ) => {
     const newRows = [...rows];
     newRows[index] = { ...newRows[index], [field]: value };
+    // Issue #1088: 改例句時同步挖空字 —— 原挖空字仍在句中則保留，否則取消並改由
+    // 單字本身自動帶入，帶不出來留空（派發時守衛會擋下提示老師補齊）。
+    if (field === "example_sentence" && typeof value === "string") {
+      newRows[index].cloze_answer = reconcileClozeAnswer(newRows[index], value);
+    }
     setRows(newRows);
   };
 
