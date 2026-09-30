@@ -226,7 +226,7 @@ describe("AdminReleaseAnnouncementsPage (issue #804)", () => {
     });
 
     expect(
-      screen.getByText(/圖片網址必須以 https:\/\/ 開頭/),
+      screen.getByText(/圖片網址必須是 https:\/\/ 開頭的完整網址/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "儲存草稿" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /發布/ })).toBeDisabled();
@@ -277,6 +277,38 @@ describe("AdminReleaseAnnouncementsPage (issue #804)", () => {
       ),
     );
   });
+
+  it("有未儲存的修改時不能合併，避免修改被合併結果蓋掉", async () => {
+    const older = draft({
+      id: 2,
+      source_ref: "old999",
+      release_title: "Release: [Bug]: 修正錄音 (Fixes #816)",
+    });
+    mockApi.list.mockResolvedValue({ data: [draft(), older] });
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    fireEvent.click(screen.getByRole("button", { name: "載入舊草稿" }));
+    fireEvent.click(await screen.findByLabelText(/修正錄音/));
+    fireEvent.change(screen.getByLabelText("LINE 文案（中文）"), {
+      target: { value: "還沒存的文案" },
+    });
+
+    expect(screen.getByRole("button", { name: "併入這一則" })).toBeDisabled();
+    expect(screen.getByText(/請先儲存草稿再合併/)).toBeInTheDocument();
+  });
+
+  it.each(["https://", "https:///a.png", "javascript:alert(1)"])(
+    "圖片網址 %s 視為無效",
+    async (url) => {
+      renderPage();
+      await screen.findByTestId("line-flex-preview");
+      fireEvent.change(screen.getByLabelText("公告圖片網址"), {
+        target: { value: url },
+      });
+      expect(screen.getByRole("button", { name: /發布/ })).toBeDisabled();
+    },
+  );
 
   it("已發布的通道顯示狀態並不再重複勾選", async () => {
     mockApi.list.mockResolvedValue({

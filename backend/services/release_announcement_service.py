@@ -9,7 +9,7 @@
    所以能「先發官網、之後再補發 LINE」。
 
 安全防呆：只有 ENVIRONMENT=production 才真的 broadcast 給所有好友；
-其他環境改 push 給 LINE_TEST_USER_ID 並加上 [STAGING] 前綴，
+其他環境改 push 給 LINE_ANNOUNCE_TEST_USER_ID 並加上 [STAGING] 前綴，
 避免測試訊息轟炸真實好友、並保護每月訊息量。
 """
 
@@ -47,16 +47,18 @@ PRODUCT_UPDATE_CATEGORY_NAME = "產品更新"
 
 VALID_CHANNELS = (CHANNEL_LINE, CHANNEL_WEBSITE)
 
-# 可編輯的草稿欄位（後台 PATCH 白名單）
-EDITABLE_FIELDS = (
+# 公告的雙語內容欄位（AI 產生 / /announce 現成內容共用）
+CONTENT_FIELDS = (
     "line_message_zh",
     "line_message_en",
     "article_title_zh",
     "article_body_zh",
     "article_title_en",
     "article_body_en",
-    "image_url",
 )
+
+# 可編輯的草稿欄位（後台 PATCH 白名單）
+EDITABLE_FIELDS = CONTENT_FIELDS + ("image_url",)
 
 # 併入舊草稿時各欄位的接合方式
 _MERGE_FIELDS = (
@@ -135,6 +137,21 @@ class ReleaseAnnouncementService:
 
     # ============ 草稿產生 ============
 
+    @staticmethod
+    def _prewritten_content(
+        content: Optional[Dict[str, Optional[str]]],
+    ) -> Optional[Dict[str, str]]:
+        """整理 CI 帶來的現成內容；缺必要欄位回傳 None（改走 AI）。"""
+        if not content:
+            return None
+        cleaned = {key: (content.get(key) or "").strip() for key in CONTENT_FIELDS}
+        if not cleaned["line_message_zh"] or not cleaned["article_title_zh"]:
+            return None
+        # router 已限制標題 ≤ 200；這裡保留截斷作為直接呼叫 service 時的防線
+        cleaned["article_title_zh"] = cleaned["article_title_zh"][:200]
+        cleaned["article_title_en"] = cleaned["article_title_en"][:200]
+        return cleaned
+
     @classmethod
     async def _generate_content(
         cls, clean_title: str, change_type: str
@@ -154,17 +171,7 @@ class ReleaseAnnouncementService:
                 temperature=0.6,
                 system_instruction=_AI_SYSTEM_INSTRUCTION,
             )
-            content = {
-                key: (result.get(key) or "").strip()
-                for key in (
-                    "line_message_zh",
-                    "line_message_en",
-                    "article_title_zh",
-                    "article_body_zh",
-                    "article_title_en",
-                    "article_body_en",
-                )
-            }
+            content = {key: (result.get(key) or "").strip() for key in CONTENT_FIELDS}
             if not content["line_message_zh"] or not content["article_title_zh"]:
                 raise ValueError("AI 回傳缺少必要欄位")
             return content, None
@@ -193,8 +200,12 @@ class ReleaseAnnouncementService:
         source_branch: Optional[str] = None,
         pr_number: Optional[int] = None,
         issue_numbers: Optional[str] = None,
+        content: Optional[Dict[str, Optional[str]]] = None,
     ) -> Tuple[ReleaseAnnouncement, bool]:
         """依 release 產生草稿；回傳 (公告, 是否為本次新建)。
+
+        content：/announce 在 issue 留言或 PR 描述寫好的雙語內容（CI 帶來）。
+        必要欄位齊全就直接使用、不呼叫 AI；否則退回 AI 產生。
 
         以 (environment, source_ref) 去重：CI 重跑或重新部署同一個 commit
         不會重複建立草稿，也不會重複消耗 AI 額度。
@@ -217,9 +228,13 @@ class ReleaseAnnouncementService:
             return existing, False
 
         parsed = cls.parse_release_title(release_title)
-        content, generation_error = await cls._generate_content(
-            parsed["clean_title"], parsed["change_type"]
-        )
+        prewritten = cls._prewritten_content(content)
+        if prewritten is not None:
+            content, generation_error = prewritten, None
+        else:
+            content, generation_error = await cls._generate_content(
+                parsed["clean_title"], parsed["change_type"]
+            )
 
         announcement = ReleaseAnnouncement(
             environment=environment,
@@ -425,7 +440,7 @@ class ReleaseAnnouncementService:
             request_id = await LinePublishService.broadcast([flex])
         else:
             request_id = await LinePublishService.push(
-                settings.LINE_TEST_USER_ID or "", [flex]
+                settings.LINE_ANNOUNCE_TEST_USER_ID or "", [flex]
             )
 
         announcement.line_request_id = request_id

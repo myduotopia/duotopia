@@ -65,6 +65,7 @@
 |-------|---------|
 | `/worktree <issues \| description>` | 使用 git worktree 隔離開發。支援 GitHub issue（如 `#42 #43`）或任意任務描述。自動觸發：「開 worktree」、「用 worktree 處理」 |
 | `/fix-review <PR-number>` | 自動分析 Claude Code Review 回饋並反覆修正，直到 PR 可以 merge。遇到需要人為判斷的項目才會提問 |
+| `/announce <#N \| release>` | 整理對外更新公告（LINE + 官網中英文章）。`#N` 寫成 issue 留言；`release` 統整後寫進 staging → main PR 描述（沒有 PR 就開）。issue 須同時有 `📣 announce` 與 `✅ tested-in-staging`。自動觸發：「開 staging → main 的 PR」、「寫更新公告」 |
 | `/fix-workflow <PR-number>` | 自動分析 CI test workflow 錯誤（backend/frontend），解析 GitHub Actions log，修復 Black、Flake8、Prettier、TypeScript、ESLint、build 等錯誤後重推 |
 
 ### Commands (`.claude/commands/`)
