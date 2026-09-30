@@ -361,7 +361,9 @@ export default function GroupCard({
         <div className="flex items-center gap-2">
           <Input
             value={draft.title}
-            onChange={(e) => patch({ title: e.target.value, serverError: null })}
+            onChange={(e) =>
+              patch({ title: e.target.value, serverError: null })
+            }
             placeholder={t("questionBank.group.titlePlaceholder")}
             className="h-9"
             disabled={locked}
