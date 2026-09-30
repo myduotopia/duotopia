@@ -6058,6 +6058,7 @@
         "needStem": "右側先輸入題目",
         "upload": "PDF／圖片上傳",
         "uploadHint": "上傳考卷圖片，AI 擷取題目與選項",
+        "uploadHintGroup": "上傳整份題組（圖片或 PDF）：AI 會擷取文章或海報、單字註解與小題，填進右側",
         "aiTitle": "AI 協助",
         "aiApplied": "已填入 {{applied}} 題，略過 {{skipped}} 題（已設定或無法判斷）",
         "aiNothingToSend": "右側還沒有可分析的題目（需要題幹與至少 2 個選項）",
@@ -6187,6 +6188,11 @@
         "regenerate": "重新產生",
         "edited": "已手動修改",
         "emptyReverts": "留空儲存後會回到由排版自動產生的文字"
+      },
+      "extract": {
+        "overwriteTitle": "覆蓋目前的題組內容？",
+        "overwriteDesc": "右側題組已經有內容，擷取結果會取代標題、排版、文字版、單字註解與全部小題。",
+        "overwriteConfirm": "覆蓋"
       },
       "questions": {
         "title": "小題（{{count}}）",

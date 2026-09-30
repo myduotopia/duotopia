@@ -23,6 +23,63 @@ const findSimilarQuestions = vi.fn();
 const listExamPoints = vi.fn();
 const listSources = vi.fn();
 const aiAnswerQuestions = vi.fn();
+
+// 題組擷取（#1084）：MagicPasteInput 換成 stub，按鈕直接觸發 onInsertGroup；裁圖／上傳 mock
+const { cropImageFileMock, uploadImageFileMock, GROUP_RESULT } = vi.hoisted(
+  () => ({
+    cropImageFileMock: vi.fn(),
+    uploadImageFileMock: vi.fn(),
+    GROUP_RESULT: {
+      title: "Lantern",
+      stimulus: {
+        kind: "image",
+        paragraphs: [],
+        text: "Happy Town Lantern Festival",
+        box_2d: [0, 0, 600, 1000],
+        page: 1,
+      },
+      glossary: [{ word: "lantern", zh: "燈籠" }],
+      questions: [
+        {
+          stem: "What is the purpose?",
+          options: ["a", "b", "c", "d"],
+          correct_indexes: [2],
+          explanation: "",
+        },
+      ],
+    },
+  }),
+);
+vi.mock("@/components/shared/MagicPasteInput", () => ({
+  __esModule: true,
+  default: (props: {
+    extractMode?: string;
+    onInsertGroup?: (r: unknown, f: File) => void | Promise<void>;
+  }) => (
+    <div data-testid="mp-stub" data-mode={props.extractMode ?? "vocabulary"}>
+      <button
+        type="button"
+        data-testid="mp-trigger-group"
+        onClick={() =>
+          void props.onInsertGroup?.(
+            GROUP_RESULT,
+            new File(["x"], "paper.png", { type: "image/png" }),
+          )
+        }
+      />
+    </div>
+  ),
+}));
+vi.mock("../cropImage", () => ({
+  cropImageFile: (...a: unknown[]) => cropImageFileMock(...a),
+}));
+vi.mock("../uploadImageFile", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../uploadImageFile")>();
+  return {
+    ...mod,
+    uploadImageFile: (...a: unknown[]) => uploadImageFileMock(...a),
+  };
+});
 vi.mock("@/lib/api", () => ({
   apiClient: {
     createQuestion: (...a: unknown[]) => createQuestion(...a),
@@ -491,5 +548,58 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(onSaved).toHaveBeenCalledWith(q1);
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId("qb-sheet")).toBeTruthy();
+  });
+
+  it("題組模式擷取（#1084）：上傳走 reading_group、裁圖上傳、填進題組卡；再擷取一次要先確認覆蓋", async () => {
+    cropImageFileMock
+      .mockReset()
+      .mockResolvedValue(new File(["c"], "crop.png", { type: "image/png" }));
+    uploadImageFileMock.mockReset().mockResolvedValue("https://cdn/crop.png");
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+
+    // 左欄上傳區是題組模式；沒有「新增題目」鍵
+    expect(
+      screen.getByTestId("qb-upload").getAttribute("data-extract-mode"),
+    ).toBe("reading_group");
+    expect(screen.getByTestId("mp-stub").getAttribute("data-mode")).toBe(
+      "reading_group",
+    );
+    expect(screen.getByTestId("qb-upload-group-hint")).toBeTruthy();
+    expect(screen.queryByTestId("qb-add-question")).toBeNull();
+
+    await user.click(screen.getByTestId("mp-trigger-group"));
+    await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(1));
+    // 依 box_2d 裁圖，上傳的是裁好的檔
+    expect(cropImageFileMock).toHaveBeenCalledWith(
+      expect.any(File),
+      [0, 0, 600, 1000],
+    );
+    expect((uploadImageFileMock.mock.calls[0][0] as File).name).toBe(
+      "crop.png",
+    );
+    // 標題、小題、圖片都進了題組卡
+    expect(
+      ((await screen.findByTestId("qg-0-title")) as HTMLInputElement).value,
+    ).toBe("Lantern");
+    expect((screen.getByTestId("qc-0-stem") as HTMLTextAreaElement).value).toBe(
+      "What is the purpose?",
+    );
+    expect(document.querySelector('img[src="https://cdn/crop.png"]')).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledWith(
+      "contentEditor.magicPaste.insertedGroup",
+    );
+
+    // 已有內容 → 再擷取先問覆蓋；取消不動、確認才套用
+    await user.click(screen.getByTestId("mp-trigger-group"));
+    expect(await screen.findByTestId("qb-extract-overwrite")).toBeTruthy();
+    await user.click(screen.getByTestId("qb-extract-overwrite-cancel"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("qb-extract-overwrite")).toBeNull(),
+    );
+    expect(uploadImageFileMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId("mp-trigger-group"));
+    await user.click(await screen.findByTestId("qb-extract-overwrite-confirm"));
+    await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(2));
   });
 });

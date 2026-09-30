@@ -39,6 +39,7 @@ import {
 } from "@/components/shared/CreatableCombobox";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import MagicPasteInput, {
+  type MagicPasteGroupResult,
   type MagicPasteMcItem,
 } from "@/components/shared/MagicPasteInput";
 import { ProgramLessonPicker } from "@/components/shared/ProgramLessonPicker";
@@ -66,6 +67,13 @@ export interface QuestionBankBatchPanelProps {
   aiBusy?: boolean;
   /** 考卷擷取結果 → 右側題目卡 */
   onInsertExtracted?: (items: MagicPasteMcItem[]) => void;
+  /** 擷取模式：單題（預設）或整份檔 → 一個題組（#1084） */
+  extractMode?: "multiple_choice" | "reading_group";
+  /** 題組擷取結果 → 右側題組卡（reading_group 模式） */
+  onInsertExtractedGroup?: (
+    result: MagicPasteGroupResult,
+    file: File,
+  ) => void | Promise<void>;
   // 批次覆寫
   batch: BatchDefaults;
   onBatchChange: (patch: Partial<BatchDefaults>) => void;
@@ -95,6 +103,8 @@ export default function QuestionBankBatchPanel({
   onAiAnalyze,
   aiBusy = false,
   onInsertExtracted,
+  extractMode = "multiple_choice",
+  onInsertExtractedGroup,
   batch,
   onBatchChange,
   programs,
@@ -184,14 +194,25 @@ export default function QuestionBankBatchPanel({
       onConfirm={() => undefined}
       isBusy={generatingAudio}
       imageTab={
-        // 1. PDF/圖片上傳：與單字集同一個 MagicPasteInput；擷取完直接進右側題目卡（不預覽）
+        // 1. PDF/圖片上傳：與單字集同一個 MagicPasteInput；擷取完直接進右側（不預覽）
+        //    單題模式 → 題目卡；題組模式 → 整份檔填進題組卡（#1084）
         <div
           className={disabled ? "opacity-50 pointer-events-none" : ""}
           data-testid="qb-upload"
+          data-extract-mode={extractMode}
         >
+          {extractMode === "reading_group" && (
+            <p
+              className="mb-2 text-xs text-gray-500"
+              data-testid="qb-upload-group-hint"
+            >
+              {t("questionBank.form.batch.uploadHintGroup")}
+            </p>
+          )}
           <MagicPasteInput
-            extractMode="multiple_choice"
+            extractMode={extractMode}
             onInsertQuestions={onInsertExtracted}
+            onInsertGroup={onInsertExtractedGroup}
           />
         </div>
       }

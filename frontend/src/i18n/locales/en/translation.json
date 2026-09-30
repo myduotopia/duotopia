@@ -6014,6 +6014,7 @@
         "needStem": "Enter a question on the right first",
         "upload": "PDF / image upload",
         "uploadHint": "Upload an exam page and let AI extract the questions and options",
+        "uploadHintGroup": "Upload the whole group (image or PDF): AI extracts the passage or poster, glossary and sub-questions into the editor",
         "aiTitle": "AI assist",
         "aiApplied": "Filled {{applied}} question(s), skipped {{skipped}} (already set or undecidable)",
         "aiNothingToSend": "No question on the right is ready (needs a stem and at least 2 options)",
@@ -6143,6 +6144,11 @@
         "regenerate": "Regenerate",
         "edited": "Edited manually",
         "emptyReverts": "Leaving this empty restores the text generated from the layout"
+      },
+      "extract": {
+        "overwriteTitle": "Replace the current group content?",
+        "overwriteDesc": "This group already has content. The extracted result will replace the title, layout, text version, glossary and all sub-questions.",
+        "overwriteConfirm": "Replace"
       },
       "questions": {
         "title": "Sub-questions ({{count}})",

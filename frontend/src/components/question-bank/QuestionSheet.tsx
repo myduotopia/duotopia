@@ -35,6 +35,14 @@ import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useSidebar } from "@/contexts/SidebarContext";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
@@ -49,6 +57,7 @@ import type {
 } from "@/types/questionBank";
 import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import QuestionUnitList from "./QuestionUnitList";
+import { useExtractedGroup } from "./useExtractedGroup";
 import {
   MAX_QUESTIONS_PER_BATCH,
   applyAiAnalysis,
@@ -179,7 +188,7 @@ export default function QuestionSheet({
           : "bulk";
   const isEdit = mode === "edit";
   const singleQuestion = isEdit ? existing[0] : null;
-  /** 右欄是題組（新增題組或編輯題組）：一次只有一個單元，沒有「新增題目」與擷取 */
+  /** 右欄是題組（新增題組或編輯題組）：一次只有一個單元，沒有「新增題目」；擷取走 reading_group（整份檔 → 這個題組） */
   const groupMode =
     mode === "editGroup" ||
     (mode === "create" && GROUP_TYPES.includes(createType));
@@ -279,7 +288,26 @@ export default function QuestionSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, questions, groupId, createType]);
 
-  const busy = saving || deleting || generatingAudio || aiBusy || loadingGroup;
+  /** 題組擷取（#1084）：把 AI 結果填進右側題組卡；已有內容先確認覆蓋 */
+  const replaceGroup = useCallback((key: string, next: GroupDraft) => {
+    dirtyRef.current = true;
+    setUnits((prev) =>
+      prev.map((u) =>
+        u.kind === "group" && u.draft.key === key
+          ? { kind: "group", draft: next }
+          : u,
+      ),
+    );
+  }, []);
+  const groupExtract = useExtractedGroup({ units, replaceGroup, t });
+
+  const busy =
+    saving ||
+    deleting ||
+    generatingAudio ||
+    aiBusy ||
+    loadingGroup ||
+    groupExtract.extracting;
   useEffect(() => {
     setEditorBusy(busy);
     return () => setEditorBusy(false);
@@ -707,9 +735,11 @@ export default function QuestionSheet({
             ? t("questionBank.group.titleCreate", { type: groupTypeLabel })
             : t("questionBank.form.titleCreate");
   const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
-  // 新增與批次編輯可加題／擷取（行為同重構前）；單題編輯、題組模式不可
-  const canAddOrExtract =
-    !effectiveReadOnly && (mode === "create" || mode === "bulk") && !groupMode;
+  // 新增與批次編輯可擷取／用 AI（題組模式也可：擷取走 reading_group，AI 帶文章上下文）；
+  // 「新增題目」只有單題的新增／批次編輯有（題組一次一個單元）
+  const canExtract =
+    !effectiveReadOnly && (mode === "create" || mode === "bulk");
+  const canAddQuestion = canExtract && !groupMode;
   const canDeleteNow =
     canDelete &&
     !effectiveReadOnly &&
@@ -791,6 +821,42 @@ export default function QuestionSheet({
           </p>
         )}
 
+        {/* 題組擷取：右側已有內容 → 先確認覆蓋（#1084） */}
+        <Dialog
+          open={groupExtract.pending !== null}
+          onOpenChange={(o) => {
+            if (!o) groupExtract.cancelPending();
+          }}
+        >
+          <DialogContent className="max-w-sm" data-testid="qb-extract-overwrite">
+            <DialogHeader>
+              <DialogTitle>
+                {t("questionBank.group.extract.overwriteTitle")}
+              </DialogTitle>
+              <DialogDescription>
+                {t("questionBank.group.extract.overwriteDesc")}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={groupExtract.cancelPending}
+                data-testid="qb-extract-overwrite-cancel"
+              >
+                {t("common.cancel", "取消")}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void groupExtract.confirmPending()}
+                data-testid="qb-extract-overwrite-confirm"
+              >
+                {t("questionBank.group.extract.overwriteConfirm")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* 兩欄：左 = 單字集同款批次工作區（md 以上），右 = 單元卡 */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
           <div className="flex gap-4 items-start">
@@ -806,11 +872,15 @@ export default function QuestionSheet({
                 onGenerateAllAudio={generateAllAudio}
                 generatingAudio={generatingAudio}
                 hasAnyStem={hasAnyStem}
-                onAiAnswer={canAddOrExtract ? handleAiAnswer : undefined}
-                onAiAnalyze={canAddOrExtract ? handleAiAnalyze : undefined}
+                onAiAnswer={canExtract ? handleAiAnswer : undefined}
+                onAiAnalyze={canExtract ? handleAiAnalyze : undefined}
                 aiBusy={aiBusy}
+                extractMode={groupMode ? "reading_group" : "multiple_choice"}
                 onInsertExtracted={
-                  canAddOrExtract ? handleInsertExtracted : undefined
+                  canExtract && !groupMode ? handleInsertExtracted : undefined
+                }
+                onInsertExtractedGroup={
+                  canExtract && groupMode ? groupExtract.onInsertGroup : undefined
                 }
                 batch={batch}
                 onBatchChange={applyBatch}
@@ -851,7 +921,7 @@ export default function QuestionSheet({
                 disabled={saving}
               />
 
-              {canAddOrExtract && (
+              {canAddQuestion && (
                 <Button
                   type="button"
                   variant="outline"
