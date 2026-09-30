@@ -7,6 +7,7 @@
 GitHub 呼叫一律透過注入的 client，測試不需要網路。
 """
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -95,6 +96,10 @@ class TestBlock:
         block = ra.render_block(CONTENT).replace("\n", "\r\n")
         assert ra.parse_block(block)["content"] == CONTENT
 
+    def test_unterminated_block_reads_to_end(self):
+        block = ra.render_block(CONTENT).replace(ra.BLOCK_END, "")
+        assert ra.parse_block(block)["content"] == CONTENT
+
     def test_no_block_returns_none(self):
         assert ra.parse_block("一般留言，沒有公告") is None
         assert ra.parse_block(None) is None
@@ -167,6 +172,27 @@ class TestEligibility:
 
         gh = FakeGitHub(comments={5: [planted]})
         assert ra.issue_content(gh, 5) is None
+
+
+class TestGhCli:
+    def _cli(self, monkeypatch, error):
+        cli = ra.GhCli(repo="o/r")
+
+        def boom(args, stdin=None):
+            raise subprocess.CalledProcessError(1, ["gh", *args], stderr=error)
+
+        monkeypatch.setattr(cli, "_run", boom)
+        return cli
+
+    def test_missing_issue_has_no_labels(self, monkeypatch):
+        """feat(#N) 的 N 不是 issue（例如打錯）→ 視為不符合，不要讓整個 job 失敗"""
+        cli = self._cli(monkeypatch, "gh: Not Found (HTTP 404)")
+        assert cli.issue_labels(99999) == []
+
+    def test_other_api_errors_still_raise(self, monkeypatch):
+        cli = self._cli(monkeypatch, "gh: Server Error (HTTP 502)")
+        with pytest.raises(subprocess.CalledProcessError):
+            cli.issue_labels(1)
 
 
 class TestStagingPayload:

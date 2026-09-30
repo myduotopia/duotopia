@@ -56,12 +56,12 @@ EDITABLE_STATUSES = (STATUS_DRAFT, STATUS_PARTIALLY_PUBLISHED)
 class AnnouncementContent(BaseModel):
     """/announce 寫在 issue 留言或 PR 描述的雙語內容（由 CI 帶來）。"""
 
-    line_message_zh: Optional[str] = None
-    line_message_en: Optional[str] = None
-    article_title_zh: Optional[str] = None
-    article_body_zh: Optional[str] = None
-    article_title_en: Optional[str] = None
-    article_body_en: Optional[str] = None
+    line_message_zh: Optional[str] = Field(None, max_length=5000)
+    line_message_en: Optional[str] = Field(None, max_length=5000)
+    article_title_zh: Optional[str] = Field(None, max_length=500)
+    article_body_zh: Optional[str] = Field(None, max_length=50000)
+    article_title_en: Optional[str] = Field(None, max_length=500)
+    article_body_en: Optional[str] = Field(None, max_length=50000)
 
 
 class ReleaseWebhookRequest(BaseModel):

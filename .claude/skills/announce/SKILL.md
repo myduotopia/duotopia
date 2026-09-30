@@ -47,6 +47,9 @@ python3 scripts/release_announcement.py <command> ...
 
 JSON 檔寫在 scratchpad（或 `/tmp`），**不要**寫進 repo。
 
+> 需要 `gh` ≥ 2.48（腳本用到 `gh api --paginate --slurp`）。版本太舊會出現看不懂的錯誤，
+> 先 `gh --version` 確認，必要時 `brew upgrade gh`。
+
 ---
 
 ## 發布資格（兩種模式共用）
@@ -104,6 +107,7 @@ issue **同時**有這兩個標籤才整理公告：
      描述包含「本次發版內容」表格（issue / 內容 / commit），比照過去的 release PR（例：#1072）。
      開 PR 前先讓使用者確認標題與描述。
 6. `upsert-pr <PR> --content <json> --issues <eligible issue，逗號分隔>`，回報 PR 網址。
+   - 腳本會再檢查一次 `--issues` 的標籤，列入不符合的 issue 會被拒絕。
    - 描述裡原本的內容會保留，只替換（或附加）公告區塊。
 
 合併後 push main 時，CI 會讀這個區塊建立 production 草稿。

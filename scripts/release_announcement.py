@@ -318,7 +318,14 @@ class GhCli:
         return self._api(f"issues/{number}")
 
     def issue_labels(self, number: int) -> List[str]:
-        return [label["name"] for label in self.issue(number).get("labels", [])]
+        try:
+            issue = self.issue(number)
+        except subprocess.CalledProcessError as exc:
+            # feat(#N) 的 N 不存在（打錯編號）→ 視為不符合；其他錯誤照常拋出讓 CI 重試
+            if "HTTP 404" in (exc.stderr or ""):
+                return []
+            raise
+        return [label["name"] for label in issue.get("labels", [])]
 
     def _issue_comment_objects(self, number: int) -> List[Dict[str, Any]]:
         return self._api_pages(f"issues/{number}/comments?per_page=100")
@@ -478,7 +485,11 @@ def cmd_upsert_issue(args: argparse.Namespace) -> None:
 
 def cmd_upsert_pr(args: argparse.Namespace) -> None:
     gh = GhCli()
-    issues = [int(n) for n in args.issues.split(",")] if args.issues else None
+    issues = [int(n) for n in args.issues.split(",")] if args.issues else []
+    for number in issues:
+        ok, reason = eligibility(gh.issue_labels(number))
+        if not ok:
+            raise SystemExit(f"#{number}：{REASON_TEXT[reason]}")
     url = gh.update_pr_body(args.pr, render_block(_load_content(args.content), issues))
     print(url)
 

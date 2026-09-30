@@ -96,6 +96,12 @@ class TestWebhook:
         row = test_db_session.get(ReleaseAnnouncement, resp.id)
         assert row.line_message_zh == "CI 帶來的現成文案"
 
+    def test_content_fields_have_length_limits(self):
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(line_message_zh="字" * 5001)
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(article_body_en="a" * 50001)
+
     @pytest.mark.asyncio
     async def test_duplicate_commit_returns_existing(self, test_db_session):
         first = await _create(test_db_session)

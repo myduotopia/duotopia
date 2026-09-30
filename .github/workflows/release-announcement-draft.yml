@@ -88,11 +88,13 @@ jobs:
             echo "branch=${{ github.ref_name }}"
           } >> "$GITHUB_OUTPUT"
 
-          # commit message 可能多行、含特殊字元，用 heredoc 形式寫入 output
+          # commit message 可能多行、含特殊字元，用 heredoc 形式寫入 output。
+          # 分隔字串隨機產生：固定字串可被 commit message 內容提前結束，進而寫入任意 output
+          DELIM="EOF_$(openssl rand -hex 16)"
           {
-            echo "message<<COMMIT_MESSAGE_EOF"
+            echo "message<<$DELIM"
             printf '%s\n' "$MESSAGE"
-            echo "COMMIT_MESSAGE_EOF"
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
       - name: Decide draft content (labels / issue comment / release PR)
@@ -134,7 +136,7 @@ jobs:
             echo "result=📝 使用 /announce 寫好的內容（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "result=🤖 找不到 /announce 內容，由後端以 Vertex AI 產生（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
+            echo "result=🤖 未使用 /announce 內容（issue 沒有公告留言，或同一次包含多個 issue 且無統整區塊），由後端以 Vertex AI 產生（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create draft via backend webhook
