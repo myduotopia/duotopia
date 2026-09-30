@@ -101,6 +101,9 @@ class TestWebhook:
             ra.AnnouncementContent(line_message_zh="字" * 5001)
         with pytest.raises(ValidationError):
             ra.AnnouncementContent(article_body_en="a" * 50001)
+        # 標題上限與 DB / 後台編輯一致（200），不在 service 裡默默截斷
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(article_title_zh="標" * 201)
 
     @pytest.mark.asyncio
     async def test_duplicate_commit_returns_existing(self, test_db_session):

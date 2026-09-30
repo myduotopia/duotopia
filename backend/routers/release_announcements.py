@@ -58,9 +58,10 @@ class AnnouncementContent(BaseModel):
 
     line_message_zh: Optional[str] = Field(None, max_length=5000)
     line_message_en: Optional[str] = Field(None, max_length=5000)
-    article_title_zh: Optional[str] = Field(None, max_length=500)
+    # 標題上限與 ReleaseAnnouncementUpdate / DB 欄位一致
+    article_title_zh: Optional[str] = Field(None, max_length=200)
     article_body_zh: Optional[str] = Field(None, max_length=50000)
-    article_title_en: Optional[str] = Field(None, max_length=500)
+    article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = Field(None, max_length=50000)
 
 

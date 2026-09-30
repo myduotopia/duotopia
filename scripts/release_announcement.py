@@ -503,11 +503,12 @@ def cmd_ci_payload(args: argparse.Namespace) -> None:
         commit_message=args.commit_message,
     )
     if "skip" in payload:
+        # workflow 摘要讀這個欄位；送給後端前會 del(.message)
         payload["message"] = REASON_TEXT[payload["skip"]]
     print(json.dumps(payload, ensure_ascii=False))
 
 
-def main(argv: Optional[List[str]] = None) -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -542,8 +543,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--branch", required=True)
     p.add_argument("--commit-message", required=True)
     p.set_defaults(func=cmd_ci_payload)
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: Optional[List[str]] = None) -> None:
+    args = build_parser().parse_args(argv)
     args.func(args)
 
 

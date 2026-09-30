@@ -147,6 +147,7 @@ class ReleaseAnnouncementService:
         cleaned = {key: (content.get(key) or "").strip() for key in CONTENT_FIELDS}
         if not cleaned["line_message_zh"] or not cleaned["article_title_zh"]:
             return None
+        # router 已限制標題 ≤ 200；這裡保留截斷作為直接呼叫 service 時的防線
         cleaned["article_title_zh"] = cleaned["article_title_zh"][:200]
         cleaned["article_title_en"] = cleaned["article_title_en"][:200]
         return cleaned

@@ -195,6 +195,21 @@ class TestGhCli:
             cli.issue_labels(1)
 
 
+class TestCli:
+    def test_commit_message_starting_with_dash_is_a_value(self):
+        """workflow_dispatch 的標題是自由文字，可能以 - 開頭"""
+        args = ra.build_parser().parse_args(
+            [
+                "ci-payload",
+                "--environment=staging",
+                "--sha=abc",
+                "--branch=staging",
+                "--commit-message=- hotfix (Fixes #1)",
+            ]
+        )
+        assert args.commit_message == "- hotfix (Fixes #1)"
+
+
 class TestStagingPayload:
     def _payload(self, gh, message):
         return ra.build_ci_payload(

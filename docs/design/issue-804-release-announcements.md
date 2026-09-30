@@ -113,6 +113,7 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
   統整版另有 `<!-- release-announcement:issues 1046,1045 -->`
 - 只採用 `author_association` 為 OWNER / MEMBER / COLLABORATOR 的留言（repo 是公開的）；
   統整區塊列出的 issue 在 CI 端會重新檢查標籤，被拿掉標籤的不列入
+- staging → main PR 描述不檢查作者：PR 只能由團隊成員合併，合併即視為認可其中內容
 - 單一 commit 含多個 issue 且沒有統整區塊時，不拿其中一則留言代表全部，改走 Vertex
 - 已知限制：欄位內容「最後」的 `---` 會被當成欄位分隔線去掉
 - staging 的單一 issue 草稿讀 issue 最新一則公告留言；main 讀 staging → main PR 描述；
