@@ -64,6 +64,8 @@ import {
 
 /** AI 標題最多送幾條小題題幹（對齊後端 MAX_TITLE_STEMS） */
 const AI_TITLE_MAX_STEMS = 20;
+/** AI 標題最多送多少字的主圖文（對齊後端 MAX_PASSAGE_CHARS） */
+const AI_TITLE_MAX_PASSAGE_CHARS = 6000;
 
 export interface GroupCardProps {
   index: number;
@@ -251,7 +253,10 @@ export default function GroupCard({
 }: GroupCardProps) {
   const { t } = useTranslation();
   const locked = readOnly || disabled;
-  const patch = (p: Partial<GroupDraft>) => onChange({ ...draft, ...p });
+  // 非同步回填（例如 AI 標題）要以「最新草稿」為底，否則等待期間老師的編輯會被蓋掉
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const patch = (p: Partial<GroupDraft>) => onChange({ ...draftRef.current, ...p });
 
   // ---- AI 標題（#1084）----
   const [titleBusy, setTitleBusy] = useState(false);
@@ -259,7 +264,9 @@ export default function GroupCard({
     .map((q) => q.stem.trim())
     .filter(Boolean)
     .slice(0, AI_TITLE_MAX_STEMS);
-  const titlePassage = (groupPassageText(draft) ?? "").trim();
+  const titlePassage = (groupPassageText(draft) ?? "")
+    .trim()
+    .slice(0, AI_TITLE_MAX_PASSAGE_CHARS);
   const canSuggestTitle = Boolean(titlePassage) || titleStems.length > 0;
   const suggestTitle = async () => {
     if (!canSuggestTitle || titleBusy) return;

@@ -291,8 +291,14 @@ class AiQuestionsIn(BaseModel):
 class AiGroupTitleIn(BaseModel):
     """AI 題組標題（#1084）：主圖文純文字與／或小題題幹，至少要有一邊。"""
 
-    passage: Optional[str] = Field(None, max_length=MAX_PASSAGE_CHARS)
+    # 不用 max_length 硬擋：前端可能送整篇主圖文，超長改為截斷（與 stems 處理一致）
+    passage: Optional[str] = None
     stems: List[str] = Field(default_factory=list, max_length=MAX_TITLE_STEMS)
+
+    @field_validator("passage")
+    @classmethod
+    def _clip_passage(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else v[:MAX_PASSAGE_CHARS]
 
     @field_validator("stems")
     @classmethod

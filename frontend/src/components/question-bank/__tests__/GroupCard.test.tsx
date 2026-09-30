@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import GroupCard from "../GroupCard";
@@ -424,6 +424,39 @@ describe("validateGroupDraft（儲存前的阻擋）", () => {
     await user.click(btn);
     expect(aiSuggestGroupTitle).toHaveBeenCalledWith("P", []);
     expect(screen.getByTestId("qg-0-title")).toHaveValue("Antonio Vivaldi");
+  });
+
+  it("AI 標題等待期間的編輯不會被回填蓋掉", async () => {
+    aiSuggestGroupTitle.mockReset();
+    toastError.mockReset();
+    let resolveTitle: (v: { title: string }) => void = () => {};
+    aiSuggestGroupTitle.mockReturnValue(
+      new Promise<{ title: string }>((r) => {
+        resolveTitle = r;
+      }),
+    );
+    const onDraft = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} onDraft={onDraft} />);
+
+    await user.click(screen.getByTestId("qg-0-layout-stub"));
+    await user.click(screen.getByTestId("qg-0-title-ai"));
+
+    // AI 還沒回來，老師先改了別的欄位
+    await user.type(screen.getByTestId("qg-0-glossary"), "timeline 時間軸");
+    expect(lastDraft(onDraft).glossary).toEqual([
+      { word: "timeline", zh: "時間軸" },
+    ]);
+
+    await act(async () => {
+      resolveTitle({ title: "Antonio Vivaldi" });
+    });
+
+    const draft = lastDraft(onDraft);
+    expect(draft.title).toBe("Antonio Vivaldi");
+    expect(draft.glossary).toEqual([{ word: "timeline", zh: "時間軸" }]);
+    expect(screen.getByTestId("qg-0-title")).toHaveValue("Antonio Vivaldi");
+    expect(screen.getByTestId("qg-0-glossary")).toHaveValue("timeline 時間軸");
   });
 
   it("AI 標題失敗 → toast，標題不變", async () => {

@@ -448,6 +448,25 @@ def test_ai_group_title_endpoint(test_client, teacher, monkeypatch):
     )
 
 
+def test_ai_group_title_long_passage_is_truncated(test_client, teacher, monkeypatch):
+    """超過上限的 passage 不該 422，而是被截斷後照常處理（#1084）。"""
+    seen = {}
+
+    async def _capture(self, passage, stems):
+        seen["passage"] = passage
+        return "Long Passage"
+
+    monkeypatch.setattr(qbai.QuestionBankAIService, "suggest_title", _capture)
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"passage": "a" * (qbai.MAX_PASSAGE_CHARS + 500), "stems": []},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"title": "Long Passage"}
+    assert len(seen["passage"]) == qbai.MAX_PASSAGE_CHARS
+
+
 def test_ai_group_title_requires_content(test_client, teacher):
     for payload in ({}, {"passage": "   ", "stems": []}, {"stems": ["  ", ""]}):
         resp = test_client.post(
