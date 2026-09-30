@@ -17,7 +17,7 @@ import secrets
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -75,6 +75,15 @@ class ReleaseAnnouncementUpdate(BaseModel):
     article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("image_url")
+    @classmethod
+    def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
+        # 空白代表清除圖片（service 會存成 NULL）；有值就必須是 https，
+        # 否則 LINE hero 會被拒收，官網也會出現混合內容
+        if value and value.strip() and not value.strip().startswith("https://"):
+            raise ValueError("圖片網址必須以 https:// 開頭")
+        return value
 
 
 class MergeRequest(BaseModel):

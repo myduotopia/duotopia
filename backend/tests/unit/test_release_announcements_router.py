@@ -8,6 +8,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 import routers.release_announcements as ra
 from models.release_announcement import (
@@ -170,6 +171,17 @@ class TestUpdate:
         )
         assert item.line_message_zh == "改過的 LINE 文案"
         assert item.article_title_zh == AI_RESULT["article_title_zh"]
+
+    @pytest.mark.parametrize(
+        "url", ["http://cdn.example.com/a.png", "javascript:alert(1)", "cdn/a.png"]
+    )
+    def test_image_url_must_be_https(self, url):
+        with pytest.raises(ValidationError):
+            ra.ReleaseAnnouncementUpdate(image_url=url)
+
+    @pytest.mark.parametrize("url", ["https://cdn.example.com/a.png", "", "  "])
+    def test_image_url_accepts_https_or_blank(self, url):
+        assert ra.ReleaseAnnouncementUpdate(image_url=url).image_url == url
 
     @pytest.mark.asyncio
     async def test_published_announcement_cannot_be_edited(self, test_db_session):

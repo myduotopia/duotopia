@@ -197,6 +197,17 @@ class TestUpdateAndMerge:
         assert updated.article_title_zh == AI_RESULT["article_title_zh"]
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("blank", ["", "   "])
+    async def test_update_draft_clears_blank_image_url(self, test_db_session, blank):
+        """後台清空圖片網址 → 存成 NULL，官網封面與 LINE hero 都不帶圖"""
+        db = test_db_session
+        ann = await _make_draft(db, source_ref=f"clear-img-{len(blank)}")
+
+        updated = ReleaseAnnouncementService.update_draft(db, ann, {"image_url": blank})
+
+        assert updated.image_url is None
+
+    @pytest.mark.asyncio
     async def test_merge_appends_unpublished_drafts_and_marks_them(
         self, test_db_session
     ):
