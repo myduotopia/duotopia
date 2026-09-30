@@ -220,6 +220,14 @@ function PassageTextTab({
         disabled={disabled}
         data-testid={testId}
       />
+      {draft.passage_text_edited && !draft.passage_text.trim() && (
+        <p
+          className="text-xs text-amber-700"
+          data-testid={`${testId.replace(/-text$/, "")}-empty-hint`}
+        >
+          {t("questionBank.group.passage.emptyReverts")}
+        </p>
+      )}
     </div>
   );
 }

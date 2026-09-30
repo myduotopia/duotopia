@@ -6137,7 +6137,8 @@
         "hint": "Hidden from students; used for search and AI analysis. Generated from the layout by default and editable.",
         "placeholder": "Poster / comic groups: paste the text from the image here",
         "regenerate": "Regenerate",
-        "edited": "Edited manually"
+        "edited": "Edited manually",
+        "emptyReverts": "Leaving this empty restores the text generated from the layout"
       },
       "questions": {
         "title": "Sub-questions ({{count}})",

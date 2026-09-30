@@ -275,6 +275,39 @@ describe("GroupCard", () => {
     expect(screen.queryByTestId("qg-0-passage-edited")).toBeNull();
   });
 
+  it("文字版清空（#1083）：改過後清空 → 提示將回到自動產生文字；再輸入 → 提示消失", async () => {
+    const onDraft = vi.fn();
+    const user = userEvent.setup();
+    const initial: GroupDraft = {
+      ...emptyGroupDraft(),
+      layout: {
+        version: 1,
+        rows: [
+          {
+            columns: [
+              { span: 1, blocks: [{ type: "paragraph", text: "Poster intro." }] },
+            ],
+          },
+        ],
+      },
+    };
+    render(<Harness initial={initial} onDraft={onDraft} />);
+    await user.click(screen.getByTestId("qg-0-tab-text"));
+    const box = await screen.findByTestId("qg-0-passage-text");
+    expect(screen.queryByTestId("qg-0-passage-empty-hint")).toBeNull();
+
+    await user.type(box, " more");
+    expect(screen.queryByTestId("qg-0-passage-empty-hint")).toBeNull();
+
+    await user.clear(box);
+    expect(lastDraft(onDraft).passage_text_edited).toBe(true);
+    expect(lastDraft(onDraft).passage_text).toBe("");
+    expect(screen.getByTestId("qg-0-passage-empty-hint")).toBeTruthy();
+
+    await user.type(box, "Back again");
+    expect(screen.queryByTestId("qg-0-passage-empty-hint")).toBeNull();
+  });
+
   it("errorMessage 顯示在卡片底部；readOnly 隱藏新增小題／新增註解", () => {
     const { rerender } = render(
       <GroupCard
