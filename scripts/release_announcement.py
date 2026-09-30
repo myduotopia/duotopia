@@ -51,12 +51,14 @@ REASON_NO_ANNOUNCE = "no_announce_label"
 REASON_NOT_TESTED = "not_tested_in_staging"
 REASON_NO_ISSUE = "no_issue_number"
 REASON_NO_ELIGIBLE_ISSUE = "no_eligible_issue"
+REASON_NOT_FOUND = "issue_not_found"
 
 REASON_TEXT = {
     REASON_NO_ANNOUNCE: "此 issue 不需發布公告（沒有「📣 announce」標籤）",
     REASON_NOT_TESTED: "此 issue 還沒測試通過（沒有「✅ tested-in-staging」標籤）",
     REASON_NO_ISSUE: "commit 沒有對應的 issue 編號，視為不需發布",
     REASON_NO_ELIGIBLE_ISSUE: "沒有同時具備「📣 announce」與「✅ tested-in-staging」的 issue",
+    REASON_NOT_FOUND: "找不到這個 issue（commit 裡的編號可能打錯），略過",
 }
 
 
@@ -178,6 +180,10 @@ def eligibility(labels: Iterable[str]) -> Tuple[bool, Optional[str]]:
 
 
 class GitHubClient(Protocol):
+    def find_issue(self, number: int) -> Optional[Dict[str, Any]]:
+        """issue 內容（title / labels）；不存在回傳 None"""
+        ...
+
     def issue_labels(self, number: int) -> List[str]:
         ...
 
@@ -201,6 +207,36 @@ def issue_content(gh: GitHubClient, number: int) -> Optional[Dict[str, str]]:
         if parsed:
             return parsed["content"]
     return None
+
+
+def scan_release(gh: GitHubClient, messages: Iterable[str]) -> List[Dict[str, Any]]:
+    """列出 commit messages 內每個 issue 的判斷結果與既有公告內容。
+
+    打錯的 issue 編號（404）列為 REASON_NOT_FOUND，不中止整個掃描。
+    """
+    issues = list(
+        dict.fromkeys(n for msg in messages for n in extract_issue_numbers(msg))
+    )
+    rows = []
+    for number in issues:
+        issue = gh.find_issue(number)
+        if issue is None:
+            ok, reason, title = False, REASON_NOT_FOUND, None
+        else:
+            labels = [label["name"] for label in issue.get("labels", [])]
+            ok, reason = eligibility(labels)
+            title = issue.get("title")
+        rows.append(
+            {
+                "issue": number,
+                "title": title,
+                "eligible": ok,
+                "reason": reason,
+                "message": (f"#{number}：{REASON_TEXT[reason]}" if reason else None),
+                "content": issue_content(gh, number) if ok else None,
+            }
+        )
+    return rows
 
 
 def _eligible_issues(gh: GitHubClient, issues: Iterable[int]) -> List[int]:
@@ -319,15 +355,18 @@ class GhCli:
     def issue(self, number: int) -> Dict[str, Any]:
         return self._api(f"issues/{number}")
 
-    def issue_labels(self, number: int) -> List[str]:
+    def find_issue(self, number: int) -> Optional[Dict[str, Any]]:
         try:
-            issue = self.issue(number)
+            return self.issue(number)
         except subprocess.CalledProcessError as exc:
-            # feat(#N) 的 N 不存在（打錯編號）→ 視為不符合；其他錯誤照常拋出讓 CI 重試
+            # feat(#N) 的 N 不存在（打錯編號）→ None；其他錯誤照常拋出讓 CI 重試
             if "HTTP 404" in (exc.stderr or ""):
-                return []
+                return None
             raise
-        return [label["name"] for label in issue.get("labels", [])]
+
+    def issue_labels(self, number: int) -> List[str]:
+        issue = self.find_issue(number)
+        return [label["name"] for label in (issue or {}).get("labels", [])]
 
     def _issue_comment_objects(self, number: int) -> List[Dict[str, Any]]:
         return self._api_pages(f"issues/{number}/comments?per_page=100")
@@ -415,9 +454,18 @@ def _git(*args: str) -> str:
 def _load_content(path: str) -> Dict[str, str]:
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
+    if not isinstance(data, dict):
+        raise SystemExit("content 必須是 JSON 物件")
     unknown = set(data) - {field for field, _ in FIELDS}
     if unknown:
         raise SystemExit(f"content 有未知欄位：{sorted(unknown)}")
+    wrong_type = sorted(
+        key
+        for key, value in data.items()
+        if value is not None and not isinstance(value, str)
+    )
+    if wrong_type:
+        raise SystemExit(f"content 欄位必須是字串或 null：{wrong_type}")
     if not is_complete(data):
         raise SystemExit(f"content 缺少必要欄位：{REQUIRED_FIELDS}")
     return data
@@ -429,7 +477,9 @@ def _print(data: Any) -> None:
 
 def cmd_check(args: argparse.Namespace) -> None:
     gh = GhCli()
-    issue = gh.issue(args.issue)
+    issue = gh.find_issue(args.issue)
+    if issue is None:
+        raise SystemExit(f"#{args.issue}：{REASON_TEXT[REASON_NOT_FOUND]}")
     labels = [label["name"] for label in issue.get("labels", [])]
     ok, reason = eligibility(labels)
     content = issue_content(gh, args.issue)
@@ -449,27 +499,8 @@ def cmd_check(args: argparse.Namespace) -> None:
 
 def cmd_release_scan(args: argparse.Namespace) -> None:
     """列出 base..head 之間所有 issue 的標籤判斷與既有公告內容。"""
-    gh = GhCli()
     messages = _git("log", "--format=%B%x00", f"{args.base}..{args.head}").split("\0")
-    issues = list(
-        dict.fromkeys(n for msg in messages for n in extract_issue_numbers(msg))
-    )
-    rows = []
-    for number in issues:
-        issue = gh.issue(number)
-        labels = [label["name"] for label in issue.get("labels", [])]
-        ok, reason = eligibility(labels)
-        rows.append(
-            {
-                "issue": number,
-                "title": issue.get("title"),
-                "eligible": ok,
-                "reason": reason,
-                "message": REASON_TEXT.get(reason) if reason else None,
-                "content": issue_content(gh, number) if ok else None,
-            }
-        )
-    _print(rows)
+    _print(scan_release(GhCli(), messages))
 
 
 def cmd_render(args: argparse.Namespace) -> None:

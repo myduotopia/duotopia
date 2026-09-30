@@ -37,11 +37,21 @@ class FakeGitHub:
         comments=None,
         commit_prs=None,
         pr_commits=None,
+        missing=(),
     ):
         self.labels = labels or {}
         self.comments = comments or {}
         self.commit_prs = commit_prs or {}
         self.pr_commits = pr_commits or {}
+        self.missing = set(missing)
+
+    def find_issue(self, number):
+        if number in self.missing:
+            return None
+        return {
+            "title": f"issue {number}",
+            "labels": [{"name": n} for n in self.labels.get(number, [])],
+        }
 
     def issue_labels(self, number):
         return self.labels.get(number, [])
@@ -208,6 +218,52 @@ class TestCli:
             ]
         )
         assert args.commit_message == "- hotfix (Fixes #1)"
+
+
+class TestReleaseScan:
+    def test_mistyped_issue_is_reported_not_fatal(self):
+        """某個 commit 打錯 issue 編號，/announce release 不能整個中止"""
+        gh = FakeGitHub(
+            labels={1046: BOTH},
+            comments={1046: [ra.render_block(CONTENT)]},
+            missing={99999},
+        )
+        rows = ra.scan_release(
+            gh,
+            [
+                "Release: 班級分組 (Fixes #1046) (#1053)",
+                "feat(#99999): 打錯編號",
+            ],
+        )
+        by_issue = {row["issue"]: row for row in rows}
+        assert by_issue[1046]["eligible"] is True
+        assert by_issue[1046]["content"] == CONTENT
+        assert by_issue[99999]["eligible"] is False
+        assert by_issue[99999]["reason"] == ra.REASON_NOT_FOUND
+        assert "99999" in by_issue[99999]["message"]
+
+    def test_lists_ineligible_issues_with_reason(self):
+        gh = FakeGitHub(labels={1051: [ra.LABEL_ANNOUNCE]})
+        (row,) = ra.scan_release(gh, ["Release: 例句 (Fixes #1051) (#1058)"])
+        assert row["eligible"] is False
+        assert row["reason"] == ra.REASON_NOT_TESTED
+        assert row["content"] is None
+
+
+class TestLoadContent:
+    def _write(self, tmp_path, data):
+        path = tmp_path / "content.json"
+        path.write_text(__import__("json").dumps(data), encoding="utf-8")
+        return str(path)
+
+    def test_non_string_value_gives_clear_error(self, tmp_path):
+        path = self._write(tmp_path, {**CONTENT, "line_message_en": ["a", "b"]})
+        with pytest.raises(SystemExit, match="line_message_en"):
+            ra._load_content(path)
+
+    def test_null_value_is_allowed(self, tmp_path):
+        path = self._write(tmp_path, {**CONTENT, "article_body_en": None})
+        assert ra._load_content(path)["article_body_en"] is None
 
 
 class TestStagingPayload:
