@@ -5538,6 +5538,8 @@
     "downloadButton": "Download PDF",
     "pdfType": "PDF Type",
     "twoColumn": "Two-column layout",
+    "showAnswers": "Show answers",
+    "answerKeyTitle": "Answer Key",
     "showSentenceTranslation": "Show sentence translation",
     "drawingArea": "Drawing area",
     "zoomLabel": "Zoom",

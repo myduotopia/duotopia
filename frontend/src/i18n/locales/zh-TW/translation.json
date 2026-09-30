@@ -5582,6 +5582,8 @@
     "downloadButton": "下載 PDF",
     "pdfType": "PDF 類型",
     "twoColumn": "雙欄顯示",
+    "showAnswers": "顯示答案",
+    "answerKeyTitle": "答案卷",
     "showSentenceTranslation": "顯示句子翻譯",
     "drawingArea": "作畫區",
     "zoomLabel": "預覽",

@@ -138,7 +138,8 @@ function AnswerSlots({ count, visible }: { count: number; visible: boolean }) {
     );
   }
   return (
-    <span className="inline-flex gap-0.5 align-bottom">
+    // Issue #1088: 長單字（雙欄約 15 字母以上）自動換行，不再撐出卡片
+    <span className="inline-flex flex-wrap gap-0.5 align-bottom max-w-full">
       {Array.from({ length: count }).map((_, i) => (
         <span
           key={i}
@@ -314,6 +315,29 @@ interface PaperPageProps {
   divRef?: (el: HTMLDivElement | null) => void;
   // 預覽版有 shadow，擷取版無
   withShadow?: boolean;
+  // Issue #1088: 答案卷頁（最後一頁）：不印題目，改印每題正解
+  answerKey?: boolean;
+  answerKeyTitle?: string;
+}
+
+/**
+ * Issue #1088: 每題正解的顯示文字。選擇題模式 → 「C. told me」（字母依該題實際
+ * 洗牌後的選項順序，與預覽／PDF 同一份 questionChoiceOptions）；否則印正解本身。
+ */
+function answerKeyText(
+  q: PrintQuestion,
+  activityType: PrintActivityType,
+  choiceOptions: string[] | undefined,
+): string {
+  const correct =
+    activityType === "word_selection" ? q.translation : q.correctAnswer;
+  if (choiceOptions && choiceOptions.length > 0) {
+    const idx = choiceOptions.findIndex(
+      (o) => o.trim().toLowerCase() === (correct ?? "").trim().toLowerCase(),
+    );
+    if (idx >= 0) return `${CHOICE_LABELS[idx]}. ${correct}`;
+  }
+  return correct ?? "";
 }
 
 function PaperPage({
@@ -335,6 +359,8 @@ function PaperPage({
   logoBase64,
   divRef,
   withShadow = false,
+  answerKey = false,
+  answerKeyTitle = "Answer Key",
 }: PaperPageProps) {
   const titleFontSize = Math.round((fontSize * 22) / 14);
   const infoFontSize = Math.round((fontSize * 13) / 14);
@@ -419,14 +445,51 @@ function PaperPage({
       {/* 題目列表：根據 localTwoColumn 切換雙欄/單欄
           注意：pageDistribution 和 displayQuestions 的狀態更新有一個 render 的時間差
           （例如 sheet 關閉時 questions 變空但 pageDistribution 還是舊的），需過濾 undefined */}
-      {activityType === "spelling" || activityType === "word_selection" ? (
+      {answerKey ? (
+        // Issue #1088: 答案卷 —— 最後一頁，老師對答案用
+        <div style={{ fontSize }}>
+          <div className="mb-3 text-center font-semibold text-gray-700">
+            {answerKeyTitle}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: `${Math.round(Q_GAP / 2)}px ${CARD_ROW_GAP}px`,
+            }}
+          >
+            {displayQuestions.map((q) => (
+              <div
+                key={q.index}
+                className="flex gap-2"
+                style={{ minWidth: 0, overflowWrap: "anywhere" }}
+              >
+                <span className="w-6 shrink-0 text-right font-medium text-gray-500">
+                  {q.index}.
+                </span>
+                <span>
+                  {answerKeyText(
+                    q,
+                    activityType,
+                    questionChoiceOptions[q.index],
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : activityType === "spelling" || activityType === "word_selection" ? (
         // 單字卡
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: localTwoColumn ? "1fr 1fr" : "1fr",
+            // Issue #1088: minmax(0,1fr) 讓長選項／長單字不撐寬欄位（跑版）
+            gridTemplateColumns: localTwoColumn
+              ? "minmax(0, 1fr) minmax(0, 1fr)"
+              : "minmax(0, 1fr)",
             gap: CARD_ROW_GAP,
             fontSize,
+            overflowWrap: "anywhere",
           }}
         >
           {qIndices.map((qi) => {
@@ -451,9 +514,10 @@ function PaperPage({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
             gap: `${Q_GAP}px ${CARD_ROW_GAP}px`,
             fontSize,
+            overflowWrap: "anywhere",
           }}
         >
           {qIndices.map((qi) => {
@@ -586,6 +650,20 @@ export function PrintPdfSheet({
     useState(showSentenceTranslation);
   const [localShowDrawingArea, setLocalShowDrawingArea] =
     useState(showDrawingArea);
+  // Issue #1088: 最後另加一頁答案卷
+  const [localShowAnswers, setLocalShowAnswers] = useState(false);
+  // Issue #1088: 字型載入後重新量測分頁 —— 量測在 useLayoutEffect 先跑，若 Noto Serif TC
+  // 之後才載入、字寬改變，底部卡片會被 overflow:hidden 切掉（列印跑版）。
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts.ready.then(() => {
+      if (!cancelled) setFontsReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [displayQuestions, setDisplayQuestions] = useState(questions);
   const [isDownloading, setIsDownloading] = useState(false);
   const [zoom, setZoom] = useState(ZOOM_DEFAULT);
@@ -789,14 +867,16 @@ export function PrintPdfSheet({
     localChoiceCount,
     fontSize,
     questionChoiceOptions,
+    fontsReady,
   ]);
 
   // ── 下載 PDF ─────────────────────────────────────────────────────────────
   // 從「隱藏擷取區」逐頁 html2canvas，合入 jsPDF
   // 擷取區在所有 CSS transform 之外，確保 794×1123 原始尺寸
   const handleDownload = useCallback(async () => {
+    // Issue #1088: 勾「顯示答案」時最後多一頁答案卷（pageRefs 索引＝pageDistribution.length）
     const refs = pageRefs.current
-      .slice(0, pageDistribution.length)
+      .slice(0, pageDistribution.length + (localShowAnswers ? 1 : 0))
       .filter(Boolean) as HTMLDivElement[];
     if (refs.length === 0) return;
     setIsDownloading(true);
@@ -823,10 +903,10 @@ export function PrintPdfSheet({
     } finally {
       setIsDownloading(false);
     }
-  }, [pageDistribution.length]);
+  }, [pageDistribution.length, localShowAnswers]);
 
   // ── Shared props for PaperPage ────────────────────────────────────────────
-  const totalPages = pageDistribution.length;
+  const totalPages = pageDistribution.length + (localShowAnswers ? 1 : 0);
   // 克漏字底線寬度：以本集最長答案為準，所有題目統一寬度
   const sheetBlankWidthEm = useMemo(() => {
     const maxLen = Math.max(...answerPool.map((a) => a.length), 4);
@@ -954,6 +1034,19 @@ export function PrintPdfSheet({
                       className="h-4 w-4 rounded border-gray-300"
                     />
                     {t("printPdf.twoColumn")}
+                  </label>
+                  {/* Issue #1088: 最後另加一頁答案卷 */}
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={localShowAnswers}
+                      onChange={(e) => {
+                        setLocalShowAnswers(e.target.checked);
+                        e.target.blur();
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {t("printPdf.showAnswers")}
                   </label>
                   {localActivityType === "cloze" &&
                     (localHintMode === "wordbank" ||
@@ -1113,6 +1206,17 @@ export function PrintPdfSheet({
                       {...sharedPageProps}
                     />
                   ))}
+                  {localShowAnswers && (
+                    <PaperPage
+                      key="answer-key"
+                      pageIndex={pageDistribution.length}
+                      qIndices={[]}
+                      withShadow
+                      answerKey
+                      answerKeyTitle={t("printPdf.answerKeyTitle")}
+                      {...sharedPageProps}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -1150,6 +1254,19 @@ export function PrintPdfSheet({
               {...sharedPageProps}
             />
           ))}
+          {localShowAnswers && (
+            <PaperPage
+              key="answer-key"
+              pageIndex={pageDistribution.length}
+              qIndices={[]}
+              divRef={(el) => {
+                pageRefs.current[pageDistribution.length] = el;
+              }}
+              answerKey
+              answerKeyTitle={t("printPdf.answerKeyTitle")}
+              {...sharedPageProps}
+            />
+          )}
         </div>
       </div>
 
