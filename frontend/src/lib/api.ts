@@ -1298,6 +1298,8 @@ class ApiClient {
       // 向後相容（ReadingAssessmentPanel 仍使用）
       english_definition?: string;
       selectedLanguage?: string;
+      // Issue #1088: 例句實際字形（後端 content_ops 已回傳）
+      cloze_answer?: string | null;
       selectedWordLanguage?: string;
       part_of_speech?: string;
       // 例句相關

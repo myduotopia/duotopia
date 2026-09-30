@@ -5356,6 +5356,7 @@
     }
   },
   "wordSelection": {
+    "exampleSentenceUnblankable": "此單字的例句無法挖空，請回教材檢查例句與挖空字",
     "loading": "正在載入單字...",
     "noItems": "找不到單字項目",
     "wordSelection": "單字選擇",

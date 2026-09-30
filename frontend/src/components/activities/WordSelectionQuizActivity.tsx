@@ -872,6 +872,17 @@ export default function WordSelectionQuizActivity({
               {/* Issue #860 / #967: 例句題型 —— 挖空例句「就是題目」，放題目位置、
                   不加外框底色（只有挖空單字有框，由 ClozeBlankText 提供）。挖不出空時
                   blankedText 為空 → 該卡不顯示，絕不顯示未挖空原句（會洩漏答案）。 */}
+              {/* Issue #1088: 預覽時挖不出空（例句與挖空字對不上）→ 顯示提示而非留白；
+                  學生端維持留白（派發守衛已擋下這種教材）。 */}
+              {!blankedText &&
+                settings.show_example_sentence &&
+                isLivePreview && (
+                  <div className="text-center py-4 sm:py-6">
+                    <p className="quiz-translation-font text-gray-500 select-none">
+                      {t("wordSelection.exampleSentenceUnblankable")}
+                    </p>
+                  </div>
+                )}
               {blankedText && (
                 <div className="text-center py-4 sm:py-6">
                   {/* Issue #1088: 字體比照單字克漏字（quiz-question-font），例句下方附翻譯 */}
