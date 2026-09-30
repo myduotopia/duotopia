@@ -11,14 +11,14 @@ import { MAX_IMAGE_BYTES } from "./uploadImageFile";
 
 type Drawable = ImageBitmap | HTMLImageElement;
 
-async function loadDrawable(
-  file: File,
-): Promise<{
+interface LoadedDrawable {
   source: Drawable;
   width: number;
   height: number;
   release: () => void;
-}> {
+}
+
+async function loadDrawable(file: File): Promise<LoadedDrawable> {
   if (typeof createImageBitmap === "function") {
     const bitmap = await createImageBitmap(file);
     return {
@@ -58,7 +58,7 @@ export async function cropImageFile(
 ): Promise<File | null> {
   if (!box || !file.type.startsWith("image/")) return null;
   if (typeof document === "undefined") return null;
-  let loaded: Awaited<ReturnType<typeof loadDrawable>> | null = null;
+  let loaded: LoadedDrawable | null = null;
   try {
     loaded = await loadDrawable(file);
     const rect = boxToPixelRect(box, loaded.width, loaded.height);
