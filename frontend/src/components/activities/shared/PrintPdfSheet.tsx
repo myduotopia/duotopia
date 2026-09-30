@@ -315,9 +315,18 @@ interface PaperPageProps {
   divRef?: (el: HTMLDivElement | null) => void;
   // 預覽版有 shadow，擷取版無
   withShadow?: boolean;
-  // Issue #1088: 答案卷頁（最後一頁）：不印題目，改印每題正解
+  // Issue #1088: 答案卷頁（最後 N 頁）：不印題目，改印每題正解
   answerKey?: boolean;
   answerKeyTitle?: string;
+  answerKeyQuestions?: PrintQuestion[];
+}
+
+// Issue #1088: 答案卷每頁可放幾題（3 欄）。行高≈字級×1.5＋行距，標題區預留 ~3 行。
+const ANSWER_KEY_COLS = 3;
+function answerKeyPerPage(fontSize: number): number {
+  const rowH = fontSize * 1.5 + Q_GAP / 2;
+  const rows = Math.max(1, Math.floor((CONTENT_H - fontSize * 3) / rowH));
+  return rows * ANSWER_KEY_COLS;
 }
 
 /**
@@ -361,6 +370,7 @@ function PaperPage({
   withShadow = false,
   answerKey = false,
   answerKeyTitle = "Answer Key",
+  answerKeyQuestions = [],
 }: PaperPageProps) {
   const titleFontSize = Math.round((fontSize * 22) / 14);
   const infoFontSize = Math.round((fontSize * 13) / 14);
@@ -454,11 +464,11 @@ function PaperPage({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
+              gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",
               gap: `${Math.round(Q_GAP / 2)}px ${CARD_ROW_GAP}px`,
             }}
           >
-            {displayQuestions.map((q) => (
+            {answerKeyQuestions.map((q) => (
               <div
                 key={q.index}
                 className="flex gap-2"
@@ -654,16 +664,20 @@ export function PrintPdfSheet({
   const [localShowAnswers, setLocalShowAnswers] = useState(false);
   // Issue #1088: 字型載入後重新量測分頁 —— 量測在 useLayoutEffect 先跑，若 Noto Serif TC
   // 之後才載入、字寬改變，底部卡片會被 overflow:hidden 切掉（列印跑版）。
-  const [fontsReady, setFontsReady] = useState(false);
+  // document.fonts.ready 在 mount 時多半已 resolve，故每次開啟 sheet／題目變動時重新
+  // 等一次（此時才會真的觸發 Noto Serif TC 載入），完成後 tick 讓分頁重算。
+  const [fontsTick, setFontsTick] = useState(0);
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
-    document.fonts.ready.then(() => {
-      if (!cancelled) setFontsReady(true);
+    // jsdom 等環境沒有 document.fonts
+    document.fonts?.ready?.then(() => {
+      if (!cancelled) setFontsTick((n) => n + 1);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [open, questions]);
   const [displayQuestions, setDisplayQuestions] = useState(questions);
   const [isDownloading, setIsDownloading] = useState(false);
   const [zoom, setZoom] = useState(ZOOM_DEFAULT);
@@ -867,8 +881,19 @@ export function PrintPdfSheet({
     localChoiceCount,
     fontSize,
     questionChoiceOptions,
-    fontsReady,
+    fontsTick,
   ]);
+
+  // Issue #1088: 答案卷分頁（3 欄、依字級算每頁題數）；沒有題目就沒有答案頁
+  const answerKeyChunks = useMemo<PrintQuestion[][]>(() => {
+    if (!localShowAnswers || displayQuestions.length === 0) return [];
+    const per = answerKeyPerPage(fontSize);
+    const chunks: PrintQuestion[][] = [];
+    for (let i = 0; i < displayQuestions.length; i += per) {
+      chunks.push(displayQuestions.slice(i, i + per));
+    }
+    return chunks;
+  }, [localShowAnswers, displayQuestions, fontSize]);
 
   // ── 下載 PDF ─────────────────────────────────────────────────────────────
   // 從「隱藏擷取區」逐頁 html2canvas，合入 jsPDF
@@ -876,7 +901,7 @@ export function PrintPdfSheet({
   const handleDownload = useCallback(async () => {
     // Issue #1088: 勾「顯示答案」時最後多一頁答案卷（pageRefs 索引＝pageDistribution.length）
     const refs = pageRefs.current
-      .slice(0, pageDistribution.length + (localShowAnswers ? 1 : 0))
+      .slice(0, pageDistribution.length + answerKeyChunks.length)
       .filter(Boolean) as HTMLDivElement[];
     if (refs.length === 0) return;
     setIsDownloading(true);
@@ -903,10 +928,10 @@ export function PrintPdfSheet({
     } finally {
       setIsDownloading(false);
     }
-  }, [pageDistribution.length, localShowAnswers]);
+  }, [pageDistribution.length, answerKeyChunks.length]);
 
   // ── Shared props for PaperPage ────────────────────────────────────────────
-  const totalPages = pageDistribution.length + (localShowAnswers ? 1 : 0);
+  const totalPages = pageDistribution.length + answerKeyChunks.length;
   // 克漏字底線寬度：以本集最長答案為準，所有題目統一寬度
   const sheetBlankWidthEm = useMemo(() => {
     const maxLen = Math.max(...answerPool.map((a) => a.length), 4);
@@ -1206,17 +1231,18 @@ export function PrintPdfSheet({
                       {...sharedPageProps}
                     />
                   ))}
-                  {localShowAnswers && (
+                  {answerKeyChunks.map((chunk, i) => (
                     <PaperPage
-                      key="answer-key"
-                      pageIndex={pageDistribution.length}
+                      key={`answer-key-${i}`}
+                      pageIndex={pageDistribution.length + i}
                       qIndices={[]}
                       withShadow
                       answerKey
                       answerKeyTitle={t("printPdf.answerKeyTitle")}
+                      answerKeyQuestions={chunk}
                       {...sharedPageProps}
                     />
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
@@ -1254,19 +1280,20 @@ export function PrintPdfSheet({
               {...sharedPageProps}
             />
           ))}
-          {localShowAnswers && (
+          {answerKeyChunks.map((chunk, i) => (
             <PaperPage
-              key="answer-key"
-              pageIndex={pageDistribution.length}
+              key={`answer-key-${i}`}
+              pageIndex={pageDistribution.length + i}
               qIndices={[]}
               divRef={(el) => {
-                pageRefs.current[pageDistribution.length] = el;
+                pageRefs.current[pageDistribution.length + i] = el;
               }}
               answerKey
               answerKeyTitle={t("printPdf.answerKeyTitle")}
+              answerKeyQuestions={chunk}
               {...sharedPageProps}
             />
-          )}
+          ))}
         </div>
       </div>
 

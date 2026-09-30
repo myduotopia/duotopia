@@ -183,6 +183,20 @@ def pick_cloze_target_from_sentence(sentence: str) -> Optional[Tuple[str, str]]:
     return blanked, word
 
 
+def normalize_cloze_case(matched: str, base_word: str) -> str:
+    """句首大寫還原（Issue #1088）。
+
+    例句 "Told me her name." 比對到 "Told me"，但作為選項應顯示 "told me"：
+    只要單字原形 ``base_word`` 小寫開頭、而比對結果大寫開頭，就把首字母小寫。
+    原形本身大寫開頭（專有名詞 Paris、句型 Good morning）則保留。
+    """
+    if not matched or not base_word:
+        return matched
+    if base_word[0].islower() and matched[0].isupper():
+        return matched[0].lower() + matched[1:]
+    return matched
+
+
 def extract_cloze_for_item(content_item) -> Optional[Tuple[str, str]]:
     """Extract ``(blanked_sentence, correct_answer)`` from a ContentItem.
 

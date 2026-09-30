@@ -7,7 +7,7 @@ These helpers read both shapes and always emit the new one.
 """
 
 import random
-from typing import Any, Iterable, List, Optional, TypedDict
+from typing import Any, Dict, Iterable, List, Optional, TypedDict
 
 
 class Distractor(TypedDict):
@@ -43,28 +43,40 @@ def answer_text_for_item(
     比對請一律 ``.strip().lower()``（cloze 字形保留句中原大小寫）。
     """
     if show_example_sentence:
-        from utils.cloze import extract_cloze_for_item  # local import: avoid cycle
+        # local import: avoid cycle
+        from utils.cloze import extract_cloze_for_item, normalize_cloze_case
 
+        base = getattr(item, "text", None) or ""
         cloze = extract_cloze_for_item(item)
         if cloze and cloze[1]:
-            return cloze[1]
-        return getattr(item, "text", None) or ""
+            # 句首 "Told me" → "told me"（原形小寫開頭時）
+            return normalize_cloze_case(cloze[1], base)
+        return base
     field = text_field_for_show_image(show_image, False)
     return getattr(item, field, None) or ""
 
 
 def build_answer_pool(
-    items: Iterable, show_image: bool, show_example_sentence: bool = False
+    items: Iterable,
+    show_image: bool,
+    show_example_sentence: bool = False,
+    answer_by_id: Optional[Dict[int, str]] = None,
 ) -> List[Distractor]:
     """Option pool (text + image) for every item, deduped case-insensitively.
 
-    Used as the distractor source for word_selection when stored distractors
-    are not applicable (e.g. 顯示例句 → cloze 字形, Issue #1088).
+    Used as the distractor source for word_selection when 顯示例句 is on
+    (cloze 字形, Issue #1088). ``answer_by_id`` lets callers reuse answers they
+    already computed instead of re-extracting the cloze per item.
+    Callers keep the legacy (non-deduped) pool when 顯示例句 is off.
     """
     pool: List[Distractor] = []
     seen = set()
     for it in items:
-        text = answer_text_for_item(it, show_image, show_example_sentence)
+        item_id = getattr(it, "id", None)
+        if answer_by_id is not None and item_id in answer_by_id:
+            text = answer_by_id[item_id]
+        else:
+            text = answer_text_for_item(it, show_image, show_example_sentence)
         key = text.strip().lower()
         if not key or key in seen:
             continue

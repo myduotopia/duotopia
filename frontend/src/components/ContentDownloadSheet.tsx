@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { normalizeClozeCase } from "@/lib/cloze";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -141,7 +142,7 @@ function buildClozeParts(
     if (m && m.index !== undefined) {
       return {
         before: sentence.slice(0, m.index),
-        answer: m[0],
+        answer: normalizeClozeCase(m[0], text),
         after: sentence.slice(m.index + m[0].length),
       };
     }
@@ -150,7 +151,7 @@ function buildClozeParts(
   if (!found) return null;
   return {
     before: sentence.slice(0, found.index),
-    answer: found.answer,
+    answer: normalizeClozeCase(found.answer, text),
     after: sentence.slice(found.index + found.answer.length),
   };
 }

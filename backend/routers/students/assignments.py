@@ -1623,23 +1623,32 @@ async def start_word_selection_practice(
     items_map = {item.id: item for item in items_with_distractors}
     # Issue #1088: 正解／干擾一律經 answer_text_for_item（開例句 → cloze 字形，如
     # tell → "told me"；未開例句 → 與舊欄位相同），pool 以小寫去重。
-    answer_pool = build_answer_pool(
-        [
-            items_map[w["content_item_id"]]
+    answer_by_id = {
+        item_id: answer_text_for_item(item, show_image_for_options, show_example)
+        for item_id, item in items_map.items()
+    }
+    if show_example:
+        answer_pool = build_answer_pool(
+            [
+                items_map[w["content_item_id"]]
+                for w in words_data
+                if w["content_item_id"] in items_map
+            ],
+            show_image_for_options,
+            True,
+            answer_by_id,
+        )
+    else:
+        # 未開例句：與舊版完全相同的 pool（依 words_data 欄位、不去重），行為不變
+        legacy_key = "text" if show_image_for_options else "translation"
+        answer_pool = [
+            {"text": w.get(legacy_key), "image_url": w.get("image_url")}
             for w in words_data
-            if w["content_item_id"] in items_map
-        ],
-        show_image_for_options,
-        show_example,
-    )
+        ]
 
     for i, word in enumerate(words_data):
         source_item = items_map.get(word["content_item_id"])
-        correct_answer = (
-            answer_text_for_item(source_item, show_image_for_options, show_example)
-            if source_item
-            else ""
-        )
+        correct_answer = answer_by_id.get(word["content_item_id"], "")
         stored_distractors = normalize_distractors(
             distractors_map.get(word["content_item_id"])
         )
@@ -1649,7 +1658,11 @@ async def start_word_selection_practice(
         else:
             # Fallback: 從其他單字取（同時帶 image_url）— 依 show_image 決定語言
             target = correct_answer.lower().strip()
-            pool = [dict(p) for p in answer_pool if p["text"].lower().strip() != target]
+            pool = [
+                dict(p)
+                for p in answer_pool
+                if p["text"] and p["text"].lower().strip() != target
+            ]
             random.shuffle(pool)
             final_distractors = pool[:3]
 
@@ -1824,15 +1837,17 @@ async def submit_word_selection_answer(
     correct_answer = answer_text_for_item(
         content_item, show_image_mode, show_example_mode
     )
-    selected_norm = request.selected_answer.strip().lower()
-    accepted = {correct_answer.strip().lower()}
+    # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
     if show_example_mode:
+        selected_norm = request.selected_answer.strip().lower()
+        accepted = {correct_answer.strip().lower()}
         # 部署交接期間容忍：舊前端仍以單字原形作答者不判錯
         accepted.add((content_item.text or "").strip().lower())
-    accepted.discard("")
-
-    # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
-    is_correct = selected_norm in accepted
+        accepted.discard("")
+        is_correct = selected_norm in accepted
+    else:
+        # 未開例句：與舊版完全相同（區分大小寫）
+        is_correct = request.selected_answer.strip() == correct_answer.strip()
     is_timeout = request.selected_answer.strip() == ""
 
     # Call update_memory_strength PostgreSQL function

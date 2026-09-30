@@ -596,9 +596,16 @@ async def get_word_selection_start(
         it.id: answer_text_for_item(it, show_image_for_options, _show_example_sentence)
         for it in content_items
     }
-    answer_pool = build_answer_pool(
-        content_items, show_image_for_options, _show_example_sentence
-    )
+    if _show_example_sentence:
+        answer_pool = build_answer_pool(
+            content_items, show_image_for_options, True, answer_by_id
+        )
+    else:
+        # 未開例句：與舊版完全相同的 pool（不去重），行為不變
+        answer_pool = [
+            {"text": answer_by_id[it.id], "image_url": it.image_url}
+            for it in content_items
+        ]
 
     words_with_options = []
 
@@ -615,7 +622,11 @@ async def get_word_selection_start(
             final_distractors = list(stored[:3])
         else:
             target = correct_answer.lower().strip()
-            pool = [dict(p) for p in answer_pool if p["text"].lower().strip() != target]
+            pool = [
+                dict(p)
+                for p in answer_pool
+                if p["text"] and p["text"].lower().strip() != target
+            ]
             random.shuffle(pool)
             final_distractors = pool[:3]
 

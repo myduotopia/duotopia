@@ -31,6 +31,41 @@ export function buildBlank(_matchedText: string): string {
 }
 
 /**
+ * 句首大寫還原（Issue #1088，鏡射後端 normalize_cloze_case）：
+ * "Told me" 作為選項應顯示 "told me" —— 原形 baseWord 小寫開頭而比對結果大寫開頭時，
+ * 首字母改小寫；原形本身大寫開頭（專有名詞）則保留。
+ */
+export function normalizeClozeCase(
+  matched: string,
+  baseWord: string | null | undefined,
+): string {
+  if (!matched || !baseWord) return matched;
+  const b = baseWord[0];
+  const m = matched[0];
+  if (b === b.toLowerCase() && b !== b.toUpperCase() && m !== m.toLowerCase()) {
+    return m.toLowerCase() + matched.slice(1);
+  }
+  return matched;
+}
+
+/**
+ * 例句題型的選項／正解文字（Issue #1088，鏡射後端 answer_text_for_item 的開例句分支）：
+ * 先在例句中找 cloze_answer、再找原形（含 apple→apples 前綴比對），取句中實際字形並
+ * 做句首大寫還原；都找不到才退回 cloze_answer || text。
+ */
+export function clozeAnswerText(item: {
+  text: string;
+  cloze_answer?: string | null;
+  example_sentence?: string | null;
+}): string {
+  const match =
+    findClozeMatch(item.cloze_answer, item.example_sentence) ??
+    findClozeMatch(item.text, item.example_sentence);
+  if (match) return normalizeClozeCase(match[2], item.text);
+  return item.cloze_answer || item.text;
+}
+
+/**
  * 在句中找出答案（或其變化形）的位置，鏡射後端 find_cloze_match。
  * 回傳 [start, end, matchedText]，找不到回 null。
  */

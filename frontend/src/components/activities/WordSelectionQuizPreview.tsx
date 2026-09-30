@@ -8,6 +8,7 @@
  * 派發 dialog 即時預覽不傳，行為不變。
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { clozeAnswerText } from "@/lib/cloze";
 import WordSelectionQuizActivity from "./WordSelectionQuizActivity";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -70,14 +71,14 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 }
 
 // 選項／正解文字：與 backend/utils/distractors.py `answer_text_for_item` 對齊。
-// Issue #1088: 開例句 → 例句中的實際字形（cloze_answer，缺則退回 text）；
+// Issue #1088: 開例句 → 例句中的實際字形（clozeAnswerText：cup → cups、句首大寫還原）；
 // 否則 showImage=true → 英文 text；false → 翻譯。
 function answerOf(
   item: ApiItem,
   showImage: boolean,
   showExample: boolean,
 ): string {
-  if (showExample) return item.cloze_answer || item.text;
+  if (showExample) return clozeAnswerText(item);
   return showImage ? item.text : item.translation || "";
 }
 

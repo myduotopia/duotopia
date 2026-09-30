@@ -267,3 +267,21 @@ class TestAnswerTextForItem:
         ]
         assert [p["text"] for p in build_answer_pool(items, False, False)] == ["甲", "乙"]
         assert [p["text"] for p in build_answer_pool(items, True, False)] == ["a", "b"]
+
+    def test_show_example_sentence_initial_capital_is_lowercased(self):
+        # 句首 "Told me" → 選項應顯示 "told me"（原形小寫開頭）
+        item = self._item(example_sentence="Told me her name, he did.")
+        assert answer_text_for_item(item, True, True) == "told me"
+
+    def test_show_example_keeps_capitalized_base_word(self):
+        # 專有名詞／原形本身大寫開頭 → 保留
+        item = self._item(
+            text="Paris", cloze_answer="Paris", example_sentence="Paris is big."
+        )
+        assert answer_text_for_item(item, True, True) == "Paris"
+
+    def test_build_answer_pool_reuses_answer_by_id(self):
+        items = [self._item(text="tell", cloze_answer="told me")]
+        items[0].id = 7
+        pool = build_answer_pool(items, True, True, {7: "precomputed"})
+        assert [p["text"] for p in pool] == ["precomputed"]

@@ -527,8 +527,11 @@ def test_selection_quiz_example_grades_cloze_form(setup_database):
         assert resp.status_code == 200, resp.text
         return resp.json()["is_correct"]
 
-    assert _answer("tell") is False
     assert _answer("Told Me") is True
+    # 部署交接期容忍：單字原形仍判對；其他單字（干擾）判錯
+    assert _answer("tell") is True
+    assert _answer("banana") is False
+    assert _answer("告訴") is False
 
 
 def test_selection_quiz_review_correct_answer_uses_cloze_form(setup_database):
@@ -615,3 +618,76 @@ def test_spelling_quiz_is_case_insensitive(setup_database):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["is_correct"] is True
+
+
+def test_selection_quiz_off_path_snapshot(setup_database):
+    """Issue #1088：未開例句時 start payload 與舊版完全相同 —— 正解＝翻譯
+    （show_image=False），選項＝翻譯＋其他單字翻譯＋補位，且不送挖空欄位。"""
+    sa_id = _seed("word_selection_quiz", show_image=False)
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    )
+    assert start.status_code == 200, start.text
+    body = start.json()
+    assert body["show_example_sentence"] is False
+    by_id = {w["content_item_id"]: w for w in body["words"]}
+    assert by_id[1]["correct_text"] == "早安"
+    assert sorted(o["text"] for o in by_id[1]["options"]) == sorted(
+        ["早安", "午安", "選項B", "選項C"]
+    )
+    assert by_id[2]["correct_text"] == "午安"
+    assert by_id[1]["blanked_sentence"] == ""
+
+
+def test_selection_quiz_review_keeps_stored_options_after_setting_change(
+    setup_database,
+):
+    """Issue #1088 向後相容：學生以舊規則（單字原形／翻譯）作答並提交後，老師才開
+    例句 → 複盤頁仍顯示作答當下存的 options_shown 與 correct_text。"""
+    sa_id = _seed("word_selection_quiz", show_image=False)
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    ).json()
+    session_id = start["session_id"]
+    shown = {w["content_item_id"]: w["options"] for w in start["words"]}
+    for w in start["words"]:
+        client.post(
+            f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/answer",
+            headers=headers,
+            json={
+                "content_item_id": w["content_item_id"],
+                "selected_answer": w["correct_text"],
+                "time_spent_seconds": 1,
+                "session_id": session_id,
+            },
+        )
+    client.post(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/complete",
+        headers=headers,
+        json={"session_id": session_id},
+    )
+
+    db = TestingSessionLocal()
+    try:
+        assignment = db.query(Assignment).filter_by(id=1).one()
+        assignment.show_example_sentence = True
+        for item in db.query(ContentItem).all():
+            item.example_sentence = f"We say {item.text} every day."
+            item.cloze_answer = item.text
+        db.commit()
+    finally:
+        db.close()
+
+    review = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/review",
+        headers=headers,
+    )
+    assert review.status_code == 200, review.text
+    by_id = {w["content_item_id"]: w for w in review.json()["words"]}
+    assert by_id[1]["options"] == shown[1]
+    assert by_id[1]["correct_answer"] == "早安"
+    assert by_id[1]["is_correct"] is True

@@ -8,6 +8,7 @@
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
+import { clozeAnswerText } from "@/lib/cloze";
 import WordSelectionActivity from "./WordSelectionActivity";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -61,14 +62,14 @@ interface WordOption {
 }
 
 // 選項／正解文字：與 backend/utils/distractors.py `answer_text_for_item` 對齊。
-// Issue #1088: 開例句 → 例句中的實際字形（cloze_answer，缺則退回 text）；
+// Issue #1088: 開例句 → 例句中的實際字形（clozeAnswerText：cup → cups、句首大寫還原）；
 // 否則 showImage=true → 英文 text；false → 翻譯。
 function answerOf(
   item: ContentItem,
   showImage: boolean,
   showExample: boolean,
 ): string {
-  if (showExample) return item.cloze_answer || item.text;
+  if (showExample) return clozeAnswerText(item);
   return showImage ? item.text : item.translation || "";
 }
 

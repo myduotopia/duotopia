@@ -503,7 +503,13 @@ def _build_selection_options(
     answer_by_id = {
         it.id: answer_text_for_item(it, show_image, show_example) for it in items
     }
-    pool = build_answer_pool(items, show_image, show_example)
+    if show_example:
+        pool = build_answer_pool(items, show_image, True, answer_by_id)
+    else:
+        # 未開例句：與舊版完全相同的 pool（不去重），行為不變
+        pool = [
+            {"text": answer_by_id[it.id], "image_url": it.image_url} for it in items
+        ]
 
     options_by_item: Dict[int, List[Dict[str, Any]]] = {}
     for item in items:
@@ -631,10 +637,14 @@ async def submit_word_selection_quiz_answer(
     # selected option against the item's answer text, same field/normalisation as
     # _build_selection_options uses to build the correct option.
     show_image = assignment.show_image if assignment.show_image is not None else True
-    correct_text = answer_text_for_item(
-        item, show_image, bool(getattr(assignment, "show_example_sentence", False))
-    )
-    is_correct = request.selected_answer.strip().lower() == correct_text.strip().lower()
+    show_example = bool(getattr(assignment, "show_example_sentence", False))
+    correct_text = answer_text_for_item(item, show_image, show_example)
+    selected_norm = request.selected_answer.strip().lower()
+    is_correct = selected_norm == correct_text.strip().lower()
+    if not is_correct and show_example and selected_norm:
+        # Issue #1088 部署交接期間容忍：考試中途升版的學生畫面上仍是單字原形選項，
+        # 選原形不判錯（與艾賓浩斯 answer 端一致）
+        is_correct = selected_norm == (item.text or "").strip().lower()
 
     # #1045: 記下學生作答當下看到的選項（文字＋順序），批改頁優先顯示這份，
     # 老師事後改派發設定也不會讓批改頁選項與學生當時畫面不一致。
@@ -1299,10 +1309,12 @@ def _build_review_response(
 ) -> Dict[str, Any]:
     """Shared review skeleton — 各模式只差 build_item 怎麼組每題的內容。
 
-    ``build_context(assignment, items)`` runs once and its result is passed to
-    every ``build_item(item, prior, context)`` call, so per-mode setup (e.g.
-    selection's option lists) can reuse the already-loaded sa/assignment/items
-    instead of re-querying them (#828 review: duplicate-query fix).
+    ``build_context(assignment, items, session)`` runs once and its result is
+    passed to every ``build_item(item, prior, context)`` call, so per-mode setup
+    (e.g. selection's option lists) can reuse the already-loaded
+    sa/assignment/items instead of re-querying them (#828 review:
+    duplicate-query fix). ``session`` (may be None) lets it rebuild options in
+    the same seeded order the student saw (Issue #1088).
     """
     sa = _get_student_assignment_or_404(db, assignment_id, student_id)
     assignment = _get_assignment_or_400(db, sa, expected_mode)
@@ -1320,8 +1332,8 @@ def _build_review_response(
         )
     # 不洗牌：複盤頁固定按 order_index 顯示，方便師生對照
     items = _load_quiz_items(db, assignment, shuffle=False)
-    context = build_context(assignment, items) if build_context else None
     session = _first_completed_quiz_session(db, assignment_id, expected_mode)
+    context = build_context(assignment, items, session) if build_context else None
     answers_map: Dict[int, PracticeAnswer] = {}
     if session:
         answers_map = _existing_answers_for_session(db, session.id)
@@ -1361,16 +1373,27 @@ async def review_word_selection_quiz(
     # options/answer_key built once via build_context — reuses the sa/assignment/
     # items loaded inside _build_review_response (no duplicate queries, #828).
     def build_context(
-        assignment: Assignment, items: List[ContentItem]
+        assignment: Assignment,
+        items: List[ContentItem],
+        session: Optional[PracticeSession] = None,
     ) -> Dict[str, Any]:
         show_image = (
             assignment.show_image if assignment.show_image is not None else True
+        )
+        # Issue #1088: 未作答題目（無 options_shown）重建選項時，pool 順序要與
+        # start/answer 相同（同 session seed），否則干擾項會跟學生當時看到的不同
+        options_items = (
+            _load_quiz_items(
+                db, assignment, assignment.shuffle_questions, seed=session.id
+            )
+            if session is not None
+            else items
         )
         # Issue #1088: 之前漏傳 show_example → 開例句＋關圖片時正解變翻譯、
         # 選項卻是英文，複盤頁沒有任何選項被標成正解。改用 helper 一次算好。
         show_example = bool(getattr(assignment, "show_example_sentence", False))
         return {
-            "options_by_item": _build_selection_options(items, assignment),
+            "options_by_item": _build_selection_options(options_items, assignment),
             "correct_by_item": {
                 it.id: answer_text_for_item(it, show_image, show_example)
                 for it in items
