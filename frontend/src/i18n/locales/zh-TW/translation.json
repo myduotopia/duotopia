@@ -6011,7 +6011,7 @@
       "removeLink": "移除關聯",
       "confirmDelete": "確定要刪除這題嗎？已派發的考卷不受影響。",
       "errors": {
-        "stemRequired": "請輸入題目",
+        "stemRequired": "請輸入題目或加上插圖",
         "duplicate": "題目與既有題目重複",
         "minOptions": "至少填 {{min}} 個選項",
         "noCorrect": "請勾選正確答案",
@@ -6033,6 +6033,7 @@
       "optionRequiredPlaceholder": "{{letter}} 選項",
       "optionOptionalPlaceholder": "{{letter}} 選項（選填）",
       "optionImage": "{{letter}} 選項圖片",
+      "stemImage": "題目插圖",
       "removeImage": "移除圖片",
       "explanationPlaceholder": "解析（選填）",
       "generateAudio": "生成題目語音",

@@ -1,7 +1,7 @@
 /**
  * 右欄單題卡片（Issue #1064）。
  *
- * |題幹 textarea + 麥克風|
+ * |題幹 textarea + 麥克風 + 插圖鈕|（有插圖時題幹下方顯示縮圖；題幹可空，圖或字至少一個 #1083）
  * |A 選項|B 選項|
  * |C 選項(選填)|D 選項(選填)|
  * |新增選項| → 展開 E/F
@@ -331,8 +331,24 @@ export default function QuestionCard({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
+          {/* 題幹插圖（#1083）：與選項圖片同一顆按鈕與上傳路徑 */}
+          <OptionImageButton
+            imageUrl={draft.image_url}
+            onChange={(url) => patch({ image_url: url, serverError: null })}
+            disabled={locked}
+            label={t("questionBank.form.stemImage")}
+            testId={tid("stem-image")}
+          />
         </div>
       </div>
+      {draft.image_url && (
+        <img
+          src={draft.image_url}
+          alt=""
+          className="max-h-48 rounded border border-gray-200 object-contain"
+          data-testid={tid("stem-image-preview")}
+        />
+      )}
 
       {/* 重複／相似提示 */}
       {exact && (

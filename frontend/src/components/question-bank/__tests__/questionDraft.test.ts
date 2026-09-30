@@ -10,6 +10,7 @@ import {
   batchDefaultsFromQuestion,
   deriveStimulusType,
   draftFromQuestion,
+  draftsEligibleForAi,
   emptyBatchDefaults,
   emptyDraft,
   emptyGroupDraft,
@@ -171,6 +172,25 @@ describe("validateDraft", () => {
     const d = draftWith("Q", [["a", true]]);
     d.options[1] = { text: "", is_correct: false, image_url: "http://x/b.png" };
     expect(validateDraft(d)).toBeNull();
+  });
+  it("題幹空但有插圖（#1083）→ 通過；payload 帶 image_url；只有插圖的題不送 AI", () => {
+    const d = draftWith("", [
+      ["a", true],
+      ["b", false],
+    ]);
+    expect(validateDraft(d)).toBe("stemRequired");
+    d.image_url = "http://x/venn.png";
+    expect(validateDraft(d)).toBeNull();
+    expect(toCreateInput(d).image_url).toBe("http://x/venn.png");
+    expect(toCreateInput(d).stem).toBe("");
+    expect(draftsEligibleForAi([d])).toEqual([]);
+    expect(
+      draftFromQuestion({
+        ...baseQuestion,
+        stem: "",
+        image_url: "http://x/v.png",
+      }).image_url,
+    ).toBe("http://x/v.png");
   });
 });
 

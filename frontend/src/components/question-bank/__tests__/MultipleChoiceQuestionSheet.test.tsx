@@ -232,6 +232,9 @@ describe("MultipleChoiceQuestionSheet", () => {
     await user.click(screen.getByTestId("qc-0-advanced-toggle"));
     expect(screen.getByTestId("qc-0-advanced")).toBeTruthy();
     expect(screen.getByTestId("qc-0-grade")).toBeTruthy();
+    // 題幹旁有插圖鈕（#1083），沒圖時沒有預覽
+    expect(screen.getByTestId("qc-0-stem-image-button")).toBeTruthy();
+    expect(screen.queryByTestId("qc-0-stem-image-preview")).toBeNull();
   });
 
   it("驗證順序：題幹 → 選項 → 考點 → 公開設定", async () => {

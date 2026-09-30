@@ -16,6 +16,8 @@ export interface OptionImageButtonProps {
   onChange: (url: string | null) => void;
   disabled?: boolean;
   label: string;
+  /** data-testid 前綴（預設 option-image）；題幹插圖（#1083）用同一顆按鈕，換前綴避免撞名 */
+  testId?: string;
 }
 
 export default function OptionImageButton({
@@ -23,6 +25,7 @@ export default function OptionImageButton({
   onChange,
   disabled,
   label,
+  testId = "option-image",
 }: OptionImageButtonProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -51,7 +54,7 @@ export default function OptionImageButton({
           if (f) void handleFile(f);
           e.target.value = "";
         }}
-        data-testid="option-image-input"
+        data-testid={`${testId}-input`}
       />
       {imageUrl ? (
         <div className="group relative h-9 w-9 rounded border border-gray-200 overflow-hidden">
@@ -62,7 +65,7 @@ export default function OptionImageButton({
               onClick={() => onChange(null)}
               className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/50 text-white"
               aria-label={t("questionBank.form.removeImage")}
-              data-testid="option-image-remove"
+              data-testid={`${testId}-remove`}
             >
               <X size={14} />
             </button>
@@ -76,7 +79,7 @@ export default function OptionImageButton({
           className="h-9 w-9 flex items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:text-blue-600 hover:border-blue-400 disabled:opacity-50"
           aria-label={label}
           title={label}
-          data-testid="option-image-button"
+          data-testid={`${testId}-button`}
         >
           {uploading ? (
             <Loader2 size={16} className="animate-spin" />

@@ -67,6 +67,8 @@ export interface QuestionDraft extends BatchDefaults {
   groupKey: string | null;
   stem: string;
   stem_audio_url: string | null;
+  /** 題幹插圖（#1083：題本第 1 題的靜物圖、第 33 題的文氏圖）；題幹可空，圖或字至少一個 */
+  image_url: string | null;
   explanation: string;
   allow_multiple: boolean;
   options: OptionDraft[];
@@ -109,6 +111,7 @@ export function emptyDraft(
     groupKey: null,
     stem: "",
     stem_audio_url: null,
+    image_url: null,
     explanation: "",
     allow_multiple: false,
     options: Array.from({ length: BASE_OPTION_SLOTS }, emptyOption),
@@ -168,6 +171,7 @@ export function draftFromQuestion(q: Question): QuestionDraft {
     sources: q.sources.map(sourceToItem),
     stem: q.stem,
     stem_audio_url: q.stem_audio_url,
+    image_url: q.image_url,
     explanation: q.explanation ?? "",
     allow_multiple: q.allow_multiple_answers,
     options: extra ? options : options.slice(0, BASE_OPTION_SLOTS),
@@ -185,8 +189,9 @@ export function optionFilled(o: OptionDraft): boolean {
   return o.text.trim() !== "" || o.image_url !== null;
 }
 
+/** 題目「有內容」= 有題幹文字或有插圖（後端同規則：stem／image_url／stem_audio_url 至少一個） */
 export function draftHasContent(d: QuestionDraft): boolean {
-  return d.stem.trim() !== "";
+  return d.stem.trim() !== "" || d.image_url !== null;
 }
 
 /** 與後端 normalize_stem 對齊的粗略版：小寫、去標點、壓空白（NFKC 全形→半形） */
@@ -247,6 +252,7 @@ export function toCreateInput(
     question_type: d.question_type,
     stem: d.stem.trim(),
     stem_audio_url: d.stem_audio_url,
+    image_url: d.image_url,
     options: d.options.filter(optionFilled).map((o) => ({
       text: o.text.trim(),
       is_correct: o.is_correct,
@@ -604,14 +610,14 @@ export function unitHasContent(u: UnitDraft): boolean {
 // AI 工具（#1065）：只填空的，不動老師已設的
 // --------------------------------------------------------------------------- #
 
-/** 可送給 AI 的題：有題幹（或題組小題有主圖文上下文）且有填的選項 ≥ 2 */
+/** 可送給 AI 的題：有題幹文字（或題組小題有主圖文上下文）且有填的選項 ≥ 2；只有插圖的題 AI 讀不到 */
 export function draftsEligibleForAi(
   drafts: QuestionDraft[],
   passageByKey: Map<string, string> = new Map(),
 ): QuestionDraft[] {
   return drafts.filter(
     (d) =>
-      (draftHasContent(d) || passageByKey.has(d.key)) &&
+      (d.stem.trim() !== "" || passageByKey.has(d.key)) &&
       d.options.filter(optionFilled).length >= 2,
   );
 }

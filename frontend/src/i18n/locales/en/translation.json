@@ -5967,7 +5967,7 @@
       "removeLink": "Remove link",
       "confirmDelete": "Delete this question? Assigned papers are not affected.",
       "errors": {
-        "stemRequired": "Question is required",
+        "stemRequired": "Enter the question or add an image",
         "duplicate": "Duplicate of an existing question",
         "minOptions": "At least {{min}} options",
         "noCorrect": "Tick a correct answer",
@@ -5989,6 +5989,7 @@
       "optionRequiredPlaceholder": "Option {{letter}}",
       "optionOptionalPlaceholder": "Option {{letter}} (optional)",
       "optionImage": "Option {{letter}} image",
+      "stemImage": "Question image",
       "removeImage": "Remove image",
       "explanationPlaceholder": "Explanation (optional)",
       "generateAudio": "Generate question audio",

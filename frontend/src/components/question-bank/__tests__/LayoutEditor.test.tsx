@@ -296,7 +296,9 @@ describe("LayoutEditor", () => {
   it("空狀態「上傳圖片」（#1083 以圖為準）：上傳成功 → 一列一欄一張原圖；失敗不動文件", async () => {
     const onChange = vi.fn();
     render(<LayoutEditor layout={null} onChange={onChange} testId="le" />);
-    const input = screen.getByTestId("le-upload-image-file") as HTMLInputElement;
+    const input = screen.getByTestId(
+      "le-upload-image-file",
+    ) as HTMLInputElement;
     expect(screen.getByTestId("le-upload-image")).toBeTruthy();
 
     uploadMock.mockResolvedValueOnce(null);
