@@ -3282,6 +3282,7 @@
       "loadError": "無法載入學生作業",
       "notFound": "找不到學生作業",
       "gradingSuccess": "批改完成！",
+      "allGraded": "所有學生皆已批改完成",
       "gradingFailed": "批改失敗，請稍後再試",
       "revisionRequested": "已要求學生訂正",
       "revisionFailed": "要求訂正失敗，請稍後再試",

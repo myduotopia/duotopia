@@ -3139,6 +3139,7 @@
       "loadError": "Failed to load student assignment",
       "notFound": "Student assignment not found",
       "gradingSuccess": "Grading completed!",
+      "allGraded": "All students have been graded",
       "gradingFailed": "Grading failed, please try again later",
       "revisionRequested": "Revision requested",
       "revisionFailed": "Failed to request revision, please try again later",
