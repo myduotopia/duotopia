@@ -44,6 +44,9 @@ FIELDS: List[Tuple[str, str]] = [
 # 與後端 AI 草稿的驗證一致：中文 LINE 文案與中文標題是必要欄位
 REQUIRED_FIELDS = ("line_message_zh", "article_title_zh")
 
+# 公開 repo 任何人都能留言：只採用團隊成員寫的公告區塊
+TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
 REASON_NO_ANNOUNCE = "no_announce_label"
 REASON_NOT_TESTED = "not_tested_in_staging"
 REASON_NO_ISSUE = "no_issue_number"
@@ -178,7 +181,8 @@ class GitHubClient(Protocol):
     def issue_labels(self, number: int) -> List[str]:
         ...
 
-    def issue_comments(self, number: int) -> List[str]:
+    def issue_comments(self, number: int) -> List[Dict[str, Any]]:
+        """[{"body": ..., "author_association": ...}]，由舊到新"""
         ...
 
     def commit_pulls(self, sha: str) -> List[Dict[str, Any]]:
@@ -189,12 +193,18 @@ class GitHubClient(Protocol):
 
 
 def issue_content(gh: GitHubClient, number: int) -> Optional[Dict[str, str]]:
-    """issue 最新一則含公告區塊的留言內容。"""
-    for body in reversed(gh.issue_comments(number)):
-        parsed = parse_block(body)
+    """issue 最新一則「團隊成員寫的」含公告區塊的留言內容。"""
+    for comment in reversed(gh.issue_comments(number)):
+        if comment.get("author_association") not in TRUSTED_ASSOCIATIONS:
+            continue
+        parsed = parse_block(comment.get("body"))
         if parsed:
             return parsed["content"]
     return None
+
+
+def _eligible_issues(gh: GitHubClient, issues: Iterable[int]) -> List[int]:
+    return [n for n in issues if eligibility(gh.issue_labels(n))[0]]
 
 
 # ============ CI：決定要不要建草稿 ============
@@ -212,7 +222,7 @@ def _payload_for_issues(
 ) -> Dict[str, Any]:
     if not issues:
         return {"skip": REASON_NO_ISSUE}
-    eligible = [n for n in issues if eligibility(gh.issue_labels(n))[0]]
+    eligible = _eligible_issues(gh, issues)
     if not eligible:
         return {"skip": REASON_NO_ELIGIBLE_ISSUE}
     payload = {**base, "issue_numbers": ",".join(map(str, eligible))}
@@ -250,10 +260,14 @@ def build_ci_payload(
             base["pr_number"] = release_pr["number"]
             parsed = parse_block(release_pr.get("body"))
             if parsed and is_complete(parsed["content"]):
+                # 區塊寫好後標籤仍可能被拿掉：重新確認，一個都不符合就不發
                 issues = parsed["issues"] or extract_issue_numbers(release_pr["title"])
+                eligible = _eligible_issues(gh, issues)
+                if not eligible:
+                    return {"skip": REASON_NO_ELIGIBLE_ISSUE}
                 return {
                     **base,
-                    "issue_numbers": ",".join(map(str, issues)) or None,
+                    "issue_numbers": ",".join(map(str, eligible)),
                     "content": parsed["content"],
                 }
             messages = [
@@ -309,8 +323,14 @@ class GhCli:
     def _issue_comment_objects(self, number: int) -> List[Dict[str, Any]]:
         return self._api_pages(f"issues/{number}/comments?per_page=100")
 
-    def issue_comments(self, number: int) -> List[str]:
-        return [c.get("body") or "" for c in self._issue_comment_objects(number)]
+    def issue_comments(self, number: int) -> List[Dict[str, Any]]:
+        return [
+            {
+                "body": c.get("body") or "",
+                "author_association": c.get("author_association"),
+            }
+            for c in self._issue_comment_objects(number)
+        ]
 
     def commit_pulls(self, sha: str) -> List[Dict[str, Any]]:
         return [
@@ -330,11 +350,12 @@ class GhCli:
         ]
 
     def upsert_issue_comment(self, number: int, body: str) -> str:
-        """更新最新一則公告留言；沒有就新增。回傳留言網址。"""
+        """更新最新一則團隊成員的公告留言；沒有就新增。回傳留言網址。"""
         existing = [
             c
             for c in self._issue_comment_objects(number)
             if BLOCK_START in (c.get("body") or "")
+            and c.get("author_association") in TRUSTED_ASSOCIATIONS
         ]
         payload = json.dumps({"body": body})
         if existing:

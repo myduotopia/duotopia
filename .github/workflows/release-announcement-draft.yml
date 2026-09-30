@@ -106,22 +106,35 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 scripts/release_announcement.py ci-payload \
-            --environment "$ENVIRONMENT" \
-            --sha "$COMMIT_SHA" \
-            --branch "$BRANCH" \
-            --commit-message "$COMMIT_MESSAGE" > payload.json
+          # GitHub API 偶發失敗（rate limit / 5xx）時重試；仍失敗就讓 job 失敗，
+          # 不退回「不檢查標籤」的草稿 —— 沒有標籤的更新不該被建成公告
+          for attempt in 1 2 3; do
+            if python3 scripts/release_announcement.py ci-payload \
+                --environment "$ENVIRONMENT" \
+                --sha "$COMMIT_SHA" \
+                --branch "$BRANCH" \
+                --commit-message "$COMMIT_MESSAGE" > payload.json; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "❌ 無法判斷是否需要建立草稿（GitHub API 失敗），可稍後用 workflow_dispatch 重跑"
+              exit 1
+            fi
+            echo "⚠️  第 $attempt 次判斷失敗，15 秒後重試"
+            sleep 15
+          done
           cat payload.json
+          ISSUES=$(jq -r '.issue_numbers // "—"' payload.json)
 
           if jq -e 'has("skip")' payload.json > /dev/null; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "result=⏭️ 略過：$(jq -r '.message' payload.json)" >> "$GITHUB_OUTPUT"
           elif jq -e 'has("content")' payload.json > /dev/null; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "result=📝 使用 /announce 寫好的內容（issue #$(jq -r '.issue_numbers' payload.json)）" >> "$GITHUB_OUTPUT"
+            echo "result=📝 使用 /announce 寫好的內容（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "result=🤖 找不到 /announce 內容，由後端以 Vertex AI 產生（issue #$(jq -r '.issue_numbers' payload.json)）" >> "$GITHUB_OUTPUT"
+            echo "result=🤖 找不到 /announce 內容，由後端以 Vertex AI 產生（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create draft via backend webhook

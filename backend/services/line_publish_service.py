@@ -6,8 +6,9 @@ production 環境改推給指定測試帳號（push），避免測試訊息轟�
 本 service 只負責「呼叫 LINE API 與組裝訊息」，不碰 DB；發布結果的記錄
 由 ReleaseAnnouncementService 負責，以維持單一職責與可測試性。
 
-憑證來自 core.config.settings（LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN / LINE_ANNOUNCE_TEST_USER_ID），
-與 CI 通知共用同一個 channel（GCP Secret Manager: line-channel-access-token）。
+憑證來自 core.config.settings（LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN /
+LINE_ANNOUNCE_TEST_USER_ID）：Duotopia 官方帳號專用，刻意不與 CI 通知 bot 共用，
+避免 production broadcast 到錯的帳號。
 """
 
 import logging

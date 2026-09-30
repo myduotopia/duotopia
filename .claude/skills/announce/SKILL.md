@@ -130,5 +130,7 @@ issue **同時**有這兩個標籤才整理公告：
 
 - 不要呼叫任何發布 API、不要 broadcast LINE（發布只在後台）。
 - 不要替沒有兩個標籤的 issue 產生內容。
+- CI 只採用 **OWNER / MEMBER / COLLABORATOR** 寫的公告留言（公開 repo 防止外人塞內容）；
+  外部貢獻者的留言即使有區塊也會被忽略。
 - 不要手動編輯區塊內的 `<!-- release-announcement:* -->` 標記或 `####` 小標題，
   一律透過腳本寫入（CI 靠它們解析）。

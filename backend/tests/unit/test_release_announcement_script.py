@@ -46,7 +46,11 @@ class FakeGitHub:
         return self.labels.get(number, [])
 
     def issue_comments(self, number):
-        return self.comments.get(number, [])
+        # 純字串視為團隊成員的留言；要測外部留言時直接給 dict
+        return [
+            c if isinstance(c, dict) else {"body": c, "author_association": "MEMBER"}
+            for c in self.comments.get(number, [])
+        ]
 
     def commit_pulls(self, sha):
         return self.commit_prs.get(sha, [])
@@ -76,7 +80,13 @@ class TestBlock:
         block = ra.render_block(CONTENT)
         assert block.count("\n---\n") == len(ra.FIELDS)
 
-    def test_body_ending_with_rule_is_kept(self):
+    def test_trailing_rule_in_body_is_dropped(self):
+        """已知限制：內文「最後」的分隔線會被當成欄位分隔線去掉（中間的會保留）"""
+        content = {**CONTENT, "article_body_en": "Body\n\n---"}
+        parsed = ra.parse_block(ra.render_block(content))
+        assert parsed["content"]["article_body_en"] == "Body"
+
+    def test_rule_inside_body_is_kept(self):
         content = {**CONTENT, "article_body_en": "Line one\n\n---\n\nLine two"}
         parsed = ra.parse_block(ra.render_block(content))
         assert parsed["content"]["article_body_en"] == "Line one\n\n---\n\nLine two"
@@ -146,6 +156,18 @@ class TestEligibility:
         )
         assert ra.issue_content(gh, 5)["line_message_zh"] == "新版"
 
+    def test_ignores_blocks_from_outside_contributors(self):
+        """公開 repo：任何人都能留言，只採用 OWNER / MEMBER / COLLABORATOR 寫的區塊"""
+        planted = {
+            "body": ra.render_block({**CONTENT, "line_message_zh": "外人塞的內容"}),
+            "author_association": "NONE",
+        }
+        gh = FakeGitHub(comments={5: [ra.render_block(CONTENT), planted]})
+        assert ra.issue_content(gh, 5)["line_message_zh"] == CONTENT["line_message_zh"]
+
+        gh = FakeGitHub(comments={5: [planted]})
+        assert ra.issue_content(gh, 5) is None
+
 
 class TestStagingPayload:
     def _payload(self, gh, message):
@@ -178,6 +200,16 @@ class TestStagingPayload:
         assert result["source_ref"] == "sha1"
         assert result["pr_number"] == 1071
 
+    def test_multiple_issues_in_one_commit_fall_back_to_vertex(self):
+        """單一 commit 含多個 issue 時沒有統整內容，不拿其中一則留言代表全部"""
+        gh = FakeGitHub(
+            labels={12: BOTH, 13: BOTH},
+            comments={12: [ra.render_block(CONTENT)], 13: [ra.render_block(CONTENT)]},
+        )
+        result = self._payload(gh, "fix: closes #12 and resolves #13")
+        assert "content" not in result
+        assert result["issue_numbers"] == "12,13"
+
     def test_eligible_without_comment_falls_back_to_vertex(self):
         gh = FakeGitHub(labels={1070: BOTH})
         result = self._payload(gh, "Release: [Bug]: x (Fixes #1070) (#1071)")
@@ -207,12 +239,30 @@ class TestProductionPayload:
             **self.RELEASE_PR,
             "body": ra.render_block(CONTENT, issues=[1046]),
         }
-        gh = FakeGitHub(commit_prs={"merge-sha": [pr]})
+        gh = FakeGitHub(commit_prs={"merge-sha": [pr]}, labels={1046: BOTH})
         result = self._payload(gh)
         assert result["content"] == CONTENT
         assert result["issue_numbers"] == "1046"
         assert result["pr_number"] == 1072
         assert result["release_title"] == self.RELEASE_PR["title"]
+
+    def test_block_issues_are_rechecked_against_labels(self):
+        """統整區塊寫好後 issue 若被拿掉標籤，就不再列入"""
+        pr = {**self.RELEASE_PR, "body": ra.render_block(CONTENT, issues=[1046, 1045])}
+        gh = FakeGitHub(
+            commit_prs={"merge-sha": [pr]},
+            labels={1046: BOTH, 1045: [ra.LABEL_ANNOUNCE]},
+        )
+        result = self._payload(gh)
+        assert result["content"] == CONTENT
+        assert result["issue_numbers"] == "1046"
+
+    def test_block_whose_issues_all_lost_labels_skips(self):
+        pr = {**self.RELEASE_PR, "body": ra.render_block(CONTENT, issues=[1045])}
+        gh = FakeGitHub(
+            commit_prs={"merge-sha": [pr]}, labels={1045: [ra.LABEL_ANNOUNCE]}
+        )
+        assert self._payload(gh)["skip"] == ra.REASON_NO_ELIGIBLE_ISSUE
 
     def test_without_block_falls_back_for_eligible_issues_only(self):
         gh = FakeGitHub(
