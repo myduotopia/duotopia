@@ -3,6 +3,8 @@
 
 從上傳的圖片 / PDF 擷取單字教材內容（單字、翻譯、詞性、例句、例句翻譯），
 一次 AI 呼叫同時完成「圖片擷取」與「資訊不足時 fallback 生成」。
+題庫用的 multiple_choice（單題選擇題）與 reading_group（一份檔 → 一個閱讀題組：
+文章素材／海報座標 + 單字註解 + 小題，issue #1084）也走同一條路徑。
 
 統一走 Vertex AI（Gemini vision），原生支援圖片與 PDF。
 
@@ -29,13 +31,19 @@ EXTRACT_MODE_VOCABULARY = "vocabulary"
 EXTRACT_MODE_SENTENCE = "sentence"
 # multiple_choice：題庫從考卷圖片擷取選擇題（issue #1061 / #1065）
 EXTRACT_MODE_MULTIPLE_CHOICE = "multiple_choice"
+# reading_group：一份檔（圖或 PDF）→ 一個閱讀題組（文章素材 + 小題）（issue #1084）
+EXTRACT_MODE_READING_GROUP = "reading_group"
 EXTRACT_MODES = {
     EXTRACT_MODE_VOCABULARY,
     EXTRACT_MODE_SENTENCE,
     EXTRACT_MODE_MULTIPLE_CHOICE,
+    EXTRACT_MODE_READING_GROUP,
 }
 MC_MIN_OPTIONS = 2
 MC_MAX_OPTIONS = 6
+# reading_group 的素材區域座標：Gemini 慣用 [ymin, xmin, ymax, xmax]，0–1000 正規化
+BOX_2D_MAX = 1000
+STIMULUS_KINDS = ("text", "image")
 
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
@@ -127,9 +135,59 @@ class MagicPasteService:
         - "vocabulary"（單字集）：一列 = 單字 + 翻譯 + 詞性 + 例句 + 例句翻譯
         - "sentence"（例句集 / 朗讀評測）：一列 = 句子 + 翻譯
         - "multiple_choice"（題庫）：一題 = 題幹 + 選項 + （圖上有標才給）答案 + 解析
+        - "reading_group"（題庫）：整份檔 = 一個閱讀題組（文章素材 + 單字註解 + 小題）
 
         `level` 目前保留供未來使用；擷取本身不生成例句故不參考。
         """
+        if extract_mode == EXTRACT_MODE_READING_GROUP:
+            return (
+                "The uploaded file contains ONE reading-comprehension question group: "
+                "a shared stimulus (a passage, or a poster / comic / map / timetable / "
+                "advertisement) followed by several multiple-choice questions about it.\n"
+                "Return JSON of the exact shape: "
+                '{"title": "...", '
+                '"stimulus": {"kind": "text" | "image", "paragraphs": ["..."], '
+                '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1}, '
+                '"glossary": [{"word": "...", "zh": "..."}], '
+                '"questions": [{"stem": "...", "options": ["...", "..."], '
+                '"correct_indexes": [0], "explanation": "..."}]}\n'
+                "Rules:\n"
+                '- `title`: a short title printed for the passage, otherwise "".\n'
+                '- `stimulus.kind`: "text" when the stimulus is prose (paragraphs, a '
+                'letter, an article, a dialogue). "image" when the layout itself '
+                "carries the meaning and must be shown as a picture: a poster, comic "
+                "strip, map, menu, timetable, chart, advertisement, or any block with "
+                "drawings.\n"
+                '- When kind is "text": `paragraphs` = the passage split into its '
+                "printed paragraphs, in order, text exactly as printed. Keep blanks such "
+                'as "__40__" as printed. You may mark printed bold as **bold** and '
+                'printed underline as __underlined__. Set `text` to "" and omit '
+                "`box_2d`.\n"
+                '- When kind is "image": `box_2d` = the bounding box of the stimulus '
+                "area ONLY (exclude the questions and their options), as "
+                "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page. "
+                "`page` = 1-based page number the box is on (1 for a single image). "
+                "`text` = all readable text inside that area, in reading order, as one "
+                "plain string (used for search, not shown to students). Set "
+                "`paragraphs` to [].\n"
+                "- `glossary`: word-meaning pairs printed as a footnote box for the "
+                'group (e.g. "timeline 時間軸"); `zh` must be Traditional Chinese. '
+                "[] if none.\n"
+                "- `questions`: every multiple-choice question that belongs to this "
+                "group, in printed order. `stem`: the question text exactly as printed, "
+                "without the leading number. `options`: the choices in printed order "
+                f"({MC_MIN_OPTIONS}–{MC_MAX_OPTIONS}), without leading labels such as "
+                "(A) B. (C). Do NOT invent options; skip a question with fewer than "
+                f"{MC_MIN_OPTIONS} choices. `correct_indexes`: 0-based indexes ONLY if "
+                "the answer is printed (answer key, circled / ticked / bold choice); "
+                "otherwise []. Never guess. `explanation`: copy ONLY a printed "
+                'explanation; otherwise "".\n'
+                "- Do NOT put the passage or the picture text into any `stem`.\n"
+                "- If the file contains no reading group at all, return "
+                '{"title": "", "stimulus": {"kind": "text", "paragraphs": [], '
+                '"text": ""}, "glossary": [], "questions": []}.'
+            )
+
         if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE:
             return (
                 "Extract every multiple-choice question from the uploaded file.\n"
@@ -229,11 +287,12 @@ class MagicPasteService:
         )
         provider = "vertex"
 
-        items = (
-            self._normalize_mc_items(raw)
-            if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE
-            else self._normalize_items(raw)
-        )
+        if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE:
+            items = self._normalize_mc_items(raw)
+        elif extract_mode == EXTRACT_MODE_READING_GROUP:
+            items = self._normalize_reading_group(raw)
+        else:
+            items = self._normalize_items(raw)
         cost = self._estimate_cost(model, usage)
         logger.info(
             "[magic-paste] provider=%s model=%s items=%d tokens(in/out)=%s/%s "
@@ -399,6 +458,97 @@ class MagicPasteService:
                 }
             )
         return items
+
+    @staticmethod
+    def _normalize_box_2d(raw: Any) -> Optional[List[int]]:
+        """[ymin, xmin, ymax, xmax]，四個 0–1000 整數且 ymin<ymax、xmin<xmax；否則 None。"""
+        if not isinstance(raw, list) or len(raw) != 4:
+            return None
+        box: List[int] = []
+        for v in raw:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return None
+            n = int(round(v))
+            if n < 0 or n > BOX_2D_MAX:
+                return None
+            box.append(n)
+        ymin, xmin, ymax, xmax = box
+        if ymin >= ymax or xmin >= xmax:
+            return None
+        return box
+
+    @classmethod
+    def _normalize_reading_group(cls, raw: Any) -> List[Dict[str, Any]]:
+        """
+        閱讀題組擷取結果整理：回傳 0 或 1 個元素的 list（沿用 endpoint 的 items 形狀）。
+
+        - stimulus.kind 只接受 text / image；缺或不合法時依內容推斷（有段落→text，否則→image）
+        - box_2d 不合法就丟掉（前端改用整張圖）；page 只留正整數
+        - glossary 兩欄皆非空才留；questions 沿用 _normalize_mc_items 規則
+        - 完全沒素材也沒小題 → []（不扣配額）
+        """
+        if not isinstance(raw, dict):
+            return []
+        stim_raw = raw.get("stimulus")
+        stim = stim_raw if isinstance(stim_raw, dict) else {}
+
+        paragraphs_raw = stim.get("paragraphs")
+        paragraphs = (
+            [str(p or "").strip() for p in paragraphs_raw]
+            if isinstance(paragraphs_raw, list)
+            else []
+        )
+        paragraphs = [p for p in paragraphs if p]
+        text = str(stim.get("text") or "").strip()
+        box = cls._normalize_box_2d(stim.get("box_2d"))
+        page_raw = stim.get("page")
+        page = (
+            int(page_raw)
+            if isinstance(page_raw, (int, float))
+            and not isinstance(page_raw, bool)
+            and int(page_raw) >= 1
+            else None
+        )
+
+        kind = str(stim.get("kind") or "").strip().lower()
+        if kind not in STIMULUS_KINDS:
+            kind = "text" if paragraphs else "image"
+        if kind == "text":
+            box = None
+            page = None
+        else:
+            paragraphs = []
+
+        glossary: List[Dict[str, str]] = []
+        glossary_raw = raw.get("glossary")
+        if isinstance(glossary_raw, list):
+            for g in glossary_raw:
+                if not isinstance(g, dict):
+                    continue
+                word = str(g.get("word") or "").strip()
+                zh = str(g.get("zh") or "").strip()
+                if word and zh:
+                    glossary.append({"word": word, "zh": zh})
+
+        questions = cls._normalize_mc_items({"items": raw.get("questions") or []})
+
+        has_stimulus = bool(paragraphs or text or box)
+        if not has_stimulus and not questions:
+            return []
+        return [
+            {
+                "title": str(raw.get("title") or "").strip(),
+                "stimulus": {
+                    "kind": kind,
+                    "paragraphs": paragraphs,
+                    "text": text,
+                    "box_2d": box,
+                    "page": page,
+                },
+                "glossary": glossary,
+                "questions": questions,
+            }
+        ]
 
     @staticmethod
     def _normalize_items(raw: Any) -> List[Dict[str, str]]:

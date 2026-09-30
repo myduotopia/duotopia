@@ -13,6 +13,7 @@ from services.magic_paste_service import (
     MagicPasteError,
     EXTRACT_MODE_VOCABULARY,
     EXTRACT_MODE_SENTENCE,
+    EXTRACT_MODE_READING_GROUP,
 )
 from services import magic_paste_quota as mpq
 
@@ -346,3 +347,142 @@ def test_quota_endpoint(test_client, auth_headers_teacher):
     assert body["free_limit"] == mpq.FREE_MONTHLY_LIMIT
     assert body["free_remaining"] == mpq.FREE_MONTHLY_LIMIT
     assert body["can_use"] is True
+
+
+# ---------------------------------------------------- reading_group（#1084 一份檔→一個題組）
+
+
+def test_reading_group_prompt_asks_for_stimulus_box_and_questions():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    assert "box_2d" in prompt
+    assert "[ymin, xmin, ymax, xmax]" in prompt
+    assert '"kind": "text" | "image"' in prompt
+    assert "glossary" in prompt
+    assert "Never guess" in prompt
+
+
+def test_normalize_reading_group_text_kind():
+    raw = {
+        "title": " Vivaldi ",
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["  Antonio Vivaldi was a violin player. ", "", "Sadly..."],
+            "text": "",
+            "box_2d": [0, 0, 500, 1000],
+        },
+        "glossary": [
+            {"word": "timeline", "zh": "時間軸"},
+            {"word": "", "zh": "空"},
+            {"word": "only", "zh": ""},
+        ],
+        "questions": [
+            {"stem": "25. Which is the best title?", "options": ["A", "B", "C", "D"]},
+            {"stem": "", "options": ["x", "y"]},
+            {"stem": "too few", "options": ["only one"]},
+        ],
+    }
+    items = MagicPasteService._normalize_reading_group(raw)
+    assert len(items) == 1
+    g = items[0]
+    assert g["title"] == "Vivaldi"
+    assert g["stimulus"]["kind"] == "text"
+    assert g["stimulus"]["paragraphs"] == [
+        "Antonio Vivaldi was a violin player.",
+        "Sadly...",
+    ]
+    # text 模式不帶座標
+    assert g["stimulus"]["box_2d"] is None
+    assert g["glossary"] == [{"word": "timeline", "zh": "時間軸"}]
+    assert [q["stem"] for q in g["questions"]] == ["25. Which is the best title?"]
+
+
+def test_normalize_reading_group_image_kind_and_bad_box():
+    good = {
+        "stimulus": {
+            "kind": "image",
+            "paragraphs": ["ignored for image"],
+            "text": "Happy Town Lantern Festival",
+            "box_2d": [12.4, 0, 640, 1000],
+            "page": 1,
+        },
+        "questions": [],
+    }
+    g = MagicPasteService._normalize_reading_group(good)[0]
+    assert g["stimulus"]["kind"] == "image"
+    assert g["stimulus"]["paragraphs"] == []
+    assert g["stimulus"]["box_2d"] == [12, 0, 640, 1000]
+    assert g["stimulus"]["page"] == 1
+    assert g["stimulus"]["text"] == "Happy Town Lantern Festival"
+    assert g["questions"] == []
+
+    for bad_box in (
+        [0, 0, 0, 1000],
+        [1, 2, 3],
+        [0, 0, 1200, 1000],
+        "nope",
+        [True, 0, 1, 1],
+    ):
+        raw = {"stimulus": {"kind": "image", "text": "t", "box_2d": bad_box}}
+        g = MagicPasteService._normalize_reading_group(raw)[0]
+        assert g["stimulus"]["box_2d"] is None, bad_box
+
+
+def test_normalize_reading_group_infers_kind_and_drops_empty():
+    inferred = MagicPasteService._normalize_reading_group(
+        {"stimulus": {"paragraphs": ["p1"]}, "questions": []}
+    )
+    assert inferred[0]["stimulus"]["kind"] == "text"
+    # 沒素材也沒小題 → 不回傳（endpoint 不扣配額）
+    assert MagicPasteService._normalize_reading_group({"stimulus": {}}) == []
+    assert MagicPasteService._normalize_reading_group("garbage") == []
+
+
+def test_endpoint_reading_group_mode_returns_single_group_and_charges_once(
+    test_client, auth_headers_teacher, monkeypatch
+):
+    seen = {}
+
+    async def fake_extract(self, file_bytes, mime_type, **kwargs):
+        seen["extract_mode"] = kwargs.get("extract_mode")
+        return {
+            "items": [
+                {
+                    "title": "",
+                    "stimulus": {
+                        "kind": "image",
+                        "paragraphs": [],
+                        "text": "poster text",
+                        "box_2d": [0, 0, 600, 1000],
+                        "page": 1,
+                    },
+                    "glossary": [],
+                    "questions": [
+                        {
+                            "stem": "What is the purpose?",
+                            "options": ["a", "b", "c", "d"],
+                            "correct_indexes": [],
+                            "explanation": "",
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "estimated_cost_usd": 0.0,
+            "provider": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr(MagicPasteService, "extract", fake_extract)
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+        data={"extract_mode": EXTRACT_MODE_READING_GROUP},
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["extract_mode"] == EXTRACT_MODE_READING_GROUP
+    body = resp.json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["stimulus"]["box_2d"] == [0, 0, 600, 1000]
+    assert body["charge"]["charged"] == "free"
+    assert body["quota"]["free_used"] == 1
