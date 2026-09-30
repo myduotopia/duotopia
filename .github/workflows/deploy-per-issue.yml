@@ -78,7 +78,7 @@ jobs:
           STAGING_SUPABASE_POOLER_URL: ${{ secrets.STAGING_DATABASE_POOLER_URL }}
         run: |
           echo "🔍 Installing dependencies for migrations..."
-          pip install alembic psycopg2-binary sqlalchemy python-dotenv
+          pip install alembic==1.13.1 psycopg2-binary==2.9.9 sqlalchemy==2.0.23 python-dotenv
           echo "🔄 Running Alembic database migrations..."
           echo "📊 Current migration status:"
           alembic current || echo "No current revision"
