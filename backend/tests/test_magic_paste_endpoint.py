@@ -14,6 +14,7 @@ from services.magic_paste_service import (
     EXTRACT_MODE_VOCABULARY,
     EXTRACT_MODE_SENTENCE,
     EXTRACT_MODE_READING_GROUP,
+    GROUP_TITLE_MAX_CHARS,
 )
 from services import magic_paste_quota as mpq
 
@@ -359,6 +360,29 @@ def test_reading_group_prompt_asks_for_stimulus_box_and_questions():
     assert '"kind": "text" | "image"' in prompt
     assert "glossary" in prompt
     assert "Never guess" in prompt
+
+
+def test_reading_group_prompt_requires_a_title_even_without_printed_one():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    assert "ALWAYS return a title" in prompt
+    assert "at most 8 words" in prompt
+    # 沒印刷標題時要自己下標，而不是留空
+    assert 'otherwise ""' not in prompt.split("`stimulus.kind`")[0]
+
+
+def test_normalize_reading_group_truncates_long_title_and_allows_empty():
+    long_title = "A" * 260
+    g = MagicPasteService._normalize_reading_group(
+        {"title": long_title, "stimulus": {"kind": "text", "paragraphs": ["p"]}}
+    )[0]
+    assert len(g["title"]) == GROUP_TITLE_MAX_CHARS
+    assert g["title"] == "A" * GROUP_TITLE_MAX_CHARS
+
+    # 模型偶爾不給 title：仍是合法結果，只是空字串
+    no_title = MagicPasteService._normalize_reading_group(
+        {"stimulus": {"kind": "text", "paragraphs": ["p"]}}
+    )[0]
+    assert no_title["title"] == ""
 
 
 def test_normalize_reading_group_text_kind():

@@ -44,6 +44,8 @@ MC_MAX_OPTIONS = 6
 # reading_group 的素材區域座標：Gemini 慣用 [ymin, xmin, ymax, xmax]，0–1000 正規化
 BOX_2D_MAX = 1000
 STIMULUS_KINDS = ("text", "image")
+# 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
+GROUP_TITLE_MAX_CHARS = 200
 
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
@@ -152,7 +154,14 @@ class MagicPasteService:
                 '"questions": [{"stem": "...", "options": ["...", "..."], '
                 '"correct_indexes": [0], "explanation": "..."}]}\n'
                 "Rules:\n"
-                '- `title`: a short title printed for the passage, otherwise "".\n'
+                "- `title`: ALWAYS return a title. If a title is printed for the "
+                "passage, copy it exactly. Otherwise write a short English title of "
+                "your own that names what the material is about, at most 8 words, no "
+                "surrounding quotes, and NOT starting with a generic word such as "
+                '"Reading", "Passage", "Article" or "Question". For an image-based '
+                "stimulus, name it after what the picture shows and its format "
+                '(e.g. "Lantern Festival Poster", "Soccer Practice Comic", '
+                '"Taipei Zoo Map").\n'
                 '- `stimulus.kind`: "text" when the stimulus is prose (paragraphs, a '
                 'letter, an article, a dialogue). "image" when the layout itself '
                 "carries the meaning and must be shown as a picture: a poster, comic "
@@ -484,6 +493,7 @@ class MagicPasteService:
 
         - stimulus.kind 只接受 text / image；缺或不合法時依內容推斷（有段落→text，否則→image）
         - box_2d 不合法就丟掉（前端改用整張圖）；page 只留正整數
+        - title 截到 GROUP_TITLE_MAX_CHARS（DB 上限）；模型沒給時留空字串不視為錯誤
         - glossary 兩欄皆非空才留；questions 沿用 _normalize_mc_items 規則
         - 完全沒素材也沒小題 → []（不扣配額）
         """
@@ -537,7 +547,7 @@ class MagicPasteService:
             return []
         return [
             {
-                "title": str(raw.get("title") or "").strip(),
+                "title": str(raw.get("title") or "").strip()[:GROUP_TITLE_MAX_CHARS],
                 "stimulus": {
                     "kind": kind,
                     "paragraphs": paragraphs,
