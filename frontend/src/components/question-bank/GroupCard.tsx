@@ -256,7 +256,8 @@ export default function GroupCard({
   // 非同步回填（例如 AI 標題）要以「最新草稿」為底，否則等待期間老師的編輯會被蓋掉
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  const patch = (p: Partial<GroupDraft>) => onChange({ ...draftRef.current, ...p });
+  const patch = (p: Partial<GroupDraft>) =>
+    onChange({ ...draftRef.current, ...p });
 
   // ---- AI 標題（#1084）----
   const [titleBusy, setTitleBusy] = useState(false);
