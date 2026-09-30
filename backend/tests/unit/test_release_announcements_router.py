@@ -8,6 +8,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 import routers.release_announcements as ra
 from models.release_announcement import (
@@ -80,6 +81,29 @@ class TestWebhook:
         assert resp.created is True
         assert resp.id is not None
         assert test_db_session.query(ReleaseAnnouncement).count() == 1
+
+    @pytest.mark.asyncio
+    async def test_accepts_prewritten_content(self, test_db_session):
+        written = {**AI_RESULT, "line_message_zh": "CI 帶來的現成文案"}
+        with _patch_ai() as ai:
+            resp = await ra.create_release_announcement(
+                _body(source_ref="pre", content=written),
+                x_release_secret="SECRET",
+                db=test_db_session,
+            )
+        assert resp.created is True
+        assert ai.return_value.generate_json.await_count == 0
+        row = test_db_session.get(ReleaseAnnouncement, resp.id)
+        assert row.line_message_zh == "CI 帶來的現成文案"
+
+    def test_content_fields_have_length_limits(self):
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(line_message_zh="字" * 5001)
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(article_body_en="a" * 50001)
+        # 標題上限與 DB / 後台編輯一致（200），不在 service 裡默默截斷
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(article_title_zh="標" * 201)
 
     @pytest.mark.asyncio
     async def test_duplicate_commit_returns_existing(self, test_db_session):
@@ -170,6 +194,24 @@ class TestUpdate:
         )
         assert item.line_message_zh == "改過的 LINE 文案"
         assert item.article_title_zh == AI_RESULT["article_title_zh"]
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://cdn.example.com/a.png",
+            "javascript:alert(1)",
+            "cdn/a.png",
+            "https://",
+            "https:///a.png",
+        ],
+    )
+    def test_image_url_must_be_https(self, url):
+        with pytest.raises(ValidationError):
+            ra.ReleaseAnnouncementUpdate(image_url=url)
+
+    @pytest.mark.parametrize("url", ["https://cdn.example.com/a.png", "", "  "])
+    def test_image_url_accepts_https_or_blank(self, url):
+        assert ra.ReleaseAnnouncementUpdate(image_url=url).image_url == url
 
     @pytest.mark.asyncio
     async def test_published_announcement_cannot_be_edited(self, test_db_session):
