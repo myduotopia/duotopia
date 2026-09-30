@@ -11,6 +11,9 @@
  *
  * #1045 階段 4：老師預覽「考後檢討」重用本元件，傳 `isPreview` 隱藏「提交後不可重做」
  * 文案、傳 `footer` 放「重新示範」。學生正式作答與派發 dialog 即時預覽不傳，外觀不變。
+ *
+ * Issue #1088：題號旁狀態 chip — 答對顯示「正確」；答錯顯示「錯誤」；
+ * 未作答同時顯示「錯誤」與「未作答」兩個 chip（依序）。
  */
 
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -48,10 +51,39 @@ interface Props<W extends QuizReviewWord> {
   hideAnswerRow?: boolean;
 }
 
-// Issue #1088：題號旁三態狀態 chip（正確／錯誤／未作答）
-function statusOf(word: QuizReviewWord): "correct" | "wrong" | "unanswered" {
+// Issue #1088：題號旁狀態 chip（正確／錯誤／未作答）；
+// 未作答題目同時顯示「錯誤」+「未作答」兩個 chip
+type ReviewStatus = "correct" | "wrong" | "unanswered";
+
+function statusOf(word: QuizReviewWord): ReviewStatus {
   if (!word.student_answer) return "unanswered";
   return word.is_correct ? "correct" : "wrong";
+}
+
+const CHIP_STYLES: Record<ReviewStatus, string> = {
+  correct: "bg-emerald-100 text-emerald-800",
+  wrong: "bg-rose-100 text-rose-800",
+  unanswered: "bg-amber-100 text-amber-800",
+};
+
+function StatusChip({ kind }: { kind: ReviewStatus }) {
+  const { t } = useTranslation();
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold",
+        CHIP_STYLES[kind],
+      )}
+      data-testid="quiz-review-status"
+      data-status={kind}
+    >
+      {kind === "correct" && <CheckCircle2 className="h-5 w-5" />}
+      {kind === "wrong" && <XCircle className="h-5 w-5" />}
+      {kind === "correct" && (t("wordQuiz.review.correct") || "正確")}
+      {kind === "wrong" && (t("wordQuiz.review.wrong") || "錯誤")}
+      {kind === "unanswered" && (t("wordQuiz.review.unanswered") || "未作答")}
+    </span>
+  );
 }
 
 export default function QuizReviewView<W extends QuizReviewWord>({
@@ -101,35 +133,10 @@ export default function QuizReviewView<W extends QuizReviewWord>({
                     total,
                   }) || `第 ${word.question_number} / ${total} 題`}
                 </span>
-                {status === "correct" && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold bg-emerald-100 text-emerald-800"
-                    data-testid="quiz-review-status"
-                    data-status="correct"
-                  >
-                    <CheckCircle2 className="h-5 w-5" />
-                    {t("wordQuiz.review.correct") || "正確"}
-                  </span>
-                )}
-                {status === "wrong" && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold bg-rose-100 text-rose-800"
-                    data-testid="quiz-review-status"
-                    data-status="wrong"
-                  >
-                    <XCircle className="h-5 w-5" />
-                    {t("wordQuiz.review.wrong") || "錯誤"}
-                  </span>
-                )}
-                {status === "unanswered" && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold bg-amber-100 text-amber-800"
-                    data-testid="quiz-review-status"
-                    data-status="unanswered"
-                  >
-                    {t("wordQuiz.review.unanswered") || "未作答"}
-                  </span>
-                )}
+                {status === "correct" && <StatusChip kind="correct" />}
+                {/* Issue #1088：未作答同時顯示「錯誤」與「未作答」兩個 chip */}
+                {status !== "correct" && <StatusChip kind="wrong" />}
+                {status === "unanswered" && <StatusChip kind="unanswered" />}
               </div>
 
               <div>{renderQuestion(word)}</div>

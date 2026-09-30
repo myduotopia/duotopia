@@ -77,11 +77,12 @@ describe("QuizReviewView (#1088 樣式)", () => {
   ];
   const data3 = { ...data, words, total_questions: 3 };
 
-  it("renders a three-state status chip beside the question number", () => {
+  it("renders status chips beside the question number (unanswered shows wrong + unanswered)", () => {
     render(<QuizReviewView data={data3} renderQuestion={() => null} />);
     const chips = screen.getAllByTestId("quiz-review-status");
     expect(chips.map((c) => c.getAttribute("data-status"))).toEqual([
       "correct",
+      "wrong",
       "wrong",
       "unanswered",
     ]);
@@ -89,8 +90,13 @@ describe("QuizReviewView (#1088 樣式)", () => {
     expect(chips[0].textContent).toContain("wordQuiz.review.correct");
     expect(chips[1].className).toContain("bg-rose-100");
     expect(chips[1].textContent).toContain("wordQuiz.review.wrong");
-    expect(chips[2].className).toContain("bg-amber-100");
-    expect(chips[2].textContent).toContain("wordQuiz.review.unanswered");
+    // 未作答題：先「錯誤」再「未作答」，兩個 chip 在同一題卡內
+    expect(chips[2].className).toContain("bg-rose-100");
+    expect(chips[2].textContent).toContain("wordQuiz.review.wrong");
+    expect(chips[3].className).toContain("bg-amber-100");
+    expect(chips[3].textContent).toContain("wordQuiz.review.unanswered");
+    expect(chips[2].parentElement).toBe(chips[3].parentElement);
+    expect(chips[1].parentElement).not.toBe(chips[2].parentElement);
     // 題號放大
     const label = screen.getAllByText("wordQuiz.questionLabel")[0];
     expect(label.className).toContain("text-lg");
