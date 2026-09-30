@@ -32,11 +32,7 @@ import {
   glossaryToText,
   parseGlossaryText,
 } from "../questionDraft";
-import type {
-  ExamPoint,
-  Question,
-  QuestionGroup,
-} from "@/types/questionBank";
+import type { ExamPoint, Question, QuestionGroup } from "@/types/questionBank";
 
 const EP: ExamPoint = {
   id: 7,
@@ -572,7 +568,10 @@ describe("AI 套用（#1065）：只填空的", () => {
       rows: [
         {
           columns: [
-            { span: 1, blocks: [{ type: "paragraph" as const, text: "Intro" }] },
+            {
+              span: 1,
+              blocks: [{ type: "paragraph" as const, text: "Intro" }],
+            },
           ],
         },
       ],
