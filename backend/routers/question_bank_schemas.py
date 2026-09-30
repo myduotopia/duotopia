@@ -17,7 +17,10 @@ from models.question_bank import (
     QUESTION_TYPE_MULTIPLE_CHOICE,
 )
 from services.question_bank_ai import (
+    MAX_PASSAGE_CHARS,
     MAX_QUESTIONS_PER_CALL,
+    MAX_TITLE_STEM_CHARS,
+    MAX_TITLE_STEMS,
 )
 from services.question_bank_layout import (
     LayoutError,
@@ -283,6 +286,24 @@ class AiQuestionsIn(BaseModel):
     questions: List[AiQuestionIn] = Field(
         ..., min_length=1, max_length=MAX_QUESTIONS_PER_CALL
     )
+
+
+class AiGroupTitleIn(BaseModel):
+    """AI 題組標題（#1084）：主圖文純文字與／或小題題幹，至少要有一邊。"""
+
+    passage: Optional[str] = Field(None, max_length=MAX_PASSAGE_CHARS)
+    stems: List[str] = Field(default_factory=list, max_length=MAX_TITLE_STEMS)
+
+    @field_validator("stems")
+    @classmethod
+    def _clean_stems(cls, v: List[str]) -> List[str]:
+        return [s.strip()[:MAX_TITLE_STEM_CHARS] for s in v if s and s.strip()]
+
+    @model_validator(mode="after")
+    def _needs_content(self):
+        if not (self.passage or "").strip() and not self.stems:
+            raise ValueError("請先輸入文章或小題")
+        return self
 
 
 class SourceCreate(BaseModel):

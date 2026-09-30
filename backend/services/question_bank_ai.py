@@ -46,6 +46,12 @@ MAX_PASSAGE_CHARS = 6000
 MAX_OPTIONS = 6
 MIN_OPTIONS = 2
 MAX_EXPLANATION_CHARS = 400
+# 題組標題（#1084）：對齊 DB `question_groups.title` VARCHAR(200)
+MAX_TITLE_CHARS = 200
+TITLE_MAX_WORDS = 8
+# 產標題時最多參考幾條小題題幹
+MAX_TITLE_STEMS = 20
+MAX_TITLE_STEM_CHARS = 200
 
 
 class QuestionBankAIError(ValueError):
@@ -160,6 +166,28 @@ def build_answer_prompt(items: list[QuestionInput]) -> str:
     )
 
 
+def build_title_prompt(passage: str, stems: list[str]) -> str:
+    """題組標題（#1084）：規則與魔術貼上擷取的 `title` 一致（≤ 8 字英文短標題）。"""
+    body = ""
+    if passage:
+        body += f"Passage:\n{passage}\n"
+    if stems:
+        body += "Questions:\n" + json.dumps(stems, ensure_ascii=False) + "\n"
+    return (
+        "Write a title for the reading material below, for a teacher's question "
+        "bank listing.\n"
+        'Return JSON of the exact shape: {"title": "..."}\n'
+        "Rules:\n"
+        "- If the material itself prints a title, copy it exactly.\n"
+        f"- Otherwise write a short English title of at most {TITLE_MAX_WORDS} "
+        "words that names what the material is about.\n"
+        "- No surrounding quotes. Do NOT start with a generic word such as "
+        '"Reading", "Passage", "Article" or "Question".\n'
+        "- If only questions are given, title the topic they are about.\n"
+        f"{body}"
+    )
+
+
 def build_analyze_prompt(items: list[QuestionInput], exam_points: list[dict]) -> str:
     catalog = json.dumps(exam_points, ensure_ascii=False)
     return (
@@ -257,6 +285,21 @@ class QuestionBankAIService:
             len(skipped),
         )
         return results, skipped
+
+    # ---- AI 題組標題（#1084）----
+    async def suggest_title(self, passage: str, stems: list[str]) -> str:
+        """回一個題組標題；模型沒給可用字串時丟 QuestionBankAIOutputError。"""
+        raw = await self.generate(build_title_prompt(passage, stems), max_tokens=200)
+        title = ""
+        if isinstance(raw, dict):
+            title = str(raw.get("title") or "").strip()
+        elif isinstance(raw, str):
+            title = raw.strip()
+        title = title.strip("\"'").strip()[:MAX_TITLE_CHARS]
+        if not title:
+            raise QuestionBankAIOutputError("AI 沒有回傳標題")
+        logger.info("[qb-ai] title: %r", title)
+        return title
 
     # ---- AI 考點分析 ----
     async def analyze(

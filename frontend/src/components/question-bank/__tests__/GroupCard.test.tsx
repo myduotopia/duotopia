@@ -32,6 +32,16 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+const aiSuggestGroupTitle = vi.fn();
+vi.mock("@/lib/api", () => ({
+  apiClient: {
+    aiSuggestGroupTitle: (...a: unknown[]) => aiSuggestGroupTitle(...a),
+  },
+}));
+
+const toastError = vi.fn();
+vi.mock("sonner", () => ({ toast: { error: (m: string) => toastError(m) } }));
+
 vi.mock("../LayoutEditor", () => ({
   default: ({
     layout,
@@ -395,6 +405,42 @@ describe("validateGroupDraft（儲存前的阻擋）", () => {
       ],
     });
     expect(validateGroupDraft(emptyDialogue)).toBe("layoutIncomplete");
+  });
+
+  it("AI 標題（#1084）：沒文章沒小題時 disabled；有內容按下回填標題", async () => {
+    aiSuggestGroupTitle.mockReset();
+    toastError.mockReset();
+    aiSuggestGroupTitle.mockResolvedValue({ title: "Antonio Vivaldi" });
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} />);
+
+    const btn = screen.getByTestId("qg-0-title-ai");
+    expect(btn).toBeDisabled();
+
+    // 排版 stub 塞一段文字 → 有文章可送
+    await user.click(screen.getByTestId("qg-0-layout-stub"));
+    expect(btn).toBeEnabled();
+
+    await user.click(btn);
+    expect(aiSuggestGroupTitle).toHaveBeenCalledWith("P", []);
+    expect(screen.getByTestId("qg-0-title")).toHaveValue("Antonio Vivaldi");
+  });
+
+  it("AI 標題失敗 → toast，標題不變", async () => {
+    aiSuggestGroupTitle.mockReset();
+    toastError.mockReset();
+    aiSuggestGroupTitle.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} />);
+    await user.click(screen.getByTestId("qg-0-layout-stub"));
+    await user.click(screen.getByTestId("qg-0-title-ai"));
+    expect(toastError).toHaveBeenCalledWith("questionBank.form.tools.aiFailed");
+    expect(screen.getByTestId("qg-0-title")).toHaveValue("");
+  });
+
+  it("readOnly 隱藏 AI 標題按鈕", () => {
+    render(<Harness initial={emptyGroupDraft()} readOnly />);
+    expect(screen.queryByTestId("qg-0-title-ai")).toBeNull();
   });
 
   it("沒有主圖文 → groupNeedsContent；沒有小題 → groupNeedsQuestions", () => {

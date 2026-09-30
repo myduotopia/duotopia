@@ -378,3 +378,94 @@ def test_magic_paste_normalize_mc_items():
             "explanation": "",
         },
     ]
+
+
+# ---------------------------------------------------------------- AI 題組標題（#1084）
+
+
+def test_build_title_prompt_rules():
+    prompt = qbai.build_title_prompt("Vivaldi was a violin player.", ["Q1?"])
+    assert "at most 8 words" in prompt
+    assert "Vivaldi was a violin player." in prompt
+    assert "Q1?" in prompt
+    # 泛稱開頭要被禁止
+    assert '"Reading"' in prompt
+
+
+@pytest.mark.asyncio
+async def test_suggest_title_strips_quotes_truncates_and_rejects_empty(monkeypatch):
+    svc = qbai.QuestionBankAIService()
+
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate({"title": '  "Vivaldi" '}),
+    )
+    assert await svc.suggest_title("p", []) == "Vivaldi"
+
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate({"title": "A" * 260}),
+    )
+    assert len(await svc.suggest_title("p", [])) == qbai.MAX_TITLE_CHARS
+
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService, "generate", _fake_generate({"title": "   "})
+    )
+    with pytest.raises(qbai.QuestionBankAIOutputError):
+        await svc.suggest_title("p", [])
+
+
+def test_ai_group_title_endpoint(test_client, teacher, monkeypatch):
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate({"title": "Antonio Vivaldi The Red Priest"}),
+    )
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"passage": "Antonio Vivaldi was a violin player.", "stems": []},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"title": "Antonio Vivaldi The Red Priest"}
+
+    # 只有小題題幹也可以
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"stems": ["What is the best title?", "  "]},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+
+    # 未登入
+    assert (
+        test_client.post(
+            "/api/question-bank/ai/group-title", json={"passage": "x"}
+        ).status_code
+        == 401
+    )
+
+
+def test_ai_group_title_requires_content(test_client, teacher):
+    for payload in ({}, {"passage": "   ", "stems": []}, {"stems": ["  ", ""]}):
+        resp = test_client.post(
+            "/api/question-bank/ai/group-title",
+            json=payload,
+            headers=_headers(teacher),
+        )
+        assert resp.status_code == 422, payload
+
+
+def test_ai_group_title_provider_failure_is_502(test_client, teacher, monkeypatch):
+    async def boom(self, prompt, max_tokens):
+        raise TimeoutError("slow")
+
+    monkeypatch.setattr(qbai.QuestionBankAIService, "generate", boom)
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"passage": "hello"},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 502

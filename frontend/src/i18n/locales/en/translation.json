@@ -6083,6 +6083,8 @@
       "titleCreate": "New {{type}}",
       "titleEdit": "Edit {{type}}",
       "titlePlaceholder": "Group title (optional, shown in the list)",
+      "titleAi": "AI title",
+      "titleAiEmpty": "Add a passage or a question first",
       "loading": "Loading group…",
       "loadFailed": "Failed to load the group",
       "confirmDelete": "Delete the whole group (all sub-questions)? Assigned papers are not affected.",

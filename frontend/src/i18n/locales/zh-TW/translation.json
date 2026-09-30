@@ -6127,6 +6127,8 @@
       "titleCreate": "新增{{type}}",
       "titleEdit": "編輯{{type}}",
       "titlePlaceholder": "題組標題（選填，列表顯示用）",
+      "titleAi": "AI 標題",
+      "titleAiEmpty": "請先貼上文章或新增小題",
       "loading": "載入題組中…",
       "loadFailed": "載入題組失敗",
       "confirmDelete": "確定要刪除整個題組（含所有小題）嗎？已派發的考卷不受影響。",

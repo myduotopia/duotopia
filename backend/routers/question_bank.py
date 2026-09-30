@@ -12,6 +12,7 @@
 - PUT    /api/question-bank/questions/{id}/program-links  整批覆寫教材包／單元關聯
 - POST   /api/question-bank/ai/answer                 AI 作答：正確選項 + 解析（#1065，不扣點）
 - POST   /api/question-bank/ai/analyze                AI 考點分析：考點 code + 年段（#1065，不扣點）
+- POST   /api/question-bank/ai/group-title            AI 題組標題：依文章／小題下短標題（#1084，不扣點）
 - GET    /api/question-bank/exam-points?q=            考點清單（含 alias 命中）
 - GET    /api/question-bank/sources?q=                來源清單（平台公用 + 自己機構 + 自己建的）
 - POST   /api/question-bank/sources                   新增來源（可打字下拉的「新增」）
@@ -62,6 +63,7 @@ from models.question_bank import (
 from routers.teachers import get_current_teacher
 from services import question_bank_service as qbs
 from services.question_bank_ai import (
+    MAX_PASSAGE_CHARS,
     QuestionBankAIError,
     QuestionBankAIOutputError,
     get_question_bank_ai_service,
@@ -71,6 +73,7 @@ from utils.permissions import (
     has_read_org_materials_permission,
 )
 from routers.question_bank_schemas import (
+    AiGroupTitleIn,
     AiQuestionsIn,
     GROUP_CREATABLE_TYPES,
     GroupQuestionIn,
@@ -747,6 +750,24 @@ async def ai_answer(
         ],
         "skipped": skipped,
     }
+
+
+@router.post("/ai/group-title")
+async def ai_group_title(
+    payload: AiGroupTitleIn,
+    teacher: Teacher = Depends(get_current_teacher),
+):
+    """AI 題組標題：依主圖文純文字與小題題幹產一個英文短標題（#1084）。"""
+    passage = (payload.passage or "").strip()[:MAX_PASSAGE_CHARS]
+    try:
+        title = await get_question_bank_ai_service().suggest_title(
+            passage, payload.stems
+        )
+    except QuestionBankAIOutputError as e:
+        raise _ai_failed("group-title", e)
+    except Exception as e:  # TimeoutError / provider errors
+        raise _ai_failed("group-title", e)
+    return {"title": title}
 
 
 @router.post("/ai/analyze")

@@ -643,6 +643,14 @@ class ApiClient {
     );
   }
 
+  /** AI 依主圖文／小題題幹產一個題組標題（#1084，不扣點）。 */
+  async aiSuggestGroupTitle(passage: string, stems: string[]) {
+    return this.post<{ title: string }>(
+      "/api/question-bank/ai/group-title",
+      { passage, stems },
+    );
+  }
+
   async listSources(q?: string) {
     const query = q ? `?q=${encodeURIComponent(q)}` : "";
     return this.get<{ items: QuestionSource[] }>(

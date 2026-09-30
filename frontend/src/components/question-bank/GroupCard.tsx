@@ -34,8 +34,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { GripVertical, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
+import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,11 +55,15 @@ import {
   emptyGroupQuestion,
   glossaryToText,
   groupDerivedText,
+  groupPassageText,
   parseGlossaryText,
   validateDraft,
   type GroupDraft,
   type QuestionDraft,
 } from "./questionDraft";
+
+/** AI 標題最多送幾條小題題幹（對齊後端 MAX_TITLE_STEMS） */
+const AI_TITLE_MAX_STEMS = 20;
 
 export interface GroupCardProps {
   index: number;
@@ -247,6 +253,28 @@ export default function GroupCard({
   const locked = readOnly || disabled;
   const patch = (p: Partial<GroupDraft>) => onChange({ ...draft, ...p });
 
+  // ---- AI 標題（#1084）----
+  const [titleBusy, setTitleBusy] = useState(false);
+  const titleStems = draft.questions
+    .map((q) => q.stem.trim())
+    .filter(Boolean)
+    .slice(0, AI_TITLE_MAX_STEMS);
+  const titlePassage = (groupPassageText(draft) ?? "").trim();
+  const canSuggestTitle = Boolean(titlePassage) || titleStems.length > 0;
+  const suggestTitle = async () => {
+    if (!canSuggestTitle || titleBusy) return;
+    setTitleBusy(true);
+    try {
+      // 老師是主動按的，直接覆蓋現有標題
+      const res = await apiClient.aiSuggestGroupTitle(titlePassage, titleStems);
+      patch({ title: res.title, serverError: null });
+    } catch {
+      toast.error(t("questionBank.form.tools.aiFailed"));
+    } finally {
+      setTitleBusy(false);
+    }
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
@@ -329,15 +357,36 @@ export default function GroupCard({
       </div>
 
       <div className="space-y-4 p-4">
-        {/* 題組標題 */}
-        <Input
-          value={draft.title}
-          onChange={(e) => patch({ title: e.target.value, serverError: null })}
-          placeholder={t("questionBank.group.titlePlaceholder")}
-          className="h-9"
-          disabled={locked}
-          data-testid={`qg-${index}-title`}
-        />
+        {/* 題組標題（右側「AI 標題」：依主圖文／小題題幹產一個短標題，#1084） */}
+        <div className="flex items-center gap-2">
+          <Input
+            value={draft.title}
+            onChange={(e) => patch({ title: e.target.value, serverError: null })}
+            placeholder={t("questionBank.group.titlePlaceholder")}
+            className="h-9"
+            disabled={locked}
+            data-testid={`qg-${index}-title`}
+          />
+          {!readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1"
+              onClick={suggestTitle}
+              disabled={locked || titleBusy || !canSuggestTitle}
+              title={
+                canSuggestTitle
+                  ? t("questionBank.group.titleAi")
+                  : t("questionBank.group.titleAiEmpty")
+              }
+              data-testid={`qg-${index}-title-ai`}
+            >
+              <Sparkles size={14} />
+              {t("questionBank.group.titleAi")}
+            </Button>
+          )}
+        </div>
 
         {/* 年段 */}
         <div className="space-y-1">
