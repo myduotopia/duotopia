@@ -44,13 +44,25 @@ def answer_text_for_item(
     """
     if show_example_sentence:
         # local import: avoid cycle
-        from utils.cloze import extract_cloze_for_item, normalize_cloze_case
+        from utils.cloze import (
+            extract_cloze_for_item,
+            find_cloze_match,
+            normalize_cloze_case,
+        )
 
         base = getattr(item, "text", None) or ""
         cloze = extract_cloze_for_item(item)
         if cloze and cloze[1]:
-            # 句首 "Told me" → "told me"（原形小寫開頭時）
-            return normalize_cloze_case(cloze[1], base)
+            # 句首 "Told me" → "told me"（原形小寫開頭、老師未存大寫、且在句首時）
+            sentence = getattr(item, "example_sentence", None) or ""
+            pos = find_cloze_match(cloze[1], sentence)
+            return normalize_cloze_case(
+                cloze[1],
+                base,
+                sentence,
+                pos[0] if pos else 0,
+                getattr(item, "cloze_answer", None),
+            )
         return base
     field = text_field_for_show_image(show_image, False)
     return getattr(item, field, None) or ""

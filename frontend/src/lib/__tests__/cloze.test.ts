@@ -7,7 +7,12 @@
  *      會整句連答案一起顯示（老師派發預覽實際發生過）
  */
 import { describe, it, expect } from "vitest";
-import { buildBlank, findClozeMatch, buildBlankedSentence } from "../cloze";
+import {
+  buildBlank,
+  findClozeMatch,
+  buildBlankedSentence,
+  clozeAnswerText,
+} from "../cloze";
 
 describe("buildBlank — 一律單一格（不洩漏答案字數）", () => {
   it("單字 → 一格", () => {
@@ -97,5 +102,75 @@ describe("buildBlankedSentence", () => {
 
   it("空句子 → 空字串", () => {
     expect(buildBlankedSentence("", "apple")).toBe("");
+  });
+});
+
+describe("normalizeClozeCase / clozeAnswerText — 句首大寫還原（#1088）", () => {
+  it("句首 Told me → told me", () => {
+    expect(
+      clozeAnswerText({
+        text: "tell",
+        cloze_answer: "told me",
+        example_sentence: "Told me her name.",
+      }),
+    ).toBe("told me");
+    expect(
+      clozeAnswerText({
+        text: "tell",
+        cloze_answer: "told me",
+        example_sentence: "Yes. Told me twice.",
+      }),
+    ).toBe("told me");
+  });
+
+  it("句中 Paris 保留", () => {
+    expect(
+      clozeAnswerText({
+        text: "paris",
+        cloze_answer: "",
+        example_sentence: "I love Paris.",
+      }),
+    ).toBe("Paris");
+  });
+
+  it("Monday 只在句首才小寫；老師存大寫則保留", () => {
+    expect(
+      clozeAnswerText({
+        text: "monday",
+        cloze_answer: "",
+        example_sentence: "Monday is busy.",
+      }),
+    ).toBe("monday");
+    expect(
+      clozeAnswerText({
+        text: "monday",
+        cloze_answer: "",
+        example_sentence: "See you Monday.",
+      }),
+    ).toBe("Monday");
+    expect(
+      clozeAnswerText({
+        text: "monday",
+        cloze_answer: "Monday",
+        example_sentence: "Monday is busy.",
+      }),
+    ).toBe("Monday");
+  });
+
+  it("The cup → cup；找不到時退回 cloze_answer || text", () => {
+    expect(
+      clozeAnswerText({
+        text: "cup",
+        cloze_answer: "",
+        example_sentence: "The cup is red.",
+      }),
+    ).toBe("cup");
+    expect(
+      clozeAnswerText({
+        text: "cup",
+        cloze_answer: "cups",
+        example_sentence: "",
+      }),
+    ).toBe("cups");
   });
 });

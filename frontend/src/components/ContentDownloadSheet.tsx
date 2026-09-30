@@ -142,7 +142,7 @@ function buildClozeParts(
     if (m && m.index !== undefined) {
       return {
         before: sentence.slice(0, m.index),
-        answer: normalizeClozeCase(m[0], text),
+        answer: normalizeClozeCase(m[0], text, sentence, m.index, persisted),
         after: sentence.slice(m.index + m[0].length),
       };
     }
@@ -151,7 +151,7 @@ function buildClozeParts(
   if (!found) return null;
   return {
     before: sentence.slice(0, found.index),
-    answer: normalizeClozeCase(found.answer, text),
+    answer: normalizeClozeCase(found.answer, text, sentence, found.index),
     after: sentence.slice(found.index + found.answer.length),
   };
 }

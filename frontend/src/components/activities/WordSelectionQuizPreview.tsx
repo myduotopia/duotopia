@@ -97,6 +97,8 @@ function buildOptions(
       image_url: p.image_url ?? null,
     }))
     .filter((o) => {
+      // 未開例句：與舊版相同只濾空字串；開例句才去重（同 cloze 字形不重複出現）
+      if (!showExample) return !!o.text;
       const key = o.text.trim().toLowerCase();
       if (!key || seen.has(key)) return false;
       seen.add(key);

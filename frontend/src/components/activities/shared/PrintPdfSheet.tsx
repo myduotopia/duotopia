@@ -324,7 +324,8 @@ interface PaperPageProps {
 // Issue #1088: 答案卷每頁可放幾題（3 欄）。行高≈字級×1.5＋行距，標題區預留 ~3 行。
 const ANSWER_KEY_COLS = 3;
 function answerKeyPerPage(fontSize: number): number {
-  const rowH = fontSize * 1.5 + Q_GAP / 2;
+  // 保守估計每列兩行（翻譯較長會換行），避免最後幾列被切掉
+  const rowH = fontSize * 1.5 * 2 + Q_GAP / 2;
   const rows = Math.max(1, Math.floor((CONTENT_H - fontSize * 3) / rowH));
   return rows * ANSWER_KEY_COLS;
 }

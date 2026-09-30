@@ -35,17 +35,33 @@ export function buildBlank(_matchedText: string): string {
  * "Told me" 作為選項應顯示 "told me" —— 原形 baseWord 小寫開頭而比對結果大寫開頭時，
  * 首字母改小寫；原形本身大寫開頭（專有名詞）則保留。
  */
+export function isSentenceStart(sentence: string, start: number): boolean {
+  if (start <= 0) return true;
+  const before = sentence.slice(0, start).trimEnd();
+  return before.length === 0 || /[.!?]$/.test(before);
+}
+
+/**
+ * 只在「比對結果大寫開頭、原形小寫開頭、老師存的 cloze_answer 不是大寫開頭、
+ * 且位於句首（index 0 或前面是 [.!?]＋空白）」時把首字母小寫；句中大寫（Paris）保留。
+ */
 export function normalizeClozeCase(
   matched: string,
   baseWord: string | null | undefined,
+  sentence = "",
+  start = 0,
+  persistedAnswer?: string | null,
 ): string {
   if (!matched || !baseWord) return matched;
   const b = baseWord[0];
   const m = matched[0];
-  if (b === b.toLowerCase() && b !== b.toUpperCase() && m !== m.toLowerCase()) {
-    return m.toLowerCase() + matched.slice(1);
-  }
-  return matched;
+  const baseIsLower = b === b.toLowerCase() && b !== b.toUpperCase();
+  const matchIsUpper = m !== m.toLowerCase();
+  if (!baseIsLower || !matchIsUpper) return matched;
+  const p = (persistedAnswer ?? "").trim()[0];
+  if (p && p !== p.toLowerCase()) return matched;
+  if (!isSentenceStart(sentence, start)) return matched;
+  return m.toLowerCase() + matched.slice(1);
 }
 
 /**
@@ -61,7 +77,15 @@ export function clozeAnswerText(item: {
   const match =
     findClozeMatch(item.cloze_answer, item.example_sentence) ??
     findClozeMatch(item.text, item.example_sentence);
-  if (match) return normalizeClozeCase(match[2], item.text);
+  if (match) {
+    return normalizeClozeCase(
+      match[2],
+      item.text,
+      item.example_sentence ?? "",
+      match[0],
+      item.cloze_answer,
+    );
+  }
   return item.cloze_answer || item.text;
 }
 

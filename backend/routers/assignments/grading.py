@@ -504,16 +504,28 @@ def _build_quiz_submission(
             )
         return item.text or ""
 
-    # 舊資料（無 options_shown）fallback：以與 start 相同的 seed 重建選項
+    # 舊資料（無 options_shown）fallback：以與 start 相同的 seed 重建選項。
+    # Issue #1088: 只在真的有題目缺 options_shown 時才重建（lazy）。這裡的 session
+    # 選擇（source 或 sa.id）只是近似 —— 只影響沒存 options_shown 的 legacy 列，
+    # #1045 之後作答的資料一律用存下來的選項，不走這條。
     fallback_options: Dict[int, List[Dict[str, Any]]] = {}
     if practice_mode == "word_selection_quiz" and parent is not None:
-        pool_items = _load_quiz_items(
-            db,
-            parent,
-            bool(parent.shuffle_questions),
-            seed=source.id if source else student_assignment.id,
+        needs_fallback = any(
+            not (
+                (answers_by_item[it.id].answer_data or {})
+                if it.id in answers_by_item
+                else {}
+            ).get("options_shown")
+            for it in items
         )
-        fallback_options = _build_selection_options(pool_items, parent)
+        if needs_fallback:
+            pool_items = _load_quiz_items(
+                db,
+                parent,
+                bool(parent.shuffle_questions),
+                seed=source.id if source else student_assignment.id,
+            )
+            fallback_options = _build_selection_options(pool_items, parent)
 
     # #1045 每題扣分：已存於 StudentItemProgress.teacher_review_score（以 content_item_id 對題）
     deductions: Dict[int, float] = {

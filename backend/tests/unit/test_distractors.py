@@ -253,12 +253,19 @@ class TestAnswerTextForItem:
 
     def test_build_answer_pool_dedupes_case_insensitively(self):
         items = [
-            self._item(text="tell", cloze_answer="told me"),
-            self._item(text="say", cloze_answer="Told me"),
+            # 老師存大寫 "Told me" → 照存（不還原）→ pool 內是 "Told me"
+            self._item(
+                text="tell", cloze_answer="Told me", example_sentence="Told me now."
+            ),
+            # 句中小寫 "told me"
+            self._item(text="say", cloze_answer="told me"),
             self._item(text="run", cloze_answer="ran", example_sentence="I ran."),
         ]
+        assert answer_text_for_item(items[0], True, True) == "Told me"
+        assert answer_text_for_item(items[1], True, True) == "told me"
         pool = build_answer_pool(items, True, True)
-        assert [p["text"] for p in pool] == ["told me", "ran"]
+        # 大小寫不同的同字形只留第一個
+        assert [p["text"] for p in pool] == ["Told me", "ran"]
 
     def test_build_answer_pool_off_matches_legacy_fields(self):
         items = [
@@ -272,6 +279,43 @@ class TestAnswerTextForItem:
         # 句首 "Told me" → 選項應顯示 "told me"（原形小寫開頭）
         item = self._item(example_sentence="Told me her name, he did.")
         assert answer_text_for_item(item, True, True) == "told me"
+        # 第二句句首（前面是 ". "）也算句首
+        item2 = self._item(example_sentence="Yes. Told me twice.")
+        assert answer_text_for_item(item2, True, True) == "told me"
+
+    def test_capitalized_match_mid_sentence_is_kept(self):
+        # 句中的大寫（專有名詞）保留，即使原形小寫
+        paris = self._item(
+            text="paris", cloze_answer="", example_sentence="I love Paris."
+        )
+        assert answer_text_for_item(paris, True, True) == "Paris"
+        # "Paris" 原形大寫 + 句中 → 保留
+        paris2 = self._item(
+            text="Paris", cloze_answer="Paris", example_sentence="I love Paris."
+        )
+        assert answer_text_for_item(paris2, True, True) == "Paris"
+
+    def test_monday_only_lowercased_at_sentence_start(self):
+        start = self._item(
+            text="monday", cloze_answer="", example_sentence="Monday is busy."
+        )
+        assert answer_text_for_item(start, True, True) == "monday"
+        mid = self._item(
+            text="monday", cloze_answer="", example_sentence="See you Monday."
+        )
+        assert answer_text_for_item(mid, True, True) == "Monday"
+
+    def test_persisted_uppercase_cloze_answer_is_kept_at_start(self):
+        item = self._item(
+            text="monday", cloze_answer="Monday", example_sentence="Monday is busy."
+        )
+        assert answer_text_for_item(item, True, True) == "Monday"
+
+    def test_the_cup_matches_cup(self):
+        item = self._item(
+            text="cup", cloze_answer="", example_sentence="The cup is red."
+        )
+        assert answer_text_for_item(item, True, True) == "cup"
 
     def test_show_example_keeps_capitalized_base_word(self):
         # 專有名詞／原形本身大寫開頭 → 保留
