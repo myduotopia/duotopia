@@ -577,6 +577,8 @@ export default function WordSelectionQuizActivity({
             <RestartDemoButton onRestart={onRestartDemo} />
           ) : undefined
         }
+        // Issue #1088：選項上已有 ✓／✗，隱藏「你的答案／正確答案」列
+        hideAnswerRow
         renderQuestion={(w) => {
           // Issue #1088: 開例句時複盤頁也顯示挖空例句＋翻譯（不顯示單字，否則洩題）
           const showSentence =
@@ -587,34 +589,68 @@ export default function WordSelectionQuizActivity({
             ? w.blanked_sentence ||
               buildBlankedSentence(w.example_sentence, w.cloze_answer, w.text)
             : "";
+          const showTranslation =
+            !hideTranslation && !!w.example_sentence_translation;
           return (
             <div className="space-y-2">
-              <div className="text-center">
+              {/* Issue #1088 第 10 項：有圖時圖靠右跨兩列（例句第一列、翻譯第二列），
+                  手機寬度改圖在上、文字在下；無圖維持置中單欄 */}
+              <div
+                className={cn(
+                  w.image_url
+                    ? "flex flex-col items-center gap-2 sm:grid sm:grid-cols-[1fr_auto] sm:grid-rows-[auto_auto] sm:gap-x-4 sm:items-center"
+                    : "text-center",
+                )}
+              >
                 {w.image_url && (
                   <img
                     src={w.image_url}
                     alt=""
-                    className="mx-auto max-h-24 object-contain"
+                    className="max-h-28 object-contain sm:col-start-2 sm:row-span-2 sm:row-start-1 order-first sm:order-none"
                   />
                 )}
                 {reviewBlanked ? (
                   <>
-                    <p className="quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none">
+                    <p
+                      className={cn(
+                        "quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none",
+                        w.image_url &&
+                          "sm:col-start-1 sm:row-start-1 text-center sm:text-left",
+                      )}
+                    >
                       <ClozeBlankText text={reviewBlanked} />
                     </p>
-                    {!hideTranslation && w.example_sentence_translation && (
-                      <p className="quiz-translation-font text-gray-500 mt-1 select-none">
+                    {showTranslation && (
+                      <p
+                        className={cn(
+                          "quiz-translation-font text-gray-500 mt-1 select-none",
+                          w.image_url &&
+                            "sm:col-start-1 sm:row-start-2 text-center sm:text-left",
+                        )}
+                      >
                         {w.example_sentence_translation}
                       </p>
                     )}
                   </>
                 ) : (
                   <>
-                    <h3 className="text-2xl font-bold text-gray-800 select-none">
+                    <h3
+                      className={cn(
+                        "text-2xl font-bold text-gray-800 select-none",
+                        w.image_url &&
+                          "sm:col-start-1 sm:row-start-1 text-center sm:text-left",
+                      )}
+                    >
                       {w.text}
                     </h3>
                     {w.translation && (
-                      <span className="text-sm text-gray-500">
+                      <span
+                        className={cn(
+                          "text-sm text-gray-500",
+                          w.image_url &&
+                            "sm:col-start-1 sm:row-start-2 text-center sm:text-left",
+                        )}
+                      >
                         {w.translation}
                       </span>
                     )}

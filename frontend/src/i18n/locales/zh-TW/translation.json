@@ -5302,8 +5302,8 @@
       "yourAnswer": "你的答案",
       "correctAnswer": "正確答案",
       "unanswered": "未作答",
-      "correct": "答對",
-      "wrong": "答錯",
+      "correct": "正確",
+      "wrong": "錯誤",
       "scoreSummary": "{{correct}} / {{total}} 答對"
     },
     "revision": {

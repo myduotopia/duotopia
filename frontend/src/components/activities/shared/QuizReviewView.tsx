@@ -44,6 +44,14 @@ interface Props<W extends QuizReviewWord> {
   isPreview?: boolean;
   // #1045 階段 4：列表最下方的附加區（老師預覽「考後檢討」放「重新示範」）
   footer?: React.ReactNode;
+  // Issue #1088：隱藏「你的答案／正確答案」列（單字選擇的選項上已有 ✓／✗）
+  hideAnswerRow?: boolean;
+}
+
+// Issue #1088：題號旁三態狀態 chip（正確／錯誤／未作答）
+function statusOf(word: QuizReviewWord): "correct" | "wrong" | "unanswered" {
+  if (!word.student_answer) return "unanswered";
+  return word.is_correct ? "correct" : "wrong";
 }
 
 export default function QuizReviewView<W extends QuizReviewWord>({
@@ -51,6 +59,7 @@ export default function QuizReviewView<W extends QuizReviewWord>({
   renderQuestion,
   isPreview = false,
   footer,
+  hideAnswerRow = false,
 }: Props<W>) {
   const { t } = useTranslation();
   const total = data.total_questions || data.words.length;
@@ -76,71 +85,90 @@ export default function QuizReviewView<W extends QuizReviewWord>({
         </CardContent>
       </Card>
 
-      {data.words.map((word) => (
-        <Card
-          key={word.content_item_id}
-          className={cn(
-            "p-4",
-            word.is_correct
-              ? "border-emerald-200 bg-emerald-50/40"
-              : "border-rose-200 bg-rose-50/40",
-          )}
-        >
-          <CardContent className="p-0 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">
-                {t("wordQuiz.questionLabel", {
-                  current: word.question_number,
-                  total,
-                }) || `第 ${word.question_number} / ${total} 題`}
-              </span>
-              {word.is_correct ? (
-                <span className="inline-flex items-center gap-1 text-sm text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {t("wordQuiz.review.correct") || "答對"}
+      {data.words.map((word) => {
+        const status = statusOf(word);
+        return (
+          <Card
+            key={word.content_item_id}
+            // Issue #1088：卡片統一白底，狀態改由題號旁 chip 表達
+            className="p-4 bg-white border-gray-200"
+          >
+            <CardContent className="p-0 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-gray-800">
+                  {t("wordQuiz.questionLabel", {
+                    current: word.question_number,
+                    total,
+                  }) || `第 ${word.question_number} / ${total} 題`}
                 </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-sm text-rose-700">
-                  <XCircle className="h-4 w-4" />
-                  {t("wordQuiz.review.wrong") || "答錯"}
-                </span>
+                {status === "correct" && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold bg-emerald-100 text-emerald-800"
+                    data-testid="quiz-review-status"
+                    data-status="correct"
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    {t("wordQuiz.review.correct") || "正確"}
+                  </span>
+                )}
+                {status === "wrong" && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold bg-rose-100 text-rose-800"
+                    data-testid="quiz-review-status"
+                    data-status="wrong"
+                  >
+                    <XCircle className="h-5 w-5" />
+                    {t("wordQuiz.review.wrong") || "錯誤"}
+                  </span>
+                )}
+                {status === "unanswered" && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-lg font-semibold bg-amber-100 text-amber-800"
+                    data-testid="quiz-review-status"
+                    data-status="unanswered"
+                  >
+                    {t("wordQuiz.review.unanswered") || "未作答"}
+                  </span>
+                )}
+              </div>
+
+              <div>{renderQuestion(word)}</div>
+
+              {!hideAnswerRow && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-gray-200/60">
+                  <div>
+                    <div className="text-xs text-gray-500">
+                      {t("wordQuiz.review.yourAnswer") || "你的答案"}
+                    </div>
+                    <div
+                      className={cn(
+                        "text-base font-medium",
+                        word.student_answer
+                          ? word.is_correct
+                            ? "text-emerald-700"
+                            : "text-rose-700"
+                          : "text-gray-400 italic",
+                      )}
+                    >
+                      {word.student_answer ||
+                        t("wordQuiz.review.unanswered") ||
+                        "未作答"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">
+                      {t("wordQuiz.review.correctAnswer") || "正確答案"}
+                    </div>
+                    <div className="text-base font-medium text-gray-800">
+                      {word.correct_answer}
+                    </div>
+                  </div>
+                </div>
               )}
-            </div>
-
-            <div>{renderQuestion(word)}</div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-gray-200/60">
-              <div>
-                <div className="text-xs text-gray-500">
-                  {t("wordQuiz.review.yourAnswer") || "你的答案"}
-                </div>
-                <div
-                  className={cn(
-                    "text-base font-medium",
-                    word.student_answer
-                      ? word.is_correct
-                        ? "text-emerald-700"
-                        : "text-rose-700"
-                      : "text-gray-400 italic",
-                  )}
-                >
-                  {word.student_answer ||
-                    t("wordQuiz.review.unanswered") ||
-                    "未作答"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500">
-                  {t("wordQuiz.review.correctAnswer") || "正確答案"}
-                </div>
-                <div className="text-base font-medium text-gray-800">
-                  {word.correct_answer}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
       {footer}
     </div>
   );

@@ -5275,7 +5275,7 @@
       "correctAnswer": "Correct answer",
       "unanswered": "Not answered",
       "correct": "Correct",
-      "wrong": "Wrong",
+      "wrong": "Incorrect",
       "scoreSummary": "{{correct}} / {{total}} correct"
     },
     "revision": {
