@@ -72,6 +72,16 @@ export default function AdminReleaseAnnouncementsPage() {
     if (token) fetchAnnouncements();
   }, [fetchAnnouncements, token]);
 
+  // 目前選取的公告被移除（捨棄 / 背景重新整理）時，改選清單第一則
+  useEffect(() => {
+    if (
+      selectedId !== null &&
+      !announcements.some((row) => row.id === selectedId)
+    ) {
+      setSelectedId(announcements[0]?.id ?? null);
+    }
+  }, [announcements, selectedId]);
+
   const selected = useMemo(
     () => announcements.find((row) => row.id === selectedId) ?? null,
     [announcements, selectedId],
@@ -185,9 +195,7 @@ export default function AdminReleaseAnnouncementsPage() {
     setBusy(true);
     try {
       await releaseAnnouncementApi.discard(selected.id, token);
-      const remaining = announcements.filter((row) => row.id !== selected.id);
-      setAnnouncements(remaining);
-      setSelectedId(remaining[0]?.id ?? null);
+      setAnnouncements((prev) => prev.filter((row) => row.id !== selected.id));
       toast.success("已捨棄");
     } catch {
       toast.error("捨棄失敗");

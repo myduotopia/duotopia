@@ -201,6 +201,12 @@ gcloud run services list --region=asia-east1 | grep "preview-issue"  # Should be
    - User will explicitly say "release to production" or "update release PR"
 
 3. **Create Release PR** (staging → main):
+
+   > 📣 **Use `/announce release`** — it scans `origin/main..origin/staging`, keeps only
+   > issues with both `📣 announce` and `✅ tested-in-staging`, aggregates their bilingual
+   > announcement and writes it into the staging → main PR description (creating the PR
+   > if needed). CI reads that block on push to main to create the production draft.
+   > The commands below remain as a reference for the PR description itself.
    ```bash
    # Gather all ready issues
    ISSUES=$(gh issue list --label "🚀 Ready for Production" --json number --jq '.[].number' | tr '\n' ',' | sed 's/,$//')

@@ -46,10 +46,18 @@ function toForm(announcement: ReleaseAnnouncement): FormState {
   }, {} as FormState);
 }
 
-/** 空白代表不帶圖；有值就必須是 https（LINE hero 只收 https） */
+/** 空白代表不帶圖；有值就必須是含主機名稱的 https 網址（LINE hero 只收 https） */
 function isValidImageUrl(value: string): boolean {
   const trimmed = value.trim();
-  return trimmed === "" || trimmed.startsWith("https://");
+  if (trimmed === "") return true;
+  // URL() 會把 https:///a.png 正規化成主機 a.png；後端 urlparse 會拒絕，這裡先擋
+  if (!/^https:\/\/[^/]/i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" && url.hostname !== "";
+  } catch {
+    return false;
+  }
 }
 
 const CHANNEL_STATUS_LABEL: Record<ChannelStatus, string> = {
@@ -187,7 +195,7 @@ export default function ReleaseAnnouncementEditor({
               />
               {!imageUrlValid && (
                 <p className="mt-1 text-xs text-red-600">
-                  圖片網址必須以 https:// 開頭
+                  圖片網址必須是 https:// 開頭的完整網址
                 </p>
               )}
             </div>
@@ -368,11 +376,16 @@ export default function ReleaseAnnouncementEditor({
             ))}
             <Button
               className="mt-2"
-              disabled={mergeIds.length === 0 || busy}
+              disabled={mergeIds.length === 0 || busy || hasUnsaved}
               onClick={() => onMerge(mergeIds)}
             >
               併入這一則
             </Button>
+            {hasUnsaved && (
+              <p className="text-xs text-amber-700">
+                請先儲存草稿再合併，否則目前的修改會被合併結果取代。
+              </p>
+            )}
           </div>
         )}
       </section>

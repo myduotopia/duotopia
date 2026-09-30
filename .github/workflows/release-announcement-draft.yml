@@ -1,10 +1,18 @@
 name: Release Announcement Draft
 
-# issue #804 — 每次 release 進 staging / production，產生一則「更新公告草稿」。
+# issue #804 — release 進 staging / production 時，視需要產生一則「更新公告草稿」。
 #
 # 草稿只是草稿：內含 LINE 文案與官網雙語文章兩份內容，都不會自動對外發布。
 # 管理者在後台（/api/admin/release-announcements）預覽、編輯、選擇要發 LINE、
 # 官網或兩者。沒發的草稿可以併進下一次一起發，節省 LINE 每月訊息量。
+#
+# 要不要建草稿、帶什麼內容，由 scripts/release_announcement.py 決定
+# （與 /announce skill 共用同一套規則）：
+# - issue 同時有「📣 announce」與「✅ tested-in-staging」才建草稿；
+#   沒有 issue 編號或標籤不齊 → 略過
+# - staging：讀 issue 上 /announce 寫好的公告留言
+# - main：讀 staging → main PR 描述內的統整公告區塊
+# - 找不到現成內容 → 不帶 content，後端退回「解析 release 標題 → Vertex AI」
 #
 # 觸發用 push 而非 workflow_run：
 # 1. workflow_run 只會執行 default branch（main）版本的 workflow，
@@ -27,19 +35,29 @@ on:
           - staging
           - production
       commit_sha:
-        description: '來源 commit sha（草稿去重用）'
+        description: '來源 commit sha（草稿去重用；production 會用它找 staging → main PR）'
         required: true
         type: string
       release_title:
-        description: 'Release 標題（例：Release: [Feature]: ... (Fixes #123)）'
+        description: 'Release 標題（例：Release: [Feature]: ... (Fixes #123) (#456)）'
         required: true
         type: string
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   create-draft:
     name: 📢 Create release announcement draft
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/release_announcement.py
+          sparse-checkout-cone-mode: false
+
       - name: Resolve environment and release info
         id: info
         env:
@@ -47,52 +65,94 @@ jobs:
           INPUT_TITLE: ${{ inputs.release_title }}
           INPUT_SHA: ${{ inputs.commit_sha }}
           INPUT_ENV: ${{ inputs.environment }}
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          GIT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        # 所有可能由使用者控制的值（手動輸入、分支名稱）都經 env 傳入，不直接內插進 shell
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             ENVIRONMENT="$INPUT_ENV"
             COMMIT_SHA="$INPUT_SHA"
-            RELEASE_TITLE="$INPUT_TITLE"
-            BRANCH="${{ github.ref_name }}"
+            MESSAGE="$INPUT_TITLE"
           else
-            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            if [ "$GIT_REF" = "refs/heads/main" ]; then
               ENVIRONMENT="production"
             else
               ENVIRONMENT="staging"
             fi
-            COMMIT_SHA="${{ github.sha }}"
-            # 只取 commit message 第一行當標題
-            RELEASE_TITLE=$(printf '%s' "$COMMIT_MESSAGE" | head -1)
-            BRANCH="${{ github.ref_name }}"
+            COMMIT_SHA="$GIT_SHA"
+            MESSAGE="$COMMIT_MESSAGE"
           fi
-
-          # 從標題結尾的 (#N) 取 PR 編號（沒有就留空）
-          PR_NUMBER=$(printf '%s' "$RELEASE_TITLE" | grep -oE '\(#[0-9]+\)$' | grep -oE '[0-9]+' || true)
 
           {
             echo "environment=$ENVIRONMENT"
             echo "commit_sha=$COMMIT_SHA"
-            echo "branch=$BRANCH"
-            echo "pr_number=$PR_NUMBER"
+            echo "branch=$REF_NAME"
           } >> "$GITHUB_OUTPUT"
 
-          # 標題可能含特殊字元，用 heredoc 形式寫入 output
+          # commit message 可能多行、含特殊字元，用 heredoc 形式寫入 output。
+          # 分隔字串隨機產生：固定字串可被 commit message 內容提前結束，進而寫入任意 output
+          DELIM="EOF_$(openssl rand -hex 16)"
           {
-            echo "release_title<<RELEASE_TITLE_EOF"
-            printf '%s\n' "$RELEASE_TITLE"
-            echo "RELEASE_TITLE_EOF"
+            echo "message<<$DELIM"
+            printf '%s\n' "$MESSAGE"
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Decide draft content (labels / issue comment / release PR)
+        id: payload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ENVIRONMENT: ${{ steps.info.outputs.environment }}
+          COMMIT_SHA: ${{ steps.info.outputs.commit_sha }}
+          BRANCH: ${{ steps.info.outputs.branch }}
+          COMMIT_MESSAGE: ${{ steps.info.outputs.message }}
+        run: |
+          set -euo pipefail
+
+          # GitHub API 偶發失敗（rate limit / 5xx）時重試；仍失敗就讓 job 失敗，
+          # 不退回「不檢查標籤」的草稿 —— 沒有標籤的更新不該被建成公告
+          for attempt in 1 2 3; do
+            # 用 --opt=value：commit message / 手動輸入的標題可能以 - 開頭
+            if python3 scripts/release_announcement.py ci-payload \
+                --environment="$ENVIRONMENT" \
+                --sha="$COMMIT_SHA" \
+                --branch="$BRANCH" \
+                --commit-message="$COMMIT_MESSAGE" > payload.json; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "❌ 無法判斷是否需要建立草稿（GitHub API 失敗），可稍後用 workflow_dispatch 重跑"
+              exit 1
+            fi
+            echo "⚠️  第 $attempt 次判斷失敗，15 秒後重試"
+            sleep 15
+          done
+          cat payload.json
+          ISSUES=$(jq -r '.issue_numbers // "—"' payload.json)
+
+          # skip 時 payload 帶有 message（REASON_TEXT），摘要直接顯示
+          if jq -e 'has("skip")' payload.json > /dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "result=⏭️ 略過：$(jq -r '.message' payload.json)" >> "$GITHUB_OUTPUT"
+          elif jq -e 'has("content")' payload.json > /dev/null; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "result=📝 使用 /announce 寫好的內容（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "result=🤖 未使用 /announce 內容（issue 沒有公告留言，或同一次包含多個 issue 且無統整區塊），由後端以 Vertex AI 產生（issue: $ISSUES）" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create draft via backend webhook
+        if: steps.payload.outputs.skip == 'false'
         env:
           BACKEND_URL: ${{ steps.info.outputs.environment == 'production' && secrets.PRODUCTION_BACKEND_URL || secrets.STAGING_BACKEND_URL }}
           RELEASE_WEBHOOK_SECRET: ${{ secrets.RELEASE_WEBHOOK_SECRET }}
           ENVIRONMENT: ${{ steps.info.outputs.environment }}
           COMMIT_SHA: ${{ steps.info.outputs.commit_sha }}
-          BRANCH: ${{ steps.info.outputs.branch }}
-          PR_NUMBER: ${{ steps.info.outputs.pr_number }}
-          RELEASE_TITLE: ${{ steps.info.outputs.release_title }}
         run: |
           set -euo pipefail
 
@@ -101,19 +161,9 @@ jobs:
             exit 0
           fi
 
-          PAYLOAD=$(jq -n \
-            --arg environment "$ENVIRONMENT" \
-            --arg source_ref "$COMMIT_SHA" \
-            --arg source_branch "$BRANCH" \
-            --arg release_title "$RELEASE_TITLE" \
-            --arg pr_number "$PR_NUMBER" \
-            '{
-              environment: $environment,
-              source_ref: $source_ref,
-              source_branch: $source_branch,
-              release_title: $release_title
-            }
-            + (if $pr_number == "" then {} else {pr_number: ($pr_number | tonumber)} end)')
+          # payload 已包含 environment / source_ref / release_title / issue_numbers
+          # （以及選填的 content）；去掉 CI 專用欄位後直接送出
+          jq 'del(.message)' payload.json > request.json
 
           echo "📢 產生更新公告草稿：$ENVIRONMENT / $COMMIT_SHA"
 
@@ -124,7 +174,7 @@ jobs:
               -H "Content-Type: application/json" \
               -H "X-Release-Secret: $RELEASE_WEBHOOK_SECRET" \
               --max-time 120 \
-              -d "$PAYLOAD") || HTTP_CODE="000"
+              -d @request.json) || HTTP_CODE="000"
 
             if [ "$HTTP_CODE" = "201" ]; then
               cat response.json
@@ -143,13 +193,17 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          RESULT: ${{ steps.payload.outputs.result }}
+          ENVIRONMENT: ${{ steps.info.outputs.environment }}
+          COMMIT_SHA: ${{ steps.info.outputs.commit_sha }}
         run: |
           {
             echo "### 📢 更新公告草稿"
             echo ""
-            echo "- 環境：\`${{ steps.info.outputs.environment }}\`"
-            echo "- Commit：\`${{ steps.info.outputs.commit_sha }}\`"
-            echo "- 標題：${{ steps.info.outputs.release_title }}"
+            echo "- 環境：\`$ENVIRONMENT\`"
+            echo "- Commit：\`$COMMIT_SHA\`"
+            echo "- 結果：${RESULT:-（未執行）}"
             echo ""
             echo "草稿不會自動對外發布，請到後台選擇發布通道。"
           } >> "$GITHUB_STEP_SUMMARY"

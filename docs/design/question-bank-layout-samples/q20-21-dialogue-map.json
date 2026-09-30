@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "rows": [
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "paragraph", "text": "Roger is new to Beach Town. He doesn't bring his cellphone, so he is asking Jim for directions." }
+    ] } ] },
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "dialogue", "frame": true, "lines": [
+        { "speaker": "Roger", "text": "Excuse me. Is there a department store around here?" },
+        { "speaker": "Jim", "text": "Yes, there's one on the corner of Happy Road and Second Street." },
+        { "speaker": "Roger", "text": "I see. I also need to go to a bank." },
+        { "speaker": "Jim", "text": "Oh. Do you see A+ Supermarket just up Happy Road? There's a bank right across from the supermarket." },
+        { "speaker": "Roger", "text": "Thanks. I also want to buy a book for my son. Is there a bookstore near here?" },
+        { "speaker": "Jim", "text": "Sure. There's a big one in the department store, and there's a smaller one on the corner of Third Street and Happy Road." },
+        { "speaker": "Roger", "text": "Which is better?" },
+        { "speaker": "Jim", "text": "If you want to buy picture books, the smaller one is right for you." },
+        { "speaker": "Roger", "text": "Oh, yeah. I'll go there first. Thank you." },
+        { "speaker": "Jim", "text": "No problem." }
+      ] }
+    ] } ] },
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "paragraph", "text": "Below is the street map of Beach Town." },
+      { "type": "image", "url": "<map.png>", "alt": "Beach Town street map", "align": "center", "maxWidth": 480 }
+    ] } ] }
+  ],
+  "_glossary": [ { "word": "directions", "zh": "指路" } ]
+}

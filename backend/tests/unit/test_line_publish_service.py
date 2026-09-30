@@ -36,8 +36,8 @@ def _patch_client(post_side_effect):
 def _line_settings(monkeypatch):
     from services import line_publish_service as mod
 
-    monkeypatch.setattr(mod.settings, "LINE_CHANNEL_ACCESS_TOKEN", "TESTTOKEN")
-    monkeypatch.setattr(mod.settings, "LINE_TEST_USER_ID", "Utest123")
+    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", "TESTTOKEN")
+    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_TEST_USER_ID", "Utest123")
 
 
 class TestBroadcast:
@@ -59,7 +59,7 @@ class TestBroadcast:
     async def test_missing_token_raises_config_error(self, monkeypatch):
         from services import line_publish_service as mod
 
-        monkeypatch.setattr(mod.settings, "LINE_CHANNEL_ACCESS_TOKEN", None)
+        monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", None)
         with pytest.raises(LineConfigError):
             await LinePublishService.broadcast([{"type": "text", "text": "hi"}])
 
