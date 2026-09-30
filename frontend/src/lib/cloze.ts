@@ -147,8 +147,20 @@ export function reconcileClozeAnswer(
   row: { text?: string | null; cloze_answer?: string | null },
   newSentence: string | null | undefined,
 ): string {
-  const keep = findClozeMatch(row.cloze_answer, newSentence);
-  if (keep) return keep[2];
-  const fromWord = findClozeMatch(row.text, newSentence);
-  return fromWord ? fromWord[2] : "";
+  const sentence = newSentence ?? "";
+  const keep = findClozeMatch(row.cloze_answer, sentence);
+  if (keep) {
+    return normalizeClozeCase(
+      keep[2],
+      row.text,
+      sentence,
+      keep[0],
+      row.cloze_answer,
+    );
+  }
+  const fromWord = findClozeMatch(row.text, sentence);
+  // 自動帶入的值一律做句首大寫還原（老師親自圈選的值走 commitSelection，不經這裡）
+  return fromWord
+    ? normalizeClozeCase(fromWord[2], row.text, sentence, fromWord[0])
+    : "";
 }

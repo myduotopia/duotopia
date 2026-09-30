@@ -155,6 +155,16 @@ class TestResolveOnSave:
         )
         assert result == "told me"
 
+    def test_incoming_with_empty_sentence_is_persisted(self):
+        # 沒有例句時無從驗證 → 照存前端／老師給的值（明確化此行為）
+        result = resolve_cloze_answer_on_save(
+            base_word="tell",
+            example_sentence="",
+            incoming_answer="told me",
+            existing_answer=None,
+        )
+        assert result == "told me"
+
     def test_incoming_case_insensitive_match_keeps_incoming_form(self):
         result = resolve_cloze_answer_on_save(
             base_word="tell",

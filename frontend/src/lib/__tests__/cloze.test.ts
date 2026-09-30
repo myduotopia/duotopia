@@ -219,3 +219,27 @@ describe("reconcileClozeAnswer — 改例句後同步挖空字（#1088）", () =
     ).toBe("");
   });
 });
+
+describe("reconcileClozeAnswer — 句首大寫還原（#1088）", () => {
+  it("句首 Told → told（自動帶入）", () => {
+    expect(
+      reconcileClozeAnswer({ text: "told", cloze_answer: "" }, "Told you so."),
+    ).toBe("told");
+    // keep 分支同樣還原（老師原本存小寫）
+    expect(
+      reconcileClozeAnswer(
+        { text: "tell", cloze_answer: "told me" },
+        "Told me her name.",
+      ),
+    ).toBe("told me");
+  });
+
+  it("句中 Paris 保留", () => {
+    expect(
+      reconcileClozeAnswer(
+        { text: "paris", cloze_answer: "" },
+        "I love Paris.",
+      ),
+    ).toBe("Paris");
+  });
+});

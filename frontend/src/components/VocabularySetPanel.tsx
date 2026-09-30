@@ -1405,6 +1405,8 @@ interface SortableRowInnerProps {
   ) => void;
   handleRemoveRow: (index: number) => void;
   handleDuplicateRow: (index: number) => void;
+  /** Issue #1088：例句輸入框 onBlur 時同步挖空字 */
+  onReconcileClozeAnswer?: (index: number) => void;
   handleOpenTTSModal: (row: ContentRow) => void;
   /** Issue #1051：例句麥克風先開語音設定視窗，確認後才產生 */
   handleOpenExampleTTSDialog: (index: number) => void;
@@ -1442,6 +1444,7 @@ function SortableRowInner({
   handleUpdateRow,
   handleRemoveRow,
   handleDuplicateRow,
+  onReconcileClozeAnswer,
   handleOpenTTSModal,
   handleOpenExampleTTSDialog,
   handleRemoveAudio,
@@ -1792,6 +1795,7 @@ function SortableRowInner({
           onChange={(e) =>
             handleUpdateRow(index, "example_sentence", e.target.value)
           }
+          onBlur={() => onReconcileClozeAnswer?.(index)}
           className="w-full px-3 py-2 pr-24 border rounded-md text-sm"
           placeholder={t("vocabularySet.placeholders.enterEnglishSentence")}
           maxLength={500}
@@ -2454,12 +2458,23 @@ const VocabularySetPanel = forwardRef<
   ) => {
     const newRows = [...rows];
     newRows[index] = { ...newRows[index], [field]: value };
-    // Issue #1088: 改例句時同步挖空字 —— 原挖空字仍在句中則保留，否則取消並改由
-    // 單字本身自動帶入，帶不出來留空（派發時守衛會擋下提示老師補齊）。
-    if (field === "example_sentence" && typeof value === "string") {
-      newRows[index].cloze_answer = reconcileClozeAnswer(newRows[index], value);
-    }
     setRows(newRows);
+  };
+
+  // Issue #1088: 例句編輯「完成」（onBlur）時同步挖空字 —— 原挖空字仍在句中則保留，
+  // 否則取消並改由單字本身自動帶入，帶不出來留空（派發守衛會擋下提示老師補齊）。
+  // 不在每次按鍵時做：打字中的中間狀態會把老師選的挖空字誤清掉；打字期間由
+  // ClozeAnswerEditor 的警示 chip 提示即可。
+  const handleReconcileClozeAnswer = (index: number) => {
+    setRows((prev) => {
+      const row = prev[index];
+      if (!row) return prev;
+      const next = reconcileClozeAnswer(row, row.example_sentence || "");
+      if ((row.cloze_answer || "") === next) return prev;
+      const newRows = [...prev];
+      newRows[index] = { ...row, cloze_answer: next };
+      return newRows;
+    });
   };
 
   // 共用 helper：將 ContentRow 轉成完整的 API payload，避免次要儲存路徑遺漏欄位 (#366)
@@ -5370,6 +5385,7 @@ const VocabularySetPanel = forwardRef<
                       handleUpdateRow={handleUpdateRow}
                       handleRemoveRow={handleDeleteRow}
                       handleDuplicateRow={handleCopyRow}
+                      onReconcileClozeAnswer={handleReconcileClozeAnswer}
                       handleOpenTTSModal={handleOpenTTSModal}
                       handleOpenExampleTTSDialog={handleOpenExampleTTSDialog}
                       handleRemoveAudio={handleRemoveAudio}
