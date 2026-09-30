@@ -30,10 +30,12 @@ export interface MagicPasteItem {
  * - sentence  ：例句集 / 朗讀評測 → 一列 = 句子 + 翻譯
  */
 // multiple_choice：題庫從考卷圖片擷取題目與選項（#1065）
+// reading_group：一份檔 → 一個閱讀題組（文章素材／海報座標 + 註解 + 小題）（#1084）
 export type MagicPasteExtractMode =
   | "vocabulary"
   | "sentence"
-  | "multiple_choice";
+  | "multiple_choice"
+  | "reading_group";
 
 /** multiple_choice 模式的擷取結果（題庫用；不預覽，直接插到右側題目卡） */
 export interface MagicPasteMcItem {
@@ -42,6 +44,24 @@ export interface MagicPasteMcItem {
   /** 圖上有標答案才會有值；否則 [] */
   correct_indexes: number[];
   explanation: string;
+}
+
+/** reading_group 模式的擷取結果：整份檔 = 一個閱讀題組（與後端 _normalize_reading_group 對應） */
+export interface MagicPasteGroupResult {
+  title: string;
+  stimulus: {
+    /** text = 散文段落；image = 海報／漫畫／地圖，整塊當圖 */
+    kind: "text" | "image";
+    paragraphs: string[];
+    /** image 時：圖內文字（文字版用，不顯示給學生） */
+    text: string;
+    /** image 時：素材區域 [ymin, xmin, ymax, xmax]，0–1000 正規化；AI 給不出就 null */
+    box_2d: number[] | null;
+    /** 多頁檔時座標所在頁（1 起算）；單張圖為 1 或 null */
+    page: number | null;
+  };
+  glossary: { word: string; zh: string }[];
+  questions: MagicPasteMcItem[];
 }
 
 interface QuotaState {
@@ -55,6 +75,14 @@ interface MagicPasteInputProps {
   onInsert?: (items: MagicPasteItem[]) => void;
   /** multiple_choice 模式：擷取完直接回呼，不經預覽 */
   onInsertQuestions?: (items: MagicPasteMcItem[]) => void;
+  /**
+   * reading_group 模式：擷取完直接回呼（不經預覽），連同原始檔一起交出去，
+   * 呼叫端用 box_2d 裁圖上傳；回呼可以是 async（裁圖／上傳期間本元件維持 loading）
+   */
+  onInsertGroup?: (
+    result: MagicPasteGroupResult,
+    file: File,
+  ) => void | Promise<void>;
   /** CEFR 程度（僅 vocabulary 模式參考） */
   level?: string;
   /** 擷取模式，預設 vocabulary（單字集） */
@@ -78,6 +106,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 export default function MagicPasteInput({
   onInsert,
   onInsertQuestions,
+  onInsertGroup,
   level = "A1",
   extractMode = "vocabulary",
   onAfterInsert,
@@ -88,6 +117,7 @@ export default function MagicPasteInput({
   const { t } = useTranslation();
   const isSentenceMode = extractMode === "sentence";
   const isMcMode = extractMode === "multiple_choice";
+  const isGroupMode = extractMode === "reading_group";
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<MagicPasteItem[]>([]);
@@ -153,11 +183,13 @@ export default function MagicPasteInput({
       toast.error(validationError);
       return;
     }
+    // 擷取完會 setFile(null)，先把原檔留住給 reading_group 回呼裁圖用
+    const picked = file;
     setLoading(true);
     setOverLimit(false);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", picked);
       formData.append("level", level);
       formData.append("extract_mode", extractMode);
       const result = await apiClient.magicPasteExtract(formData);
@@ -166,6 +198,20 @@ export default function MagicPasteInput({
         free_remaining: result.quota.free_remaining,
         can_use: result.quota.can_use,
       }));
+      if (isGroupMode) {
+        // 題組：不預覽；整份檔 = 一個題組，交給呼叫端裁圖／組草稿
+        const groups = result.items as unknown as MagicPasteGroupResult[];
+        if (!groups.length) {
+          toast.error(t("contentEditor.magicPaste.noGroupExtracted"));
+        } else {
+          await onInsertGroup?.(groups[0], picked);
+        }
+        setFile(null);
+        setItems([]);
+        setSelected({});
+        onAfterInsert?.();
+        return;
+      }
       if (isMcMode) {
         // 題庫：不預覽，擷取完直接插到右側題目卡
         const questions = result.items as unknown as MagicPasteMcItem[];
