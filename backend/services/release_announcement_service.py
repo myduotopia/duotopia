@@ -256,7 +256,11 @@ class ReleaseAnnouncementService:
         """更新草稿內容（只允許 EDITABLE_FIELDS，未提供的欄位不動）。"""
         for field in EDITABLE_FIELDS:
             if field in data and data[field] is not None:
-                setattr(announcement, field, data[field])
+                value = data[field]
+                # 清空圖片網址 → 存成 NULL，官網封面與 LINE hero 都不帶圖
+                if field == "image_url":
+                    value = value.strip() or None
+                setattr(announcement, field, value)
         db.commit()
         db.refresh(announcement)
         return announcement
