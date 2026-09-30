@@ -285,7 +285,10 @@ describe("GroupCard", () => {
         rows: [
           {
             columns: [
-              { span: 1, blocks: [{ type: "paragraph", text: "Poster intro." }] },
+              {
+                span: 1,
+                blocks: [{ type: "paragraph", text: "Poster intro." }],
+              },
             ],
           },
         ],
