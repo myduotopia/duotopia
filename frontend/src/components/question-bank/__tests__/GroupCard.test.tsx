@@ -224,6 +224,57 @@ describe("GroupCard", () => {
     expect(draft.serverError).toBeNull();
   });
 
+  it("文字版分頁（#1083）：預設顯示排版推導文字；打字後變老師版本並標記；重新產生回推導", async () => {
+    const onDraft = vi.fn();
+    const user = userEvent.setup();
+    const initial: GroupDraft = {
+      ...emptyGroupDraft(),
+      layout: {
+        version: 1,
+        rows: [
+          {
+            columns: [
+              {
+                span: 1,
+                blocks: [{ type: "paragraph", text: "Poster **intro**." }],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(<Harness initial={initial} onDraft={onDraft} />);
+    // 預設在「排版」分頁，文字版不在畫面上
+    expect(screen.getByTestId("qg-0-layout-stub")).toBeTruthy();
+    expect(screen.queryByTestId("qg-0-passage-text")).toBeNull();
+    expect(screen.queryByTestId("qg-0-passage-edited")).toBeNull();
+
+    await user.click(screen.getByTestId("qg-0-tab-text"));
+    const box = await screen.findByTestId("qg-0-passage-text");
+    // 推導文字（去標記），還沒改過 → 沒有「重新產生」
+    expect(box).toHaveValue("Poster intro.");
+    expect(screen.queryByTestId("qg-0-passage-text-regen")).toBeNull();
+
+    await user.type(box, " Happy Town Lantern Festival 2026");
+    let draft = lastDraft(onDraft);
+    expect(draft.passage_text_edited).toBe(true);
+    expect(draft.passage_text).toBe(
+      "Poster intro. Happy Town Lantern Festival 2026",
+    );
+    expect(toCreateGroupInput(draft).passage_text).toBe(
+      "Poster intro. Happy Town Lantern Festival 2026",
+    );
+    expect(screen.getByTestId("qg-0-passage-edited")).toBeTruthy();
+
+    await user.click(screen.getByTestId("qg-0-passage-text-regen"));
+    draft = lastDraft(onDraft);
+    expect(draft.passage_text_edited).toBe(false);
+    expect(screen.getByTestId("qg-0-passage-text")).toHaveValue(
+      "Poster intro.",
+    );
+    expect(screen.queryByTestId("qg-0-passage-edited")).toBeNull();
+  });
+
   it("errorMessage 顯示在卡片底部；readOnly 隱藏新增小題／新增註解", () => {
     const { rerender } = render(
       <GroupCard

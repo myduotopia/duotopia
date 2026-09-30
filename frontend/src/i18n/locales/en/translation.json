@@ -6129,6 +6129,14 @@
         "title": "Glossary",
         "placeholder": "timeline 時間軸\ncompose 作曲"
       },
+      "passage": {
+        "tabLayout": "Layout",
+        "tabText": "Text version",
+        "hint": "Hidden from students; used for search and AI analysis. Generated from the layout by default and editable.",
+        "placeholder": "Poster / comic groups: paste the text from the image here",
+        "regenerate": "Regenerate",
+        "edited": "Edited manually"
+      },
       "questions": {
         "title": "Sub-questions ({{count}})",
         "add": "Add sub-question",

@@ -15,6 +15,8 @@ import {
   emptyGroupDraft,
   emptyGroupQuestion,
   findBatchDuplicateKeys,
+  groupDraftFromGroup,
+  groupPassageText,
   mapUnitQuestions,
   normalizeStem,
   optionFilled,
@@ -30,7 +32,11 @@ import {
   glossaryToText,
   parseGlossaryText,
 } from "../questionDraft";
-import type { ExamPoint, Question } from "@/types/questionBank";
+import type {
+  ExamPoint,
+  Question,
+  QuestionGroup,
+} from "@/types/questionBank";
 
 const EP: ExamPoint = {
   id: 7,
@@ -559,6 +565,92 @@ describe("AI 套用（#1065）：只填空的", () => {
     expect(toCreateGroupInput(g).passage_text).toBe(
       "Vivaldi\n\nHe wrote 500 pieces.",
     );
+  });
+  it("文字版先後（#1083）：沒改過 → 推導；改過 → 老師的；純圖沒推導 → 老師手打的", () => {
+    const layout = {
+      version: 1 as const,
+      rows: [
+        {
+          columns: [
+            { span: 1, blocks: [{ type: "paragraph" as const, text: "Intro" }] },
+          ],
+        },
+      ],
+    };
+    const g = emptyGroupDraft("reading");
+    g.visibility = "private";
+    g.layout = layout;
+    g.passage_text = "stale copy";
+    expect(groupPassageText(g)).toBe("Intro");
+    g.passage_text_edited = true;
+    g.passage_text = "Intro plus the poster text";
+    expect(groupPassageText(g)).toBe("Intro plus the poster text");
+    expect(toUpdateGroupInput(g).passage_text).toBe(
+      "Intro plus the poster text",
+    );
+    // 純圖排版：推導為空，老師手打的文字版就算沒標 edited 也要送
+    const img = emptyGroupDraft("reading");
+    img.layout = {
+      version: 1,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [{ type: "image", url: "http://x/poster.png" }],
+            },
+          ],
+        },
+      ],
+    };
+    img.passage_text = "Text on the poster";
+    expect(groupPassageText(img)).toBe("Text on the poster");
+    img.passage_text = "   ";
+    expect(groupPassageText(img)).toBeNull();
+  });
+  it("groupDraftFromGroup：存的文字版與推導不同 → passage_text_edited；相同或空 → 未改", () => {
+    const base = {
+      id: 1,
+      question_type: "reading",
+      stimulus_type: "mixed",
+      title: null,
+      image_url: null,
+      audio_url: null,
+      glossary: null,
+      grade_min: null,
+      grade_max: null,
+      visibility: "private",
+      is_platform: false,
+      teacher_id: 1,
+      organization_id: null,
+      school_id: null,
+      is_owner: true,
+      can_edit: true,
+      questions: [],
+      created_at: null,
+      updated_at: null,
+      layout: {
+        version: 1,
+        rows: [
+          {
+            columns: [
+              { span: 1, blocks: [{ type: "paragraph", text: "Intro" }] },
+            ],
+          },
+        ],
+      },
+    } as unknown as QuestionGroup;
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: "Intro" })
+        .passage_text_edited,
+    ).toBe(false);
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: null }).passage_text_edited,
+    ).toBe(false);
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: "Intro\n\nPoster text" })
+        .passage_text_edited,
+    ).toBe(true);
   });
   it("toUpdateGroupInput：帶 existingId 的小題送 id，新小題不送；不含題型／歸屬", () => {
     const g = emptyGroupDraft("reading");

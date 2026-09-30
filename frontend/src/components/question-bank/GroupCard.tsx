@@ -4,13 +4,15 @@
  * 修訂後的樣子：淡外框＋標題列（一個面板多個題組時分得開），內容像一份文件
  * |題組標題|
  * |年段|
- * |主圖文（LayoutEditor：文件式區塊編輯器，預覽另開 Dialog）|
+ * |主圖文：分頁「排版」（LayoutEditor：文件式區塊編輯器，預覽另開 Dialog）｜「文字版」|
  * |單字註解（一個文字框，一行一筆「word 中文」）|
  * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
  * 素材類型不讓老師選：儲存時由內容判定（questionDraft.deriveStimulusType）。
+ * 「文字版」（#1083）：不顯示給學生，供搜尋／AI 考點分析／重複偵測。預設由排版推導；
+ * 老師改過（`passage_text_edited`）就以老師的為準，排版再變也不覆蓋，可按「重新產生」回推導。
+ * 以圖為準的題組（海報／漫畫）排版只有一張圖，文字版就是老師貼上的圖中文字。
  * 小題的考點、來源、教材關聯仍在各自的 QuestionCard；公開設定與年段跟隨題組（左欄套用）。
- * `passage_text` 儲存時由 layout 拼出（questionDraft.toCreateGroupInput）。
  */
 
 import { useMemo, useRef, useState } from "react";
@@ -32,12 +34,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
@@ -49,6 +52,7 @@ import { DOC_TEXTAREA_CLASS, useAutoGrow } from "./useAutoGrow";
 import {
   emptyGroupQuestion,
   glossaryToText,
+  groupDerivedText,
   parseGlossaryText,
   validateDraft,
   type GroupDraft,
@@ -148,6 +152,75 @@ function GlossaryTextarea({
       disabled={disabled}
       data-testid={testId}
     />
+  );
+}
+
+/**
+ * 文字版分頁：不顯示給學生的純文字（搜尋／AI）。沒改過時顯示排版推導的文字，
+ * 一打字就變成老師的版本（`passage_text_edited`）；「重新產生」回到推導文字。
+ */
+function PassageTextTab({
+  draft,
+  onPatch,
+  disabled,
+  testId,
+}: {
+  draft: GroupDraft;
+  onPatch: (p: Partial<GroupDraft>) => void;
+  disabled: boolean;
+  testId: string;
+}) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const derived = groupDerivedText(draft);
+  const value = draft.passage_text_edited ? draft.passage_text : derived;
+  useAutoGrow(ref, value);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-gray-400">
+          {t("questionBank.group.passage.hint")}
+        </p>
+        {draft.passage_text_edited && !disabled && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 gap-1 text-xs text-gray-600"
+            onClick={() =>
+              onPatch({
+                passage_text: derived,
+                passage_text_edited: false,
+                serverError: null,
+              })
+            }
+            data-testid={`${testId}-regen`}
+          >
+            <RefreshCw size={12} />
+            {t("questionBank.group.passage.regenerate")}
+          </Button>
+        )}
+      </div>
+      <Textarea
+        ref={ref}
+        value={value}
+        onChange={(e) =>
+          onPatch({
+            passage_text: e.target.value,
+            passage_text_edited: true,
+            serverError: null,
+          })
+        }
+        rows={1}
+        placeholder={t("questionBank.group.passage.placeholder")}
+        className={cn(
+          DOC_TEXTAREA_CLASS,
+          "rounded-md border border-gray-200 px-3 py-2 text-sm leading-relaxed",
+        )}
+        disabled={disabled}
+        data-testid={testId}
+      />
+    </div>
   );
 }
 
@@ -277,20 +350,55 @@ export default function GroupCard({
           />
         </div>
 
-        {/* 主圖文 */}
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-600">
-            {t("questionBank.group.layout.title")}
-          </Label>
-          <LayoutEditor
-            key={draft.key}
-            layout={draft.layout}
-            onChange={(layout) => patch({ layout, serverError: null })}
-            glossary={draft.glossary}
-            disabled={locked}
-            testId={`qg-${index}-layout`}
-          />
-        </div>
+        {/* 主圖文：排版｜文字版 */}
+        <Tabs defaultValue="layout" className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs text-gray-600">
+              {t("questionBank.group.layout.title")}
+            </Label>
+            <TabsList className="h-7 p-0.5">
+              <TabsTrigger
+                value="layout"
+                className="h-6 px-2 text-xs"
+                data-testid={`qg-${index}-tab-layout`}
+              >
+                {t("questionBank.group.passage.tabLayout")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="text"
+                className="h-6 gap-1 px-2 text-xs"
+                data-testid={`qg-${index}-tab-text`}
+              >
+                {t("questionBank.group.passage.tabText")}
+                {draft.passage_text_edited && (
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-amber-500"
+                    title={t("questionBank.group.passage.edited")}
+                    data-testid={`qg-${index}-passage-edited`}
+                  />
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="layout" className="mt-0">
+            <LayoutEditor
+              key={draft.key}
+              layout={draft.layout}
+              onChange={(layout) => patch({ layout, serverError: null })}
+              glossary={draft.glossary}
+              disabled={locked}
+              testId={`qg-${index}-layout`}
+            />
+          </TabsContent>
+          <TabsContent value="text" className="mt-0">
+            <PassageTextTab
+              draft={draft}
+              onPatch={patch}
+              disabled={locked}
+              testId={`qg-${index}-passage-text`}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* 單字註解：一個文字框，一行一筆 */}
         <div className="space-y-1.5">

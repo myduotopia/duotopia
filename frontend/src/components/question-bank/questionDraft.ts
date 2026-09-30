@@ -286,8 +286,12 @@ export interface GroupDraft {
   layout: LayoutDoc | null;
   glossary: GlossaryEntry[];
   image_url: string | null;
-  /** layout 的純文字副本（搜尋／AI 用）；以圖為準時是老師可修的「文字版」 */
+  /**
+   * 「文字版」（搜尋／AI 用，不顯示給學生）。沒改過時由 layout 推導（`groupPassageText`），
+   * 老師在文字版分頁改過（`passage_text_edited`）就以這裡的為準；「重新產生」清掉。
+   */
   passage_text: string;
+  passage_text_edited: boolean;
   /** 小題（groupKey 都指向本題組） */
   questions: QuestionDraft[];
   grade: GradeRange;
@@ -316,6 +320,7 @@ export function emptyGroupDraft(
     glossary: [],
     image_url: null,
     passage_text: "",
+    passage_text_edited: false,
     questions: [],
     grade: [...defaults.grade] as GradeRange,
     program_link: defaults.program_link ? { ...defaults.program_link } : null,
@@ -351,6 +356,10 @@ export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
     glossary: g.glossary ?? [],
     image_url: g.image_url,
     passage_text: g.passage_text ?? "",
+    // 存的文字跟排版推導出來的不一樣 = 老師改過（純圖題組沒有推導文字，有存就是改過）
+    passage_text_edited:
+      (g.passage_text ?? "").trim() !== "" &&
+      (g.passage_text ?? "").trim() !== layoutToPlainText(g.layout).trim(),
     questions: [],
     grade: [g.grade_min, g.grade_max],
     // 題組層沒有教材關聯／來源欄位：以第一個小題的值當左欄預填（各小題仍各自帶）
@@ -484,10 +493,18 @@ export function deriveStimulusType(
   return "mixed";
 }
 
-/** 純文字副本：有排版就由排版拼；沒有（或排版沒有文字）才用老師手打的文字版 */
+/** 排版推導出的文字版（去標記、段落以空行隔開）；沒有排版或排版沒有文字 → "" */
+export function groupDerivedText(g: GroupDraft): string {
+  return layoutToPlainText(g.layout);
+}
+
+/**
+ * 送後端的文字版：老師改過就用老師的；否則用排版推導，推導不出（純圖／沒排版）才用
+ * 老師手打的；都空 → null。後端規則是「有送 passage_text 就存它」，所以這裡決定的就是最終值。
+ */
 export function groupPassageText(g: GroupDraft): string | null {
-  const derived = layoutToPlainText(g.layout);
-  const text = derived || g.passage_text.trim();
+  const own = g.passage_text.trim();
+  const text = g.passage_text_edited ? own : groupDerivedText(g) || own;
   return text || null;
 }
 

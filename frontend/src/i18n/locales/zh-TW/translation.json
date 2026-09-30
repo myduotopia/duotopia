@@ -6173,6 +6173,14 @@
         "title": "單字註解",
         "placeholder": "timeline 時間軸\ncompose 作曲"
       },
+      "passage": {
+        "tabLayout": "排版",
+        "tabText": "文字版",
+        "hint": "不顯示給學生；供搜尋與 AI 考點分析。預設由排版產生，可直接修改。",
+        "placeholder": "海報、漫畫等圖片題組：把圖中的文字貼在這裡",
+        "regenerate": "重新產生",
+        "edited": "已手動修改"
+      },
       "questions": {
         "title": "小題（{{count}}）",
         "add": "新增小題",
