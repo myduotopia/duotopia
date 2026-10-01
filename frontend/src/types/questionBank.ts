@@ -35,6 +35,9 @@ export interface QuestionExamPointRef {
 export interface QuestionProgramLink {
   program_id: number;
   lesson_id: number | null;
+  /** 列表「教材」欄顯示用（後端回傳；寫入時不需要） */
+  program_name?: string | null;
+  lesson_name?: string | null;
 }
 
 /** 考題來源：歷屆考題（exam）／出版社版本（publisher）。organization_id / teacher_id 皆 null = 平台公用 */
@@ -201,6 +204,8 @@ export interface QuestionGroupListRow {
   sources: QuestionSource[];
   /** 題組內小題的考點聯集（列表顯示用；舊回應可能沒有） */
   exam_points?: QuestionExamPointRef[];
+  /** 題組內小題的教材關聯聯集（列表顯示用；舊回應可能沒有） */
+  program_links?: QuestionProgramLink[];
   created_at: string | null;
   updated_at: string | null;
 }

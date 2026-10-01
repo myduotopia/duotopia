@@ -3,6 +3,7 @@
  *
  * 勾選、題目（點開編輯面板）、題型、年級，以及三個可快速編輯的欄位：
  * 考點／考題來源／公開（點整格才出選單、選完關閉）。編輯狀態由父層持有。
+ * 「教材」欄（關聯教材包／單元）唯讀顯示。
  */
 
 import { useTranslation } from "react-i18next";
@@ -23,6 +24,7 @@ import {
   formatGrade,
   InlineVisibility,
   OptionGrid,
+  programLinkLabel,
 } from "./listCells";
 import { searchSources } from "./sourcesCombobox";
 
@@ -146,6 +148,12 @@ export default function QuestionRow({
           )}
           data-testid={`qb-row-${q.id}-sources`}
         />
+      </td>
+      <td
+        className="px-4 py-2 hidden lg:table-cell"
+        data-testid={`qb-row-${q.id}-programs`}
+      >
+        <ChipCell labels={(q.program_links ?? []).map(programLinkLabel)} />
       </td>
       <td className="px-4 py-2 hidden lg:table-cell" onClick={stop}>
         <InlineVisibility

@@ -5906,7 +5906,8 @@
       "grade": "Grade",
       "examPoints": "Exam Points",
       "visibility": "Visibility",
-      "sources": "Source"
+      "sources": "Source",
+      "programs": "Materials"
     },
     "visibility": {
       "private": "Private",

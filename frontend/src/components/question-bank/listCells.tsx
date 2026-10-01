@@ -5,6 +5,7 @@
  * - InlineVisibility：公開設定平常是文字，點了才出現下拉
  * - OptionGrid：選擇題選項預覽（短→一列四格、長→兩欄）
  * - formatGrade：年級只顯示數字
+ * - programLinkLabel：教材欄 chip 文字（教材名 › 單元名）
  */
 
 import { useState } from "react";
@@ -14,7 +15,11 @@ import {
   VisibilitySelect,
   visibilityLabelKey,
 } from "@/components/shared/VisibilitySelect";
-import type { Question, QuestionVisibility } from "@/types/questionBank";
+import type {
+  Question,
+  QuestionProgramLink,
+  QuestionVisibility,
+} from "@/types/questionBank";
 
 /** 表格格子的純顯示：chip 列；沒有值顯示「—」。點整格才開選單（由外層 renderTrigger 包） */
 export function ChipCell({ labels }: { labels: string[] }) {
@@ -110,6 +115,15 @@ export function OptionGrid({ options }: { options: Question["options"] }) {
       ))}
     </div>
   );
+}
+
+/**
+ * 教材欄 chip 文字：有單元 → 「教材名 › 單元名」，否則只有教材名。
+ * 舊回應沒有名稱時退回 id，過長由 ChipCell 的 truncate + title 處理。
+ */
+export function programLinkLabel(link: QuestionProgramLink): string {
+  const program = link.program_name || `#${link.program_id}`;
+  return link.lesson_name ? `${program} › ${link.lesson_name}` : program;
 }
 
 /** 年級只顯示數字（中英文相同）：7–9、7、不限 — */

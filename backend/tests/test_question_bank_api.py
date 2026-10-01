@@ -894,7 +894,44 @@ def test_program_links_replace_dedups(test_client, shared_test_session, teacher_
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["program_links"] == [
-        {"program_id": program.id, "lesson_id": None}
+        {
+            "program_id": program.id,
+            "lesson_id": None,
+            "program_name": program.name,
+            "lesson_name": None,
+        }
+    ]
+
+
+def test_program_links_carry_names(test_client, shared_test_session, teacher_a):
+    """單題列表的 program_links 帶教材包／單元名稱（列表「教材」欄用）。"""
+    from tests.factories import TestDataFactory
+
+    program = TestDataFactory.create_program(
+        shared_test_session, teacher_a, name="國中會考總複習"
+    )
+    lesson = TestDataFactory.create_lesson(
+        shared_test_session, program, name="Unit 3 時態"
+    )
+    q = _create(test_client, teacher_a, stem="Named links")
+    resp = test_client.put(
+        f"/api/question-bank/questions/{q['id']}/program-links",
+        json={"program_links": [{"program_id": program.id, "lesson_id": lesson.id}]},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    (row,) = [i for i in listing["items"] if i["id"] == q["id"]]
+    assert row["program_links"] == [
+        {
+            "program_id": program.id,
+            "lesson_id": lesson.id,
+            "program_name": "國中會考總複習",
+            "lesson_name": "Unit 3 時態",
+        }
     ]
 
 
@@ -1072,6 +1109,57 @@ def test_create_question_group_one_transaction(test_client, teacher_a, exam_poin
     assert row["question_count"] == 2
     assert row["question_type"] == "reading"
     assert row["title"] == "Vivaldi"
+
+
+def test_group_row_program_links_union(test_client, shared_test_session, teacher_a):
+    """題組列的 program_links＝小題關聯的聯集（去重、帶名稱）。"""
+    from tests.factories import TestDataFactory
+
+    program = TestDataFactory.create_program(
+        shared_test_session, teacher_a, name="閱讀教材"
+    )
+    lesson = TestDataFactory.create_lesson(
+        shared_test_session, program, name="Unit 1 音樂家"
+    )
+    g = _create_group(test_client, teacher_a)
+    q1, q2 = g["questions"]
+    for qid, links in (
+        (q1["id"], [{"program_id": program.id, "lesson_id": lesson.id}]),
+        (
+            q2["id"],
+            [
+                {"program_id": program.id, "lesson_id": lesson.id},  # 與 q1 重複
+                {"program_id": program.id},  # 只掛教材包
+            ],
+        ),
+    ):
+        resp = test_client.put(
+            f"/api/question-bank/questions/{qid}/program-links",
+            json={"program_links": links},
+            headers=_headers(teacher_a),
+        )
+        assert resp.status_code == 200, resp.text
+
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    (row,) = [
+        i for i in listing["items"] if i["kind"] == "group" and i["id"] == g["id"]
+    ]
+    assert row["program_links"] == [
+        {
+            "program_id": program.id,
+            "lesson_id": lesson.id,
+            "program_name": "閱讀教材",
+            "lesson_name": "Unit 1 音樂家",
+        },
+        {
+            "program_id": program.id,
+            "lesson_id": None,
+            "program_name": "閱讀教材",
+            "lesson_name": None,
+        },
+    ]
 
 
 def test_create_question_group_validation(test_client, teacher_a):

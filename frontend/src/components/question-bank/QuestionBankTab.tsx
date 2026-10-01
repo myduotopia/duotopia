@@ -536,6 +536,9 @@ export default function QuestionBankTab({
                 <th className="px-4 py-2 font-medium w-44 hidden md:table-cell">
                   {t("questionBank.columns.sources")}
                 </th>
+                <th className="px-4 py-2 font-medium w-44 hidden lg:table-cell">
+                  {t("questionBank.columns.programs")}
+                </th>
                 <th className="px-4 py-2 font-medium w-32 hidden lg:table-cell">
                   {t("questionBank.columns.visibility")}
                 </th>

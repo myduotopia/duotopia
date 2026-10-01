@@ -2,7 +2,8 @@
  * 題庫列表的題組列（#1082）。
  *
  * 與單題列同欄位：☑ | 標題＋文章預覽（點開題組編輯面板）| 題型「閱讀題組」| 年級 |
- * 考點（小題聯集，唯讀）| 來源（小題聯集，唯讀）| 公開（可快速編輯）。
+ * 考點（小題聯集，唯讀）| 來源（小題聯集，唯讀）| 教材（小題聯集，唯讀）|
+ * 公開（可快速編輯）。
  * 可勾選進批次刪除／儲存；列尾「刪除題組」用 Dialog 確認（整組含小題）。
  */
 
@@ -26,7 +27,12 @@ import {
   type QuestionType,
   type QuestionVisibility,
 } from "@/types/questionBank";
-import { ChipCell, formatGrade, InlineVisibility } from "./listCells";
+import {
+  ChipCell,
+  formatGrade,
+  InlineVisibility,
+  programLinkLabel,
+} from "./listCells";
 
 const PREVIEW_CHARS = 120;
 
@@ -183,6 +189,12 @@ export default function GroupRow({
       </td>
       <td className="px-4 py-2 hidden md:table-cell">
         <ChipCell labels={row.sources.map((x) => x.name)} />
+      </td>
+      <td
+        className="px-4 py-2 hidden lg:table-cell"
+        data-testid={`qb-group-${row.id}-programs`}
+      >
+        <ChipCell labels={(row.program_links ?? []).map(programLinkLabel)} />
       </td>
       <td className="px-4 py-2 hidden lg:table-cell">
         <InlineVisibility

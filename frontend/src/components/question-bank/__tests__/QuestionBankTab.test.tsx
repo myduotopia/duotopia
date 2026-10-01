@@ -5,7 +5,7 @@
  *
  * 驗證：列表載入與渲染、scope 對應的 API 參數、機構 scope 沒 organizationId 不打 API、
  * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁
- * （含每頁 10 筆）。
+ * （含每頁 10 筆）、教材欄。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -413,6 +413,34 @@ describe("QuestionBankTab", () => {
       ),
     );
     expect(await screen.findByText("Q21")).toBeTruthy();
+  });
+
+  it("教材欄：單題與題組列顯示「教材名 › 單元名」，沒有關聯顯示 —", async () => {
+    const links = [
+      {
+        program_id: 5,
+        lesson_id: 9,
+        program_name: "國中會考總複習",
+        lesson_name: "Unit 3 時態",
+      },
+    ];
+    listQuestions.mockResolvedValue(
+      respond([
+        makeQuestion({ id: 1, program_links: links }),
+        makeQuestion({ id: 2, stem: "Q2", program_links: [] }),
+        makeGroupRow({ id: 101, program_links: links }),
+      ]),
+    );
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Q2");
+
+    expect(screen.getByTestId("qb-row-1-programs").textContent).toBe(
+      "國中會考總複習 › Unit 3 時態",
+    );
+    expect(screen.getByTestId("qb-row-2-programs").textContent).toBe("—");
+    expect(screen.getByTestId("qb-group-101-programs").textContent).toBe(
+      "國中會考總複習 › Unit 3 時態",
+    );
   });
 
   it("每頁筆數支援 10：URL size=10 時以 page_size 10 查詢，選單含 10 的選項", async () => {

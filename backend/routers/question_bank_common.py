@@ -1,7 +1,8 @@
 """
 題庫 API 的序列化、權限與查詢輔助（自 routers/question_bank.py 拆出，#1082）。
 
-- Serializers：_question_out／_group_out／_group_row_out／_source_out／_exam_point_out
+- Serializers：_question_out／_group_out／_group_row_out／_source_out／_exam_point_out／
+  _program_link_out（教材關聯帶教材包／單元名稱）
 - 權限：_can_edit（建立者本人；機構／學校題庫別人的題只有擁有人／教材管理者）
 - 查詢：_load_options／_load_group_rows（selectinload，避免 N+1）、_scope_filter、
   _grade_filter、_merged_page_keys（單題／題組 SQL 層合併分頁）
@@ -21,6 +22,7 @@ from models import (
     Question,
     QuestionExamPoint,
     QuestionGroup,
+    QuestionProgramLink,
     QuestionSource,
     QuestionSourceLink,
     Teacher,
@@ -44,6 +46,16 @@ def _exam_point_out(ep: ExamPoint) -> dict:
         "status": ep.status,
         "order_index": ep.order_index,
         "aliases": [a.alias for a in (ep.aliases or [])],
+    }
+
+
+def _program_link_out(pl: QuestionProgramLink) -> dict:
+    """教材關聯：帶教材包／單元名稱供列表「教材」欄顯示（lesson 可為 None）。"""
+    return {
+        "program_id": pl.program_id,
+        "lesson_id": pl.lesson_id,
+        "program_name": pl.program.name if pl.program is not None else None,
+        "lesson_name": pl.lesson.name if pl.lesson is not None else None,
     }
 
 
@@ -102,10 +114,7 @@ def _question_out(
             for link in q.exam_point_links
             if link.exam_point is not None
         ],
-        "program_links": [
-            {"program_id": pl.program_id, "lesson_id": pl.lesson_id}
-            for pl in q.program_links
-        ],
+        "program_links": [_program_link_out(pl) for pl in q.program_links],
         "sources": [
             _source_out(link.source)
             for link in q.source_links
@@ -152,6 +161,7 @@ def _group_row_out(
     questions = [q for q in g.questions if q.is_active]
     sources: dict = {}
     exam_points: dict = {}
+    program_links: dict = {}
     for q in questions:
         for link in q.source_links:
             if link.source is not None:
@@ -159,6 +169,8 @@ def _group_row_out(
         for link in q.exam_point_links:
             if link.exam_point is not None:
                 exam_points.setdefault(link.exam_point.id, link.exam_point)
+        for pl in q.program_links:
+            program_links.setdefault((pl.program_id, pl.lesson_id), pl)
     preview = (g.passage_text or "").strip()[:200]
     return {
         "kind": "group",
@@ -179,6 +191,7 @@ def _group_row_out(
         "can_edit": _can_edit(db, teacher, g, perm_cache),
         "sources": [_source_out(x) for x in sources.values()],
         "exam_points": [_exam_point_out(x) for x in exam_points.values()],
+        "program_links": [_program_link_out(x) for x in program_links.values()],
         "created_at": g.created_at.isoformat() if g.created_at else None,
         "updated_at": g.updated_at.isoformat() if g.updated_at else None,
     }
@@ -255,13 +268,14 @@ def _load_options(query):
         selectinload(Question.exam_point_links).selectinload(
             QuestionExamPoint.exam_point
         ),
-        selectinload(Question.program_links),
+        selectinload(Question.program_links).selectinload(QuestionProgramLink.program),
+        selectinload(Question.program_links).selectinload(QuestionProgramLink.lesson),
         selectinload(Question.source_links).selectinload(QuestionSourceLink.source),
     )
 
 
 def _load_group_rows(query):
-    """列表題組列只需要小題的題型／來源／考點（不載選項）。"""
+    """列表題組列只需要小題的題型／來源／考點／教材關聯（不載選項）。"""
     return query.options(
         selectinload(QuestionGroup.questions)
         .selectinload(Question.source_links)
@@ -269,6 +283,12 @@ def _load_group_rows(query):
         selectinload(QuestionGroup.questions)
         .selectinload(Question.exam_point_links)
         .selectinload(QuestionExamPoint.exam_point),
+        selectinload(QuestionGroup.questions)
+        .selectinload(Question.program_links)
+        .selectinload(QuestionProgramLink.program),
+        selectinload(QuestionGroup.questions)
+        .selectinload(Question.program_links)
+        .selectinload(QuestionProgramLink.lesson),
     )
 
 

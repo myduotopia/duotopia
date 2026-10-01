@@ -5950,7 +5950,8 @@
       "grade": "年級",
       "examPoints": "考點",
       "visibility": "公開",
-      "sources": "考題來源"
+      "sources": "考題來源",
+      "programs": "教材"
     },
     "visibility": {
       "private": "私人",
