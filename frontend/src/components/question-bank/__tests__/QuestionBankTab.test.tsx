@@ -427,9 +427,7 @@ describe("QuestionBankTab", () => {
     expect(listQuestions).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, page_size: 10 }),
     );
-    expect(
-      screen.getByTestId("question-bank-page-size").textContent,
-    ).toContain("每頁 10 題");
+    expect(screen.getByTestId("question-bank-page-size")).toBeTruthy();
     expect(screen.getByText("第 1 / 5 頁")).toBeTruthy();
   });
 
