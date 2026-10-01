@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "rows": [
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "paragraph", "text": "Robert, a college student, had a long winter vacation this year. He did not work part-time or play video games at home all day. He did something more important—to help school children in the mountains." },
+      { "type": "paragraph", "text": "This was the first time Robert joined this activity. He and 23 other college students started from Spring Town and visited three elementary schools one by one. To get to each school, they had to walk many kilometers, each carrying a backpack of six to ten kilograms. It was not easy because no buses or cars could reach these schools." }
+    ] } ] },
+    { "columns": [
+      { "span": 1, "blocks": [ { "type": "image", "url": "<backpack.png>", "alt": "Robert's backpack", "caption": "Robert's backpack", "frame": true } ] },
+      { "span": 1, "blocks": [ { "type": "image", "url": "<plan.png>", "alt": "Here was their plan", "caption": "Here was their plan.", "frame": true } ] }
+    ] },
+    { "columns": [ { "span": 1, "blocks": [
+      { "type": "paragraph", "text": "In each school, the team taught the students math, history, and Chinese by playing board games, singing songs, and telling stories. The students found learning very interesting, and they also enjoyed many fun activities with their young teachers." },
+      { "type": "paragraph", "text": "The trip was hard, but Robert and his team tried their best. They felt proud because they could help many students learn new things. They all had the best winter vacation this year." }
+    ] } ] }
+  ],
+  "_glossary": [ { "word": "college", "zh": "大學" }, { "word": "activity", "zh": "活動" }, { "word": "board game", "zh": "桌遊" } ]
+}

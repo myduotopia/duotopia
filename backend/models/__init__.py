@@ -89,6 +89,20 @@ from .student_group import (
 # Program models
 from .program import Program, Lesson, Content, ContentItem, ProgramCopyLog
 
+# Question bank models (issue #1061 / #1062)
+from .question_bank import (
+    ExamPoint,
+    ExamPointAlias,
+    Question,
+    QuestionExamPoint,
+    QuestionGroup,
+    QuestionGroupSegment,
+    QuestionOption,
+    QuestionProgramLink,
+    QuestionSource,
+    QuestionSourceLink,
+)
+
 # Assignment models
 from .assignment import (
     Assignment,
@@ -182,6 +196,17 @@ __all__ = [
     "Content",
     "ContentItem",
     "ProgramCopyLog",
+    # Question bank (issue #1061 / #1062)
+    "ExamPoint",
+    "ExamPointAlias",
+    "Question",
+    "QuestionExamPoint",
+    "QuestionGroup",
+    "QuestionGroupSegment",
+    "QuestionOption",
+    "QuestionProgramLink",
+    "QuestionSource",
+    "QuestionSourceLink",
     # Assignments
     "Assignment",
     "AssignmentContent",

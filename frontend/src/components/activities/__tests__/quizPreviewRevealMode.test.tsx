@@ -175,9 +175,18 @@ describe.each(variants)("$name preview reveal modes (#1045 stage 4)", (v) => {
     expect(
       await screen.findByText("wordQuiz.review.scoreSummary"),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByText("wordQuiz.review.correctAnswer").length,
-    ).toBeGreaterThan(0);
+    // #1088：單字選擇檢視頁隱藏「你的答案／正確答案」列（選項上已有 ✓／✗），
+    // 改以題號旁狀態 chip 驗證；其他小考仍顯示正確答案列
+    if (v.name === "word_selection_quiz") {
+      expect(
+        screen.getAllByTestId("quiz-review-status").length,
+      ).toBeGreaterThan(0);
+      expect(screen.queryByText("wordQuiz.review.correctAnswer")).toBeNull();
+    } else {
+      expect(
+        screen.getAllByText("wordQuiz.review.correctAnswer").length,
+      ).toBeGreaterThan(0);
+    }
     expect(screen.queryByText("wordQuiz.locked.desc")).toBeNull();
     expect(screen.queryByTestId("preview-demo-done")).toBeNull();
     fireEvent.click(screen.getByTestId("preview-restart-demo"));

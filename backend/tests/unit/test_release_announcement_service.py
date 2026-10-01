@@ -75,7 +75,7 @@ def _settings(monkeypatch):
     monkeypatch.setattr(
         mod.settings, "RELEASE_ANNOUNCEMENT_BANNER_URL", "https://cdn/banner.png"
     )
-    monkeypatch.setattr(mod.settings, "LINE_TEST_USER_ID", "Utest123")
+    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_TEST_USER_ID", "Utest123")
 
 
 class TestParseReleaseTitle:
@@ -129,6 +129,55 @@ class TestCreateDraft:
         assert ann.line_status == CHANNEL_PENDING
         assert ann.website_status == CHANNEL_PENDING
         assert ai.generate_json.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_prewritten_content_skips_ai(self, test_db_session):
+        """/announce 已在 issue / PR 寫好內容 → 直接用，不呼叫 Vertex AI"""
+        db = test_db_session
+        written = {
+            "line_message_zh": "Claude Code 寫的文案",
+            "line_message_en": "Written by Claude Code",
+            "article_title_zh": "標題",
+            "article_body_zh": "內文",
+            "article_title_en": "Title",
+            "article_body_en": "Body",
+        }
+        patcher, ai = _patch_ai()
+        with patcher:
+            ann, created = await ReleaseAnnouncementService.create_draft_from_release(
+                db,
+                environment="staging",
+                source_ref="prewritten",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=written,
+            )
+
+        assert created is True
+        assert ai.generate_json.await_count == 0
+        assert ann.line_message_zh == "Claude Code 寫的文案"
+        assert ann.article_body_en == "Body"
+        assert ann.generation_error is None
+        # release 標題解析仍照做（變更類型、issue 編號）
+        assert ann.change_type == "feature"
+        assert ann.issue_numbers == "860"
+
+    @pytest.mark.asyncio
+    async def test_incomplete_prewritten_content_falls_back_to_ai(
+        self, test_db_session
+    ):
+        db = test_db_session
+        patcher, ai = _patch_ai()
+        with patcher:
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                db,
+                environment="staging",
+                source_ref="incomplete",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content={"line_message_zh": "", "article_title_zh": "只有標題"},
+            )
+
+        assert ai.generate_json.await_count == 1
+        assert ann.line_message_zh == AI_RESULT["line_message_zh"]
 
     @pytest.mark.asyncio
     async def test_same_commit_twice_is_idempotent(self, test_db_session):
@@ -195,6 +244,17 @@ class TestUpdateAndMerge:
         assert updated.line_message_zh == "手改文案"
         assert updated.article_title_en == "Edited"
         assert updated.article_title_zh == AI_RESULT["article_title_zh"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("blank", ["", "   "])
+    async def test_update_draft_clears_blank_image_url(self, test_db_session, blank):
+        """後台清空圖片網址 → 存成 NULL，官網封面與 LINE hero 都不帶圖"""
+        db = test_db_session
+        ann = await _make_draft(db, source_ref=f"clear-img-{len(blank)}")
+
+        updated = ReleaseAnnouncementService.update_draft(db, ann, {"image_url": blank})
+
+        assert updated.image_url is None
 
     @pytest.mark.asyncio
     async def test_merge_appends_unpublished_drafts_and_marks_them(

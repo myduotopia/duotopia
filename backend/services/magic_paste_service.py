@@ -27,7 +27,15 @@ MAX_OUTPUT_TOKENS = 8192
 # - sentence  ：例句集 / 朗讀評測（一列 = 句子 + 翻譯）
 EXTRACT_MODE_VOCABULARY = "vocabulary"
 EXTRACT_MODE_SENTENCE = "sentence"
-EXTRACT_MODES = {EXTRACT_MODE_VOCABULARY, EXTRACT_MODE_SENTENCE}
+# multiple_choice：題庫從考卷圖片擷取選擇題（issue #1061 / #1065）
+EXTRACT_MODE_MULTIPLE_CHOICE = "multiple_choice"
+EXTRACT_MODES = {
+    EXTRACT_MODE_VOCABULARY,
+    EXTRACT_MODE_SENTENCE,
+    EXTRACT_MODE_MULTIPLE_CHOICE,
+}
+MC_MIN_OPTIONS = 2
+MC_MAX_OPTIONS = 6
 
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
@@ -118,9 +126,34 @@ class MagicPasteService:
         extract_mode:
         - "vocabulary"（單字集）：一列 = 單字 + 翻譯 + 詞性 + 例句 + 例句翻譯
         - "sentence"（例句集 / 朗讀評測）：一列 = 句子 + 翻譯
+        - "multiple_choice"（題庫）：一題 = 題幹 + 選項 + （圖上有標才給）答案 + 解析
 
         `level` 目前保留供未來使用；擷取本身不生成例句故不參考。
         """
+        if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE:
+            return (
+                "Extract every multiple-choice question from the uploaded file.\n"
+                "Return JSON of the exact shape: "
+                '{"items": [{"stem": "...", "options": ["...", "..."], '
+                '"correct_indexes": [0], "explanation": "..."}]}\n'
+                "Rules:\n"
+                "- `stem`: the question text exactly as printed. Keep blanks such as "
+                '"____" as-is. Remove the leading question number (e.g. "12." or "(3)").\n'
+                f"- `options`: the choices in printed order ({MC_MIN_OPTIONS}–{MC_MAX_OPTIONS}). "
+                "Remove leading labels such as (A) B. (C) 甲 乙. Do NOT invent options; "
+                f"if a question has fewer than {MC_MIN_OPTIONS} choices, skip it.\n"
+                "- `correct_indexes`: 0-based indexes of the correct options ONLY if the "
+                "answer is printed in the file (an answer key, a circled/ticked choice, "
+                "bold or underlined choice). Otherwise return []. Never guess.\n"
+                "- `explanation`: copy ONLY an explanation printed in the file; "
+                'otherwise "".\n'
+                "- If a passage or dialogue is shared by several questions, do NOT put it "
+                "in `stem`; skip such question groups and return only stand-alone "
+                "questions.\n"
+                "- Preserve the order the questions appear in the file.\n"
+                '- If the file contains no multiple-choice questions, return {"items": []}.'
+            )
+
         if extract_mode == EXTRACT_MODE_SENTENCE:
             return (
                 "Extract every English sentence from the uploaded file.\n"
@@ -196,7 +229,11 @@ class MagicPasteService:
         )
         provider = "vertex"
 
-        items = self._normalize_items(raw)
+        items = (
+            self._normalize_mc_items(raw)
+            if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE
+            else self._normalize_items(raw)
+        )
         cost = self._estimate_cost(model, usage)
         logger.info(
             "[magic-paste] provider=%s model=%s items=%d tokens(in/out)=%s/%s "
@@ -313,6 +350,54 @@ class MagicPasteService:
                 continue
             if isinstance(parsed, dict) and str(parsed.get("text") or "").strip():
                 items.append(parsed)
+        return items
+
+    @staticmethod
+    def _normalize_mc_items(raw: Any) -> List[Dict[str, Any]]:
+        """選擇題擷取結果整理：題幹空或選項 < 2 的丟掉；correct_indexes 只留合法範圍。"""
+        if isinstance(raw, dict):
+            raw_items = raw.get("items", [])
+        elif isinstance(raw, list):
+            raw_items = raw
+        else:
+            raw_items = []
+
+        items: List[Dict[str, Any]] = []
+        for entry in raw_items:
+            if not isinstance(entry, dict):
+                continue
+            stem = str(entry.get("stem") or "").strip()
+            options_raw = entry.get("options")
+            options = (
+                [str(o or "").strip() for o in options_raw]
+                if isinstance(options_raw, list)
+                else []
+            )
+            options = [o for o in options if o][:MC_MAX_OPTIONS]
+            if not stem or len(options) < MC_MIN_OPTIONS:
+                continue
+            idx_raw = entry.get("correct_indexes")
+            correct = (
+                sorted(
+                    {
+                        int(i)
+                        for i in idx_raw
+                        if isinstance(i, (int, float))
+                        and not isinstance(i, bool)
+                        and 0 <= int(i) < len(options)
+                    }
+                )
+                if isinstance(idx_raw, list)
+                else []
+            )
+            items.append(
+                {
+                    "stem": stem,
+                    "options": options,
+                    "correct_indexes": correct,
+                    "explanation": str(entry.get("explanation") or "").strip(),
+                }
+            )
         return items
 
     @staticmethod

@@ -59,7 +59,10 @@ async def magic_paste_extract(
     擷取只抄圖上有的翻譯/例句；AI 翻譯/例句/語音改由前端「插入時」補洞。
     """
     if extract_mode not in EXTRACT_MODES:
-        extract_mode = EXTRACT_MODE_VOCABULARY
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"extract_mode 需為 {sorted(EXTRACT_MODES)} 之一",
+        )
 
     service = get_magic_paste_service()
 

@@ -44,6 +44,7 @@ import {
   deriveClozeAnswer,
 } from "@/utils/magicPasteHelpers";
 import { retryAudioUpload } from "@/utils/retryHelper";
+import { findClozeMatch, reconcileClozeAnswer } from "@/lib/cloze";
 import {
   TTS_ACCENTS,
   TTS_GENDERS,
@@ -1275,9 +1276,13 @@ export function ClozeAnswerEditor({
 
   const answer = (value || "").trim();
   const lowerSentence = sentence.toLowerCase();
-  const matchStart = answer ? lowerSentence.indexOf(answer.toLowerCase()) : -1;
-  const matchEnd = matchStart >= 0 ? matchStart + answer.length : -1;
+  // Issue #1088: 高亮改用 findClozeMatch（整字比對，與後端／挖空同語意）；找不到＝
+  // 挖空字已對不上例句（例句改過），chip 顯示警示請老師重選。
+  const match = answer ? findClozeMatch(answer, sentence) : null;
+  const matchStart = match ? match[0] : -1;
+  const matchEnd = match ? match[1] : -1;
   const hasHighlight = matchStart >= 0;
+  const isStale = !!answer && !hasHighlight;
 
   // 取得目前選取的文字，驗證它確實出現在例句中後設為答案（保留例句原始大小寫）。
   const commitSelection = (showErrors: boolean): boolean => {
@@ -1313,10 +1318,20 @@ export function ClozeAnswerEditor({
         </span>
         {answer ? (
           <span
-            className="text-xs px-2 py-0.5 rounded bg-purple-200 text-purple-800 font-semibold"
+            className={
+              isStale
+                ? "text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold border border-amber-300"
+                : "text-xs px-2 py-0.5 rounded bg-purple-200 text-purple-800 font-semibold"
+            }
             data-testid="cloze-current"
+            data-stale={isStale ? "true" : undefined}
           >
             {answer}
+            {isStale && (
+              <span className="ml-1 font-normal" data-testid="cloze-stale-hint">
+                {t("vocabularySet.cloze.staleHint")}
+              </span>
+            )}
             {!disabled && (
               <button
                 type="button"
@@ -1390,6 +1405,8 @@ interface SortableRowInnerProps {
   ) => void;
   handleRemoveRow: (index: number) => void;
   handleDuplicateRow: (index: number) => void;
+  /** Issue #1088：例句輸入框 onBlur 時同步挖空字 */
+  onReconcileClozeAnswer?: (index: number) => void;
   handleOpenTTSModal: (row: ContentRow) => void;
   /** Issue #1051：例句麥克風先開語音設定視窗，確認後才產生 */
   handleOpenExampleTTSDialog: (index: number) => void;
@@ -1427,6 +1444,7 @@ function SortableRowInner({
   handleUpdateRow,
   handleRemoveRow,
   handleDuplicateRow,
+  onReconcileClozeAnswer,
   handleOpenTTSModal,
   handleOpenExampleTTSDialog,
   handleRemoveAudio,
@@ -1777,6 +1795,7 @@ function SortableRowInner({
           onChange={(e) =>
             handleUpdateRow(index, "example_sentence", e.target.value)
           }
+          onBlur={() => onReconcileClozeAnswer?.(index)}
           className="w-full px-3 py-2 pr-24 border rounded-md text-sm"
           placeholder={t("vocabularySet.placeholders.enterEnglishSentence")}
           maxLength={500}
@@ -2440,6 +2459,22 @@ const VocabularySetPanel = forwardRef<
     const newRows = [...rows];
     newRows[index] = { ...newRows[index], [field]: value };
     setRows(newRows);
+  };
+
+  // Issue #1088: 例句編輯「完成」（onBlur）時同步挖空字 —— 原挖空字仍在句中則保留，
+  // 否則取消並改由單字本身自動帶入，帶不出來留空（派發守衛會擋下提示老師補齊）。
+  // 不在每次按鍵時做：打字中的中間狀態會把老師選的挖空字誤清掉；打字期間由
+  // ClozeAnswerEditor 的警示 chip 提示即可。
+  const handleReconcileClozeAnswer = (index: number) => {
+    setRows((prev) => {
+      const row = prev[index];
+      if (!row) return prev;
+      const next = reconcileClozeAnswer(row, row.example_sentence || "");
+      if ((row.cloze_answer || "") === next) return prev;
+      const newRows = [...prev];
+      newRows[index] = { ...row, cloze_answer: next };
+      return newRows;
+    });
   };
 
   // 共用 helper：將 ContentRow 轉成完整的 API payload，避免次要儲存路徑遺漏欄位 (#366)
@@ -5350,6 +5385,7 @@ const VocabularySetPanel = forwardRef<
                       handleUpdateRow={handleUpdateRow}
                       handleRemoveRow={handleDeleteRow}
                       handleDuplicateRow={handleCopyRow}
+                      onReconcileClozeAnswer={handleReconcileClozeAnswer}
                       handleOpenTTSModal={handleOpenTTSModal}
                       handleOpenExampleTTSDialog={handleOpenExampleTTSDialog}
                       handleRemoveAudio={handleRemoveAudio}

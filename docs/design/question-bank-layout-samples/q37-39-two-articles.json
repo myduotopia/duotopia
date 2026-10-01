@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "rows": [
+    { "type": "section", "frame": true, "rows": [
+      { "columns": [
+        { "span": 2, "blocks": [ { "type": "heading", "level": 2, "text": "The Future of Dabbawalas" } ] },
+        { "span": 1, "blocks": [ { "type": "paragraph", "text": "**Mumbai Life**\nby Priya Rao" } ] }
+      ] },
+      { "columns": [
+        { "span": 2, "blocks": [
+          { "type": "paragraph", "text": "Dabbawalas are workers in Mumbai. They bring lunch boxes from homes to offices. They were once an important part of life in the city, but their future does not look good. In 2018, there were about 4,500 of them, but there are only about 1,500 in 2026. This is because people can now order food online. They can try many different kinds of food. \"I may have to think about changing my job as a dabbawala. Business is bad. I make much less money,\" said Ravi Sharma." }
+        ] },
+        { "span": 1, "blocks": [ { "type": "image", "url": "<dabbawala.png>", "alt": "Dabbawalas", "caption": "Dabbawalas" } ] }
+      ] },
+      { "columns": [ { "span": 1, "blocks": [
+        { "type": "paragraph", "text": "Dabbawalas may keep going for some time, but their best days may already be over." }
+      ] } ] }
+    ] },
+    { "type": "section", "frame": true, "rows": [
+      { "columns": [
+        { "span": 2, "blocks": [ { "type": "heading", "level": 2, "text": "Our Future with Dabbawalas" } ] },
+        { "span": 1, "blocks": [ { "type": "paragraph", "text": "**Mumbai Life**\nby Raj Mehta" } ] }
+      ] },
+      { "columns": [
+        { "span": 2, "blocks": [
+          { "type": "paragraph", "text": "Dabbawalas are part of Mumbai history, and their work is still important. They bring lunch boxes from homes to many office workers, not food from restaurants. Many people love this service because they think home food tastes better and is healthier." }
+        ] },
+        { "span": 1, "blocks": [ { "type": "image", "url": "<dabbawala.png>", "alt": "Dabbawalas", "caption": "Dabbawalas" } ] }
+      ] },
+      { "columns": [ { "span": 1, "blocks": [
+        { "type": "paragraph", "text": "People need dabbawalas less than before, but they still try to do their work in new ways. For example, they use phones and apps to find more customers. They also try to bring food to more places. If these changes work, there is still hope for dabbawalas." },
+        { "type": "paragraph", "text": "We need dabbawalas. Let's use their service, so this old job can go on." }
+      ] } ] }
+    ] }
+  ],
+  "_glossary": [ { "word": "online", "zh": "在網路上" }, { "word": "business", "zh": "生意" }, { "word": "service", "zh": "服務" }, { "word": "app", "zh": "應用程式" }, { "word": "customer", "zh": "顧客" } ]
+}

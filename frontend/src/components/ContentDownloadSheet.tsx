@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { normalizeClozeCase } from "@/lib/cloze";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -40,6 +41,8 @@ interface ContentDetailItem {
   distractors?: string[];
   example_sentence?: string;
   example_sentence_translation?: string;
+  // Issue #1088: 後端解析／老師覆寫的例句實際字形（如 tell → "told me"）
+  cloze_answer?: string | null;
   image_url?: string;
   part_of_speech?: string;
 }
@@ -128,12 +131,27 @@ function findAnswerInSentence(
 function buildClozeParts(
   text: string,
   sentence: string,
+  clozeAnswer?: string | null,
 ): { before: string; answer: string; after: string } | null {
+  // Issue #1088: 優先用 cloze_answer（支援不規則變化與多字，如 "told me"），
+  // 與 backend/utils/cloze.extract_cloze_for_item 的策略 0 一致；找不到才猜字尾。
+  const persisted = (clozeAnswer ?? "").trim();
+  if (persisted) {
+    const escaped = persisted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = sentence.match(new RegExp(`\\b${escaped}\\b`, "i"));
+    if (m && m.index !== undefined) {
+      return {
+        before: sentence.slice(0, m.index),
+        answer: normalizeClozeCase(m[0], text, sentence, m.index, persisted),
+        after: sentence.slice(m.index + m[0].length),
+      };
+    }
+  }
   const found = findAnswerInSentence(text, sentence);
   if (!found) return null;
   return {
     before: sentence.slice(0, found.index),
-    answer: found.answer,
+    answer: normalizeClozeCase(found.answer, text, sentence, found.index),
     after: sentence.slice(found.index + found.answer.length),
   };
 }
@@ -219,9 +237,13 @@ export function ContentDownloadSheet({
     >();
     for (const item of items) {
       const parts = item.example_sentence
-        ? buildClozeParts(item.text, item.example_sentence)
+        ? buildClozeParts(item.text, item.example_sentence, item.cloze_answer)
         : null;
-      map.set(item.id, { parts, answer: parts?.answer ?? item.text });
+      // 挖不出空時正解仍以 cloze_answer 為準（老師可能手動覆寫），再退回 text
+      map.set(item.id, {
+        parts,
+        answer: parts?.answer ?? (item.cloze_answer || item.text),
+      });
     }
     return map;
   }, [items]);

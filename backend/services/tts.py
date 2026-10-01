@@ -6,6 +6,8 @@ import asyncio
 import tempfile
 import os
 import hashlib
+import re
+from xml.sax.saxutils import escape as _xml_escape
 import logging
 from typing import Optional, Dict  # noqa: F401
 from google.cloud import storage
@@ -14,6 +16,54 @@ import azure.cognitiveservices.speech as speechsdk
 from core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ---- 題幹空格 → 訊號音（Issue #1061 題庫）----
+# 題目裡的 `____`（≥2 個底線）與空括號 `( )` 代表要填的空格。Azure 會把底線逐字念成
+# "underscore"，所以改用 SSML 在該位置插入一段柔和的「叮」（<audio>），一個空格一聲、
+# 不論幾個底線。音檔必須是公開 HTTPS 網址（Azure 端下載），由 scripts/upload_tts_assets.py
+# 產生並上傳；載入失敗時 Azure 會念 <audio> 內的備援內容 → 放 <break> 變成停頓。
+BLANK_PATTERN = re.compile(r"_{2,}|\(\s*\)")
+BLANK_CHIME_URL = os.getenv(
+    "TTS_BLANK_CHIME_URL",
+    "https://storage.googleapis.com/duotopia-audio/tts/blank-chime.wav",
+)
+# 換訊號音或 SSML 規則時遞增，讓舊快取失效
+BLANK_SSML_VERSION = "chime1"
+
+
+def has_blanks(text: str) -> bool:
+    return bool(BLANK_PATTERN.search(text or ""))
+
+
+def build_ssml(
+    text: str,
+    voice: str,
+    prosody_rate: str = "1.0",
+    volume: str = "+0%",
+    chime_url: str = BLANK_CHIME_URL,
+) -> str:
+    """把含空格的題幹轉成 Azure SSML：空格 → <audio>（備援 <break>），其餘文字 XML escape。"""
+    parts: list[str] = []
+    last = 0
+    for m in BLANK_PATTERN.finditer(text):
+        parts.append(_xml_escape(text[last : m.start()]))
+        parts.append(
+            f'<audio src="{_xml_escape(chime_url)}"><break time="600ms"/></audio>'
+        )
+        last = m.end()
+    parts.append(_xml_escape(text[last:]))
+    body = "".join(parts)
+    volume_attr = (
+        "" if volume in ("", "+0%", "0%") else f' volume="{_xml_escape(volume)}"'
+    )
+    return (
+        '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+        'xml:lang="en-US">'
+        f'<voice name="{_xml_escape(voice)}">'
+        f'<prosody rate="{_xml_escape(prosody_rate)}"{volume_attr}>{body}</prosody>'
+        "</voice></speak>"
+    )
 
 
 class TTSService:
@@ -141,6 +191,9 @@ class TTSService:
         Uses hash of text + voice + rate + volume to create deterministic filename
         """
         cache_input = f"{text}|{voice}|{rate}|{volume}"
+        if has_blanks(text):
+            # 空格走 SSML 訊號音；換規則／音檔時靠版本字串讓舊快取失效
+            cache_input += f"|{BLANK_SSML_VERSION}"
         hash_object = hashlib.md5(cache_input.encode("utf-8"))
         return hash_object.hexdigest()
 
@@ -236,8 +289,18 @@ class TTSService:
 
                 # 生成 TTS（同步操作，需在 executor 中執行）
                 loop = asyncio.get_running_loop()
-                # 直接傳遞方法調用，不需要 lambda
-                result = await loop.run_in_executor(None, synthesizer.speak_text, text)
+                if has_blanks(text):
+                    # 題幹含空格（____ / ( )）→ SSML，在空格處插入訊號音，不念 underscore
+                    ssml = build_ssml(
+                        text, voice, self._convert_rate_to_prosody(rate), volume
+                    )
+                    result = await loop.run_in_executor(
+                        None, synthesizer.speak_ssml, ssml
+                    )
+                else:
+                    result = await loop.run_in_executor(
+                        None, synthesizer.speak_text, text
+                    )
 
                 # 檢查結果
                 if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:

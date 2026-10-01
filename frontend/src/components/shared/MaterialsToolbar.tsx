@@ -12,7 +12,8 @@ import { Search, FolderPlus, List, LayoutGrid } from "lucide-react";
 export type ViewMode = "tree" | "folder";
 
 export interface MaterialsToolbarProps {
-  title: string;
+  /** 頁面標題；由上方 tab 擔任標頭的頁面不傳（issue #1061） */
+  title?: string;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   searchPlaceholder?: string;
@@ -36,9 +37,11 @@ export default function MaterialsToolbar({
 
   return (
     <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-      <h2 className="text-[22px] font-bold text-gray-900 whitespace-nowrap">
-        {title}
-      </h2>
+      {title && (
+        <h2 className="text-[22px] font-bold text-gray-900 whitespace-nowrap">
+          {title}
+        </h2>
+      )}
 
       {/* Spacer (desktop only) */}
       <div className="hidden lg:block flex-1" />
