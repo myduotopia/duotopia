@@ -182,21 +182,21 @@ export default function GroupRow({
       <td className="px-2 py-2.5 text-gray-600 hidden lg:table-cell tabular-nums">
         {formatGrade(row.grade_min, row.grade_max)}
       </td>
-      <td className="px-4 py-2 hidden xl:table-cell">
+      <td className="px-3 py-2 hidden xl:table-cell">
         <ChipCell
           labels={(row.exam_points ?? []).map((ep) => examPointLabel(ep, lang))}
         />
       </td>
-      <td className="px-4 py-2 hidden md:table-cell">
+      <td className="px-3 py-2 hidden md:table-cell">
         <ChipCell labels={row.sources.map((x) => x.name)} />
       </td>
       <td
-        className="px-4 py-2 hidden lg:table-cell"
+        className="px-3 py-2 hidden lg:table-cell"
         data-testid={`qb-group-${row.id}-programs`}
       >
         <ChipCell labels={(row.program_links ?? []).map(programLinkLabel)} />
       </td>
-      <td className="px-4 py-2 hidden lg:table-cell">
+      <td className="px-3 py-2 hidden lg:table-cell">
         <InlineVisibility
           value={visibility}
           onChange={onChangeVisibility}

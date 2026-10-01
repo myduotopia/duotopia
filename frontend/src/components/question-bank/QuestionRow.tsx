@@ -112,7 +112,7 @@ export default function QuestionRow({
       <td className="px-2 py-2.5 text-gray-600 hidden lg:table-cell tabular-nums">
         {formatGrade(q.grade_min, q.grade_max)}
       </td>
-      <td className="px-4 py-2 hidden xl:table-cell" onClick={stop}>
+      <td className="px-3 py-2 hidden xl:table-cell" onClick={stop}>
         <ExamPointPicker
           value={e.exam_points}
           onChange={(exam_points) => onPatch({ exam_points })}
@@ -127,7 +127,7 @@ export default function QuestionRow({
           data-testid={`qb-row-${q.id}-exam-points`}
         />
       </td>
-      <td className="px-4 py-2 hidden md:table-cell" onClick={stop}>
+      <td className="px-3 py-2 hidden md:table-cell" onClick={stop}>
         <CreatableCombobox
           value={e.sources}
           onChange={(sources) => onPatch({ sources })}
@@ -150,12 +150,12 @@ export default function QuestionRow({
         />
       </td>
       <td
-        className="px-4 py-2 hidden lg:table-cell"
+        className="px-3 py-2 hidden lg:table-cell"
         data-testid={`qb-row-${q.id}-programs`}
       >
         <ChipCell labels={(q.program_links ?? []).map(programLinkLabel)} />
       </td>
-      <td className="px-4 py-2 hidden lg:table-cell" onClick={stop}>
+      <td className="px-3 py-2 hidden lg:table-cell" onClick={stop}>
         <InlineVisibility
           value={e.visibility}
           onChange={(visibility) => onPatch({ visibility })}

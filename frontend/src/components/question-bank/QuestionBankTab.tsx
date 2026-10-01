@@ -530,16 +530,16 @@ export default function QuestionBankTab({
                 <th className="px-2 py-2 font-medium w-[56px] hidden lg:table-cell">
                   {t("questionBank.columns.grade")}
                 </th>
-                <th className="px-4 py-2 font-medium hidden xl:table-cell">
+                <th className="px-3 py-2 font-medium w-[135px] hidden xl:table-cell">
                   {t("questionBank.columns.examPoints")}
                 </th>
-                <th className="px-4 py-2 font-medium w-44 hidden md:table-cell">
+                <th className="px-3 py-2 font-medium min-w-[128px] hidden md:table-cell">
                   {t("questionBank.columns.sources")}
                 </th>
-                <th className="px-4 py-2 font-medium w-44 hidden lg:table-cell">
+                <th className="px-3 py-2 font-medium min-w-[128px] hidden lg:table-cell">
                   {t("questionBank.columns.programs")}
                 </th>
-                <th className="px-4 py-2 font-medium w-32 hidden lg:table-cell">
+                <th className="px-3 py-2 font-medium w-24 hidden lg:table-cell">
                   {t("questionBank.columns.visibility")}
                 </th>
               </tr>
