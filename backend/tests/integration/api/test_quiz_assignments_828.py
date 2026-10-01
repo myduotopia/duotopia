@@ -327,6 +327,18 @@ def _seed_example_selection_quiz() -> int:
                 example_sentence="I love to take pictures of landscapes.",
                 example_sentence_translation="我喜歡拍風景照。",
             ),
+            # Issue #1088：不規則變化＋多字挖空（tell → "told me"），正解／選項
+            # 必須是例句中的實際字形，不是單字原形。
+            ContentItem(
+                id=5,
+                content_id=1,
+                order_index=5,
+                text="tell",
+                translation="告訴",
+                example_sentence="He told me her name.",
+                example_sentence_translation="他告訴我她的名字。",
+                cloze_answer="told me",
+            ),
         ]
     )
     db.commit()
@@ -383,8 +395,8 @@ def test_selection_quiz_start_ships_example_sentence_and_cloze(setup_database):
     assert by_id[1]["blanked_sentence"] == "I eat an _."
     assert by_id[2]["cloze_answer"] == "banana"
     assert by_id[2]["blanked_sentence"] == "The _ is yellow."
-    # 例句翻譯刻意不下放（翻譯直接講出該單字洩漏答案）
-    assert "example_sentence_translation" not in by_id[1]
+    # Issue #1088：例句翻譯下放，前端顯示於挖空例句下方
+    assert by_id[1]["example_sentence_translation"] == "我吃一顆蘋果。"
     # Issue #967: 例句題型「例句即題目」，開播放音檔時需播例句音檔 → 下放例句音檔。
     assert (
         by_id[1]["example_sentence_audio_url"] == "https://cdn/example/apple_sent.mp3"
@@ -460,6 +472,111 @@ def test_selection_quiz_blanks_inflected_form_without_leaking_suffix(setup_datab
     assert word["blanked_sentence"] == "I have two _."
     assert "s." not in word["blanked_sentence"]
     assert word["cloze_answer"] == "cups"  # 實際出現在句中的變化形
+    # Issue #1088：正解也是實際字形
+    assert word["correct_text"] == "cups"
+
+
+def test_selection_quiz_example_options_use_cloze_form(setup_database):
+    """Issue #1088：開例句時，正解與干擾選項一律是例句中的實際字形
+    （tell → "told me"、cup → "cups"），干擾＝其他單字的實際字形。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    )
+    assert start.status_code == 200, start.text
+    by_id = {w["content_item_id"]: w for w in start.json()["words"]}
+    word = by_id[5]
+    assert word["blanked_sentence"] == "He _ her name."
+    assert word["correct_text"] == "told me"
+    assert word["example_sentence_translation"] == "他告訴我她的名字。"
+    cloze_forms = {"apple", "banana", "cups", "take pictures", "told me"}
+    texts = [o["text"] for o in word["options"]]
+    assert "told me" in texts
+    assert "tell" not in texts
+    assert set(texts) <= cloze_forms, texts
+    assert len(texts) == len({t.lower() for t in texts})  # 不重複
+    # 其他題的干擾也不得出現原形 cup / tell
+    for w in by_id.values():
+        assert set(o["text"] for o in w["options"]) <= cloze_forms
+
+
+def test_selection_quiz_example_grades_cloze_form(setup_database):
+    """Issue #1088：答案比對用實際字形 —— 送 'told me' 判對、送原形 'tell' 判錯，
+    大小寫不敏感。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    session_id = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    ).json()["session_id"]
+
+    def _answer(selected: str) -> bool:
+        resp = client.post(
+            f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/answer",
+            headers=headers,
+            json={
+                "content_item_id": 5,
+                "selected_answer": selected,
+                "time_spent_seconds": 3,
+                "session_id": session_id,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["is_correct"]
+
+    assert _answer("Told Me") is True
+    # 部署交接期容忍：單字原形仍判對；其他單字（干擾）判錯
+    assert _answer("tell") is True
+    assert _answer("banana") is False
+    assert _answer("告訴") is False
+
+
+def test_selection_quiz_review_correct_answer_uses_cloze_form(setup_database):
+    """Issue #1088 回歸：review 端先前漏傳 show_example → show_image=False 時正解
+    變成翻譯、沒有任何選項被標成正解。現在 correct_answer 必須是實際字形，且
+    帶 show_example_sentence 與例句翻譯供複盤頁渲染。"""
+    sa_id = _seed_example_selection_quiz()
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    session_id = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    ).json()["session_id"]
+    client.post(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/answer",
+        headers=headers,
+        json={
+            "content_item_id": 5,
+            "selected_answer": "told me",
+            "time_spent_seconds": 3,
+            "session_id": session_id,
+        },
+    )
+    done = client.post(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/complete",
+        headers=headers,
+        json={"session_id": session_id},
+    )
+    assert done.status_code == 200, done.text
+
+    review = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/review",
+        headers=headers,
+    )
+    assert review.status_code == 200, review.text
+    body = review.json()
+    assert body["show_example_sentence"] is True
+    by_id = {w["content_item_id"]: w for w in body["words"]}
+    assert by_id[5]["correct_answer"] == "told me"
+    assert by_id[5]["student_answer"] == "told me"
+    assert by_id[5]["is_correct"] is True
+    assert by_id[5]["blanked_sentence"] == "He _ her name."
+    assert by_id[5]["example_sentence_translation"] == "他告訴我她的名字。"
+    # 未作答題也用實際字形（非翻譯）
+    assert by_id[3]["correct_answer"] == "cups"
+    assert "told me" in {o["text"] for o in by_id[5]["options"]}
 
 
 def test_selection_quiz_blanks_without_stored_cloze_answer(setup_database):
@@ -501,3 +618,76 @@ def test_spelling_quiz_is_case_insensitive(setup_database):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["is_correct"] is True
+
+
+def test_selection_quiz_off_path_snapshot(setup_database):
+    """Issue #1088：未開例句時 start payload 與舊版完全相同 —— 正解＝翻譯
+    （show_image=False），選項＝翻譯＋其他單字翻譯＋補位，且不送挖空欄位。"""
+    sa_id = _seed("word_selection_quiz", show_image=False)
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    )
+    assert start.status_code == 200, start.text
+    body = start.json()
+    assert body["show_example_sentence"] is False
+    by_id = {w["content_item_id"]: w for w in body["words"]}
+    assert by_id[1]["correct_text"] == "早安"
+    assert sorted(o["text"] for o in by_id[1]["options"]) == sorted(
+        ["早安", "午安", "選項B", "選項C"]
+    )
+    assert by_id[2]["correct_text"] == "午安"
+    assert by_id[1]["blanked_sentence"] == ""
+
+
+def test_selection_quiz_review_keeps_stored_options_after_setting_change(
+    setup_database,
+):
+    """Issue #1088 向後相容：學生以舊規則（單字原形／翻譯）作答並提交後，老師才開
+    例句 → 複盤頁仍顯示作答當下存的 options_shown 與 correct_text。"""
+    sa_id = _seed("word_selection_quiz", show_image=False)
+    headers = {"Authorization": f"Bearer {_student_token()}"}
+    start = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/start",
+        headers=headers,
+    ).json()
+    session_id = start["session_id"]
+    shown = {w["content_item_id"]: w["options"] for w in start["words"]}
+    for w in start["words"]:
+        client.post(
+            f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/answer",
+            headers=headers,
+            json={
+                "content_item_id": w["content_item_id"],
+                "selected_answer": w["correct_text"],
+                "time_spent_seconds": 1,
+                "session_id": session_id,
+            },
+        )
+    client.post(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/complete",
+        headers=headers,
+        json={"session_id": session_id},
+    )
+
+    db = TestingSessionLocal()
+    try:
+        assignment = db.query(Assignment).filter_by(id=1).one()
+        assignment.show_example_sentence = True
+        for item in db.query(ContentItem).all():
+            item.example_sentence = f"We say {item.text} every day."
+            item.cloze_answer = item.text
+        db.commit()
+    finally:
+        db.close()
+
+    review = client.get(
+        f"/api/students/assignments/{sa_id}/vocabulary/selection_quiz/review",
+        headers=headers,
+    )
+    assert review.status_code == 200, review.text
+    by_id = {w["content_item_id"]: w for w in review.json()["words"]}
+    assert by_id[1]["options"] == shown[1]
+    assert by_id[1]["correct_answer"] == "早安"
+    assert by_id[1]["is_correct"] is True

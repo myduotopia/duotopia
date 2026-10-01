@@ -31,6 +31,65 @@ export function buildBlank(_matchedText: string): string {
 }
 
 /**
+ * 句首大寫還原（Issue #1088，鏡射後端 normalize_cloze_case）：
+ * "Told me" 作為選項應顯示 "told me" —— 原形 baseWord 小寫開頭而比對結果大寫開頭時，
+ * 首字母改小寫；原形本身大寫開頭（專有名詞）則保留。
+ */
+export function isSentenceStart(sentence: string, start: number): boolean {
+  if (start <= 0) return true;
+  const before = sentence.slice(0, start).trimEnd();
+  return before.length === 0 || /[.!?]$/.test(before);
+}
+
+/**
+ * 只在「比對結果大寫開頭、原形小寫開頭、老師存的 cloze_answer 不是大寫開頭、
+ * 且位於句首（index 0 或前面是 [.!?]＋空白）」時把首字母小寫；句中大寫（Paris）保留。
+ */
+export function normalizeClozeCase(
+  matched: string,
+  baseWord: string | null | undefined,
+  sentence = "",
+  start = 0,
+  persistedAnswer?: string | null,
+): string {
+  if (!matched || !baseWord) return matched;
+  const b = baseWord[0];
+  const m = matched[0];
+  const baseIsLower = b === b.toLowerCase() && b !== b.toUpperCase();
+  const matchIsUpper = m !== m.toLowerCase();
+  if (!baseIsLower || !matchIsUpper) return matched;
+  const p = (persistedAnswer ?? "").trim()[0];
+  if (p && p !== p.toLowerCase()) return matched;
+  if (!isSentenceStart(sentence, start)) return matched;
+  return m.toLowerCase() + matched.slice(1);
+}
+
+/**
+ * 例句題型的選項／正解文字（Issue #1088，鏡射後端 answer_text_for_item 的開例句分支）：
+ * 先在例句中找 cloze_answer、再找原形（含 apple→apples 前綴比對），取句中實際字形並
+ * 做句首大寫還原；都找不到才退回 cloze_answer || text。
+ */
+export function clozeAnswerText(item: {
+  text: string;
+  cloze_answer?: string | null;
+  example_sentence?: string | null;
+}): string {
+  const match =
+    findClozeMatch(item.cloze_answer, item.example_sentence) ??
+    findClozeMatch(item.text, item.example_sentence);
+  if (match) {
+    return normalizeClozeCase(
+      match[2],
+      item.text,
+      item.example_sentence ?? "",
+      match[0],
+      item.cloze_answer,
+    );
+  }
+  return item.cloze_answer || item.text;
+}
+
+/**
  * 在句中找出答案（或其變化形）的位置，鏡射後端 find_cloze_match。
  * 回傳 [start, end, matchedText]，找不到回 null。
  */
@@ -77,4 +136,31 @@ export function buildBlankedSentence(
   if (!match) return "";
   const [start, end, matched] = match;
   return sentence.slice(0, start) + buildBlank(matched) + sentence.slice(end);
+}
+
+/**
+ * Issue #1088：老師改例句後同步挖空字（純函式，VocabularySetPanel.handleUpdateRow 用）。
+ * 規則：原挖空字仍在新例句中 → 保留（採句中實際字形）；已對不上 → 取消，改由單字本身
+ * 在句中找（含 apple→apples 前綴、片語不做前綴猜測），找不到留空由老師重選。
+ */
+export function reconcileClozeAnswer(
+  row: { text?: string | null; cloze_answer?: string | null },
+  newSentence: string | null | undefined,
+): string {
+  const sentence = newSentence ?? "";
+  const keep = findClozeMatch(row.cloze_answer, sentence);
+  if (keep) {
+    return normalizeClozeCase(
+      keep[2],
+      row.text,
+      sentence,
+      keep[0],
+      row.cloze_answer,
+    );
+  }
+  const fromWord = findClozeMatch(row.text, sentence);
+  // 自動帶入的值一律做句首大寫還原（老師親自圈選的值走 commitSelection，不經這裡）
+  return fromWord
+    ? normalizeClozeCase(fromWord[2], row.text, sentence, fromWord[0])
+    : "";
 }

@@ -302,6 +302,51 @@ class TestGetWordSelectionStart:
         )
         assert len(second["words"]) > 0
 
+    def test_example_sentence_options_use_cloze_form(
+        self,
+        shared_test_session,
+        preview_teacher,
+        preview_classroom,
+        _program_and_lesson,
+    ):
+        """Issue #1088: 開例句時正解／干擾一律是例句中的實際字形，並附例句翻譯。"""
+        assignment = _make_assignment(
+            shared_test_session,
+            preview_classroom,
+            preview_teacher,
+            _program_and_lesson,
+            practice_mode="word_selection",
+            show_image=False,
+            show_example_sentence=True,
+        )
+        items = (
+            shared_test_session.query(ContentItem)
+            .join(
+                AssignmentContent,
+                AssignmentContent.content_id == ContentItem.content_id,
+            )
+            .filter(AssignmentContent.assignment_id == assignment.id)
+            .order_by(ContentItem.id)
+            .all()
+        )
+        forms = ["told me", "ran", "cups", "apples", "went", "ate"]
+        for item, form in zip(items, forms):
+            item.example_sentence = f"Yesterday I {form} again."
+            item.example_sentence_translation = f"昨天我又{form}。"
+            item.cloze_answer = form
+        shared_test_session.commit()
+
+        result = get_word_selection_start(assignment, shared_test_session)
+        by_id = {w["content_item_id"]: w for w in result["words"]}
+        for item, form in zip(items, forms):
+            w = by_id[item.id]
+            assert w["correct_text"] == form
+            assert w["example_sentence_translation"] == f"昨天我又{form}。"
+            texts = {o["text"] for o in w["options"]}
+            assert form in texts
+            # 干擾全是其他單字的實際字形，不得出現原形 wordX_Y 或翻譯
+            assert texts <= set(forms), texts
+
 
 # ---------------------------------------------------------------------------
 # Tests: _parse_exclude_ids

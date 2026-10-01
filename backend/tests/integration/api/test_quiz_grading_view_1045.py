@@ -329,3 +329,31 @@ def test_non_selection_quiz_has_no_options(setup_database):
     _seed("word_spelling_quiz")
     view = _grading_view()
     assert all(q["options"] is None for q in view["submissions"])
+
+
+def test_grading_keeps_stored_answer_after_example_sentence_enabled(setup_database):
+    """Issue #1088 向後相容：作答後老師才開「顯示例句」→ 批改頁仍顯示作答當下存的
+    options_shown / correct_text（單字原形或翻譯），不套用新的 cloze 字形規則。"""
+    _seed()
+    start_options = _start_answer_complete()
+
+    db = TestingSessionLocal()
+    try:
+        assignment = db.query(Assignment).filter_by(id=1).one()
+        assignment.show_example_sentence = True
+        for item in db.query(ContentItem).all():
+            item.example_sentence = f"I like {item.text}s a lot."
+            item.cloze_answer = f"{item.text}s"
+        db.commit()
+        stored_correct = {
+            ans.content_item_id: ans.answer_data["correct_text"]
+            for ans in db.query(PracticeAnswer).all()
+        }
+    finally:
+        db.close()
+
+    view = _grading_view()
+    assert _options_by_item(view) == start_options
+    for q in view["submissions"]:
+        assert q["correct_answer"] == stored_correct[q["content_item_id"]]
+        assert not q["correct_answer"].endswith("s")  # 不是新的 cloze 字形

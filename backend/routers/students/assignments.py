@@ -1595,7 +1595,11 @@ async def start_word_selection_practice(
     # 雙形狀相容：舊 distractors 是 list[str]、新的是 list[{text, image_url}]，由
     # normalize_distractors 統一吐 dict 形狀。
     # show_image 模式：選項與正解用英文（item.text），題目隱藏英文。
-    from utils.distractors import normalize_distractors, text_field_for_show_image
+    from utils.distractors import (
+        answer_text_for_item,
+        build_answer_pool,
+        normalize_distractors,
+    )
 
     show_image_for_options = (
         assignment.show_image
@@ -1607,8 +1611,6 @@ async def start_word_selection_practice(
     show_example = bool(
         assignment and getattr(assignment, "show_example_sentence", False)
     )
-    answer_key = text_field_for_show_image(show_image_for_options, show_example)
-
     words_with_options = []
 
     # Query stored AI distractors from DB
@@ -1619,9 +1621,34 @@ async def start_word_selection_practice(
     distractors_map = {item.id: item.distractors for item in items_with_distractors}
     # Issue #860: 顯示例句（答案挖空）所需資料，用同一批已載入的 ContentItem。
     items_map = {item.id: item for item in items_with_distractors}
+    # Issue #1088: 正解／干擾一律經 answer_text_for_item（開例句 → cloze 字形，如
+    # tell → "told me"；未開例句 → 與舊欄位相同），pool 以小寫去重。
+    answer_by_id = {
+        item_id: answer_text_for_item(item, show_image_for_options, show_example)
+        for item_id, item in items_map.items()
+    }
+    if show_example:
+        answer_pool = build_answer_pool(
+            [
+                items_map[w["content_item_id"]]
+                for w in words_data
+                if w["content_item_id"] in items_map
+            ],
+            show_image_for_options,
+            True,
+            answer_by_id,
+        )
+    else:
+        # 未開例句：與舊版完全相同的 pool（依 words_data 欄位、不去重），行為不變
+        legacy_key = "text" if show_image_for_options else "translation"
+        answer_pool = [
+            {"text": w.get(legacy_key), "image_url": w.get("image_url")}
+            for w in words_data
+        ]
 
     for i, word in enumerate(words_data):
-        correct_answer = word.get(answer_key) or ""
+        source_item = items_map.get(word["content_item_id"])
+        correct_answer = answer_by_id.get(word["content_item_id"], "")
         stored_distractors = normalize_distractors(
             distractors_map.get(word["content_item_id"])
         )
@@ -1632,9 +1659,9 @@ async def start_word_selection_practice(
             # Fallback: 從其他單字取（同時帶 image_url）— 依 show_image 決定語言
             target = correct_answer.lower().strip()
             pool = [
-                {"text": w.get(answer_key), "image_url": w.get("image_url")}
-                for w in words_data
-                if w.get(answer_key) and w.get(answer_key, "").lower().strip() != target
+                dict(p)
+                for p in answer_pool
+                if p["text"] and p["text"].lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -1655,7 +1682,6 @@ async def start_word_selection_practice(
         # Issue #860: 例句（答案挖空）資料；cloze_answer 沿用 extract_cloze_for_item
         # 的解析（優先 stored cloze_answer，再回退推導），前端在 show_example_sentence
         # 開啟時據此把例句挖空。
-        source_item = items_map.get(word["content_item_id"])
         cloze = extract_cloze_for_item(source_item) if source_item else None
         words_with_options.append(
             {
@@ -1667,9 +1693,14 @@ async def start_word_selection_practice(
                 "image_url": word.get("image_url"),
                 "memory_strength": word.get("memory_strength", 0),
                 "options": options,
-                # 刻意不送例句翻譯：此題型不渲染，且翻譯會直接講出該單字洩漏答案。
                 "example_sentence": (
                     source_item.example_sentence or "" if source_item else ""
+                ),
+                # Issue #1088: 開例句時例句下方顯示翻譯（比照單字克漏字）
+                "example_sentence_translation": (
+                    source_item.example_sentence_translation or ""
+                    if source_item
+                    else ""
                 ),
                 # Issue #967: 例句題型即「例句就是題目」，開播放音檔時改播例句音檔。
                 # 已知取捨：例句音檔會唸出整句（含挖空單字），可能透露答案 —— 依產品
@@ -1800,14 +1831,23 @@ async def submit_word_selection_answer(
         assignment_for_check
         and getattr(assignment_for_check, "show_example_sentence", False)
     )
-    correct_answer = (
-        content_item.text
-        if (show_image_mode or show_example_mode)
-        else content_item.translation
-    ) or ""
+    from utils.distractors import answer_text_for_item
 
+    # Issue #1088: 開例句 → 正解是例句實際字形（cloze_answer）；比對忽略大小寫
+    correct_answer = answer_text_for_item(
+        content_item, show_image_mode, show_example_mode
+    )
     # 伺服器端驗證答案正確性（不信任客戶端的 is_correct）
-    is_correct = request.selected_answer.strip() == correct_answer.strip()
+    if show_example_mode:
+        selected_norm = request.selected_answer.strip().lower()
+        accepted = {correct_answer.strip().lower()}
+        # 部署交接期間容忍：舊前端仍以單字原形作答者不判錯
+        accepted.add((content_item.text or "").strip().lower())
+        accepted.discard("")
+        is_correct = selected_norm in accepted
+    else:
+        # 未開例句：與舊版完全相同（區分大小寫）
+        is_correct = request.selected_answer.strip() == correct_answer.strip()
     is_timeout = request.selected_answer.strip() == ""
 
     # Call update_memory_strength PostgreSQL function

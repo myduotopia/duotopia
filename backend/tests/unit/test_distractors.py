@@ -4,6 +4,8 @@ import random
 from types import SimpleNamespace
 
 from utils.distractors import (
+    answer_text_for_item,
+    build_answer_pool,
     distractor_text,
     make_distractor,
     normalize_distractors,
@@ -214,3 +216,116 @@ class TestRegenerateWordSelectionDistractors:
 
         for item in items:
             assert len(item.distractors) == 3
+
+
+class TestAnswerTextForItem:
+    """Issue #1088: 開例句時正解／選項改用例句中的實際字形。"""
+
+    def _item(self, **kw):
+        base = dict(
+            text="tell",
+            translation="告訴",
+            example_sentence="He told me her name.",
+            cloze_answer="told me",
+            image_url=None,
+        )
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    def test_show_example_uses_persisted_cloze_form(self):
+        assert answer_text_for_item(self._item(), True, True) == "told me"
+        assert answer_text_for_item(self._item(), False, True) == "told me"
+
+    def test_show_example_persisted_not_in_sentence_falls_back_to_text(self):
+        item = self._item(cloze_answer="spoke", example_sentence="He said hi.")
+        # 存的字形不在句中、原形也不在句中 → 退回 text
+        assert answer_text_for_item(item, True, True) == "tell"
+
+    def test_show_example_empty_cloze_finds_inflected_form(self):
+        item = self._item(
+            text="cup", cloze_answer="", example_sentence="I have two cups."
+        )
+        assert answer_text_for_item(item, True, True) == "cups"
+
+    def test_show_example_off_is_unchanged(self):
+        assert answer_text_for_item(self._item(), True, False) == "tell"
+        assert answer_text_for_item(self._item(), False, False) == "告訴"
+
+    def test_build_answer_pool_dedupes_case_insensitively(self):
+        items = [
+            # 老師存大寫 "Told me" → 照存（不還原）→ pool 內是 "Told me"
+            self._item(
+                text="tell", cloze_answer="Told me", example_sentence="Told me now."
+            ),
+            # 句中小寫 "told me"
+            self._item(text="say", cloze_answer="told me"),
+            self._item(text="run", cloze_answer="ran", example_sentence="I ran."),
+        ]
+        assert answer_text_for_item(items[0], True, True) == "Told me"
+        assert answer_text_for_item(items[1], True, True) == "told me"
+        pool = build_answer_pool(items, True, True)
+        # 大小寫不同的同字形只留第一個
+        assert [p["text"] for p in pool] == ["Told me", "ran"]
+
+    def test_build_answer_pool_off_matches_legacy_fields(self):
+        items = [
+            self._item(text="a", translation="甲"),
+            self._item(text="b", translation="乙"),
+        ]
+        assert [p["text"] for p in build_answer_pool(items, False, False)] == ["甲", "乙"]
+        assert [p["text"] for p in build_answer_pool(items, True, False)] == ["a", "b"]
+
+    def test_show_example_sentence_initial_capital_is_lowercased(self):
+        # 句首 "Told me" → 選項應顯示 "told me"（原形小寫開頭）
+        item = self._item(example_sentence="Told me her name, he did.")
+        assert answer_text_for_item(item, True, True) == "told me"
+        # 第二句句首（前面是 ". "）也算句首
+        item2 = self._item(example_sentence="Yes. Told me twice.")
+        assert answer_text_for_item(item2, True, True) == "told me"
+
+    def test_capitalized_match_mid_sentence_is_kept(self):
+        # 句中的大寫（專有名詞）保留，即使原形小寫
+        paris = self._item(
+            text="paris", cloze_answer="", example_sentence="I love Paris."
+        )
+        assert answer_text_for_item(paris, True, True) == "Paris"
+        # "Paris" 原形大寫 + 句中 → 保留
+        paris2 = self._item(
+            text="Paris", cloze_answer="Paris", example_sentence="I love Paris."
+        )
+        assert answer_text_for_item(paris2, True, True) == "Paris"
+
+    def test_monday_only_lowercased_at_sentence_start(self):
+        start = self._item(
+            text="monday", cloze_answer="", example_sentence="Monday is busy."
+        )
+        assert answer_text_for_item(start, True, True) == "monday"
+        mid = self._item(
+            text="monday", cloze_answer="", example_sentence="See you Monday."
+        )
+        assert answer_text_for_item(mid, True, True) == "Monday"
+
+    def test_persisted_uppercase_cloze_answer_is_kept_at_start(self):
+        item = self._item(
+            text="monday", cloze_answer="Monday", example_sentence="Monday is busy."
+        )
+        assert answer_text_for_item(item, True, True) == "Monday"
+
+    def test_the_cup_matches_cup(self):
+        item = self._item(
+            text="cup", cloze_answer="", example_sentence="The cup is red."
+        )
+        assert answer_text_for_item(item, True, True) == "cup"
+
+    def test_show_example_keeps_capitalized_base_word(self):
+        # 專有名詞／原形本身大寫開頭 → 保留
+        item = self._item(
+            text="Paris", cloze_answer="Paris", example_sentence="Paris is big."
+        )
+        assert answer_text_for_item(item, True, True) == "Paris"
+
+    def test_build_answer_pool_reuses_answer_by_id(self):
+        items = [self._item(text="tell", cloze_answer="told me")]
+        items[0].id = 7
+        pool = build_answer_pool(items, True, True, {7: "precomputed"})
+        assert [p["text"] for p in pool] == ["precomputed"]

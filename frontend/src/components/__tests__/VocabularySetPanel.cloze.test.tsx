@@ -177,3 +177,36 @@ describe("ClozeAnswerEditor", () => {
     expect(onChange).toHaveBeenCalledWith("Cups");
   });
 });
+
+describe("ClozeAnswerEditor — stale answer (#1088)", () => {
+  it("shows the stale hint when the answer is not in the sentence", () => {
+    render(
+      <ClozeAnswerEditor
+        sentence="I like playing basketball."
+        value="play basketball"
+        onChange={vi.fn()}
+      />,
+    );
+    const chip = screen.getByTestId("cloze-current");
+    expect(chip.getAttribute("data-stale")).toBe("true");
+    expect(screen.getByTestId("cloze-stale-hint").textContent).toBe(
+      "vocabularySet.cloze.staleHint",
+    );
+    expect(screen.queryByTestId("cloze-highlight")).toBeNull();
+  });
+
+  it("does not show the stale hint when the answer matches as a whole word", () => {
+    render(
+      <ClozeAnswerEditor
+        sentence="I have two cups."
+        value="cups"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("cloze-current").getAttribute("data-stale")).toBe(
+      null,
+    );
+    expect(screen.queryByTestId("cloze-stale-hint")).toBeNull();
+    expect(screen.getByTestId("cloze-highlight").textContent).toBe("cups");
+  });
+});

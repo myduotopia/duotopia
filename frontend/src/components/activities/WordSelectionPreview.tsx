@@ -8,6 +8,7 @@
  * ⚠️ 改動前必讀：docs/design/preview-architecture.md
  */
 import { useEffect, useMemo, useState } from "react";
+import { clozeAnswerText } from "@/lib/cloze";
 import WordSelectionActivity from "./WordSelectionActivity";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 
@@ -35,6 +36,7 @@ interface ContentItem {
   example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  example_sentence_translation?: string | null; // Issue #1088
 }
 
 interface OptionEntry {
@@ -56,23 +58,44 @@ interface WordOption {
   example_sentence_audio_url?: string | null; // Issue #967
   cloze_answer?: string | null;
   blanked_sentence?: string | null;
+  example_sentence_translation?: string | null; // Issue #1088
+}
+
+// 選項／正解文字：與 backend/utils/distractors.py `answer_text_for_item` 對齊。
+// Issue #1088: 開例句 → 例句中的實際字形（clozeAnswerText：cup → cups、句首大寫還原）；
+// 否則 showImage=true → 英文 text；false → 翻譯。
+function answerOf(
+  item: ContentItem,
+  showImage: boolean,
+  showExample: boolean,
+): string {
+  if (showExample) return clozeAnswerText(item);
+  return showImage ? item.text : item.translation || "";
 }
 
 function buildOptions(
   current: ContentItem,
   pool: ContentItem[],
   showImage: boolean,
+  showExample = false,
 ): OptionEntry[] {
-  // showImage=true 時題目顯示圖片+翻譯，選項用英文（item.text）；反之題目顯示英文、選項用翻譯。
-  // 此規則必須與 backend/utils/distractors.py `text_field_for_show_image` 保持一致。
-  const correctText = showImage ? current.text : current.translation || "";
+  const correctText = answerOf(current, showImage, showExample);
+  const target = correctText.trim().toLowerCase();
+  const seen = new Set<string>([target]);
   const distractorPool = pool
     .filter((p) => p.id !== current.id)
     .map((p) => ({
-      text: showImage ? p.text : p.translation || "",
+      text: answerOf(p, showImage, showExample),
       image_url: p.image_url ?? null,
     }))
-    .filter((o) => o.text);
+    .filter((o) => {
+      // 未開例句：與舊版相同只濾空字串；開例句才去重（同 cloze 字形不重複出現）
+      if (!showExample) return !!o.text;
+      const key = o.text.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
   // 隨機抽 3 個干擾項
   const shuffled = [...distractorPool];
@@ -140,21 +163,23 @@ export default function WordSelectionPreview({
   // 組成 WordOption[]（含選項）— 只在 items / show_image / show_example_sentence 變動時重組
   const previewWords = useMemo<WordOption[]>(() => {
     // 選項語言由 show_image 決定；Issue #967: 例句題型一律英文選項。
-    const englishOptions =
-      (settings.show_image ?? true) || settings.show_example_sentence === true;
+    // Issue #1088: 例句題型正解／選項改用例句實際字形（answerOf）
+    const showImage = settings.show_image ?? true;
+    const showExample = settings.show_example_sentence === true;
     return items.map((item) => ({
       content_item_id: item.id,
       text: item.text,
       translation: item.translation || "",
-      correct_text: englishOptions ? item.text : item.translation || "",
+      correct_text: answerOf(item, showImage, showExample),
       audio_url: item.audio_url,
       image_url: item.image_url,
       memory_strength: 0,
-      options: buildOptions(item, items, englishOptions),
+      options: buildOptions(item, items, showImage, showExample),
       example_sentence: item.example_sentence,
       example_sentence_audio_url: item.example_sentence_audio_url,
       cloze_answer: item.cloze_answer,
       blanked_sentence: item.blanked_sentence,
+      example_sentence_translation: item.example_sentence_translation,
     }));
   }, [items, settings.show_image, settings.show_example_sentence]);
 

@@ -3282,6 +3282,7 @@
       "loadError": "無法載入學生作業",
       "notFound": "找不到學生作業",
       "gradingSuccess": "批改完成！",
+      "allGraded": "所有學生皆已批改完成",
       "gradingFailed": "批改失敗，請稍後再試",
       "revisionRequested": "已要求學生訂正",
       "revisionFailed": "要求訂正失敗，請稍後再試",
@@ -5115,7 +5116,8 @@
       "usePhrase": "新增答案",
       "hint": "單字點兩下即成為答案；片語請圈選後按「新增答案」",
       "noSelection": "請先在例句中選取文字",
-      "selectionNotInSentence": "選取的文字必須來自例句"
+      "selectionNotInSentence": "選取的文字必須來自例句",
+      "staleHint": "例句中找不到此挖空字，請重新選取"
     }
   },
   "wordReading": {
@@ -5300,8 +5302,8 @@
       "yourAnswer": "你的答案",
       "correctAnswer": "正確答案",
       "unanswered": "未作答",
-      "correct": "答對",
-      "wrong": "答錯",
+      "correct": "正確",
+      "wrong": "錯誤",
       "scoreSummary": "{{correct}} / {{total}} 答對"
     },
     "revision": {
@@ -5354,6 +5356,7 @@
     }
   },
   "wordSelection": {
+    "exampleSentenceUnblankable": "此單字的例句無法挖空，請回教材檢查例句與挖空字",
     "loading": "正在載入單字...",
     "noItems": "找不到單字項目",
     "wordSelection": "單字選擇",
@@ -5582,6 +5585,8 @@
     "downloadButton": "下載 PDF",
     "pdfType": "PDF 類型",
     "twoColumn": "雙欄顯示",
+    "showAnswers": "顯示答案",
+    "answerKeyTitle": "答案卷",
     "showSentenceTranslation": "顯示句子翻譯",
     "drawingArea": "作畫區",
     "zoomLabel": "預覽",

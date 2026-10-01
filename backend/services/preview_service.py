@@ -320,12 +320,15 @@ def build_assignment_preview(assignment: Assignment, db: Session) -> dict:
                     # blanked_sentence 由後端算（含 cloze_answer 缺漏時的 fallback），
                     # 與學生端同源。
                     #
-                    # 與 quiz_assignments._example_cloze_fields 一致，刻意不送
-                    # example_sentence_translation：翻譯會直接講出該單字洩漏答案。
+                    # Issue #1088: 與 quiz_assignments._example_cloze_fields 一致，
+                    # 一併送 example_sentence_translation（開例句時顯示於例句下方）。
                     # Issue #967: 送 example_sentence_audio_url，讓教師預覽與學生端
                     # 一致（例句題型開播放音檔時可試聽例句音檔）。已知取捨：音檔會唸出
                     # 含挖空單字的整句，可能透露答案 —— 依產品決策照送。
                     "example_sentence": getattr(item, "example_sentence", "") or "",
+                    "example_sentence_translation": (
+                        getattr(item, "example_sentence_translation", "") or ""
+                    ),
                     "example_sentence_audio_url": (
                         getattr(item, "example_sentence_audio_url", None) or None
                     ),
@@ -577,21 +580,37 @@ async def get_word_selection_start(
 
     # Build response — Issue #631: options 升級為 list[{text, image_url}]
     # show_image 模式：選項用英文（item.text），題目隱藏英文，避免答案太明顯。
-    from utils.distractors import normalize_distractors, text_field_for_show_image
+    from utils.distractors import (
+        answer_text_for_item,
+        build_answer_pool,
+        normalize_distractors,
+    )
 
     show_image_for_options = (
         assignment.show_image if assignment.show_image is not None else True
     )
     # Issue #967: 例句題型選項一律英文；且例句時不可用 stored distractors（依 show_image
     # 分語言儲存，show_image=關 時是中文），改用英文 pool 現組。
-    answer_field = text_field_for_show_image(
-        show_image_for_options, _show_example_sentence
-    )
+    # Issue #1088: 例句題型正解／干擾一律用例句中的實際字形（cloze 字形）
+    answer_by_id = {
+        it.id: answer_text_for_item(it, show_image_for_options, _show_example_sentence)
+        for it in content_items
+    }
+    if _show_example_sentence:
+        answer_pool = build_answer_pool(
+            content_items, show_image_for_options, True, answer_by_id
+        )
+    else:
+        # 未開例句：與舊版完全相同的 pool（不去重），行為不變
+        answer_pool = [
+            {"text": answer_by_id[it.id], "image_url": it.image_url}
+            for it in content_items
+        ]
 
     words_with_options = []
 
     for item in content_items:
-        correct_answer = getattr(item, answer_field) or ""
+        correct_answer = answer_by_id[item.id]
 
         # Use stored distractors if available (≥3), else fallback to other words
         stored = normalize_distractors(item.distractors)
@@ -604,10 +623,9 @@ async def get_word_selection_start(
         else:
             target = correct_answer.lower().strip()
             pool = [
-                {"text": getattr(other, answer_field), "image_url": other.image_url}
-                for other in content_items
-                if getattr(other, answer_field)
-                and getattr(other, answer_field).lower().strip() != target
+                dict(p)
+                for p in answer_pool
+                if p["text"] and p["text"].lower().strip() != target
             ]
             random.shuffle(pool)
             final_distractors = pool[:3]
@@ -622,7 +640,7 @@ async def get_word_selection_start(
         random.shuffle(options)
 
         # Issue #860: 例句挖空模式下，per-item payload 必須與學生端同一套處理 ——
-        # 送後端算好的 blanked_sentence，拿掉例句翻譯（翻譯直接講出該單字洩漏答案）。
+        # 送後端算好的 blanked_sentence。Issue #1088：例句翻譯照送（顯示於例句下方）。
         # Issue #967: 送 example_sentence_audio_url，讓例句題型開播放音檔時可播例句
         # 音檔（與學生端／教師預覽一致）。已知取捨：音檔會唸出含挖空單字的整句、
         # 可能透露答案 —— 依產品決策照送。
@@ -630,6 +648,9 @@ async def get_word_selection_start(
             _cloze = _extract_cloze(item)
             example_fields = {
                 "example_sentence": item.example_sentence or "",
+                "example_sentence_translation": (
+                    item.example_sentence_translation or ""
+                ),
                 "example_sentence_audio_url": (
                     sentence_audio_by_id.get(item.id)
                     or item.example_sentence_audio_url
