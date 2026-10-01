@@ -5947,7 +5947,7 @@
     "columns": {
       "stem": "題目",
       "type": "題型",
-      "grade": "適合年級",
+      "grade": "年級",
       "examPoints": "考點",
       "visibility": "公開",
       "sources": "考題來源"

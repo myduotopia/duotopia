@@ -4,7 +4,8 @@
  * 所有 render 都包 MemoryRouter（元件用 useSearchParams 存 filter／分頁）。
  *
  * 驗證：列表載入與渲染、scope 對應的 API 參數、機構 scope 沒 organizationId 不打 API、
- * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁。
+ * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁
+ * （含每頁 10 筆）。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -13,6 +14,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
 import QuestionBankTab from "../QuestionBankTab";
+import { PAGE_SIZES } from "../QuestionBankPagination";
 import type {
   Question,
   QuestionGroupListRow,
@@ -411,6 +413,24 @@ describe("QuestionBankTab", () => {
       ),
     );
     expect(await screen.findByText("Q21")).toBeTruthy();
+  });
+
+  it("每頁筆數支援 10：URL size=10 時以 page_size 10 查詢，選單含 10 的選項", async () => {
+    const items = Array.from({ length: 10 }, (_, i) =>
+      makeQuestion({ id: i + 1, stem: `Q${i + 1}` }),
+    );
+    listQuestions.mockResolvedValue(respond(items, 45));
+    renderTab(<QuestionBankTab scope="mine" />, ["/?size=10"]);
+    await screen.findByText("Q1");
+
+    expect(PAGE_SIZES).toContain(10);
+    expect(listQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 10 }),
+    );
+    expect(
+      screen.getByTestId("question-bank-page-size").textContent,
+    ).toContain("每頁 10 題");
+    expect(screen.getByText("第 1 / 5 頁")).toBeTruthy();
   });
 
   it("全選／取消全選；勾選後底部動作列出現", async () => {
