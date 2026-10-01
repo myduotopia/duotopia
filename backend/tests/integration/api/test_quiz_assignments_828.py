@@ -622,7 +622,10 @@ def test_spelling_quiz_is_case_insensitive(setup_database):
 
 def test_selection_quiz_off_path_snapshot(setup_database):
     """Issue #1088：未開例句時 start payload 與舊版完全相同 —— 正解＝翻譯
-    （show_image=False），選項＝翻譯＋其他單字翻譯＋補位，且不送挖空欄位。"""
+    （show_image=False），選項＝翻譯＋其他單字翻譯＋補位。
+
+    挖空欄位（blanked_sentence 等）舊版本來就一律照送，前端看
+    show_example_sentence=False 就不顯示，所以這裡只驗正解與選項。"""
     sa_id = _seed("word_selection_quiz", show_image=False)
     headers = {"Authorization": f"Bearer {_student_token()}"}
     start = client.get(
@@ -638,7 +641,6 @@ def test_selection_quiz_off_path_snapshot(setup_database):
         ["早安", "午安", "選項B", "選項C"]
     )
     assert by_id[2]["correct_text"] == "午安"
-    assert by_id[1]["blanked_sentence"] == ""
 
 
 def test_selection_quiz_review_keeps_stored_options_after_setting_change(
