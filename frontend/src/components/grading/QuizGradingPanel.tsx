@@ -20,6 +20,10 @@
  * 以 quizDeductions.scoreFromDeductions 即時重算總分（round1(max(0, 100 − Σ扣分))）。
  * 老師直接改總分時以總分為準，扣分不反向改。存檔送 quiz_deductions（依 content_item_id）。
  *
+ * Issue #1092 打字類小考評分方式：預設扣分改用後端每題回的 default_deduction（依作業的
+ * 評分方式算，可能只扣部分）；彙總卡下方顯示目前評分方式；部分扣分題以後端
+ * deduction_detail 顯示原因（如「3 個單字錯 1 個」「差 1 個字母」）。老師仍可手動改。
+ *
  * 退回（要求訂正）鈕沿用右欄 OverallFeedbackPanel；訂正不改成績紀錄（成績以舊
  * 的為準），故此面板永遠顯示第一次作答的對錯，與凍結分數一致。
  *
@@ -29,7 +33,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle, X } from "lucide-react";
-import { defaultDeduction, round1 } from "./quizDeductions";
+import { itemDefaultDeduction, round1 } from "./quizDeductions";
+import { deductionReason, isTypedQuizMode } from "@/lib/quizScoring";
 import { Card } from "@/components/ui/card";
 import ClozeBlankText from "@/components/activities/shared/ClozeBlankText";
 import QuizOptionChip from "@/components/activities/shared/QuizOptionChip";
@@ -202,6 +207,11 @@ export function QuizGradingPanel({
   const settings = submission.quiz_settings;
   const showExampleSentence = settings?.show_example_sentence ?? false;
   const showImage = settings?.show_image ?? true;
+  // #1092 打字類小考評分方式（null ＝ 舊作業整題計分）
+  const isTyped = isTypedQuizMode(practiceMode);
+  const scoringMethod = settings?.quiz_scoring_method || "whole_question";
+  const scoringPoints = settings?.quiz_scoring_points;
+  const perQ = total > 0 ? 100 / total : null;
 
   return (
     <div
@@ -238,6 +248,34 @@ export function QuizGradingPanel({
               </div>
             </div>
           </div>
+          {isTyped && (
+            <div
+              className="mt-3 border-t pt-2 text-center text-xs text-gray-600"
+              data-testid="quiz-scoring-summary"
+            >
+              {t("quizScoring.grading.methodLabel")}：
+              {t(`quizScoring.methods.${scoringMethod}.label`)}
+              {scoringPoints != null &&
+                (scoringMethod === "fixed_per_word" ||
+                  scoringMethod === "fixed_per_letter") && (
+                  <span className="ml-1">
+                    （
+                    {t(
+                      scoringMethod === "fixed_per_letter"
+                        ? "quizScoring.grading.pointsPerLetter"
+                        : "quizScoring.grading.pointsPerWord",
+                      { points: scoringPoints },
+                    )}
+                    ）
+                  </span>
+                )}
+              {settings?.quiz_case_sensitive && (
+                <span className="ml-1">
+                  · {t("quizScoring.grading.caseSensitiveOn")}
+                </span>
+              )}
+            </div>
+          )}
         </Card>
 
         {/* 逐題：題目區 + 學生答案 / 正解 */}
@@ -250,6 +288,28 @@ export function QuizGradingPanel({
             <div className="space-y-0 divide-y">
               {items.map((item, idx) => {
                 const correct = item.is_correct === true;
+                // #1092 部分扣分題：依後端錯字統計顯示原因（如「3 個單字錯 1 個」）
+                const defaultDed = itemDefaultDeduction(item, total);
+                const detail = item.deduction_detail;
+                const partial =
+                  isTyped &&
+                  !!detail &&
+                  perQ != null &&
+                  defaultDed > 0 &&
+                  defaultDed < perQ - 1e-9;
+                const reason =
+                  partial && detail
+                    ? deductionReason(
+                        scoringMethod,
+                        {
+                          wordTotal: detail.word_total,
+                          wrongWords: detail.wrong_words,
+                          wrongLetters: detail.wrong_letters,
+                        },
+                        defaultDed,
+                        perQ,
+                      )
+                    : null;
                 return (
                   <div
                     key={item.content_item_id ?? idx}
@@ -295,12 +355,22 @@ export function QuizGradingPanel({
                           </span>
                         )}
                       </div>
+                      {reason && (
+                        <p
+                          className="text-xs text-amber-700"
+                          data-testid="quiz-deduction-reason"
+                        >
+                          {t("quizScoring.grading.partialReason", {
+                            reason: t(reason.key, reason.values),
+                            points: round1(defaultDed),
+                          })}
+                        </p>
+                      )}
                       {onDeductionChange && item.content_item_id != null && (
                         <DeductionInput
                           label={t("gradingPage.quiz.deduction") || "扣分"}
                           value={
-                            deductions?.[item.content_item_id] ??
-                            defaultDeduction(correct, total)
+                            deductions?.[item.content_item_id] ?? defaultDed
                           }
                           onChange={(value) =>
                             onDeductionChange(item.content_item_id!, value)

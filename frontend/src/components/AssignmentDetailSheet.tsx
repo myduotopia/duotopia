@@ -1,3 +1,12 @@
+/**
+ * AssignmentDetailSheet — 班級頁「查看詳情」作業詳情 sheet（檢視 / 編輯）
+ *
+ * Issue #1092：打字類小考（拼寫／克漏字）編輯區加「評分方式」（QuizScoringMethodField，
+ * 學生已開始作答仍可改；舊作業 method=null 顯示為整題計分）。儲存時若評分設定的
+ * 「有效值」有變（與後端相同：null ＝ 整題計分、大小寫 null ＝ 不分、扣分只在固定扣分
+ * 方式才比較）且已有學生交卷 → 先跳確認視窗（取消／確定重算），確定才 PATCH；成功後
+ * 依回應的 recomputed_count 提示並重抓進度。評分設定沒變就不送這三個欄位。
+ */
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -47,6 +56,26 @@ import StudentStatusPanel, {
   StudentProgress,
 } from "@/components/StudentStatusPanel";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { QuizScoringMethodField } from "@/components/assignment/QuizScoringMethodField";
+import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
+import {
+  EMPTY_QUIZ_SCORING,
+  isQuizScoringComplete,
+  isTypedQuizMode,
+  quizScoringChanged,
+  quizScoringErrorCode,
+  quizScoringFromDetail,
+  quizScoringPayload,
+  type QuizScoringSettings,
+} from "@/lib/quizScoring";
+
+// Issue #1092: 已交卷（有第一次作答成績）的狀態 —— 改評分方式會被重算的學生
+const SUBMITTED_STATUSES = new Set([
+  "SUBMITTED",
+  "RESUBMITTED",
+  "GRADED",
+  "RETURNED",
+]);
 
 interface AssignmentContent {
   id: number;
@@ -155,6 +184,10 @@ export function AssignmentDetailSheet({
     show_option_images: false,
     show_example_sentence: false,
   });
+  // Issue #1092: 打字類小考評分設定（編輯中的值）與重算確認視窗
+  const [editScoring, setEditScoring] =
+    useState<QuizScoringSettings>(EMPTY_QUIZ_SCORING);
+  const [confirmRecomputeOpen, setConfirmRecomputeOpen] = useState(false);
 
   const fetchAssignmentData = useCallback(async () => {
     if (!assignment) return;
@@ -194,6 +227,7 @@ export function AssignmentDetailSheet({
         show_example_sentence:
           (detail.show_example_sentence as boolean) ?? false,
       });
+      setEditScoring(quizScoringFromDetail(detail));
 
       // Extract contents from detail response
       const contents =
@@ -259,6 +293,22 @@ export function AssignmentDetailSheet({
     [studentProgress],
   );
 
+  // Issue #1092: 評分設定（只有打字類小考）
+  const isTypedQuiz = isTypedQuizMode(assignment?.practice_mode);
+  const savedScoring = useMemo(
+    () => (detailData ? quizScoringFromDetail(detailData) : EMPTY_QUIZ_SCORING),
+    [detailData],
+  );
+  const scoringChanged =
+    isTypedQuiz &&
+    !!detailData &&
+    quizScoringChanged(savedScoring, editScoring);
+  const submittedCount = useMemo(
+    () =>
+      studentProgress.filter((sp) => SUBMITTED_STATUSES.has(sp.status)).length,
+    [studentProgress],
+  );
+
   const loadContentDetail = async (contentId: number, forceReload = false) => {
     if (!forceReload && contentDetails[contentId]) return;
     if (loadingRef.current.has(contentId)) return;
@@ -291,20 +341,60 @@ export function AssignmentDetailSheet({
       );
       return;
     }
+    // Issue #1092: 評分方式未完成（未選 / 扣分不合法）不可儲存
+    if (isTypedQuiz && !isQuizScoringComplete(editScoring)) return;
+    // Issue #1092: 評分設定有變且已有人交卷 → 先確認（會重算、取代手動扣分）
+    if (scoringChanged && submittedCount > 0) {
+      setConfirmRecomputeOpen(true);
+      return;
+    }
+    await performSave();
+  };
+
+  const performSave = async () => {
+    if (!assignment || !detailData) return;
     setSaving(true);
     try {
-      await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
-        title: editTitle,
-        description: editInstructions,
-        // Taiwan-only product: hardcode TST (+08:00) for TIMESTAMPTZ columns
-        due_date: editDueDate ? `${editDueDate}T23:59:59+08:00` : null,
-        start_date: editStartDate ? `${editStartDate}T00:00:00+08:00` : null,
-        ...editAdvanced,
-      });
-      toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
+      const response = (await apiClient.patch(
+        `/api/teachers/assignments/${assignment.id}`,
+        {
+          title: editTitle,
+          description: editInstructions,
+          // Taiwan-only product: hardcode TST (+08:00) for TIMESTAMPTZ columns
+          due_date: editDueDate ? `${editDueDate}T23:59:59+08:00` : null,
+          start_date: editStartDate ? `${editStartDate}T00:00:00+08:00` : null,
+          ...editAdvanced,
+          // Issue #1092: 評分設定有變才送（沒變就不碰，舊作業維持 NULL）
+          ...(scoringChanged && quizScoringPayload(editScoring)),
+        },
+      )) as { recomputed_count?: number } | undefined;
+      const recomputed = response?.recomputed_count ?? 0;
+      if (recomputed > 0) {
+        toast.success(t("quizScoring.recomputed", { count: recomputed }));
+      } else {
+        toast.success(
+          t("assignmentDetail.messages.updateSuccess", "已儲存變更"),
+        );
+      }
       setIsEditing(false);
+      if (scoringChanged) {
+        // 重抓詳情（新設定）與學生進度（重算後的分數）
+        fetchAssignmentData();
+      }
       onAssignmentUpdated?.();
     } catch (error) {
+      // Issue #1092: 後端擋下評分設定不完整
+      const scoringCode = quizScoringErrorCode(error);
+      if (scoringCode) {
+        toast.error(
+          t(
+            scoringCode === "QUIZ_SCORING_POINTS_REQUIRED"
+              ? "quizScoring.errors.pointsRequired"
+              : "quizScoring.errors.methodRequired",
+          ),
+        );
+        return;
+      }
       // Issue #757: PATCH 在 play_audio 切到 True 時若副本缺例句音檔會回
       // 422 EXAMPLE_AUDIO_REQUIRED。對齊派發 dialog 的提示語、明確告訴
       // 老師缺哪些單字集 + 怎麼修。
@@ -370,6 +460,7 @@ export function AssignmentDetailSheet({
       show_example_sentence:
         (detailData.show_example_sentence as boolean) ?? false,
     });
+    setEditScoring(quizScoringFromDetail(detailData));
     setIsEditing(false);
   };
 
@@ -574,6 +665,17 @@ export function AssignmentDetailSheet({
                     value={editAdvanced}
                     onChange={setEditAdvanced}
                     context={{ locked: hasStudentsStarted }}
+                  />
+                )}
+
+                {/* Issue #1092: 打字類小考評分方式（學生已作答仍可改，改了會重算已交卷者） */}
+                {isTypedQuiz && assignment.practice_mode && (
+                  <QuizScoringMethodField
+                    value={editScoring}
+                    onChange={setEditScoring}
+                    practiceMode={assignment.practice_mode}
+                    contentIds={assignmentContents.map((c) => c.id)}
+                    idPrefix="edit-quiz-scoring"
                   />
                 )}
               </div>
@@ -845,7 +947,14 @@ export function AssignmentDetailSheet({
                   <X className="h-4 w-4 mr-1.5" />
                   {t("common.cancel", "取消")}
                 </Button>
-                <Button onClick={handleSave} disabled={saving || !detailData}>
+                <Button
+                  onClick={handleSave}
+                  disabled={
+                    saving ||
+                    !detailData ||
+                    (isTypedQuiz && !isQuizScoringComplete(editScoring))
+                  }
+                >
                   {saving ? (
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                   ) : (
@@ -980,6 +1089,22 @@ export function AssignmentDetailSheet({
             })()}
         </SheetContent>
       </Sheet>
+
+      {/* Issue #1092: 改評分方式且已有人交卷 → 確認後才重算。Radix Dialog 疊在 Sheet
+          上會接手 focus trap（Esc / 取消只關確認視窗，不關 Sheet、不儲存）。 */}
+      <ConfirmDialog
+        open={confirmRecomputeOpen}
+        onOpenChange={setConfirmRecomputeOpen}
+        title={t("quizScoring.confirm.title")}
+        description={t("quizScoring.confirm.description", {
+          count: submittedCount,
+        })}
+        confirmText={t("quizScoring.confirm.confirm")}
+        cancelText={t("quizScoring.confirm.cancel")}
+        onConfirm={() => {
+          void performSave();
+        }}
+      />
     </>
   );
 }

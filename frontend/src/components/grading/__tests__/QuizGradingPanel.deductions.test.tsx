@@ -137,6 +137,56 @@ describe("QuizGradingPanel deductions (#1045 V10)", () => {
     expect(inputs()[0].value).toBe("12");
   });
 
+  it("#1092: uses backend default_deduction and shows the reason for partial ones", () => {
+    const partial = {
+      ...item(2, false),
+      default_deduction: 16.7,
+      deduction_detail: { word_total: 3, wrong_words: 1, wrong_letters: 1 },
+    } as SubmissionItem;
+    const full = {
+      ...item(3, false),
+      default_deduction: 100 / 3,
+      deduction_detail: { word_total: 3, wrong_words: 3, wrong_letters: 9 },
+    } as SubmissionItem;
+    const sub = {
+      ...submissionOf([item(1, true), partial, full]),
+      quiz_settings: {
+        show_example_sentence: false,
+        show_image: true,
+        show_option_images: false,
+        show_translation: true,
+        show_word: true,
+        quiz_scoring_method: "per_word",
+        quiz_scoring_points: null,
+        quiz_case_sensitive: false,
+      },
+    } as StudentSubmission;
+    const onScore = vi.fn();
+    render(<Harness submission={sub} onScore={onScore} />);
+    expect(inputs().map((i) => i.value)).toEqual(["0", "16.7", "33.3"]);
+    // 只有部分扣分題顯示原因
+    expect(screen.getAllByTestId("quiz-deduction-reason")).toHaveLength(1);
+    // 彙總卡顯示目前評分方式
+    expect(screen.getByTestId("quiz-scoring-summary").textContent).toContain(
+      "quizScoring.methods.per_word.label",
+    );
+  });
+
+  it("#1092: legacy submission without default_deduction falls back to 0 / 100÷N", () => {
+    render(
+      <Harness
+        submission={submissionOf([item(1, true), item(2, false)])}
+        onScore={() => {}}
+      />,
+    );
+    expect(inputs().map((i) => i.value)).toEqual(["0", "50"]);
+    expect(screen.queryByTestId("quiz-deduction-reason")).toBeNull();
+    // 舊作業（無設定）顯示整題計分
+    expect(screen.getByTestId("quiz-scoring-summary").textContent).toContain(
+      "quizScoring.methods.whole_question.label",
+    );
+  });
+
   it("hides deduction inputs when no onDeductionChange is given", () => {
     render(
       <QuizGradingPanel
