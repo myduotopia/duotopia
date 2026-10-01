@@ -157,7 +157,11 @@ def _group_out(
 def _group_row_out(
     db: Session, g: QuestionGroup, teacher: Teacher, perm_cache: dict | None = None
 ) -> dict:
-    """列表的題組列：不帶小題內容，帶小題數與來源／考點聯集。"""
+    """列表的題組列：不帶小題內容，帶小題數與來源／考點聯集。
+
+    教材聯集依 ``(program_id, 有無 lesson, lesson_id)`` 排序，
+    避免輸出順序受小題順序／關聯建立順序影響。
+    """
     questions = [q for q in g.questions if q.is_active]
     sources: dict = {}
     exam_points: dict = {}
@@ -191,7 +195,17 @@ def _group_row_out(
         "can_edit": _can_edit(db, teacher, g, perm_cache),
         "sources": [_source_out(x) for x in sources.values()],
         "exam_points": [_exam_point_out(x) for x in exam_points.values()],
-        "program_links": [_program_link_out(x) for x in program_links.values()],
+        "program_links": [
+            _program_link_out(x)
+            for x in sorted(
+                program_links.values(),
+                key=lambda pl: (
+                    pl.program_id,
+                    pl.lesson_id is None,
+                    pl.lesson_id or 0,
+                ),
+            )
+        ],
         "created_at": g.created_at.isoformat() if g.created_at else None,
         "updated_at": g.updated_at.isoformat() if g.updated_at else None,
     }

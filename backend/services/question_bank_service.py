@@ -187,7 +187,12 @@ def get_visible_group(
             selectinload(QuestionGroup.questions)
             .selectinload(Question.exam_point_links)
             .selectinload(QuestionExamPoint.exam_point),
-            selectinload(QuestionGroup.questions).selectinload(Question.program_links),
+            selectinload(QuestionGroup.questions)
+            .selectinload(Question.program_links)
+            .selectinload(QuestionProgramLink.program),
+            selectinload(QuestionGroup.questions)
+            .selectinload(Question.program_links)
+            .selectinload(QuestionProgramLink.lesson),
             selectinload(QuestionGroup.questions)
             .selectinload(Question.source_links)
             .selectinload(QuestionSourceLink.source),
@@ -467,7 +472,12 @@ def get_visible_question(
             selectinload(Question.exam_point_links).selectinload(
                 QuestionExamPoint.exam_point
             ),
-            selectinload(Question.program_links),
+            selectinload(Question.program_links).selectinload(
+                QuestionProgramLink.program
+            ),
+            selectinload(Question.program_links).selectinload(
+                QuestionProgramLink.lesson
+            ),
             selectinload(Question.source_links).selectinload(QuestionSourceLink.source),
         )
         .filter(Question.id == question_id)

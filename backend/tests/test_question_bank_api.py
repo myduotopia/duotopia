@@ -1162,6 +1162,81 @@ def test_group_row_program_links_union(test_client, shared_test_session, teacher
     ]
 
 
+def _count_queries(engine):
+    """SQLAlchemy 查詢計數 context manager（專案沒有 assertNumQueries 等工具）。"""
+    import contextlib
+
+    from sqlalchemy import event
+
+    @contextlib.contextmanager
+    def _ctx():
+        counter = {"n": 0}
+
+        def _on_exec(conn, cursor, statement, parameters, context, executemany):
+            counter["n"] += 1
+
+        event.listen(engine, "before_cursor_execute", _on_exec)
+        try:
+            yield counter
+        finally:
+            event.remove(engine, "before_cursor_execute", _on_exec)
+
+    return _ctx()
+
+
+def _group_with_program_links(client, session, teacher, n_questions: int):
+    """建一個 n 小題的題組，每個小題各掛一組教材關聯，回傳題組 id。"""
+    from tests.factories import TestDataFactory
+
+    program = TestDataFactory.create_program(session, teacher, name=f"教材{n_questions}")
+    questions = [
+        {
+            "stem": f"Question {i}?",
+            "options": [
+                {"text": "right", "is_correct": True},
+                {"text": "wrong"},
+            ],
+        }
+        for i in range(n_questions)
+    ]
+    g = _create_group(client, teacher, questions=questions)
+    for q in g["questions"]:
+        lesson = TestDataFactory.create_lesson(session, program, name=f"Unit {q['id']}")
+        resp = client.put(
+            f"/api/question-bank/questions/{q['id']}/program-links",
+            json={
+                "program_links": [
+                    {"program_id": program.id, "lesson_id": lesson.id},
+                    {"program_id": program.id},
+                ]
+            },
+            headers=_headers(teacher),
+        )
+        assert resp.status_code == 200, resp.text
+    return g["id"]
+
+
+def test_group_detail_query_count_is_constant(
+    test_client, shared_test_session, test_engine, teacher_a
+):
+    """題組詳情的查詢數不隨小題數增加（program/lesson 名稱已 selectinload 預載）。"""
+    small_id = _group_with_program_links(test_client, shared_test_session, teacher_a, 2)
+    large_id = _group_with_program_links(test_client, shared_test_session, teacher_a, 8)
+
+    counts = {}
+    for label, gid in (("small", small_id), ("large", large_id)):
+        with _count_queries(test_engine) as counter:
+            resp = test_client.get(
+                f"/api/question-bank/question-groups/{gid}",
+                headers=_headers(teacher_a),
+            )
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()["questions"]) == (2 if label == "small" else 8)
+        counts[label] = counter["n"]
+
+    assert counts["small"] == counts["large"], counts
+
+
 def test_create_question_group_validation(test_client, teacher_a):
     # 沒有小題
     resp = test_client.post(
