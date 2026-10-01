@@ -1,8 +1,15 @@
 """
 Pydantic models and validators for assignments
+
+Issue #1092: Create / Update 加打字類小考評分設定 ``quiz_scoring_method``（五值
+Literal）、``quiz_scoring_points``（D/E 用，0 < x ≤ 100，存到小數兩位）、
+``quiz_case_sensitive``。「打字小考 create 時 method 必填」與「D/E 必填 points」
+依 practice_mode 而定，在 crud.create_assignment 檢查（PUT 也用
+CreateAssignmentRequest 但不改評分設定，故不放在 model validator）。
 """
 
-from typing import List, Optional, Dict, Any
+from decimal import ROUND_HALF_UP, Decimal
+from typing import List, Literal, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator, field_validator
 
@@ -31,6 +38,28 @@ def _validate_quiz_time_limit(value: Optional[int]) -> Optional[int]:
             f"0 and {_MAX_QUIZ_TIME_LIMIT_SECONDS}"
         )
     return value
+
+
+# Issue #1092: 打字類小考評分方式（值與 utils.quiz_scoring.SCORING_METHODS 一致）
+QuizScoringMethod = Literal[
+    "whole_question",
+    "per_word",
+    "per_word_lenient",
+    "fixed_per_word",
+    "fixed_per_letter",
+]
+
+
+def _validate_quiz_scoring_points(value: Optional[float]) -> Optional[float]:
+    """D/E 每錯一單位扣幾分：0 < x ≤ 100，存 NUMERIC(5,2) 故先捨到小數兩位。"""
+    if value is None:
+        return value
+    rounded = float(
+        Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    )
+    if rounded <= 0 or rounded > 100:
+        raise ValueError("quiz_scoring_points must be > 0 and <= 100")
+    return rounded
 
 
 class CreateAssignmentRequest(BaseModel):
@@ -68,11 +97,20 @@ class CreateAssignmentRequest(BaseModel):
     show_option_images: Optional[bool] = None  # Issue #631
     show_example_sentence: Optional[bool] = None  # Issue #860
     score_category: Optional[str] = None
+    # Issue #1092: 打字類小考評分設定（打字小考必填 method，見 crud.create_assignment）
+    quiz_scoring_method: Optional[QuizScoringMethod] = None
+    quiz_scoring_points: Optional[float] = None
+    quiz_case_sensitive: Optional[bool] = None
 
     @field_validator("quiz_time_limit_seconds")
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("quiz_scoring_points")
+    @classmethod
+    def _check_quiz_scoring_points(cls, v: Optional[float]) -> Optional[float]:
+        return _validate_quiz_scoring_points(v)
 
     @field_validator("practice_mode")
     @classmethod
@@ -111,11 +149,21 @@ class UpdateAssignmentRequest(BaseModel):
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
     show_example_sentence: Optional[bool] = None  # Issue #860
+    # Issue #1092: 打字類小考評分設定；明確傳 null ＝ 不變更。任一有效值改變且為
+    # 打字小考 → PATCH 同 transaction 重算已交卷學生（回應帶 recomputed_count）
+    quiz_scoring_method: Optional[QuizScoringMethod] = None
+    quiz_scoring_points: Optional[float] = None
+    quiz_case_sensitive: Optional[bool] = None
 
     @field_validator("quiz_time_limit_seconds")
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("quiz_scoring_points")
+    @classmethod
+    def _check_quiz_scoring_points(cls, v: Optional[float]) -> Optional[float]:
+        return _validate_quiz_scoring_points(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "UpdateAssignmentRequest":

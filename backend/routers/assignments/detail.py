@@ -1,5 +1,8 @@
 """
 Assignment detail and progress endpoints
+
+Issue #1092: GET 詳情回 ``quiz_scoring_method`` / ``quiz_scoring_points`` /
+``quiz_case_sensitive``（``_quiz_scoring_settings``，批改頁 quiz_settings 共用）。
 """
 
 import logging
@@ -384,6 +387,21 @@ async def get_assignment_detail(
         # Issue #835: 編輯 sheet 讀回 live 模式原始值
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
         "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+        # Issue #1092: 打字類小考評分設定（編輯 sheet 讀回原始值；NULL ＝ 舊作業整題計分）
+        **_quiz_scoring_settings(assignment),
+    }
+
+
+def _quiz_scoring_settings(assignment: Assignment) -> dict:
+    """Issue #1092: 三個評分設定的原始值（points 轉 float，NULL 照回 None）。"""
+    points = getattr(assignment, "quiz_scoring_points", None)
+    case_sensitive = getattr(assignment, "quiz_case_sensitive", None)
+    return {
+        "quiz_scoring_method": getattr(assignment, "quiz_scoring_method", None),
+        "quiz_scoring_points": float(points) if points is not None else None,
+        "quiz_case_sensitive": (
+            bool(case_sensitive) if case_sensitive is not None else None
+        ),
     }
 
 
