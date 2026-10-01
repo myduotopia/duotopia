@@ -11,6 +11,8 @@ import {
   editDistance,
   effectiveMethod,
   evaluateAnswer,
+  isQuizScoringComplete,
+  isValidScoringPoints,
   joinAnswerSlots,
   questionDeduction,
   roundHalfUp1,
@@ -214,6 +216,49 @@ describe("總分", () => {
 
   it("下限 0", () => {
     expect(totalScore(50, [50, 50])).toBe(0);
+  });
+});
+
+describe("扣分數值驗證（0.1～100、最多一位小數，與後端一致）", () => {
+  it.each([0.1, 0.5, 2, 2.5, 100])("%s 合法", (p) => {
+    expect(isValidScoringPoints(p)).toBe(true);
+  });
+
+  it.each([
+    0,
+    0.05,
+    1.25,
+    100.1,
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    null,
+  ])("%s 不合法", (p) => {
+    expect(isValidScoringPoints(p)).toBe(false);
+  });
+
+  it("D/E 沒填合法扣分不可送出", () => {
+    expect(
+      isQuizScoringComplete({
+        method: "fixed_per_letter",
+        points: 0.25,
+        caseSensitive: false,
+      }),
+    ).toBe(false);
+    expect(
+      isQuizScoringComplete({
+        method: "fixed_per_letter",
+        points: 0.5,
+        caseSensitive: false,
+      }),
+    ).toBe(true);
+    expect(
+      isQuizScoringComplete({
+        method: "per_word",
+        points: null,
+        caseSensitive: false,
+      }),
+    ).toBe(true);
   });
 });
 

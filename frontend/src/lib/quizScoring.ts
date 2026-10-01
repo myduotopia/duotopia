@@ -284,7 +284,7 @@ export function totalScore(perQ: number, deductions: number[]): number {
 export interface QuizScoringSettings {
   /** 新派發不預選（null）；編輯舊作業時 null 顯示為整題計分 */
   method: QuizScoringMethod | null;
-  /** D、E 每錯一單位扣幾分（> 0、≤ 100）；輸入不合法時為 null */
+  /** D、E 每錯一單位扣幾分（0.1～100、最多一位小數）；輸入不合法時為 null 或不合法值 */
   points: number | null;
   caseSensitive: boolean;
 }
@@ -295,10 +295,14 @@ export const EMPTY_QUIZ_SCORING: QuizScoringSettings = {
   caseSensitive: false,
 };
 
+/**
+ * D/E 扣分是否合法（與後端 validators 一致）：0.1 ≤ x ≤ 100、最多一位小數、
+ * 有限數字（NaN / Infinity 不行）。
+ */
 export function isValidScoringPoints(points: number | null | undefined) {
-  return (
-    points != null && Number.isFinite(points) && points > 0 && points <= 100
-  );
+  if (points == null || !Number.isFinite(points)) return false;
+  if (points < 0.1 || points > 100) return false;
+  return Math.abs(points * 10 - Math.round(points * 10)) < 1e-9;
 }
 
 /** 可以送出：已選方式，且 D/E 已填合法的扣分。 */

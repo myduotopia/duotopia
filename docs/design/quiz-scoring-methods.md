@@ -57,7 +57,8 @@
 `assignments` 三個欄位（皆 nullable、無 backfill；migration `20261001_1000`）：
 
 - `quiz_scoring_method VARCHAR(30)`：NULL = 舊作業 = 整題計分
-- `quiz_scoring_points NUMERIC(5,2)`：D、E 用（0 < x ≤ 100）
+- `quiz_scoring_points NUMERIC(5,2)`：D、E 用。允許值 **0.1～100、最多一位小數**
+  （超過一位小數直接 422，不默默捨入；NaN / Infinity 也是 422）。前端輸入框同規則即時提示、不合法不能送出。
 - `quiz_case_sensitive BOOLEAN`：NULL / false = 不分大小寫
 
 分數一律在**算分當下**由「作業設定＋`practice_answers.answer_data`」推導，不在作答時存中間結果。
@@ -73,6 +74,22 @@
   **有效值**（NULL method ＝ 整題計分、NULL 大小寫 ＝ 不分、points 只在 D/E 比較）有變 →
   同一 transaction 內重算，回應 `recomputed_count`；沒變不重算。
 - 學生作答 `POST .../spelling_quiz/answer`、`.../cloze_quiz/answer`：可帶 `typed_words`。
+  有帶時，存下的 `answer_data.typed_answer` 由後端從 `typed_words` 產生（非空格以單一空白相接），
+  不採用 client 送的值 —— 學生複盤頁與老師批改頁永遠顯示同一份答案。
+
+## 作答中改設定
+
+重算只處理「已交卷」的第一次作答。還在作答中的答案（IN_PROGRESS、live 小考、被退回後的訂正
+作答）在**算分當下**（`compute_quiz_score`：交卷、收卷、通用提交）以作業目前的設定重判
+`is_correct` 並寫回、同步 `session.correct_count`；答對題數、整題計分的扣分、訂正「全對才能交」
+都用重判後的值。例：學生作答中答 `Apple`（不分大小寫 → 對），老師改成區分大小寫後學生交卷 →
+該題判錯、扣分。舊作答在設定沒變時重判結果與當初相同。
+
+## 已知的舊資料細節（可接受）
+
+- 舊作答（沒有 `typed_words`）的字串若中間有不規則空白（例如兩個空白），整題判定沿用舊的整串比對
+  （判錯），但逐字比對時單字都對 → 在 B～E 方式下會出現「判錯但扣 0 分」。只發生在舊資料。
+- 有 `typed_words` 時以逐格判定：正解本身含兩個空白的題目，學生逐格填對會判對；舊的整串比對會判錯。
 
 ## 重算（`recompute_quiz_scores`）
 

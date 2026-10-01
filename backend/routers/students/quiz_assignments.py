@@ -32,6 +32,11 @@ Issue #828: introduces ``word_selection_quiz`` / ``word_spelling_quiz`` /
       blank slots stay in place. ``recompute_quiz_scores`` re-scores the first
       completed session of every submitted student after a settings change
       (called by the teacher PATCH; clears manual deductions, keeps status).
+      Answers still in progress are re-judged with the CURRENT settings when
+      they are scored (``compute_quiz_score`` → ``_sync_typed_correctness``),
+      so a mid-quiz case-sensitivity change never leaves a stale ``is_correct``.
+      When ``typed_words`` is sent, the stored ``typed_answer`` is derived from
+      it server-side (non-blank words joined by one space).
 """
 import random
 from datetime import datetime, timezone
@@ -477,6 +482,11 @@ def _typed_answer_data(
     # Issue #1092: 只有新前端送 typed_words 時才存，舊作答列形狀不變
     if request.typed_words is not None:
         data["typed_words"] = list(request.typed_words)
+        # typed_answer 一律由 typed_words 在後端產生（非空格以單一空白相接），
+        # 不信任 client 送的值 → 學生複盤頁與老師批改頁看到的答案永遠一致
+        data["typed_answer"] = " ".join(
+            w.strip() for w in request.typed_words if w and w.strip()
+        )
     return data
 
 
@@ -1160,9 +1170,11 @@ def quiz_item_deduction(
     """單題預設扣分（Issue #1092）。回 (deduction, evaluation)。
 
     - 未作答 → ``per_q``，evaluation 為 None。
-    - 選擇題小考 / 打字小考整題計分（含 NULL 舊作業）→ 依已存的 ``is_correct``：
-      對 0、錯 ``per_q`` —— 與 #1045 公式逐位元相同。打字小考仍附 evaluation
-      供批改頁顯示錯字數。
+    - 選擇題小考 → 依已存的 ``is_correct``：對 0、錯 ``per_q``（不變）。
+    - 打字小考一律以**作業目前設定**重評（作答中途老師改大小寫開關，已存的
+      ``is_correct`` 可能過期）。整題計分（含 NULL 舊作業）：對 0、錯 ``per_q``
+      —— 舊作答（整串、不分大小寫）重評結果與當初存的完全相同，與 #1045 公式
+      逐位元相同。打字小考附 evaluation 供批改頁顯示錯字數。
     - 打字小考 B〜E → ``quiz_scoring.question_deduction``。
     """
     if ans is None:
@@ -1173,7 +1185,7 @@ def quiz_item_deduction(
     evaluation = evaluate_typed_quiz_answer(assignment, item, ans)
     method = effective_method(getattr(assignment, "quiz_scoring_method", None))
     if method == WHOLE_QUESTION:
-        return (0.0 if ans.is_correct else per_q), evaluation
+        return (0.0 if evaluation["is_correct"] else per_q), evaluation
     return (
         question_deduction(
             method,
@@ -1183,6 +1195,33 @@ def quiz_item_deduction(
         ),
         evaluation,
     )
+
+
+def _sync_typed_correctness(
+    assignment: Optional[Assignment],
+    items_by_id: Dict[int, ContentItem],
+    latest: Dict[int, PracticeAnswer],
+    session: Optional[PracticeSession],
+) -> None:
+    """Issue #1092: 打字小考以作業目前設定重判每題最新答案的 ``is_correct`` 並寫回，
+    同步 ``session.correct_count``（統計、訂正「全對才能交」都讀這兩個值）。
+
+    作答中（IN_PROGRESS、live、訂正中的 session）老師改了大小寫開關時，作答當下
+    存的 ``is_correct`` 會過期；這裡讓「答對題數」與扣分用同一個判定。
+    選擇題小考不處理。舊作答在未改設定時重判結果不變。
+    """
+    if assignment is None or (assignment.practice_mode or "") not in TYPED_QUIZ_MODES:
+        return
+    for item_id, ans in latest.items():
+        fresh = bool(
+            evaluate_typed_quiz_answer(assignment, items_by_id.get(item_id), ans)[
+                "is_correct"
+            ]
+        )
+        if ans.is_correct != fresh:
+            ans.is_correct = fresh
+    if session is not None:
+        session.correct_count = sum(1 for ans in latest.values() if ans.is_correct)
 
 
 def _score_latest_answers(
@@ -1210,22 +1249,27 @@ def compute_quiz_score(
     未作答扣整題；clamp 到 [0, 100]。#1092：打字小考依作業的評分方式逐題累加
     ``quiz_item_deduction``；NULL / whole_question 與選擇題 = 100 − 錯題數 × 每題扣分，
     與舊公式逐位元相同。回傳形狀不變。
+    #1092：打字小考先以作業目前設定重判 ``is_correct`` 並寫回（``_sync_typed_correctness``），
+    答對題數、整題計分扣分、訂正「全對才能交」都用重判後的值。不 commit。
     """
     items = _assignment_quiz_items(db, sa.assignment_id)
     total_items = len(items)
     correct_count = 0
     answered = 0
     latest: Dict[int, PracticeAnswer] = {}
-    if session is not None:
-        # #1045: 每題只算最新一筆、只算本作業題目 → correct ≤ answered ≤ total。
-        latest = latest_quiz_answers_by_item(db, session.id, {it.id for it in items})
-        answered = len(latest)
-        correct_count = sum(1 for ans in latest.values() if ans.is_correct)
     assignment = (
         db.query(Assignment).filter(Assignment.id == sa.assignment_id).first()
         if total_items
         else None
     )
+    if session is not None:
+        # #1045: 每題只算最新一筆、只算本作業題目 → correct ≤ answered ≤ total。
+        latest = latest_quiz_answers_by_item(db, session.id, {it.id for it in items})
+        _sync_typed_correctness(
+            assignment, {it.id: it for it in items}, latest, session
+        )
+        answered = len(latest)
+        correct_count = sum(1 for ans in latest.values() if ans.is_correct)
     score = _score_latest_answers(assignment, items, latest)
     return score, correct_count, total_items, answered
 
@@ -1262,12 +1306,7 @@ def recompute_quiz_scores(db: Session, assignment: Assignment) -> int:
         if session is None:
             continue
         latest = latest_quiz_answers_by_item(db, session.id, item_ids)
-        for item_id, ans in latest.items():
-            evaluation = evaluate_typed_quiz_answer(
-                assignment, items_by_id.get(item_id), ans
-            )
-            ans.is_correct = bool(evaluation["is_correct"])
-        session.correct_count = sum(1 for ans in latest.values() if ans.is_correct)
+        _sync_typed_correctness(assignment, items_by_id, latest, session)
         if item_ids:
             db.query(StudentItemProgress).filter(
                 StudentItemProgress.student_assignment_id == sa.id,
@@ -1375,6 +1414,7 @@ def _complete_quiz(
     score, correct_count, total_items, answered = compute_quiz_score(db, sa, session)
 
     # 訂正再提交（退回後 status=RETURNED）：強制改到全對才能交，且成績以舊的為準。
+    # #1092：correct_count 已依作業目前的大小寫開關重判（compute_quiz_score）。
     if is_revision and correct_count < total_items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

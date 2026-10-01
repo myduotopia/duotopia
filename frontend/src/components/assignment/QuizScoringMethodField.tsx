@@ -4,7 +4,8 @@
  * 派發 dialog（AssignmentDialog 最後一步）與作業詳情編輯（AssignmentDetailSheet）共用，
  * 只用於 word_spelling_quiz / word_cloze_quiz。內容：
  *   - 五種評分方式單選（新派發不預選，必須選一種才能送出）
- *   - 「每錯一個單字／字母扣固定分數」需填扣分（> 0、≤ 100）
+ *   - 「每錯一個單字／字母扣固定分數」需填扣分（0.1～100、最多一位小數，與後端驗證一致；
+ *     不合法時即時提示且不可送出）
  *   - 區分大小寫開關（預設關）
  *   - 每題配分 X 分（共 Q 題）—— 題數未知時不顯示數字
  *   - 即時試算表：用本次題目中單字最多的答案（抓不到題目就用內建例句），
@@ -245,7 +246,8 @@ export function QuizScoringMethodField({
               value={pointsDraft}
               onChange={(e) => {
                 const next = e.target.value;
-                if (next !== "" && !/^\d*(\.\d{0,2})?$/.test(next)) return;
+                // 最多一位小數（0.1～100，與後端驗證一致）；更多位數直接不收
+                if (next !== "" && !/^\d{0,3}(\.\d?)?$/.test(next)) return;
                 setPointsDraft(next);
                 const parsed = next === "" ? null : Number(next);
                 onChange({
@@ -255,6 +257,8 @@ export function QuizScoringMethodField({
                 });
               }}
               aria-invalid={pointsInvalid}
+              aria-describedby={`${idPrefix}-points-hint`}
+              placeholder="0.1–100"
               className={cn(
                 "w-20 h-8 text-right",
                 pointsInvalid && "border-red-500",
@@ -262,9 +266,15 @@ export function QuizScoringMethodField({
             />
             <span>{t(`${QS}.pointsUnit`)}</span>
           </div>
-          {pointsInvalid && (
-            <p className="text-xs text-red-600">{t(`${QS}.pointsInvalid`)}</p>
-          )}
+          <p
+            id={`${idPrefix}-points-hint`}
+            className={cn(
+              "text-xs",
+              pointsInvalid ? "text-red-600" : "text-gray-500",
+            )}
+          >
+            {t(pointsInvalid ? `${QS}.pointsInvalid` : `${QS}.pointsHint`)}
+          </p>
         </div>
       )}
 

@@ -555,16 +555,29 @@ def test_patch_scoring_fields_ignored_for_selection_quiz(setup_database):
 # ---------------------------------------------------------------------------
 
 
-def _seed_fresh_quiz(method: str, points=None) -> None:
+def _seed_fresh_quiz(
+    method: str, points=None, mode: str = "word_spelling_quiz"
+) -> None:
     _seed_base()
     db = TestingSessionLocal()
+    if mode == "word_cloze_quiz":
+        # 克漏字：正解為 cloze_answer（例句中的實際字形）
+        for item_id, sentence, answer in [
+            (1, "I looked forward to the trip.", "looked forward to"),
+            (2, "She ate an apple.", "apple"),
+        ]:
+            item = db.query(ContentItem).filter_by(id=item_id).one()
+            item.example_sentence = sentence
+            item.example_sentence_translation = "譯"
+            item.cloze_answer = answer
+        db.commit()
     db.add(
         Assignment(
             id=1,
             title="quiz",
             classroom_id=1,
             teacher_id=1,
-            practice_mode="word_spelling_quiz",
+            practice_mode=mode,
             shuffle_questions=False,
             is_active=True,
             quiz_scoring_method=method,
@@ -687,3 +700,187 @@ def test_legacy_answer_without_typed_words_unchanged(setup_database):
         assert "typed_words" not in ans.answer_data
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Commit 3：作答中改開關、數值驗證、typed_answer 由 typed_words 產生
+# ---------------------------------------------------------------------------
+
+
+def _start(s_headers: dict, mode_path: str = "spelling_quiz") -> int:
+    resp = client.get(
+        f"/api/students/assignments/1/vocabulary/{mode_path}/start",
+        headers=s_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["session_id"]
+
+
+def _answer(s_headers, session_id, item_id, typed_answer, typed_words=None, path=""):
+    body = {
+        "content_item_id": item_id,
+        "typed_answer": typed_answer,
+        "time_spent_seconds": 0,
+        "session_id": session_id,
+    }
+    if typed_words is not None:
+        body["typed_words"] = typed_words
+    resp = client.post(
+        f"/api/students/assignments/1/vocabulary/{path or 'spelling_quiz'}/answer",
+        headers=s_headers,
+        json=body,
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _complete(s_headers, session_id, path="spelling_quiz"):
+    resp = client.post(
+        f"/api/students/assignments/1/vocabulary/{path}/complete",
+        headers=s_headers,
+        json={"session_id": session_id},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_case_toggle_mid_quiz_rejudges_in_progress_answers(setup_database):
+    """作答中（IN_PROGRESS）答 Apple 對 apple 為對；老師改成分大小寫後交卷 →
+    該題改判錯、整題扣分、答對題數不含它（重算只處理已交卷，這裡靠交卷時重判）。"""
+    _seed_fresh_quiz("whole_question")
+    s_headers = _student_headers(1)
+    session_id = _start(s_headers)
+    assert _answer(
+        s_headers, session_id, 1, "look forward to", ["look", "forward", "to"]
+    )["is_correct"]
+    assert _answer(s_headers, session_id, 2, "Apple", ["Apple"])["is_correct"]
+
+    resp = _patch(_teacher_headers(), quiz_case_sensitive=True)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["recomputed_count"] == 0  # 沒有人交卷
+
+    done = _complete(s_headers, session_id)
+    assert done["score"] == 50.0
+    assert done["correct_count"] == 1
+
+    db = TestingSessionLocal()
+    try:
+        ans = db.query(PracticeAnswer).filter_by(content_item_id=2).one()
+        assert ans.is_correct is False
+        assert (
+            db.query(PracticeSession).filter_by(id=session_id).one().correct_count == 1
+        )
+    finally:
+        db.close()
+
+
+def test_null_method_complete_equals_legacy_formula(setup_database):
+    """method=NULL 走 /complete：與舊公式 100 − 錯題數 × 100/N 相同（舊前端、不送 typed_words）。"""
+    _seed_fresh_quiz(None)
+    s_headers = _student_headers(1)
+    session_id = _start(s_headers)
+    assert not _answer(s_headers, session_id, 1, "look forwerd to")["is_correct"]
+    assert _answer(s_headers, session_id, 2, " APPLE ")["is_correct"]
+    done = _complete(s_headers, session_id)
+    assert done["score"] == round(max(0.0, min(100.0, 100.0 - 1 * (100 / 2))), 1)
+    assert done["correct_count"] == 1
+
+
+def test_cloze_quiz_answer_path_scores_by_method(setup_database):
+    """克漏字小考：正解為 cloze_answer，逐格判分、存 typed_words。"""
+    _seed_fresh_quiz("per_word", mode="word_cloze_quiz")
+    s_headers = _student_headers(1)
+    session_id = _start(s_headers, "cloze_quiz")
+    res = _answer(
+        s_headers,
+        session_id,
+        1,
+        "looked forwerd to",
+        ["looked", "forwerd", "to"],
+        path="cloze_quiz",
+    )
+    assert res["is_correct"] is False
+    assert res["correct_answer"] == "looked forward to"
+    # item1 錯 1/3 字 → 50/3 → 16.7；item2 未作答 → 50 → 33.3
+    done = _complete(s_headers, session_id, "cloze_quiz")
+    assert done["score"] == 33.3
+    db = TestingSessionLocal()
+    try:
+        ans = db.query(PracticeAnswer).filter_by(content_item_id=1).one()
+        assert ans.answer_data["type"] == "word_cloze_quiz"
+        assert ans.answer_data["typed_words"] == ["looked", "forwerd", "to"]
+    finally:
+        db.close()
+
+
+def test_typed_answer_is_derived_from_typed_words(setup_database):
+    """client 送的 typed_answer 與 typed_words 不一致 → 存的 typed_answer 由 typed_words 產生，
+    學生複盤頁與老師批改頁顯示同一份答案。"""
+    _seed_fresh_quiz("per_word")
+    s_headers = _student_headers(1)
+    session_id = _start(s_headers)
+    res = _answer(s_headers, session_id, 1, "look forward to", ["", "forward", "to"])
+    assert res["is_correct"] is False  # 判分以 typed_words 為準
+    db = TestingSessionLocal()
+    try:
+        ans = db.query(PracticeAnswer).filter_by(content_item_id=1).one()
+        assert ans.answer_data["typed_answer"] == "forward to"
+    finally:
+        db.close()
+    _complete(s_headers, session_id)
+    review = client.get(
+        "/api/students/assignments/1/vocabulary/spelling_quiz/review",
+        headers=s_headers,
+    )
+    assert review.status_code == 200, review.text
+    by_item = {w["content_item_id"]: w for w in review.json()["words"]}
+    assert by_item[1]["student_answer"] == "forward to"
+
+
+@pytest.mark.parametrize(
+    "raw_points",
+    ["NaN", "Infinity", "-Infinity", "0.05", "1.25", "0", "100.1"],
+)
+def test_create_rejects_invalid_points_values(setup_database, raw_points):
+    """扣分：0.1～100、最多一位小數；NaN / Infinity 一律 422（不是 500）。"""
+    _seed_base()
+    body = (
+        '{"title": "quiz", "classroom_id": 1, "content_ids": [1], '
+        '"student_ids": [], "practice_mode": "word_spelling_quiz", '
+        '"quiz_scoring_method": "fixed_per_letter", '
+        f'"quiz_scoring_points": {raw_points}}}'
+    )
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers={**_teacher_headers(), "Content-Type": "application/json"},
+        content=body,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.parametrize("points", [0.1, 2.5, 100])
+def test_create_accepts_one_decimal_points(setup_database, points):
+    _seed_base()
+    resp = client.post(
+        "/api/teachers/assignments/create",
+        headers=_teacher_headers(),
+        json=_create_payload(
+            "word_spelling_quiz",
+            quiz_scoring_method="fixed_per_word",
+            quiz_scoring_points=points,
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_patch_rejects_two_decimal_points(setup_database):
+    _seed_quiz(method="fixed_per_word")
+    db = TestingSessionLocal()
+    try:
+        db.query(Assignment).filter_by(id=1).one().quiz_scoring_points = 1
+        db.commit()
+    finally:
+        db.close()
+    resp = _patch(_teacher_headers(), quiz_scoring_points=0.25)
+    assert resp.status_code == 422, resp.text
+    assert _sa(1).score == 90.0

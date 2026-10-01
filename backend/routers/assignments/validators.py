@@ -2,13 +2,14 @@
 Pydantic models and validators for assignments
 
 Issue #1092: Create / Update 加打字類小考評分設定 ``quiz_scoring_method``（五值
-Literal）、``quiz_scoring_points``（D/E 用，0 < x ≤ 100，存到小數兩位）、
-``quiz_case_sensitive``。「打字小考 create 時 method 必填」與「D/E 必填 points」
-依 practice_mode 而定，在 crud.create_assignment 檢查（PUT 也用
+Literal）、``quiz_scoring_points``（D/E 用，0.1 ≤ x ≤ 100、最多一位小數，
+NaN / Infinity 拒絕）、``quiz_case_sensitive``。「打字小考 create 時 method 必填」與
+「D/E 必填 points」依 practice_mode 而定，在 crud.create_assignment 檢查（PUT 也用
 CreateAssignmentRequest 但不改評分設定，故不放在 model validator）。
 """
 
-from decimal import ROUND_HALF_UP, Decimal
+import math
+from decimal import Decimal
 from typing import List, Literal, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator, field_validator
@@ -50,16 +51,27 @@ QuizScoringMethod = Literal[
 ]
 
 
+_MIN_QUIZ_SCORING_POINTS = Decimal("0.1")
+_MAX_QUIZ_SCORING_POINTS = Decimal("100")
+_ONE_DECIMAL = Decimal("0.1")
+
+
 def _validate_quiz_scoring_points(value: Optional[float]) -> Optional[float]:
-    """D/E 每錯一單位扣幾分：0 < x ≤ 100，存 NUMERIC(5,2) 故先捨到小數兩位。"""
+    """D/E 每錯一單位扣幾分：0.1 ≤ x ≤ 100、最多一位小數（使用者定案）。
+
+    NaN / Infinity 一律 422（NaN 會讓整班 /complete 算分崩潰、Infinity 原本 500）；
+    超過一位小數直接拒絕，不默默捨入。DB 欄位仍是 NUMERIC(5,2)。
+    """
     if value is None:
         return value
-    rounded = float(
-        Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    )
-    if rounded <= 0 or rounded > 100:
-        raise ValueError("quiz_scoring_points must be > 0 and <= 100")
-    return rounded
+    if not math.isfinite(value):
+        raise ValueError("quiz_scoring_points must be a finite number")
+    dec = Decimal(str(value))
+    if dec != dec.quantize(_ONE_DECIMAL):
+        raise ValueError("quiz_scoring_points allows at most one decimal place")
+    if dec < _MIN_QUIZ_SCORING_POINTS or dec > _MAX_QUIZ_SCORING_POINTS:
+        raise ValueError("quiz_scoring_points must be between 0.1 and 100")
+    return float(dec)
 
 
 class CreateAssignmentRequest(BaseModel):
