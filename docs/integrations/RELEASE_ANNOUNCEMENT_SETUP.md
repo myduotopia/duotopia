@@ -80,8 +80,8 @@ GitHub 只會顯示**名稱與最後更新時間**，看不到值（設計如此
 開發 issue ──────────────────────────────────────────────────────────────
   issue 加上 📣 announce（需要對外公告的才加）
   測試通過 → 加上 ✅ tested-in-staging → CI 自動開進 staging 的 Release PR
-  在合併該 Release PR 之前：/announce #N
-      └─ Claude Code 讀 issue + 改動 → 產生中英文內容 → 寫成 issue 留言（圖①）
+  同時 announce-issue.yml 自動產生公告留言（圖①）→ LINE 通知 LINE_USER_ID
+      └─ 已有留言就略過；失敗會 LINE 通知，改在本機 /announce #N（保險 / 覆寫）
 
 push staging（合併 Release PR）
   └─ CI：兩個標籤都有 → 讀 issue 留言 → 建立 staging 草稿（不呼叫 Vertex）
@@ -89,9 +89,10 @@ push staging（合併 Release PR）
          沒有留言 → 退回「解析 release 標題 → Vertex AI」
          沒有 issue 編號 / 標籤不齊 → 不建草稿
 
-準備上 production：/announce release（或跟 Claude Code 說「開 staging → main 的 PR」）
-  └─ 掃描 main..staging 的 issue → 只取兩個標籤都有的 → 缺留言的當場補產
-     → 統整成一則 → 寫進 staging → main PR 描述（圖②；沒有 PR 就一起開）
+開 staging → main PR（手動開，或本機 /announce release 一起開）
+  └─ announce-release.yml 自動執行：掃描 main..staging → 只取兩個標籤都有的 issue
+     → 缺留言的當場補產 → 統整成一則 → 寫進 PR 描述（圖②）→ LINE 通知 LINE_USER_ID
+     （描述已有完整區塊就略過；沒有需要公告的 issue 也會通知；可用 workflow_dispatch 重跑）
 
 push main（合併 staging → main PR）
   └─ CI：讀 PR 描述的統整區塊 → 建立 production 草稿
@@ -103,6 +104,10 @@ push main（合併 staging → main PR）
 ```
 
 - **沒有 `📣 announce` 標籤 = 不需要發布**，CI 不會建立草稿。
+- 自動產生使用 GitHub Actions 的 Claude Code（`CLAUDE_CODE_OAUTH_TOKEN`、`--model claude-opus-5-5`），
+  公告留言 / PR 描述以 `RELEASE_PAT`（myduotopia）寫入，CI 才會視為團隊成員的內容。
+- `announce-issue.yml` 由 issues 事件觸發，**要合併進 main 之後才生效**；
+  `announce-release.yml` 由 pull_request 事件觸發，合併進 staging 後下一次開 PR 即生效。
 - `/announce` 會拒絕還沒有 `✅ tested-in-staging` 的 issue。
 - issue 留言與 PR 描述裡的內容都可以直接在 GitHub 上修改，CI 讀的是修改後的版本。
   請保留 `####` 小標題與 `<!-- release-announcement:* -->` 標記。
