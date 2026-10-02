@@ -101,7 +101,12 @@ def test_create_classroom_without_teacher_assignment(
     # This test will FAIL until we implement the endpoint
     response = client.post(
         f"/api/schools/{school.id}/classrooms",
-        json={"name": "一年級 A 班", "description": "Test classroom", "level": "A1"},
+        json={
+            "name": "一年級 A 班",
+            "description": "Test classroom",
+            "level": "A1",
+            "grade": 1,
+        },
         headers={"Authorization": f"Bearer {get_test_token(school_admin_teacher.id)}"},
     )
 
@@ -126,7 +131,12 @@ def test_create_classroom_with_teacher_assignment(
 
     response = client.post(
         f"/api/schools/{school.id}/classrooms",
-        json={"name": "一年級 B 班", "level": "A1", "teacher_id": teacher.id},
+        json={
+            "name": "一年級 B 班",
+            "level": "A1",
+            "grade": 1,
+            "teacher_id": teacher.id,
+        },
         headers={"Authorization": f"Bearer {get_test_token(school_admin_teacher.id)}"},
     )
 
@@ -149,7 +159,7 @@ def test_create_classroom_without_permission_fails(client, test_db, school):
 
     response = client.post(
         f"/api/schools/{school.id}/classrooms",
-        json={"name": "Unauthorized", "level": "A1"},
+        json={"name": "Unauthorized", "level": "A1", "grade": 1},
         headers={"Authorization": f"Bearer {get_test_token(teacher.id)}"},
     )
 

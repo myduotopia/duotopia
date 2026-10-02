@@ -112,7 +112,7 @@ def test_complete_classroom_lifecycle(client, test_db):
     # Step 1: Create classroom without teacher
     response = client.post(
         f"/api/schools/{school_id}/classrooms",
-        json={"name": "一年級 A 班", "level": "A1"},
+        json={"name": "一年級 A 班", "level": "A1", "grade": 1},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 201

@@ -19,6 +19,8 @@ from models import (
     School,
     ClassroomSchool,
 )
+from routers.schemas.classroom import BatchClassroomGradeRequest
+from utils.classroom_grade import grade_to_storage, parse_grade
 from .dependencies import get_current_teacher
 from .validators import *
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
@@ -154,6 +156,7 @@ async def get_teacher_classrooms(
                 "name": classroom.name,
                 "description": classroom.description,
                 "level": classroom.level.value if classroom.level else "A1",
+                "grade": parse_grade(classroom.grade),
                 "student_count": len(
                     [
                         cs
@@ -226,6 +229,7 @@ async def create_classroom(
             classroom_data.level.upper().replace("-", "_"),
             ProgramLevel.A1,
         ),
+        grade=grade_to_storage(classroom_data.grade),
         teacher_id=current_teacher.id,
         is_active=True,
     )
@@ -238,7 +242,57 @@ async def create_classroom(
         "name": classroom.name,
         "description": classroom.description,
         "level": classroom.level.value,
+        "grade": parse_grade(classroom.grade),
         "teacher_id": classroom.teacher_id,
+    }
+
+
+@router.post("/classrooms/batch-grade")
+async def batch_set_classroom_grades(
+    payload: BatchClassroomGradeRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次設定個人班級年級（#1097）
+
+    全有或全無：任一班級不屬於本人（或已刪除）→ 404；
+    任一班級屬於學校 → 403；全部通過才單次 commit。
+    """
+    classroom_ids = [item.classroom_id for item in payload.items]
+
+    classrooms = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id.in_(classroom_ids),
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.is_active.is_(True),
+        )
+        .all()
+    )
+    if len(classrooms) != len(classroom_ids):
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    school_linked = (
+        db.query(ClassroomSchool.classroom_id)
+        .filter(
+            ClassroomSchool.classroom_id.in_(classroom_ids),
+            ClassroomSchool.is_active.is_(True),
+        )
+        .first()
+    )
+    if school_linked:
+        raise HTTPException(status_code=403, detail="此班級屬於學校，請通過學校後台編輯")
+
+    classroom_map = {c.id: c for c in classrooms}
+    for item in payload.items:
+        classroom_map[item.classroom_id].grade = grade_to_storage(item.grade)
+    db.commit()
+
+    return {
+        "updated": [
+            {"id": item.classroom_id, "grade": item.grade} for item in payload.items
+        ],
+        "count": len(payload.items),
     }
 
 
@@ -265,6 +319,7 @@ async def get_classroom(
         "name": classroom.name,
         "description": classroom.description,
         "level": classroom.level.value if classroom.level else "A1",
+        "grade": parse_grade(classroom.grade),
         "teacher_id": classroom.teacher_id,
     }
 
@@ -349,6 +404,8 @@ async def update_classroom(
         classroom.level = getattr(
             ProgramLevel, update_data.level.upper().replace("-", "_"), ProgramLevel.A1
         )
+    if update_data.grade is not None:
+        classroom.grade = grade_to_storage(update_data.grade)
 
     db.commit()
     db.refresh(classroom)
@@ -358,6 +415,7 @@ async def update_classroom(
         "name": classroom.name,
         "description": classroom.description,
         "level": classroom.level.value,
+        "grade": parse_grade(classroom.grade),
     }
 
 

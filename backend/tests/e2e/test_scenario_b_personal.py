@@ -173,7 +173,7 @@ def main():
         resp = requests.post(
             f"{BASE_URL}/api/teachers/classrooms",
             headers={"Authorization": f"Bearer {demo_token}"},
-            json={"name": "E2E Personal Class", "level": "A1"},
+            json={"name": "E2E Personal Class", "level": "A1", "grade": 3},
             timeout=10,
         )
         resp.raise_for_status()
