@@ -263,6 +263,33 @@ class ReleaseAnnouncementService:
         return announcement, True
 
     @staticmethod
+    def _draft_notice_text(announcement: ReleaseAnnouncement) -> str:
+        title = (
+            announcement.article_title_zh
+            or announcement.release_title
+            or announcement.source_ref
+        )
+        lines = [
+            f"📝 新的更新公告草稿待審核（{announcement.environment}）",
+            title,
+        ]
+        issues = [
+            n.strip()
+            for n in (announcement.issue_numbers or "").split(",")
+            if n.strip()
+        ]
+        if issues:
+            lines.append("Issue：" + "、".join(f"#{n}" for n in issues))
+        if announcement.generation_error:
+            lines.append("⚠️ AI 產生失敗，草稿暫用 release 標題，請先編修")
+        frontend_url = (settings.FRONTEND_URL or "").rstrip("/")
+        if frontend_url:
+            lines.append(f"審核 / 發布：{frontend_url}/admin")
+        else:
+            lines.append("請到管理員後台「更新公告」審核 / 發布")
+        return "\n".join(lines)
+
+    @staticmethod
     async def notify_draft_created(announcement: ReleaseAnnouncement) -> bool:
         """新草稿建立後推一則「待審核」通知給 LINE_ANNOUNCE_USER_ID。
 
@@ -276,28 +303,10 @@ class ReleaseAnnouncementService:
             logger.info("未設定 LINE 公告收件人，略過草稿通知 id=%s", announcement.id)
             return False
 
-        title = (
-            announcement.article_title_zh
-            or announcement.release_title
-            or announcement.source_ref
-        )
-        lines = [
-            f"📝 新的更新公告草稿待審核（{announcement.environment}）",
-            title,
-        ]
-        if announcement.issue_numbers:
-            issues = "、".join(
-                f"#{n.strip()}" for n in announcement.issue_numbers.split(",")
-            )
-            lines.append(f"Issue：{issues}")
-        if announcement.generation_error:
-            lines.append("⚠️ AI 產生失敗，草稿暫用 release 標題，請先編修")
-        lines.append(f"審核 / 發布：{settings.FRONTEND_URL.rstrip('/')}/admin")
-
         try:
-            await LinePublishService.push(
-                user_id, [{"type": "text", "text": "\n".join(lines)}]
-            )
+            # 組訊息也放在 try 內：任何意外（例如設定缺漏）都不能讓 webhook 500
+            text = ReleaseAnnouncementService._draft_notice_text(announcement)
+            await LinePublishService.push(user_id, [{"type": "text", "text": text}])
         except Exception as exc:  # noqa: BLE001 - 通知失敗不影響草稿
             logger.warning("更新公告草稿通知失敗 id=%s：%s", announcement.id, exc)
             return False

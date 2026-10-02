@@ -441,6 +441,28 @@ class TestNotifyDraftCreated:
         assert push.await_count == 0
 
     @pytest.mark.asyncio
+    async def test_missing_frontend_url_still_notifies_without_link(
+        self, test_db_session, monkeypatch
+    ):
+        """FRONTEND_URL 未設定不能讓 webhook 500（草稿已建立、CI 重跑也不會再通知）"""
+        from services import release_announcement_service as mod
+
+        ann = await _make_draft(test_db_session, source_ref="n-no-url")
+        monkeypatch.setattr(mod.settings, "FRONTEND_URL", None)
+        ann.issue_numbers = "860,,"
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(return_value="REQ"),
+        ) as push:
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is True
+        text = push.await_args.args[1][0]["text"]
+        assert "/admin" not in text
+        assert "Issue：#860" in text
+        assert "#、" not in text and not text.rstrip().endswith("#")
+
+    @pytest.mark.asyncio
     async def test_line_failure_does_not_raise(self, test_db_session):
         """通知失敗不能讓草稿建立失敗"""
         ann = await _make_draft(test_db_session, source_ref="n-fail")
