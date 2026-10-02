@@ -454,7 +454,7 @@ export default function WordClozeQuizActivity({
       setCurrentIndex(firstWrong);
       toast.warning(
         t("wordQuiz.revision.settingsChanged") ||
-          "老師調整了評分方式，有題目需要再修正，請修改標示的題目後再交卷。",
+          "老師調整了評分方式，有題目需要再修正，請修改後再交卷。",
       );
     } catch {
       toast.error(t("wordCloze.toast.submitFailed") || "Submit failed");
