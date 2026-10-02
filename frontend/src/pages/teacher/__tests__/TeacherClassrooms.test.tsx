@@ -135,6 +135,8 @@ vi.mock("react-i18next", () => ({
         "classroomGrade.limitExceeded": "Up to {{max}} classrooms at a time",
         "classroomGrade.messages.saveSuccess": "Updated {{count}} classroom(s)",
         "classroomGrade.messages.saveFailed": "Failed to update grades",
+        "classroomGrade.messages.reloadFailed":
+          "Saved, but the list could not be reloaded",
       };
       if (key === "teacherClassrooms.messages.totalCount" && opts) {
         return `Total ${opts.count} classrooms`;
@@ -179,6 +181,18 @@ vi.mock("@/lib/api", () => ({
   },
   ApiError: class ApiError extends Error {
     status?: number;
+  },
+}));
+
+// Mock toast (sonner) so toasts can be asserted
+const mockToastSuccess = vi.fn();
+const mockToastError = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: (...args: unknown[]) => mockToastError(...args),
+    info: vi.fn(),
+    warning: vi.fn(),
   },
 }));
 
@@ -833,6 +847,40 @@ describe("TeacherClassrooms", () => {
           screen.queryByText(/classroom\(s\) selected/),
         ).not.toBeInTheDocument();
       });
+    });
+
+    it("shows a reload-failed toast when the background reload fails after a save", async () => {
+      const user = userEvent.setup();
+      mockBatchSetClassroomGrades.mockResolvedValue({
+        updated: [{ id: 3, grade: 2 }],
+        count: 1,
+      });
+      // 1st call: initial load succeeds; 2nd call: background reload fails
+      mockGetTeacherClassrooms
+        .mockResolvedValueOnce(mockClassrooms)
+        .mockRejectedValueOnce(new Error("network"));
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await user.click(screen.getByRole("button", { name: "Set now" }));
+      const rowSelect = await screen.findByLabelText("Grade for Charlie Class");
+      await user.selectOptions(rowSelect, "2");
+      await user.click(screen.getByRole("button", { name: "Save (1)" }));
+
+      await waitFor(() => {
+        expect(mockToastError).toHaveBeenCalledWith(
+          "Saved, but the list could not be reloaded",
+        );
+      });
+      // The save itself still reports success
+      expect(mockToastSuccess).toHaveBeenCalledWith("Updated 1 classroom(s)");
+      expect(mockGetTeacherClassrooms).toHaveBeenCalledTimes(2);
+      // The page stays rendered (no full-page loading / blank state)
+      expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
     });
 
     it("keeps the row selection when saving from the fill-in dialog", async () => {

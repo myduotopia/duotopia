@@ -47,6 +47,10 @@ vi.mock("@/lib/api", () => ({
     createSchoolClassroom: vi.fn(),
     updateSchoolClassroom: vi.fn(),
   },
+  // classroomGrade.ts imports ApiError from this module
+  ApiError: class ApiError extends Error {
+    status?: number;
+  },
 }));
 
 vi.mock("sonner", () => ({

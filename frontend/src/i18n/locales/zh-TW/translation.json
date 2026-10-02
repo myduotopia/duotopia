@@ -6160,9 +6160,13 @@
     "messages": {
       "saveSuccess": "已更新 {{count}} 個班級的年級",
       "saveFailed": "更新年級失敗，請稍後再試",
-      "forbidden": "您沒有權限調整此學校的班級年級"
+      "forbidden": "您沒有權限調整此學校的班級年級",
+      "reloadFailed": "已儲存，但清單重新載入失敗，請重新整理頁面"
     },
-    "limitExceeded": "一次最多調整 {{max}} 個班級，請用年級篩選分批處理"
+    "limitExceeded": "一次最多調整 {{max}} 個班級，請用年級篩選分批處理",
+    "missing": {
+      "limitExceeded": "一次最多儲存 {{max}} 個班級，請先儲存一部分再繼續"
+    }
   },
   "schoolClassrooms": {
     "labels": {

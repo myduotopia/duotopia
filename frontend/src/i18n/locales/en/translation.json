@@ -6116,9 +6116,13 @@
     "messages": {
       "saveSuccess": "Updated grade for {{count}} classroom(s)",
       "saveFailed": "Failed to update grades. Please try again.",
-      "forbidden": "You don't have permission to adjust classroom grades in this school"
+      "forbidden": "You don't have permission to adjust classroom grades in this school",
+      "reloadFailed": "Saved, but the list could not be reloaded. Please refresh the page."
     },
-    "limitExceeded": "You can adjust up to {{max}} classrooms at a time. Use the grade filter to work in batches."
+    "limitExceeded": "You can adjust up to {{max}} classrooms at a time. Use the grade filter to work in batches.",
+    "missing": {
+      "limitExceeded": "You can save at most {{max}} classes at a time. Save some first, then continue."
+    }
   },
   "schoolClassrooms": {
     "labels": {

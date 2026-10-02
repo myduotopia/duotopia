@@ -239,9 +239,10 @@ export default function TeacherClassrooms() {
   };
 
   // silent：背景重新載入（批次設定年級後），不切換整頁 loading，
-  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容（#1097）
+  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容（#1097）。
+  // 回傳是否載入成功，讓背景重新載入的呼叫端能提示失敗。
   const fetchClassrooms = useCallback(
-    async (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean }): Promise<boolean> => {
       const silent = options?.silent ?? false;
       try {
         if (!silent) setLoading(true);
@@ -267,8 +268,10 @@ export default function TeacherClassrooms() {
           apiParams,
         )) as ClassroomDetail[];
         setClassrooms(data);
+        return true;
       } catch (err) {
         console.error("Fetch classrooms error:", err);
+        return false;
       } finally {
         if (!silent) setLoading(false);
       }
@@ -391,7 +394,10 @@ export default function TeacherClassrooms() {
       toast.success(
         t("classroomGrade.messages.saveSuccess", { count: res.count }),
       );
-      void fetchClassrooms({ silent: true });
+      // 背景重新載入；失敗時已儲存的結果仍有效，只提示重新整理
+      void fetchClassrooms({ silent: true }).then((reloaded) => {
+        if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
+      });
       return true;
     } catch (err) {
       console.error("Failed to set classroom grades:", err);

@@ -9,6 +9,8 @@
  * 班級 id 型別不同（個人端 number、機構端 string），所以函式對 id 泛型。
  */
 import { GRADE_MAX, GRADE_MIN } from "@/components/shared/GradeRangeSlider";
+// 單向依賴：lib/api 不 import 本檔，不會形成循環
+import { ApiError } from "@/lib/api";
 
 export { GRADE_MAX, GRADE_MIN };
 
@@ -24,6 +26,17 @@ export const GRADE_OPTIONS: readonly number[] = Array.from(
  * 超過時對話框停用送出並提示分批，不自動切批。
  */
 export const BATCH_GRADE_MAX_ITEMS = 200;
+
+/**
+ * 批次設定年級失敗時要顯示的訊息 key：
+ * HTTP 403 的 ApiError → 權限專屬提示；其他錯誤 → 一般失敗提示。
+ */
+export function batchGradeErrorMessageKey(error: unknown): string {
+  if (error instanceof ApiError && error.status === 403) {
+    return "classroomGrade.messages.forbidden";
+  }
+  return "classroomGrade.messages.saveFailed";
+}
 
 /** 篩選值：全部／未設定／"1"–"12" */
 export const GRADE_FILTER_ALL = "all";

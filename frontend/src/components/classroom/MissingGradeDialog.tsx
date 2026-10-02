@@ -111,7 +111,9 @@ export function MissingGradeDialog<Id extends string | number>({
 
         {overLimit && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {t("classroomGrade.limitExceeded", { max: BATCH_GRADE_MAX_ITEMS })}
+            {t("classroomGrade.missing.limitExceeded", {
+              max: BATCH_GRADE_MAX_ITEMS,
+            })}
           </p>
         )}
 

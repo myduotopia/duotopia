@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { apiClient, ApiError } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 import {
   GRADE_FILTER_ALL,
+  batchGradeErrorMessageKey,
   isValidGrade,
   matchesGradeFilter,
   type GradeUpdateItem,
@@ -150,8 +151,9 @@ export default function SchoolClassroomsPage() {
   };
 
   // silent：背景重新載入（批次設定年級後，#1097），不切換 loading／error，
-  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容；失敗只記錄。
-  const loadClassrooms = async ({ silent = false } = {}) => {
+  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容。
+  // 回傳是否載入成功，讓背景重新載入的呼叫端能提示失敗。
+  const loadClassrooms = async ({ silent = false } = {}): Promise<boolean> => {
     try {
       if (!silent) {
         setLoading(true);
@@ -168,12 +170,22 @@ export default function SchoolClassroomsPage() {
       if (response.ok) {
         const data = await response.json();
         setClassrooms(data);
-      } else if (!silent) {
+        return true;
+      }
+      if (silent) {
+        logError(
+          "Failed to reload classrooms",
+          new Error(`HTTP ${response.status}`),
+          { schoolId },
+        );
+      } else {
         setError(`載入班級列表失敗：${response.status}`);
       }
+      return false;
     } catch (error) {
       logError("Failed to fetch classrooms", error, { schoolId });
       if (!silent) setError("網路連線錯誤");
+      return false;
     } finally {
       if (!silent) setLoading(false);
     }
@@ -276,16 +288,15 @@ export default function SchoolClassroomsPage() {
       toast.success(
         t("classroomGrade.messages.saveSuccess", { count: res.count }),
       );
-      void loadClassrooms({ silent: true });
+      // 背景重新載入；失敗時已儲存的結果仍有效，只提示重新整理
+      void loadClassrooms({ silent: true }).then((reloaded) => {
+        if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
+      });
       return true;
     } catch (error) {
       logError("Failed to batch set classroom grades", error, { schoolId });
-      // apiClient 對非 2xx 回應丟 ApiError（含 HTTP status）
-      if (error instanceof ApiError && error.status === 403) {
-        toast.error(t("classroomGrade.messages.forbidden"));
-      } else {
-        toast.error(t("classroomGrade.messages.saveFailed"));
-      }
+      // 403 → 權限專屬提示，其餘 → 一般失敗（對應見 batchGradeErrorMessageKey）
+      toast.error(t(batchGradeErrorMessageKey(error)));
       return false;
     }
   };

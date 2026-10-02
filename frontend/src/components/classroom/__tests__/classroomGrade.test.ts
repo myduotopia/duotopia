@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { ApiError } from "@/lib/api";
 import {
   GRADE_FILTER_ALL,
   GRADE_FILTER_UNSET,
   GRADE_OPTIONS,
+  batchGradeErrorMessageKey,
   computeGradeAdjust,
   isValidGrade,
   matchesGradeFilter,
@@ -122,5 +124,35 @@ describe("computeGradeAdjust", () => {
       { id: "s-2", name: "B", reason: "max" },
       { id: "s-3", name: "C", reason: "unset" },
     ]);
+  });
+});
+
+describe("batchGradeErrorMessageKey", () => {
+  it("maps a 403 ApiError to the permission message", () => {
+    expect(batchGradeErrorMessageKey(new ApiError(403, "Forbidden"))).toBe(
+      "classroomGrade.messages.forbidden",
+    );
+  });
+
+  it("maps other ApiError statuses to the generic failure", () => {
+    for (const status of [400, 404, 422, 500]) {
+      expect(batchGradeErrorMessageKey(new ApiError(status, "error"))).toBe(
+        "classroomGrade.messages.saveFailed",
+      );
+    }
+  });
+
+  it("maps a plain Error to the generic failure", () => {
+    expect(batchGradeErrorMessageKey(new Error("network"))).toBe(
+      "classroomGrade.messages.saveFailed",
+    );
+  });
+
+  it("maps non-error values to the generic failure", () => {
+    for (const value of [undefined, null, "403", { status: 403 }]) {
+      expect(batchGradeErrorMessageKey(value)).toBe(
+        "classroomGrade.messages.saveFailed",
+      );
+    }
   });
 });
