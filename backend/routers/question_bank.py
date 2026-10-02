@@ -704,8 +704,17 @@ def delete_question(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """軟刪除：is_active=False，保留已派發考卷的參照。"""
+    """軟刪除：is_active=False，保留已派發考卷的參照。
+
+    克漏字小題不能從這裡刪：它與文章裡的 ``{{n}}`` 一一對應，單獨刪掉會讓題組
+    永遠驗證失敗（文章的空格沒有對應小題）。要刪請在題組編輯器裡刪掉空格（#1085）。
+    """
     q = _require_editable(db, teacher, question_id)
+    if q.blank_index is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="克漏字小題請在題組內刪除",
+        )
     q.is_active = False
     q.deleted_at = datetime.now(timezone.utc)
     db.commit()

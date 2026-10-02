@@ -7,7 +7,7 @@ router 只負責權限與流程。
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import ClassVar, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -73,6 +73,10 @@ class ProgramLinkIn(BaseModel):
 
 class QuestionBase(BaseModel):
     # 題幹可空（純圖題），但 stem / image_url / stem_audio_url 至少一個
+    # 題組小題例外：克漏字小題本來就沒有自身題幹／插圖（只有選項），
+    # DB 的 ck_questions_has_content 也已排除 group_id 非空的小題，
+    # 所以子類別可以關掉這個內容檢查（#1085）
+    REQUIRES_CONTENT: ClassVar[bool] = True
     stem: str = Field("", max_length=5000)
     explanation: Optional[str] = Field(None, max_length=5000)
     image_url: Optional[str] = None
@@ -101,7 +105,9 @@ class QuestionBase(BaseModel):
             and self.grade_min > self.grade_max
         ):
             raise ValueError("grade_min 不可大於 grade_max")
-        if not (self.stem or self.image_url or self.stem_audio_url):
+        if self.REQUIRES_CONTENT and not (
+            self.stem or self.image_url or self.stem_audio_url
+        ):
             raise ValueError("題目需要文字或圖片")
         return self
 
@@ -122,7 +128,13 @@ class QuestionCreate(QuestionBase):
 
 
 class GroupQuestionIn(QuestionBase):
-    """題組小題：與單題相同，但 question_type／歸屬／visibility 由題組決定。"""
+    """題組小題：與單題相同，但 question_type／歸屬／visibility 由題組決定。
+
+    題幹／插圖／語音可以全空：克漏字小題只有選項（題幹由文章裡的空格代表）。
+    題組本身的圖文在 ``QuestionGroupCreate`` 驗證，所以小題不再要求自身素材。
+    """
+
+    REQUIRES_CONTENT: ClassVar[bool] = False
 
     options: List[OptionIn] = Field(..., min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)
     # 不給就照陣列順序

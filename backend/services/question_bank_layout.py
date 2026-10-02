@@ -217,6 +217,19 @@ def layout_blank_indexes(layout: Any) -> list[int]:
     return found
 
 
+def layout_blank_occurrences(layout: Any) -> list[int]:
+    """layout 內所有克漏字空格編號（依出現順序，**不去重**）。
+
+    `layout_blank_indexes` 會去重，所以同一個 ``{{3}}`` 在文章裡貼了兩次看不出來，
+    但兩個空格卻只能對一個小題 —— 重複偵測要用這個版本（#1085）。
+    """
+    found: list[int] = []
+    for text in _iter_texts(layout):
+        for m in BLANK_RE.finditer(text):
+            found.append(int(m.group(1)))
+    return found
+
+
 def _iter_texts(layout: Any):
     if not isinstance(layout, dict):
         return
@@ -257,9 +270,16 @@ def validate_cloze_blanks(layout: Any, blank_indexes: list) -> None:
     ``blank_indexes`` 依小題順序給（可含 ``None`` 代表沒填）。空格編號就是權威：
     文章有空格卻沒小題、小題指向不存在的空格、或編號重複，都不准儲存。
     """
+    occurrences = layout_blank_occurrences(layout)
     blanks = layout_blank_indexes(layout)
     if not blanks:
         raise LayoutError("layout", "克漏字題組的文章需要至少一個 {{1}} 空格")
+    layout_counts: dict[int, int] = {}
+    for n in occurrences:
+        layout_counts[n] = layout_counts.get(n, 0) + 1
+    layout_dup = sorted(n for n, c in layout_counts.items() if c > 1)
+    if layout_dup:
+        raise LayoutError("layout", f"文章裡的空格出現了兩次：{_fmt(layout_dup)}")
     if any(b is None for b in blank_indexes):
         raise LayoutError("questions", "每個克漏字小題都要對應一個空格編號")
     counts: dict[int, int] = {}

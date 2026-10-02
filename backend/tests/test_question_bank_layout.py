@@ -16,6 +16,7 @@ from services.question_bank_layout import (
     LayoutError,
     assert_no_cloze_blanks,
     layout_blank_indexes,
+    layout_blank_occurrences,
     layout_to_plain_text,
     strip_inline_markup,
     validate_cloze_blanks,
@@ -256,6 +257,53 @@ def test_validate_cloze_blanks_requires_at_least_one_blank():
     with pytest.raises(LayoutError) as e:
         validate_cloze_blanks(reading, [])
     assert "至少一個" in e.value.message
+
+
+def test_layout_blank_occurrences_keeps_duplicates():
+    cloze = _load(SAMPLES_DIR / "q40-43-cloze.json")
+    assert layout_blank_occurrences(cloze) == [40, 41, 42, 43]
+    dup = {
+        "version": 1,
+        "rows": [
+            {
+                "columns": [
+                    {
+                        "span": 1,
+                        "blocks": [
+                            {"type": "paragraph", "text": "a {{1}} b {{2}}"},
+                            {"type": "paragraph", "text": "c {{1}}"},
+                        ],
+                    }
+                ]
+            }
+        ],
+    }
+    assert layout_blank_occurrences(dup) == [1, 2, 1]
+    # 去重版本看不出重複，所以兩個函式要並存
+    assert layout_blank_indexes(dup) == [1, 2]
+
+
+def test_validate_cloze_blanks_rejects_duplicate_blank_in_passage():
+    """同一個 {{1}} 在文章裡出現兩次 —— 兩個空格卻只能對一張小題。"""
+    dup = {
+        "version": 1,
+        "rows": [
+            {
+                "columns": [
+                    {
+                        "span": 1,
+                        "blocks": [
+                            {"type": "paragraph", "text": "a {{1}} b {{2}} c {{1}}"}
+                        ],
+                    }
+                ]
+            }
+        ],
+    }
+    with pytest.raises(LayoutError) as e:
+        validate_cloze_blanks(dup, [1, 2])
+    assert "出現了兩次" in e.value.message
+    assert e.value.path == "layout"
 
 
 def test_assert_no_cloze_blanks():

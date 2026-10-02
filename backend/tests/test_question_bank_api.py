@@ -1690,8 +1690,9 @@ def test_sub_question_with_image_and_empty_stem(test_client, teacher_a):
     q = g["questions"][0]
     assert q["stem"] == ""
     assert q["image_url"] == "http://x/venn.png"
-    # 沒題幹也沒圖 → 422
-    bad = _group_payload(
+    # 題組小題沒題幹也沒圖同樣放行（#1085）：題幹在題組的文章裡，
+    # 克漏字小題更是只有選項。單題端點才要求素材（見下一個測試）。
+    plain = _group_payload(
         questions=[
             {
                 "stem": "",
@@ -1700,6 +1701,19 @@ def test_sub_question_with_image_and_empty_stem(test_client, teacher_a):
         ]
     )
     resp = test_client.post(
-        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+        "/api/question-bank/question-groups", json=plain, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_single_question_still_requires_stem_or_image(test_client, teacher_a):
+    """單題端點維持原規則：題幹／圖片／語音至少一個。"""
+    resp = test_client.post(
+        "/api/question-bank/questions",
+        json={
+            "stem": "",
+            "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+        },
+        headers=_headers(teacher_a),
     )
     assert resp.status_code == 422

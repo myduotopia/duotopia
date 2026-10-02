@@ -6,6 +6,9 @@
 - layout 的 ``{{n}}`` 與小題 ``blank_index`` 不一致 → 422（缺、多、重複、沒填）
 - reading 題組的文章含 ``{{n}}`` → 422（請改用克漏字題組）
 - PATCH 同步更新空格與小題；只改 layout 刪掉空格也會被擋
+- 小題不需要自身題幹／插圖（題組小題一律放行，文章才是題幹）
+- 同一個 ``{{n}}`` 在文章裡貼了兩次 → 422
+- 單題端點不准刪克漏字小題（會讓題組永遠驗證失敗）
 """
 
 import pytest
@@ -48,9 +51,9 @@ PASSAGE = "Lapland is snowy, but this year is {{1}}. Santa {{2}} the reindeer."
 
 
 def _question(blank_index, **overrides):
+    # 真實情境：克漏字小題完全沒有自身題幹／插圖／語音，只有選項
     q = {
         "stem": "",
-        "image_url": "https://example.com/blank.png",
         "blank_index": blank_index,
         "options": [
             {"text": "different", "is_correct": True},
@@ -96,6 +99,63 @@ def test_create_cloze_group_round_trips_blank_index(test_client, teacher_c):
     assert [q["blank_index"] for q in again.json()["questions"]] == [1, 2]
     # passage_text 仍是去編號的純文字副本（搜尋用）
     assert "____" in again.json()["passage_text"]
+
+
+def test_create_cloze_allows_subquestion_without_own_content(test_client, teacher_c):
+    """小題沒有 stem／image_url／stem_audio_url 也能建 —— _payload() 本來就這樣。"""
+    resp = _post(test_client, teacher_c)
+    assert resp.status_code == 201, resp.text
+    for q in resp.json()["questions"]:
+        assert q["stem"] == ""
+        assert not q.get("image_url")
+
+
+def test_create_reading_allows_subquestion_without_own_stem(test_client, teacher_c):
+    """閱讀題組的小題同樣放行空題幹（題組小題的素材在文章）。"""
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json={
+            "question_type": "reading",
+            "stimulus_type": "passage",
+            "title": "Lapland",
+            "layout": _layout("Lapland is snowy."),
+            "questions": [
+                {
+                    "stem": "",
+                    "options": [
+                        {"text": "yes", "is_correct": True},
+                        {"text": "no"},
+                    ],
+                }
+            ],
+        },
+        headers=_headers(teacher_c),
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_create_cloze_rejects_duplicate_blank_in_passage(test_client, teacher_c):
+    """同一個 {{1}} 貼了兩次：兩個空格只能對一張小題 → 擋下。"""
+    resp = _post(
+        test_client,
+        teacher_c,
+        layout=_layout("A {{1}} B {{2}} C {{1}}"),
+        questions=[_question(1), _question(2)],
+    )
+    assert resp.status_code == 422
+    assert "兩次" in resp.text
+
+
+def test_delete_single_question_endpoint_rejects_cloze_subquestion(
+    test_client, teacher_c
+):
+    created = _post(test_client, teacher_c).json()
+    qid = created["questions"][0]["id"]
+    resp = test_client.delete(
+        f"/api/question-bank/questions/{qid}", headers=_headers(teacher_c)
+    )
+    assert resp.status_code == 422
+    assert "題組內刪除" in resp.text
 
 
 def test_create_cloze_rejects_blank_without_question(test_client, teacher_c):
