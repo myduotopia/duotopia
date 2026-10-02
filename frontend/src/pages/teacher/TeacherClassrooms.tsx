@@ -41,12 +41,26 @@ import { apiClient, ApiError } from "@/lib/api";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
 import { toast } from "sonner";
 import { CloudDownload } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  GRADE_FILTER_ALL,
+  formatGradeLabel,
+  isValidGrade,
+  matchesGradeFilter,
+  type GradeUpdateItem,
+} from "@/components/classroom/classroomGrade";
+import { GradeSelect } from "@/components/classroom/GradeSelect";
+import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
+import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
+import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
+import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
 
 interface ClassroomDetail {
   id: number;
   name: string;
   description?: string;
   level?: string;
+  grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
   student_count: number;
   students: Array<{
     id: number;
@@ -74,22 +88,44 @@ export default function TeacherClassrooms() {
   const [loading, setLoading] = useState(true);
   const [editingClassroom, setEditingClassroom] =
     useState<ClassroomDetail | null>(null);
-  const [editFormData, setEditFormData] = useState({
+  const [editFormData, setEditFormData] = useState<{
+    name: string;
+    description: string;
+    level: string;
+    grade: number | null;
+  }>({
     name: "",
     description: "",
     level: "",
+    grade: null,
   });
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createFormData, setCreateFormData] = useState({
+  const [createFormData, setCreateFormData] = useState<{
+    name: string;
+    description: string;
+    level: string;
+    grade: number | null;
+  }>({
     name: "",
     description: "",
     level: "A1",
+    grade: null,
   });
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState<string>("all");
+  const [gradeFilter, setGradeFilter] = useState<string>(GRADE_FILTER_ALL);
+
+  // 年級批次調整／補填（#1097）— 只有個人班級可勾選
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showAdjustGrade, setShowAdjustGrade] = useState(false);
+  const [showMissingGrade, setShowMissingGrade] = useState(false);
+  // 與編輯／刪除按鈕停用條件相同：機構模式或選了學校時本頁唯讀
+  const canEditClassrooms = !(
+    mode === "organization" || selectedSchool !== null
+  );
 
   // Sorting
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -244,15 +280,26 @@ export default function TeacherClassrooms() {
       name: classroom.name,
       description: classroom.description || "",
       level: classroom.level || "A1",
+      grade: isValidGrade(classroom.grade) ? classroom.grade : null,
     });
   };
 
   const handleSaveEdit = async () => {
     if (!editingClassroom) return;
 
+    // 年級必填（#1097）：尚未設定年級的班級編輯時也要補選
+    const { grade } = editFormData;
+    if (grade === null) {
+      alert(t("classroomGrade.required"));
+      return;
+    }
+
     try {
       // API call to update classroom
-      await apiClient.updateClassroom(editingClassroom.id, editFormData);
+      await apiClient.updateClassroom(editingClassroom.id, {
+        ...editFormData,
+        grade,
+      });
 
       // Refresh classrooms list
       await fetchClassrooms();
@@ -285,14 +332,24 @@ export default function TeacherClassrooms() {
       alert(t("teacherClassrooms.messages.nameRequired"));
       return;
     }
+    const { grade } = createFormData;
+    if (grade === null) {
+      alert(t("classroomGrade.required"));
+      return;
+    }
 
     try {
-      await apiClient.createClassroom(createFormData);
+      await apiClient.createClassroom({ ...createFormData, grade });
 
       // Refresh the list after creation
       await fetchClassrooms();
       setShowCreateDialog(false);
-      setCreateFormData({ name: "", description: "", level: "A1" });
+      setCreateFormData({
+        name: "",
+        description: "",
+        level: "A1",
+        grade: null,
+      });
     } catch (error) {
       console.error("Error creating classroom:", error);
       // Show error to user
@@ -301,6 +358,29 @@ export default function TeacherClassrooms() {
           ? error.message
           : t("teacherClassrooms.messages.createFailed");
       alert(`${t("teacherClassrooms.messages.error")}: ${errorMessage}`);
+    }
+  };
+
+  // 補填年級與批次升降共用同一個批次端點（#1097）；回傳 true 讓對話框關閉
+  const handleBatchSetGrades = async (
+    items: GradeUpdateItem<number>[],
+  ): Promise<boolean> => {
+    try {
+      const res = await apiClient.batchSetClassroomGrades(
+        items.map(({ id, grade }) => ({ classroom_id: id, grade })),
+      );
+      toast.success(
+        t("classroomGrade.messages.saveSuccess", { count: res.count }),
+      );
+      setSelectedIds(new Set());
+      setShowAdjustGrade(false);
+      setShowMissingGrade(false);
+      await fetchClassrooms();
+      return true;
+    } catch (err) {
+      console.error("Failed to set classroom grades:", err);
+      toast.error(t("classroomGrade.messages.saveFailed"));
+      return false;
     }
   };
 
@@ -427,6 +507,9 @@ export default function TeacherClassrooms() {
       );
     }
 
+    // Grade filter (#1097)
+    result = result.filter((c) => matchesGradeFilter(c.grade, gradeFilter));
+
     // Sorting
     if (sortField) {
       result = [...result].sort((a, b) => {
@@ -459,9 +542,44 @@ export default function TeacherClassrooms() {
     selectedOrganization,
     searchQuery,
     levelFilter,
+    gradeFilter,
     sortField,
     sortDirection,
   ]);
+
+  // 年級勾選／補填只作用在個人班級（學校班級須在學校後台編輯）
+  const isSelectable = (c: ClassroomDetail) =>
+    canEditClassrooms && !c.school_id && !c.organization_id;
+  const selectableVisible = processedClassrooms.filter(isSelectable);
+  // 只計目前清單上看得到的勾選，篩選掉的班級不會被批次調整
+  const selectedClassrooms = selectableVisible.filter((c) =>
+    selectedIds.has(c.id),
+  );
+  const allVisibleSelected =
+    selectableVisible.length > 0 &&
+    selectedClassrooms.length === selectableVisible.length;
+  const missingGradeClassrooms = classrooms.filter(
+    (c) => isSelectable(c) && !isValidGrade(c.grade),
+  );
+
+  const toggleSelected = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      selectableVisible.forEach((c) =>
+        checked ? next.add(c.id) : next.delete(c.id),
+      );
+      return next;
+    });
+  };
 
   if (loading) {
     return (
@@ -579,6 +697,12 @@ export default function TeacherClassrooms() {
         </div>
       </div>
 
+      {/* 尚未設定年級提醒（#1097） */}
+      <MissingGradeBanner
+        count={missingGradeClassrooms.length}
+        onAction={() => setShowMissingGrade(true)}
+      />
+
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <select
@@ -597,6 +721,7 @@ export default function TeacherClassrooms() {
           <option value="C1">C1</option>
           <option value="C2">C2</option>
         </select>
+        <GradeFilterSelect value={gradeFilter} onChange={setGradeFilter} />
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
@@ -608,6 +733,36 @@ export default function TeacherClassrooms() {
           />
         </div>
       </div>
+
+      {/* Bulk Actions Bar — 年級批次調整（#1097） */}
+      {selectedClassrooms.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            {t("classroomGrade.selection.selectedCount", {
+              count: selectedClassrooms.length,
+            })}
+          </span>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAdjustGrade(true)}
+              className="flex-1 sm:flex-none"
+            >
+              <GraduationCap className="h-4 w-4 mr-2" />
+              {t("classroomGrade.adjust.button")}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+              className="flex-1 sm:flex-none"
+            >
+              {t("classroomGrade.selection.clear")}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Classrooms Table */}
       <>
@@ -662,6 +817,17 @@ export default function TeacherClassrooms() {
                 {/* Header */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3 flex-1">
+                    {isSelectable(classroom) && (
+                      <Checkbox
+                        checked={selectedIds.has(classroom.id)}
+                        onCheckedChange={(checked) =>
+                          toggleSelected(classroom.id, checked === true)
+                        }
+                        aria-label={t("classroomGrade.selection.selectRow", {
+                          name: classroom.name,
+                        })}
+                      />
+                    )}
                     <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
                       <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
@@ -705,6 +871,15 @@ export default function TeacherClassrooms() {
                     </span>
                     <span className="font-medium dark:text-gray-200">
                       {classroom.program_count || 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {t("teacherClassrooms.labels.grade")}:
+                    </span>
+                    <span className="font-medium dark:text-gray-200">
+                      {formatGradeLabel(t, classroom.grade)}
                     </span>
                   </div>
                   <div className="col-span-2">
@@ -775,6 +950,24 @@ export default function TeacherClassrooms() {
               </TableCaption>
               <TableHeader>
                 <TableRow>
+                  {canEditClassrooms && (
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected
+                            ? true
+                            : selectedClassrooms.length > 0
+                              ? "indeterminate"
+                              : false
+                        }
+                        disabled={selectableVisible.length === 0}
+                        onCheckedChange={(checked) =>
+                          toggleSelectAllVisible(checked === true)
+                        }
+                        aria-label={t("classroomGrade.selection.selectAll")}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="w-[50px] text-left text-xs sm:text-sm">
                     ID
                   </TableHead>
@@ -786,6 +979,9 @@ export default function TeacherClassrooms() {
                   </SortableHeader>
                   <TableHead className="text-left text-xs sm:text-sm min-w-[60px]">
                     {t("teacherClassrooms.labels.level")}
+                  </TableHead>
+                  <TableHead className="text-left text-xs sm:text-sm min-w-[70px]">
+                    {t("teacherClassrooms.labels.grade")}
                   </TableHead>
                   <SortableHeader
                     field="created_at"
@@ -808,6 +1004,22 @@ export default function TeacherClassrooms() {
                         className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
                         onClick={() => toggleRowExpanded(classroom.id)}
                       >
+                        {canEditClassrooms && (
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {isSelectable(classroom) && (
+                              <Checkbox
+                                checked={selectedIds.has(classroom.id)}
+                                onCheckedChange={(checked) =>
+                                  toggleSelected(classroom.id, checked === true)
+                                }
+                                aria-label={t(
+                                  "classroomGrade.selection.selectRow",
+                                  { name: classroom.name },
+                                )}
+                              />
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium text-xs sm:text-sm">
                           {classroom.id}
                         </TableCell>
@@ -849,6 +1061,15 @@ export default function TeacherClassrooms() {
                           </div>
                         </TableCell>
                         <TableCell>{getLevelBadge(classroom.level)}</TableCell>
+                        <TableCell
+                          className={`text-xs sm:text-sm ${
+                            isValidGrade(classroom.grade)
+                              ? "dark:text-gray-200"
+                              : "text-gray-400 dark:text-gray-500"
+                          }`}
+                        >
+                          {formatGradeLabel(t, classroom.grade)}
+                        </TableCell>
                         <TableCell className="text-xs sm:text-sm dark:text-gray-200">
                           {formatDate(classroom.created_at)}
                         </TableCell>
@@ -910,7 +1131,10 @@ export default function TeacherClassrooms() {
                       {/* Expanded Detail Row */}
                       {isExpanded && (
                         <TableRow className="bg-gray-50 dark:bg-gray-700/30">
-                          <TableCell colSpan={5} className="py-3 px-6">
+                          <TableCell
+                            colSpan={canEditClassrooms ? 7 : 6}
+                            className="py-3 px-6"
+                          >
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
                                 <span className="text-gray-500 dark:text-gray-400 text-xs">
@@ -1063,6 +1287,22 @@ export default function TeacherClassrooms() {
                 <option value="C2">C2</option>
               </select>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+              <label
+                htmlFor="edit-grade"
+                className="text-left sm:text-right text-sm font-medium"
+              >
+                {t("teacherClassrooms.labels.grade")}
+              </label>
+              <GradeSelect
+                id="edit-grade"
+                value={editFormData.grade}
+                onChange={(grade) =>
+                  setEditFormData({ ...editFormData, grade })
+                }
+                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
             <Button
@@ -1208,8 +1448,24 @@ export default function TeacherClassrooms() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1">
+              <label
+                htmlFor="create-grade"
+                className="text-sm font-medium block mb-1"
+              >
                 {t("teacherClassrooms.labels.grade")}
+              </label>
+              <GradeSelect
+                id="create-grade"
+                value={createFormData.grade}
+                onChange={(grade) =>
+                  setCreateFormData({ ...createFormData, grade })
+                }
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1">
+                {t("teacherClassrooms.labels.level")}
               </label>
               <select
                 className="w-full px-3 py-2 border rounded-md text-sm"
@@ -1256,6 +1512,20 @@ export default function TeacherClassrooms() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 年級補填／批次調整（#1097） */}
+      <MissingGradeDialog
+        open={showMissingGrade}
+        onOpenChange={setShowMissingGrade}
+        classrooms={missingGradeClassrooms}
+        onSave={handleBatchSetGrades}
+      />
+      <AdjustGradeDialog
+        open={showAdjustGrade}
+        onOpenChange={setShowAdjustGrade}
+        classrooms={selectedClassrooms}
+        onConfirm={handleBatchSetGrades}
+      />
 
       {/* Assignment Dialog */}
       {assignmentClassroom && (

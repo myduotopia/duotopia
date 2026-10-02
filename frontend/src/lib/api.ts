@@ -127,6 +127,12 @@ export class ApiError extends Error {
   }
 }
 
+/** 班級批次設定年級回應（個人端與機構端相同，#1097） */
+export interface BatchClassroomGradeResponse {
+  updated: { id: number; grade: number }[];
+  count: number;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -766,7 +772,12 @@ class ApiClient {
   // ============ Classroom CRUD Methods ============
   async updateClassroom(
     classroomId: number,
-    data: { name?: string; description?: string; level?: string },
+    data: {
+      name?: string;
+      description?: string;
+      level?: string;
+      grade?: number;
+    },
   ) {
     return this.request(`/api/teachers/classrooms/${classroomId}`, {
       method: "PUT",
@@ -784,10 +795,21 @@ class ApiClient {
     name: string;
     description?: string;
     level: string;
+    grade: number;
   }) {
     return this.request("/api/teachers/classrooms", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  }
+
+  /** 批次設定個人班級年級（#1097）；全有或全無 */
+  async batchSetClassroomGrades(
+    items: { classroom_id: number; grade: number }[],
+  ): Promise<BatchClassroomGradeResponse> {
+    return this.request("/api/teachers/classrooms/batch-grade", {
+      method: "POST",
+      body: JSON.stringify({ items }),
     });
   }
 
@@ -798,6 +820,8 @@ class ApiClient {
       name: string;
       description?: string;
       level: string;
+      // 後端必填；機構後台表單接上年級前暫為選填（#1097 commit 3 改為必填）
+      grade?: number;
       teacher_id?: number | null;
     },
   ) {
@@ -807,12 +831,24 @@ class ApiClient {
     });
   }
 
+  /** 批次設定學校班級年級（#1097）；全有或全無 */
+  async batchSetSchoolClassroomGrades(
+    schoolId: string,
+    items: { classroom_id: number; grade: number }[],
+  ): Promise<BatchClassroomGradeResponse> {
+    return this.request(`/api/schools/${schoolId}/classrooms/batch-grade`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
   async updateSchoolClassroom(
     classroomId: number,
     data: {
       name?: string;
       description?: string;
       level?: string;
+      grade?: number;
       is_active?: boolean;
     },
   ) {

@@ -3485,7 +3485,7 @@
       "programCount": "課程數",
       "createdAt": "建立時間",
       "actions": "操作",
-      "grade": "級別",
+      "grade": "年級",
       "school": "所屬學校"
     },
     "messages": {
@@ -6113,5 +6113,52 @@
   },
   "orgMaterials": {
     "title": "機構教材"
+  },
+  "classroomGrade": {
+    "gradeLabel": "{{grade}} 年級",
+    "unset": "未設定",
+    "selectPlaceholder": "請選擇年級",
+    "required": "請選擇年級",
+    "filter": {
+      "label": "年級篩選",
+      "all": "所有年級",
+      "unset": "未設定年級"
+    },
+    "selection": {
+      "selectedCount": "已選 {{count}} 個班級",
+      "selectAll": "全選目前列出的班級",
+      "selectRow": "選取 {{name}}",
+      "clear": "取消選取"
+    },
+    "banner": {
+      "message": "有 {{count}} 個班級尚未設定年級",
+      "action": "立即設定"
+    },
+    "missingDialog": {
+      "title": "設定班級年級",
+      "description": "為尚未設定年級的班級選擇年級。沒有選擇的班級會維持未設定。",
+      "rowLabel": "{{name}} 的年級",
+      "save": "儲存（{{count}}）"
+    },
+    "adjust": {
+      "button": "調整年級",
+      "title": "調整年級",
+      "description": "選擇升一級或降一級，確認每班調整前後的年級後套用。班級名稱不會變更。",
+      "up": "升一級",
+      "down": "降一級",
+      "changesTitle": "將調整 {{count}} 個班級",
+      "skippedTitle": "略過 {{count}} 個班級",
+      "nothingToChange": "沒有可以調整的班級",
+      "reason": {
+        "max": "已是 {{grade}} 年級，無法再升",
+        "min": "已是 {{grade}} 年級，無法再降",
+        "unset": "尚未設定年級"
+      },
+      "confirm": "套用（{{count}}）"
+    },
+    "messages": {
+      "saveSuccess": "已更新 {{count}} 個班級的年級",
+      "saveFailed": "更新年級失敗，請稍後再試"
+    }
   }
 }

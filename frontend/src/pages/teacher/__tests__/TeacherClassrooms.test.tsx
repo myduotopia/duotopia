@@ -97,11 +97,33 @@ vi.mock("react-i18next", () => ({
         "dialogs.createProgramDialog.custom.levels.B2": "B2",
         "dialogs.createProgramDialog.custom.levels.C1": "C1",
         "dialogs.createProgramDialog.custom.levels.C2": "C2",
+        // #1097 classroom grade
+        "teacherClassrooms.labels.grade": "Grade",
+        "classroomGrade.gradeLabel": "Grade {{grade}}",
+        "classroomGrade.unset": "Not set",
+        "classroomGrade.selectPlaceholder": "Select a grade",
+        "classroomGrade.required": "Please select a grade",
+        "classroomGrade.filter.label": "Filter by grade",
+        "classroomGrade.filter.all": "All Grades",
+        "classroomGrade.filter.unset": "Grade not set",
+        "classroomGrade.selection.selectedCount":
+          "{{count}} classroom(s) selected",
+        "classroomGrade.selection.selectAll": "Select all listed classrooms",
+        "classroomGrade.selection.selectRow": "Select {{name}}",
+        "classroomGrade.selection.clear": "Clear selection",
+        "classroomGrade.banner.message":
+          "{{count}} classroom(s) have no grade set",
+        "classroomGrade.banner.action": "Set now",
+        "classroomGrade.adjust.button": "Adjust grade",
       };
       if (key === "teacherClassrooms.messages.totalCount" && opts) {
         return `Total ${opts.count} classrooms`;
       }
-      return translations[key] || key;
+      const template = translations[key];
+      if (!template) return key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(opts?.[name] ?? ""),
+      );
     },
     i18n: { language: "en" },
   }),
@@ -121,15 +143,19 @@ vi.mock("@/components/AssignmentDialog", () => ({
 // Mock API
 const mockGetTeacherClassrooms = vi.fn();
 const mockSyncOneCampusClasses = vi.fn();
+const mockCreateClassroom = vi.fn();
+const mockBatchSetClassroomGrades = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiClient: {
     getTeacherClassrooms: (...args: unknown[]) =>
       mockGetTeacherClassrooms(...args),
     syncOneCampusClasses: (...args: unknown[]) =>
       mockSyncOneCampusClasses(...args),
-    createClassroom: vi.fn(),
+    createClassroom: (...args: unknown[]) => mockCreateClassroom(...args),
     updateClassroom: vi.fn(),
     deleteClassroom: vi.fn(),
+    batchSetClassroomGrades: (...args: unknown[]) =>
+      mockBatchSetClassroomGrades(...args),
   },
   ApiError: class ApiError extends Error {
     status?: number;
@@ -142,6 +168,7 @@ const mockClassrooms = [
     name: "Alpha Class",
     description: "First class",
     level: "A1",
+    grade: 3,
     student_count: 5,
     students: [
       { id: 1, name: "Student A", email: "a@test.com" },
@@ -155,6 +182,7 @@ const mockClassrooms = [
     name: "Beta Class",
     description: "Second class",
     level: "B1",
+    grade: 5,
     student_count: 10,
     students: [{ id: 3, name: "Student C", email: "c@test.com" }],
     program_count: 1,
@@ -165,6 +193,7 @@ const mockClassrooms = [
     name: "Charlie Class",
     description: "",
     level: "A1",
+    grade: null,
     student_count: 0,
     students: [],
     program_count: 0,
@@ -601,6 +630,150 @@ describe("TeacherClassrooms", () => {
         ).not.toBeInTheDocument();
       });
       expect(mockSyncOneCampusClasses).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Classroom Grade (#1097)", () => {
+    const findGradeFilter = () =>
+      screen
+        .getAllByRole("combobox")
+        .find((s) =>
+          Array.from(s.querySelectorAll("option")).some(
+            (o) => o.textContent === "All Grades",
+          ),
+        );
+
+    it("shows the grade column with labels and Not set", async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      const table = screen.getByRole("table");
+      expect(table.textContent).toContain("Grade 3");
+      expect(table.textContent).toContain("Grade 5");
+      expect(table.textContent).toContain("Not set");
+    });
+
+    it("narrows the list with the grade filter", async () => {
+      const user = userEvent.setup();
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      const gradeFilter = findGradeFilter();
+      expect(gradeFilter).toBeDefined();
+
+      await user.selectOptions(gradeFilter!, "3");
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+        expect(screen.queryByText("Beta Class")).not.toBeInTheDocument();
+        expect(screen.queryByText("Charlie Class")).not.toBeInTheDocument();
+      });
+
+      await user.selectOptions(gradeFilter!, "unset");
+      await waitFor(() => {
+        expect(screen.getAllByText("Charlie Class").length).toBeGreaterThan(0);
+        expect(screen.queryByText("Alpha Class")).not.toBeInTheDocument();
+      });
+    });
+
+    it("blocks creating a classroom without a grade", async () => {
+      const user = userEvent.setup();
+      const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await user.click(
+        screen.getAllByRole("button", { name: /Add Classroom/ })[0],
+      );
+      await user.type(screen.getByPlaceholderText("e.g., Grade 5"), "New");
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      expect(alertSpy).toHaveBeenCalledWith("Please select a grade");
+      expect(mockCreateClassroom).not.toHaveBeenCalled();
+
+      await user.selectOptions(screen.getByLabelText("Grade"), "4");
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      await waitFor(() => {
+        expect(mockCreateClassroom).toHaveBeenCalledWith(
+          expect.objectContaining({ name: "New", grade: 4 }),
+        );
+      });
+      alertSpy.mockRestore();
+    });
+
+    it("does not expand the row when clicking its checkbox", async () => {
+      const user = userEvent.setup();
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      const rowCheckbox = screen
+        .getAllByRole("checkbox", { name: "Select Alpha Class" })
+        .find((el) => el.closest("tr"));
+      expect(rowCheckbox).toBeDefined();
+
+      await user.click(rowCheckbox!);
+
+      expect(rowCheckbox).toHaveAttribute("data-state", "checked");
+      // Expanded detail row (with "Student Count") must not appear
+      expect(screen.queryByText("Student Count")).not.toBeInTheDocument();
+      // Bulk bar appears instead
+      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Adjust grade/ }),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the missing-grade banner when a classroom has no grade", async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("1 classroom(s) have no grade set"),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("button", { name: "Set now" }),
+      ).toBeInTheDocument();
+    });
+
+    it("hides the banner when every classroom has a grade", async () => {
+      mockGetTeacherClassrooms.mockResolvedValue([
+        mockClassrooms[0],
+        mockClassrooms[1],
+      ]);
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByText(/have no grade set/)).not.toBeInTheDocument();
+    });
+
+    it("hides checkboxes and the banner in organization mode", async () => {
+      mockWorkspace.mode = "organization";
+      mockWorkspace.selectedOrganization = { id: "org-1", name: "Test Org" };
+      mockGetTeacherClassrooms.mockResolvedValue([
+        { ...mockClassrooms[2], organization_id: "org-1" },
+      ]);
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Charlie Class").length).toBeGreaterThan(0);
+      });
+      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+      expect(screen.queryByText(/have no grade set/)).not.toBeInTheDocument();
     });
   });
 

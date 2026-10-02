@@ -32,6 +32,7 @@ export interface ClassroomInfo {
   name: string;
   description?: string;
   level?: string;
+  grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
   student_count: number;
   students: Student[];
   program_count?: number;

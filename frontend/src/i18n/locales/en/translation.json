@@ -6069,5 +6069,52 @@
   },
   "orgMaterials": {
     "title": "Organization Materials"
+  },
+  "classroomGrade": {
+    "gradeLabel": "Grade {{grade}}",
+    "unset": "Not set",
+    "selectPlaceholder": "Select a grade",
+    "required": "Please select a grade",
+    "filter": {
+      "label": "Filter by grade",
+      "all": "All Grades",
+      "unset": "Grade not set"
+    },
+    "selection": {
+      "selectedCount": "{{count}} classroom(s) selected",
+      "selectAll": "Select all listed classrooms",
+      "selectRow": "Select {{name}}",
+      "clear": "Clear selection"
+    },
+    "banner": {
+      "message": "{{count}} classroom(s) have no grade set",
+      "action": "Set now"
+    },
+    "missingDialog": {
+      "title": "Set classroom grades",
+      "description": "Choose a grade for each classroom without one. Classrooms you leave blank stay unset.",
+      "rowLabel": "Grade for {{name}}",
+      "save": "Save ({{count}})"
+    },
+    "adjust": {
+      "button": "Adjust grade",
+      "title": "Adjust grade",
+      "description": "Choose to move up or down one grade, check each classroom's before and after, then apply. Classroom names are not changed.",
+      "up": "Up one grade",
+      "down": "Down one grade",
+      "changesTitle": "{{count}} classroom(s) will change",
+      "skippedTitle": "{{count}} classroom(s) skipped",
+      "nothingToChange": "No classrooms can be adjusted",
+      "reason": {
+        "max": "Already Grade {{grade}}, cannot go up",
+        "min": "Already Grade {{grade}}, cannot go down",
+        "unset": "Grade not set"
+      },
+      "confirm": "Apply ({{count}})"
+    },
+    "messages": {
+      "saveSuccess": "Updated grade for {{count}} classroom(s)",
+      "saveFailed": "Failed to update grades. Please try again."
+    }
   }
 }
