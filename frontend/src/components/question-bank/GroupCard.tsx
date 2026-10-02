@@ -366,8 +366,14 @@ export default function GroupCard({
     if (added) scrollToCard(added.key);
   };
   const orphanBlanks = clozeOrphanBlanksOf(draft);
+  // 下一個空格編號（max+1；>999 才找最小未用；全滿 null）。走一次 layout＋小題，memo 避免每次打字都重算
+  const nextBlank = useMemo(
+    () => (isCloze ? nextClozeBlankIndex(draft) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isCloze, draft.layout, draft.questions],
+  );
   // 1..999 全部用完 → 不能再插空格（插了會跟既有小題撞號）
-  const blankLimitReached = isCloze && nextClozeBlankIndex(draft) === null;
+  const blankLimitReached = isCloze && nextBlank === null;
   const addClozeBlank = () => {
     const base = draftRef.current;
     const next = appendClozeBlank(base);
@@ -511,9 +517,7 @@ export default function GroupCard({
               disabled={locked}
               testId={`qg-${index}-layout`}
               clozeMode={isCloze}
-              nextBlankIndex={
-                isCloze ? (nextClozeBlankIndex(draft) ?? undefined) : undefined
-              }
+              nextBlankIndex={nextBlank ?? undefined}
             />
           </TabsContent>
           <TabsContent value="text" className="mt-0">

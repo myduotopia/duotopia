@@ -446,7 +446,7 @@ function questionBlanks(g: GroupDraft): (number | null)[] {
   return g.questions.map((q) => q.blank_index);
 }
 
-/** 手動插入時要用的新編號 = 最小未使用編號；1..999 全滿回 null（按鈕要 disable） */
+/** 手動插入時要用的新編號 = 最大編號 + 1（匯入 40–43 後接 44）；超過 999 才改找最小未使用，1..999 全滿回 null（按鈕要 disable） */
 export function nextClozeBlankIndex(g: GroupDraft): number | null {
   return nextBlankIndex(clozeBlanks(g), questionBlanks(g));
 }
