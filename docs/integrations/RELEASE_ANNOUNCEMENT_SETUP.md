@@ -18,7 +18,7 @@
 | `RELEASE_WEBHOOK_SECRET` | Secret（**必填**） | 自己產生：`openssl rand -hex 32` | 不需要 LINE 帳號；有 GitHub repo 管理權限的人設定 | 每次 push `staging` / `main`，CI 呼叫後端建立草稿 | GitHub Actions ↔ 我們的後端（內部驗證，未設定時不會建立任何草稿） |
 | `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN` | Secret（要發 LINE / 收通知才需要） | LINE Developers → 官方帳號的 Messaging API channel → **Messaging API** 分頁 → Channel access token (long-lived) → Issue | **官方帳號**：必須是 Duotopia 官方 LINE 帳號的 Messaging API channel，由對官方帳號有管理權限的人登入取得 | 草稿建立時的通知、後台按「發布」並勾選 LINE | production 發布：**broadcast 給官方帳號的所有好友**；其他情況只推給下一列的審核者 |
 | `LINE_ANNOUNCE_USER_ID` | Secret（要收草稿通知 / 在 staging 測 LINE 才需要） | 審核者的 user ID（`U` 開頭 33 字元）：本人可在同一個 channel 的 **Basic settings → Your user ID** 取得；他人需透過 webhook 事件的 `source.userId` 取得 | **個人帳號**：公告審核者，且要先把官方帳號加為好友 | ① staging / production **建立草稿時**推「待審核」通知 ② staging 按「發布」勾選 LINE | 只推給這一個人（staging 發布的卡片標題加 `[STAGING]`），不會打擾真實粉絲 |
-| `RELEASE_ANNOUNCEMENT_BANNER_URL` | Variable（選填） | 公告樣板圖的 `https://` 網址 | 不需要 LINE 帳號 | 建立草稿時當預設圖片 | LINE 卡片主圖、官網文章封面（未設定時用官網圖示佔位） |
+| `RELEASE_ANNOUNCEMENT_BANNER_URL` | Variable（選填） | 公告樣板圖的 `https://` 網址 | 不需要 LINE 帳號 | 建立草稿時當預設圖片 | LINE 卡片主圖、官網文章封面（未設定時用 `frontend/public/release-announcement-banner.png`，1200×780 / 20:13；自訂圖建議同比例） |
 
 > **為什麼審核者 ID 要另外設？** LINE 的 user ID **依 provider 不同**。
 > CI 通知 bot 的 `LINE_USER_ID` 屬於另一個 provider，拿官方帳號的 token 推給它會失敗。

@@ -15,6 +15,7 @@
 
 import logging
 import re
+from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -461,7 +462,9 @@ class ReleaseAnnouncementService:
         )
         if post is None:
             return None
-        return f"{settings.FRONTEND_URL.rstrip('/')}/blog/{post.slug}"
+        # 中文標題產生的 slug 含非 ASCII 字元：LINE 只接受 percent-encoded URI
+        # （否則整則訊息被拒：Invalid action URI）；前端路由會自動 decode
+        return f"{settings.FRONTEND_URL.rstrip('/')}/blog/{quote(post.slug, safe='-')}"
 
     @classmethod
     async def _publish_line(

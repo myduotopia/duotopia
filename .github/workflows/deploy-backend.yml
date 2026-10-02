@@ -486,10 +486,10 @@ jobs:
         if [ -n "$RELEASE_SECRET_VALUE" ]; then
           ENV_VARS="$ENV_VARS,RELEASE_WEBHOOK_SECRET=$RELEASE_SECRET_VALUE"
         fi
-        # 公告樣板圖：先用官網現有圖片佔位，之後改 repo variable 即可換圖
+        # 公告樣板圖（1200×780，LINE hero 20:13）：未設定 repo variable 時用預設 banner，改 variable 即可換圖
         BANNER_URL="${{ vars.RELEASE_ANNOUNCEMENT_BANNER_URL }}"
         if [ -z "$BANNER_URL" ]; then
-          BANNER_URL="${{ steps.db_env.outputs.FRONTEND_URL }}/android-chrome-512x512.png"
+          BANNER_URL="${{ steps.db_env.outputs.FRONTEND_URL }}/release-announcement-banner.png"
         fi
         ENV_VARS="$ENV_VARS,RELEASE_ANNOUNCEMENT_BANNER_URL=$BANNER_URL"
 
