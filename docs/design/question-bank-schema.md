@@ -40,7 +40,7 @@
 | answer_match_mode | varchar(20), nullable | 填充題比對規則：`exact` / `case_insensitive` / `ignore_punctuation` |
 | group_id | int FK question_groups ON DELETE CASCADE, nullable | 屬於題組時填；一般單題為 NULL |
 | group_order | smallint, nullable | 題組內順序 |
-| blank_index | smallint, nullable | 克漏字：對應 `passage_text` 內 `{{n}}` 的 n |
+| blank_index | smallint, nullable | 克漏字：對應 `question_groups.layout` 內 `{{n}}` 的 n（1–999，#1085） |
 | segment_id | int FK question_group_segments, nullable | 預留：小題只針對對話中某一段（本期不做 UI） |
 | teacher_id | int FK teachers | 建立者（平台題庫 = contact@duotopia.co 對應的 teacher） |
 | organization_id | uuid FK organizations, nullable | 機構題庫 |
@@ -83,7 +83,7 @@
 | id | serial PK | |
 | stimulus_type | varchar(20) NOT NULL | `passage` / `audio` / `dialogue` / `image` / `mixed` |
 | title | varchar(200) | 題組標題（列表顯示用） |
-| passage_text | text | 文章；克漏字用 `{{1}}` `{{2}}` 標記空格 |
+| passage_text | text | 文章的純文字副本（搜尋／AI）；空格一律去編號成 `____`。帶編號的 `{{n}}` 只存在 `layout` 裡 |
 | audio_url | text | 整段合併音檔（播放快取；segments 變動時重生成） |
 | image_url | text | 以圖為準的題組（海報／漫畫／地圖）整組原圖 |
 | layout | jsonb | 排版樹（#1079 閱讀題組，migration 在 sub-issue #1081；見下方「layout 格式」）；NULL 時退回 `passage_text` + `image_url` |
@@ -104,6 +104,20 @@
 - 手機寬度時同一 row 的欄位依序上下堆疊，不做自由拉寬度；老師預覽、學生端、考卷共用同一個 renderer
 - 原卷「文繞圖」刻意改成「左文右圖 + 下一段全寬」
 - `passage_text` 為 layout 內所有文字區塊拼出的純文字副本，供搜尋、重複偵測、AI 考點分析；以圖為準的題組由 AI 擷取填入、老師可在「文字版」分頁修改
+
+#### 克漏字題組（#1085）
+
+克漏字 = 閱讀題組的文字區塊裡有 `{{n}}` 空格，每個空格對一個小題。`question_groups.question_type` 由小題的 `question_type = 'cloze'` 推得，`questions.blank_index` 存空格編號。
+
+- **空格編號是權威**：`{{n}}` 的 n 就是小題的 `blank_index`，也是畫面顯示的編號。拖拉重排區塊**不改編號**；手動插入時 n = 目前（文章與小題）最大編號 + 1（新題組從 1 開始，擷取進來的題本編號如 40 原樣保留）。老師按「依閱讀順序重新編號」才會把 layout 的 `{{舊}}` 與小題 `blank_index` 一起映射成 1..k（一次 replace 完成，交換編號不會互撞）。
+- **插入**：段落聚焦工具列的「插入空格」在游標處插入 `{{n}}`（非包裹式）。只改文字 —— 對應的小題卡由 `syncClozeQuestions` 從空格差集自動建立，狀態只有一份。「在文末插入空格」把 `{{n}}` 加到最後一個段落尾端（沒有段落就補一列）。
+- **刪除**：文字變更後比對前後的空格集合；消失的編號若對應小題還是「空白」（無題幹／圖、無填好的選項、無考點、無解析）就自動移除，有內容則保留並在卡上標「找不到空格 n」，提供「重新插入到文末」與「刪除小題」，驗證阻擋儲存。
+- **只有完整 `{{n}}` 配對才算空格**：老師打到一半的 `{{4` 不會觸發同步。
+- **小題卡**：隱藏題幹文字框與題幹插圖，標題改成徽章「空格 n」；選項、正確答案、考點、解析、進階不變。列表依 `blank_index` 升冪，不開放拖曳排序。
+- **驗證**（前端 `clozeBlankError`、後端 `services/question_bank_layout.validate_cloze_blanks`，同規則）：layout 至少要有一個空格；每個小題都要有 `blank_index`；編號不可重複；layout 的空格集合與小題 `blank_index` 集合必須相等。不合格建立／PATCH 皆回 422 並指出缺的或多的編號。PATCH 以**合併後**的狀態檢查，所以只改 layout 把空格刪掉也會被擋。
+- **reading 題組的文章不得含 `{{n}}`**（`assert_no_cloze_blanks`）→ 422「請改用克漏字題組」。
+- **`passage_text`（搜尋用）維持 `____`**，不帶編號。
+- **AI 作答／考點分析**：小題題幹空白時送 `Fill in blank (n).`；passage 改用保留編號的版本（`layoutToNumberedText`：`{{3}}` → `(3)____`），prompt 另有一行說明 `(n)____` 代表第 n 個空格。
 
 #### 題組端點與列表（#1082）
 

@@ -488,3 +488,27 @@ def test_ai_group_title_provider_failure_is_502(test_client, teacher, monkeypatc
         headers=_headers(teacher),
     )
     assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------- 克漏字（#1085）
+
+
+def test_cloze_inputs_keep_blank_numbers_in_prompt():
+    """克漏字小題：題幹是「Fill in blank (n).」、passage 用 (n)____ 保留編號。"""
+    items = qbai.normalize_inputs(
+        [
+            {
+                "key": "c1",
+                "stem": "Fill in blank (3).",
+                "options": ["different", "the same"],
+                "passage": "Lapland is snowy, but this year is (3)____ .",
+            }
+        ]
+    )
+    assert items[0].passage is not None
+    prompt = qbai.build_answer_prompt(items)
+    assert "Fill in blank (3)." in prompt
+    assert "(3)____" in prompt
+    # 提示模型 (n)____ 是第 n 個空格
+    assert "marks blank number n" in prompt
+    assert "marks blank number n" in qbai.build_analyze_prompt(items, [])

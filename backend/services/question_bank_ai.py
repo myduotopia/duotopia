@@ -132,6 +132,9 @@ def _questions_block(items: list[QuestionInput]) -> str:
 PASSAGE_RULE = (
     "- Some questions carry a `passage` (the reading text they belong to). "
     "Read the passage first; the stem refers to it.\n"
+    # 克漏字（#1085）：passage 內的 (n)____ 就是空格，stem 會是 "Fill in blank (n)."
+    "- In a cloze passage, `(n)____` marks blank number n. A stem like "
+    '"Fill in blank (3)." asks which option belongs in `(3)____`.\n'
 )
 
 
