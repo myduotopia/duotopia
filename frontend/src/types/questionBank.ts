@@ -169,6 +169,8 @@ export interface Question {
   group_id: number | null;
   /** 題組內小題順序；單題為 null */
   group_order?: number | null;
+  /** 克漏字小題對應的空格編號（文章內 `{{n}}` 的 n）；其他題型為 null（#1085） */
+  blank_index?: number | null;
   is_owner: boolean;
   /** 後端算出：建立者本人，或機構擁有人／教材管理者 → 可編輯／刪除 */
   can_edit: boolean;
@@ -307,7 +309,7 @@ export type QuestionUpdateInput = Partial<
 export type QuestionGroupQuestionInput = Omit<
   QuestionCreateInput,
   "question_type" | "organization_id" | "school_id" | "visibility"
-> & { group_order?: number };
+> & { group_order?: number; blank_index?: number | null };
 
 export interface QuestionGroupCreateInput {
   question_type: QuestionType;

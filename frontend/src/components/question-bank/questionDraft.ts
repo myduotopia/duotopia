@@ -35,7 +35,21 @@ import type {
   SimilarQuestionsResponse,
   StimulusType,
 } from "@/types/questionBank";
-import { layoutToPlainText } from "./layoutInline";
+import {
+  layoutBlankIndexes,
+  layoutToNumberedText,
+  layoutToPlainText,
+} from "./layoutInline";
+import {
+  appendBlankToLayout,
+  clozeBlankDiff,
+  clozeBlankError,
+  clozeNeedsRenumber,
+  clozeOrphanBlanks,
+  nextBlankIndex,
+  renumberLayoutBlanks,
+  renumberMap,
+} from "./clozeDraft";
 import { sourceToItem } from "./sourcesCombobox";
 
 /** 預設顯示 A–D 四格；按「新增選項」才展開到 6 格 */
@@ -65,6 +79,8 @@ export interface QuestionDraft extends BatchDefaults {
   question_type: QuestionType;
   /** 所屬題組草稿的 key；單題為 null */
   groupKey: string | null;
+  /** 克漏字小題對應的空格編號（文章內 `{{n}}` 的 n）；其他情況 null（#1085） */
+  blank_index: number | null;
   stem: string;
   stem_audio_url: string | null;
   /** 題幹插圖（#1083：題本第 1 題的靜物圖、第 33 題的文氏圖）；題幹可空，圖或字至少一個 */
@@ -109,6 +125,7 @@ export function emptyDraft(
     key: nextKey(),
     question_type: "multiple_choice",
     groupKey: null,
+    blank_index: null,
     stem: "",
     stem_audio_url: null,
     image_url: null,
@@ -166,6 +183,7 @@ export function draftFromQuestion(q: Question): QuestionDraft {
   return {
     ...emptyDraft(defaults),
     question_type: q.question_type,
+    blank_index: q.blank_index ?? null,
     existingId: q.id,
     visibility: q.visibility,
     sources: q.sources.map(sourceToItem),
@@ -392,6 +410,136 @@ export function groupStemOptional(g: GroupDraft): boolean {
   return g.question_type === "cloze";
 }
 
+// --------------------------------------------------------------------------- #
+// 克漏字（#1085）：GroupDraft 層的包裝，空格運算本身在 clozeDraft.ts
+// --------------------------------------------------------------------------- #
+
+export function isClozeGroup(g: GroupDraft): boolean {
+  return g.question_type === "cloze";
+}
+
+/** 題組（文章）內的空格編號，依閱讀順序 */
+export function clozeBlanks(g: GroupDraft): number[] {
+  return layoutBlankIndexes(g.layout);
+}
+
+function questionBlanks(g: GroupDraft): (number | null)[] {
+  return g.questions.map((q) => q.blank_index);
+}
+
+/** 手動插入時要用的新編號 = 目前最大編號 + 1 */
+export function nextClozeBlankIndex(g: GroupDraft): number {
+  return nextBlankIndex(clozeBlanks(g), questionBlanks(g));
+}
+
+/** 小題依空格編號升冪（沒編號的排最後）；克漏字不開放拖曳排序 */
+export function sortClozeQuestions(questions: QuestionDraft[]): QuestionDraft[] {
+  return [...questions].sort(
+    (a, b) => (a.blank_index ?? Infinity) - (b.blank_index ?? Infinity),
+  );
+}
+
+/** 「空白」小題 = 沒題幹沒圖、沒填選項、沒考點、沒解析 → 空格被刪掉時可以自動移除 */
+function clozeQuestionIsBlank(q: QuestionDraft): boolean {
+  return (
+    !draftHasContent(q) &&
+    q.options.every((o) => !optionFilled(o)) &&
+    q.exam_points.length === 0 &&
+    q.explanation.trim() === ""
+  );
+}
+
+/** 建一張對應空格 n 的小題卡 */
+export function clozeQuestionFor(g: GroupDraft, n: number): QuestionDraft {
+  return { ...emptyGroupQuestion(g), blank_index: n };
+}
+
+/**
+ * 文字改動後同步小題：新出現的空格自動建卡，消失的空格若對應小題還是空白就移除
+ * （有內容就留著並由 `clozeOrphanBlanksOf` 標成「找不到空格 n」，驗證會擋住儲存）。
+ * 非克漏字題組原樣回傳。
+ */
+export function syncClozeQuestions(
+  g: GroupDraft,
+  beforeLayout: LayoutDoc | null,
+  afterLayout: LayoutDoc | null,
+): GroupDraft {
+  if (!isClozeGroup(g)) return g;
+  const { added, removed } = clozeBlankDiff(
+    layoutBlankIndexes(beforeLayout),
+    layoutBlankIndexes(afterLayout),
+  );
+  if (added.length === 0 && removed.length === 0) return g;
+  const next = { ...g, layout: afterLayout };
+  let questions = g.questions;
+  if (removed.length > 0) {
+    questions = questions.filter(
+      (q) =>
+        q.blank_index === null ||
+        !removed.includes(q.blank_index) ||
+        !clozeQuestionIsBlank(q),
+    );
+  }
+  const taken = new Set(questions.map((q) => q.blank_index));
+  const fresh = added
+    .filter((n) => !taken.has(n))
+    .map((n) => clozeQuestionFor(next, n));
+  return { ...next, questions: sortClozeQuestions([...questions, ...fresh]) };
+}
+
+/** 小題指向的空格已不在文章裡的編號清單 */
+export function clozeOrphanBlanksOf(g: GroupDraft): number[] {
+  if (!isClozeGroup(g)) return [];
+  return clozeOrphanBlanks(clozeBlanks(g), questionBlanks(g));
+}
+
+/** 編號是否已經是閱讀順序 1..k（否 → 顯示「依閱讀順序重新編號」） */
+export function clozeCanRenumber(g: GroupDraft): boolean {
+  return isClozeGroup(g) && clozeNeedsRenumber(clozeBlanks(g));
+}
+
+/** 依閱讀順序重新編號：layout 的 `{{n}}` 與小題 `blank_index` 一起映射 */
+export function renumberClozeBlanks(g: GroupDraft): GroupDraft {
+  if (!isClozeGroup(g) || g.layout === null) return g;
+  const map = renumberMap(clozeBlanks(g));
+  return {
+    ...g,
+    layout: renumberLayoutBlanks(g.layout, map),
+    questions: sortClozeQuestions(
+      g.questions.map((q) => ({
+        ...q,
+        blank_index:
+          q.blank_index === null ? null : map.get(q.blank_index) ?? q.blank_index,
+      })),
+    ),
+  };
+}
+
+/** 「在文末插入空格」：layout 文末加 `{{n}}` 並建對應小題卡 */
+export function appendClozeBlank(g: GroupDraft): GroupDraft {
+  const n = nextClozeBlankIndex(g);
+  const layout = appendBlankToLayout(g.layout, n);
+  return {
+    ...g,
+    layout,
+    questions: sortClozeQuestions([...g.questions, clozeQuestionFor(g, n)]),
+  };
+}
+
+/** 「重新插入到文末」：小題還在、但文章裡的空格 n 被刪了 → 把 `{{n}}` 加回文末 */
+export function reinsertClozeBlank(g: GroupDraft, n: number): GroupDraft {
+  return { ...g, layout: appendBlankToLayout(g.layout, n) };
+}
+
+/** 克漏字小題送 AI 的題幹：老師沒自己打就用「Fill in blank (n).」 */
+export function clozeAiStem(d: QuestionDraft): string {
+  const own = d.stem.trim();
+  if (own) return own;
+  return d.blank_index === null
+    ? "Fill in the blank."
+    : `Fill in blank (${d.blank_index}).`;
+}
+
 /** 題組有內容 = 有排版、有文字版或有圖 */
 export function groupHasStimulus(g: GroupDraft): boolean {
   return (
@@ -458,6 +606,11 @@ export function validateGroupDraft(g: GroupDraft): string | null {
   if (!groupHasStimulus(g)) return "groupNeedsContent";
   if (layoutIncomplete(g.layout)) return "layoutIncomplete";
   if (g.questions.length === 0) return "groupNeedsQuestions";
+  if (isClozeGroup(g)) {
+    // 空格與小題必須一一對應（後端同規則，不合格 422）
+    const err = clozeBlankError(clozeBlanks(g), questionBlanks(g));
+    if (err) return err;
+  }
   const stemOptional = groupStemOptional(g);
   for (const q of g.questions) {
     const err = validateDraft(
@@ -518,7 +671,7 @@ function groupQuestionInput(q: QuestionDraft, i: number) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { question_type, organization_id, school_id, visibility, ...rest } =
     toCreateInput(q);
-  return { ...rest, group_order: i };
+  return { ...rest, group_order: i, blank_index: q.blank_index };
 }
 
 /** 題組送後端的 payload：小題不帶 question_type／歸屬／公開（跟隨題組） */
@@ -566,7 +719,10 @@ export function unitPassageByKey(units: UnitDraft[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const u of units) {
     if (u.kind !== "group") continue;
-    const passage = groupPassageText(u.draft);
+    // 克漏字要讓模型看得到是哪個空格 → 用保留編號的版本（`(3)____`），不是 passage_text 的 `____`
+    const passage = isClozeGroup(u.draft)
+      ? layoutToNumberedText(u.draft.layout) || groupPassageText(u.draft)
+      : groupPassageText(u.draft);
     if (!passage) continue;
     for (const q of u.draft.questions) map.set(q.key, passage);
   }
@@ -631,7 +787,8 @@ export function toAiInputs(
     const passage = passageByKey.get(d.key);
     return {
       key: d.key,
-      stem: d.stem.trim(),
+      // 克漏字小題題幹通常是空的 → 送「Fill in blank (n).」讓模型知道要填哪一格
+      stem: d.question_type === "cloze" ? clozeAiStem(d) : d.stem.trim(),
       options: d.options
         .filter(optionFilled)
         .map((o) => o.text.trim() || "(圖片選項)"),

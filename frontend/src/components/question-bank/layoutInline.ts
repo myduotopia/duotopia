@@ -102,18 +102,27 @@ function parseRange(
   return nodes;
 }
 
+/** 純文字化的選項；`numberedBlanks` 讓 `{{n}}` 變成 `(n)____`（AI 上下文用，編號要讀得到） */
+export interface StripOptions {
+  numberedBlanks?: boolean;
+}
+
 /**
- * 去掉行內標記；`{{n}}` → `____`。
+ * 去掉行內標記；`{{n}}` → `____`（或 `numberedBlanks` 時 `(n)____`）。
  * 以 parseInline 的節點重建純文字，所以規則與渲染一致：只有真正成對且有內容的
  * 標記會被去掉，落單或空內容的 `**`／`__`／`==` 照字面保留。
  */
-export function stripInlineMarkup(text: string): string {
+export function stripInlineMarkup(
+  text: string,
+  opts: StripOptions = {},
+): string {
   const flat = (nodes: InlineNode[]): string =>
     nodes
       .map((n) => {
         if (n.type === "text") return n.text;
         if (n.type === "br") return "\n";
-        if (n.type === "blank") return "____";
+        if (n.type === "blank")
+          return opts.numberedBlanks ? `(${n.n})____` : "____";
         return flat(n.children);
       })
       .join("");
@@ -162,6 +171,19 @@ export function layoutToPlainText(
 ): string {
   return layoutTexts(layout)
     .map((t) => stripInlineMarkup(t).trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/**
+ * 保留空格編號的純文字（克漏字送 AI 用，#1085）：`{{3}}` → `(3)____`。
+ * 不給 `passage_text`（搜尋用那份仍是 `____`），只在組 AI 輸入時使用。
+ */
+export function layoutToNumberedText(
+  layout: LayoutDoc | null | undefined,
+): string {
+  return layoutTexts(layout)
+    .map((t) => stripInlineMarkup(t, { numberedBlanks: true }).trim())
     .filter(Boolean)
     .join("\n\n");
 }
