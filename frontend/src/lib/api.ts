@@ -820,8 +820,7 @@ class ApiClient {
       name: string;
       description?: string;
       level: string;
-      // 後端必填；機構後台表單接上年級前暫為選填（#1097 commit 3 改為必填）
-      grade?: number;
+      grade: number;
       teacher_id?: number | null;
     },
   ) {

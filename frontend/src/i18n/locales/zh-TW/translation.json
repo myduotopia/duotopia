@@ -6122,7 +6122,8 @@
     "filter": {
       "label": "年級篩選",
       "all": "所有年級",
-      "unset": "未設定年級"
+      "unset": "未設定年級",
+      "noMatch": "沒有符合年級篩選的班級"
     },
     "selection": {
       "selectedCount": "已選 {{count}} 個班級",

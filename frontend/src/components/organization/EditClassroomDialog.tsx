@@ -20,11 +20,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import { GradeSelect } from "@/components/classroom/GradeSelect";
+import { isValidGrade } from "@/components/classroom/classroomGrade";
 
 interface Classroom {
   id: string;
   name: string;
   program_level: string;
+  grade?: number | null;
   is_active: boolean;
 }
 
@@ -41,10 +45,18 @@ export function EditClassroomDialog({
   classroom,
   onSuccess,
 }: EditClassroomDialogProps) {
-  const [formData, setFormData] = useState({
+  const { t } = useTranslation();
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    level: string;
+    grade: number | null;
+    is_active: boolean;
+  }>({
     name: "",
     description: "",
     level: "A1",
+    grade: null,
     is_active: true,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +68,7 @@ export function EditClassroomDialog({
         name: classroom.name,
         description: "", // API response may not include description
         level: classroom.program_level || "A1",
+        grade: isValidGrade(classroom.grade) ? classroom.grade : null,
         is_active: classroom.is_active,
       });
     }
@@ -81,6 +94,13 @@ export function EditClassroomDialog({
       return;
     }
 
+    // 年級必填（#1097）：尚未設定年級的班級編輯時也要補選
+    const { grade } = formData;
+    if (grade === null) {
+      toast.error(t("classroomGrade.required"));
+      return;
+    }
+
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
@@ -88,6 +108,7 @@ export function EditClassroomDialog({
         name: trimmedName,
         description: formData.description || undefined,
         level: formData.level,
+        grade,
         is_active: formData.is_active,
       });
 
@@ -163,6 +184,17 @@ export function EditClassroomDialog({
                 <SelectItem value="C2">C2</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-grade">
+              {t("teacherClassrooms.labels.grade")} *
+            </Label>
+            <GradeSelect
+              id="edit-grade"
+              value={formData.grade}
+              onChange={(grade) => setFormData({ ...formData, grade })}
+              disabled={isSubmitting}
+            />
           </div>
           <div className="flex items-center space-x-2">
             <input

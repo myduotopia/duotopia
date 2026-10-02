@@ -6078,7 +6078,8 @@
     "filter": {
       "label": "Filter by grade",
       "all": "All Grades",
-      "unset": "Grade not set"
+      "unset": "Grade not set",
+      "noMatch": "No classrooms match this grade filter"
     },
     "selection": {
       "selectedCount": "{{count}} classroom(s) selected",

@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import { GradeSelect } from "@/components/classroom/GradeSelect";
 
 interface CreateClassroomDialogProps {
   open: boolean;
@@ -36,16 +38,23 @@ export function CreateClassroomDialog({
   schoolName,
   onSuccess,
 }: CreateClassroomDialogProps) {
-  const [formData, setFormData] = useState({
+  const { t } = useTranslation();
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    level: string;
+    grade: number | null;
+  }>({
     name: "",
     description: "",
     level: "A1",
+    grade: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
   const handleClose = () => {
-    setFormData({ name: "", description: "", level: "A1" });
+    setFormData({ name: "", description: "", level: "A1", grade: null });
     onOpenChange(false);
   };
 
@@ -64,6 +73,13 @@ export function CreateClassroomDialog({
       return;
     }
 
+    // 年級必填（#1097）
+    const { grade } = formData;
+    if (grade === null) {
+      toast.error(t("classroomGrade.required"));
+      return;
+    }
+
     if (!schoolId) {
       toast.error("找不到學校 ID");
       return;
@@ -76,6 +92,7 @@ export function CreateClassroomDialog({
         name: trimmedName,
         description: formData.description || undefined,
         level: formData.level,
+        grade,
       });
 
       toast.success("班級建立成功");
@@ -148,6 +165,17 @@ export function CreateClassroomDialog({
                 <SelectItem value="C2">C2</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="grade">
+              {t("teacherClassrooms.labels.grade")} *
+            </Label>
+            <GradeSelect
+              id="grade"
+              value={formData.grade}
+              onChange={(grade) => setFormData({ ...formData, grade })}
+              disabled={isSubmitting}
+            />
           </div>
         </div>
         <DialogFooter>

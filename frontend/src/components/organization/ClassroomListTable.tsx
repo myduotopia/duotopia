@@ -1,4 +1,6 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -8,11 +10,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Users, Edit2, UserPlus, Send } from "lucide-react";
+import {
+  formatGradeLabel,
+  isValidGrade,
+} from "@/components/classroom/classroomGrade";
 
 export interface Classroom {
   id: string;
   name: string;
   program_level: string;
+  grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
   is_active: boolean;
   created_at: string;
   teacher_name: string | null;
@@ -23,12 +30,25 @@ export interface Classroom {
   program_count: number;
 }
 
+/**
+ * 可否勾選做年級批次調整（#1097）：停用班級會被後端批次端點拒絕（404），
+ * 所以不可勾選。頁面的補填清單與全選範圍使用相同條件（SchoolClassroomsPage）。
+ */
+const isClassroomSelectable = (classroom: Classroom) => classroom.is_active;
+
 interface ClassroomListTableProps {
   classrooms: Classroom[];
   onEdit?: (classroom: Classroom) => void;
   onAssignTeacher?: (classroom: Classroom) => void;
   onViewStudents?: (classroom: Classroom) => void;
   onAssignHomework?: (classroom: Classroom) => void;
+  /**
+   * 勾選欄（#1097）：三個都有傳才顯示。
+   * onToggleAll 由頁面決定作用範圍（目前列出且可勾選的班級）。
+   */
+  selectedIds?: ReadonlySet<string>;
+  onToggle?: (classroomId: string, checked: boolean) => void;
+  onToggleAll?: (checked: boolean) => void;
 }
 
 export function ClassroomListTable({
@@ -37,7 +57,21 @@ export function ClassroomListTable({
   onAssignTeacher,
   onViewStudents,
   onAssignHomework,
+  selectedIds,
+  onToggle,
+  onToggleAll,
 }: ClassroomListTableProps) {
+  const { t } = useTranslation();
+  const showSelection = !!(selectedIds && onToggle && onToggleAll);
+  const selectable = classrooms.filter(isClassroomSelectable);
+  const selectedCount = selectable.filter((c) => selectedIds?.has(c.id)).length;
+  const headerChecked =
+    selectable.length > 0 && selectedCount === selectable.length
+      ? true
+      : selectedCount > 0
+        ? "indeterminate"
+        : false;
+
   const getLevelBadge = (level: string) => {
     const levelColors: Record<string, string> = {
       PREA: "bg-gray-100 text-gray-800",
@@ -63,8 +97,19 @@ export function ClassroomListTable({
     <Table>
       <TableHeader>
         <TableRow>
+          {showSelection && (
+            <TableHead className="w-[40px]">
+              <Checkbox
+                checked={headerChecked}
+                disabled={selectable.length === 0}
+                onCheckedChange={(checked) => onToggleAll!(checked === true)}
+                aria-label={t("classroomGrade.selection.selectAll")}
+              />
+            </TableHead>
+          )}
           <TableHead>班級名稱</TableHead>
           <TableHead>語言程度</TableHead>
+          <TableHead>{t("teacherClassrooms.labels.grade")}</TableHead>
           <TableHead>導師</TableHead>
           <TableHead>學生數量</TableHead>
           {onAssignHomework && <TableHead>派發作業</TableHead>}
@@ -75,8 +120,30 @@ export function ClassroomListTable({
       <TableBody>
         {classrooms.map((classroom) => (
           <TableRow key={classroom.id}>
+            {showSelection && (
+              <TableCell>
+                {isClassroomSelectable(classroom) && (
+                  <Checkbox
+                    checked={selectedIds!.has(classroom.id)}
+                    onCheckedChange={(checked) =>
+                      onToggle!(classroom.id, checked === true)
+                    }
+                    aria-label={t("classroomGrade.selection.selectRow", {
+                      name: classroom.name,
+                    })}
+                  />
+                )}
+              </TableCell>
+            )}
             <TableCell className="font-medium">{classroom.name}</TableCell>
             <TableCell>{getLevelBadge(classroom.program_level)}</TableCell>
+            <TableCell
+              className={
+                isValidGrade(classroom.grade) ? undefined : "text-gray-400"
+              }
+            >
+              {formatGradeLabel(t, classroom.grade)}
+            </TableCell>
             <TableCell>
               {classroom.teacher_name ? (
                 <button
