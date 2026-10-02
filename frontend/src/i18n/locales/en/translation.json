@@ -5356,7 +5356,7 @@
     "revision": {
       "hint": "Revision mode: wrong answers reveal the correct answer; fix them all to submit.",
       "correctAnswer": "Answer: {{answer}}",
-      "settingsChanged": "Your teacher changed how this quiz is scored, so some answers need fixing. Please correct the marked questions and submit again."
+      "settingsChanged": "Your teacher changed how this quiz is scored, so some answers need fixing. Please correct them and submit again."
     }
   },
   "wordSpelling": {
