@@ -9,7 +9,7 @@
    所以能「先發官網、之後再補發 LINE」。
 
 安全防呆：只有 ENVIRONMENT=production 才真的 broadcast 給所有好友；
-其他環境改 push 給 LINE_ANNOUNCE_TEST_USER_ID 並加上 [STAGING] 前綴，
+其他環境改 push 給 LINE_ANNOUNCE_USER_ID 並加上 [STAGING] 前綴，
 避免測試訊息轟炸真實好友、並保護每月訊息量。
 """
 
@@ -262,6 +262,47 @@ class ReleaseAnnouncementService:
         )
         return announcement, True
 
+    @staticmethod
+    async def notify_draft_created(announcement: ReleaseAnnouncement) -> bool:
+        """新草稿建立後推一則「待審核」通知給 LINE_ANNOUNCE_USER_ID。
+
+        staging / production 都會通知（只推給審核者一人，不是 broadcast）。
+        未設定或 LINE 失敗只記 log、回傳 False —— 通知不能讓草稿建立失敗。
+        注意：每則通知消耗 1 則 LINE 訊息量。
+        """
+        token = settings.LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN
+        user_id = settings.LINE_ANNOUNCE_USER_ID
+        if not token or not user_id:
+            logger.info("未設定 LINE 公告收件人，略過草稿通知 id=%s", announcement.id)
+            return False
+
+        title = (
+            announcement.article_title_zh
+            or announcement.release_title
+            or announcement.source_ref
+        )
+        lines = [
+            f"📝 新的更新公告草稿待審核（{announcement.environment}）",
+            title,
+        ]
+        if announcement.issue_numbers:
+            issues = "、".join(
+                f"#{n.strip()}" for n in announcement.issue_numbers.split(",")
+            )
+            lines.append(f"Issue：{issues}")
+        if announcement.generation_error:
+            lines.append("⚠️ AI 產生失敗，草稿暫用 release 標題，請先編修")
+        lines.append(f"審核 / 發布：{settings.FRONTEND_URL.rstrip('/')}/admin")
+
+        try:
+            await LinePublishService.push(
+                user_id, [{"type": "text", "text": "\n".join(lines)}]
+            )
+        except Exception as exc:  # noqa: BLE001 - 通知失敗不影響草稿
+            logger.warning("更新公告草稿通知失敗 id=%s：%s", announcement.id, exc)
+            return False
+        return True
+
     # ============ 編輯 / 合併 / 捨棄 ============
 
     @staticmethod
@@ -417,7 +458,7 @@ class ReleaseAnnouncementService:
     async def _publish_line(
         cls, db: Session, announcement: ReleaseAnnouncement
     ) -> None:
-        """發布到 LINE：production 廣播，其他環境推給測試帳號。"""
+        """發布到 LINE：production 廣播，其他環境推給公告審核者。"""
         if not announcement.line_message_zh:
             raise LinePublishError("LINE 文案不可為空")
 
@@ -440,7 +481,7 @@ class ReleaseAnnouncementService:
             request_id = await LinePublishService.broadcast([flex])
         else:
             request_id = await LinePublishService.push(
-                settings.LINE_ANNOUNCE_TEST_USER_ID or "", [flex]
+                settings.LINE_ANNOUNCE_USER_ID or "", [flex]
             )
 
         announcement.line_request_id = request_id

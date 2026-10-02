@@ -75,7 +75,7 @@ def _settings(monkeypatch):
     monkeypatch.setattr(
         mod.settings, "RELEASE_ANNOUNCEMENT_BANNER_URL", "https://cdn/banner.png"
     )
-    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_TEST_USER_ID", "Utest123")
+    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_USER_ID", "Utest123")
 
 
 class TestParseReleaseTitle:
@@ -369,6 +369,88 @@ class TestPublishWebsite:
 
         assert ann.published_blog_post_id == first_id
         assert db.query(BlogPost).count() == 2
+
+
+class TestNotifyDraftCreated:
+    """建立草稿時推一則通知給 LINE_ANNOUNCE_USER_ID（staging / production 都會）"""
+
+    @pytest.fixture(autouse=True)
+    def _line_configured(self, monkeypatch):
+        from services import release_announcement_service as mod
+
+        monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", "TOKEN")
+        monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_USER_ID", "Ureviewer")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    async def test_pushes_review_notice_to_announce_user(
+        self, test_db_session, environment
+    ):
+        ann = await _make_draft(
+            test_db_session, environment=environment, source_ref=f"n-{environment}"
+        )
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(return_value="REQ"),
+        ) as push:
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is True
+        to, messages = push.await_args.args
+        assert to == "Ureviewer"
+        text = messages[0]["text"]
+        assert environment in text
+        assert AI_RESULT["article_title_zh"] in text
+        assert "https://duotopia.co/admin" in text
+        assert "#860" in text
+
+    @pytest.mark.asyncio
+    async def test_production_notice_is_a_push_not_broadcast(self, test_db_session):
+        """正式版的『通知』只給審核者；對粉絲 broadcast 只在後台按發布時"""
+        ann = await _make_draft(test_db_session, source_ref="n-prod-push")
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(return_value="REQ"),
+        ) as push, patch(
+            "services.release_announcement_service.LinePublishService.broadcast",
+            new=AsyncMock(),
+        ) as broadcast:
+            await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert push.await_count == 1
+        assert broadcast.await_count == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "missing", ["LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", "LINE_ANNOUNCE_USER_ID"]
+    )
+    async def test_skips_when_not_configured(
+        self, test_db_session, monkeypatch, missing
+    ):
+        from services import release_announcement_service as mod
+
+        monkeypatch.setattr(mod.settings, missing, None)
+        ann = await _make_draft(test_db_session, source_ref=f"n-skip-{missing}")
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(),
+        ) as push:
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is False
+        assert push.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_line_failure_does_not_raise(self, test_db_session):
+        """通知失敗不能讓草稿建立失敗"""
+        ann = await _make_draft(test_db_session, source_ref="n-fail")
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(side_effect=LinePublishError("quota exceeded", 429)),
+        ):
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is False
 
 
 class TestPublishLine:

@@ -16,11 +16,11 @@
 | 名稱 | 種類 | 值從哪裡來 | 用哪種帳號取得 | 什麼時候用 | 用在誰身上 |
 |------|------|-----------|---------------|-----------|-----------|
 | `RELEASE_WEBHOOK_SECRET` | Secret（**必填**） | 自己產生：`openssl rand -hex 32` | 不需要 LINE 帳號；有 GitHub repo 管理權限的人設定 | 每次 push `staging` / `main`，CI 呼叫後端建立草稿 | GitHub Actions ↔ 我們的後端（內部驗證，未設定時不會建立任何草稿） |
-| `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN` | Secret（要發 LINE 才需要） | LINE Developers → 官方帳號的 Messaging API channel → **Messaging API** 分頁 → Channel access token (long-lived) → Issue | **官方帳號**：必須是 Duotopia 官方 LINE 帳號的 Messaging API channel，由對官方帳號有管理權限的人登入取得 | 管理者在後台按「發布」並勾選 LINE | production：**broadcast 給官方帳號的所有好友**；其他環境：只推給下一列的測試者 |
-| `LINE_ANNOUNCE_TEST_USER_ID` | Secret（要在 staging 測 LINE 才需要） | 同一個 channel 的 **Basic settings → Your user ID**（`U` 開頭 33 字元） | **個人帳號**：測試者本人，且要先把官方帳號加為好友 | 在 staging 按「發布」勾選 LINE | 只推給這一個人，標題加 `[STAGING]`，不會打擾真實粉絲 |
+| `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN` | Secret（要發 LINE / 收通知才需要） | LINE Developers → 官方帳號的 Messaging API channel → **Messaging API** 分頁 → Channel access token (long-lived) → Issue | **官方帳號**：必須是 Duotopia 官方 LINE 帳號的 Messaging API channel，由對官方帳號有管理權限的人登入取得 | 草稿建立時的通知、後台按「發布」並勾選 LINE | production 發布：**broadcast 給官方帳號的所有好友**；其他情況只推給下一列的審核者 |
+| `LINE_ANNOUNCE_USER_ID` | Secret（要收草稿通知 / 在 staging 測 LINE 才需要） | 審核者的 user ID（`U` 開頭 33 字元）：本人可在同一個 channel 的 **Basic settings → Your user ID** 取得；他人需透過 webhook 事件的 `source.userId` 取得 | **個人帳號**：公告審核者，且要先把官方帳號加為好友 | ① staging / production **建立草稿時**推「待審核」通知 ② staging 按「發布」勾選 LINE | 只推給這一個人（staging 發布的卡片標題加 `[STAGING]`），不會打擾真實粉絲 |
 | `RELEASE_ANNOUNCEMENT_BANNER_URL` | Variable（選填） | 公告樣板圖的 `https://` 網址 | 不需要 LINE 帳號 | 建立草稿時當預設圖片 | LINE 卡片主圖、官網文章封面（未設定時用官網圖示佔位） |
 
-> **為什麼測試者 ID 要另外設？** LINE 的 user ID **依 provider 不同**。
+> **為什麼審核者 ID 要另外設？** LINE 的 user ID **依 provider 不同**。
 > CI 通知 bot 的 `LINE_USER_ID` 屬於另一個 provider，拿官方帳號的 token 推給它會失敗。
 
 ### 維持不動（CI 通知 bot，和粉絲無關）
@@ -49,8 +49,9 @@
    剛啟用的 channel：
    - **Messaging API** 分頁最下方 → Channel access token (long-lived) → **Issue**
      → 存成 `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN`
-   - **Basic settings** 分頁 → **Your user ID** → 存成 `LINE_ANNOUNCE_TEST_USER_ID`
-     （這個人要先用手機把官方帳號加為好友）
+   - 審核者的 user ID → 存成 `LINE_ANNOUNCE_USER_ID`（這個人要先用手機把官方帳號加為好友）
+     - 審核者是登入 LINE Developers 的本人：**Basic settings** 分頁 → **Your user ID**
+     - 審核者是其他人：請對方加好友或傳一句話給官方帳號，從 webhook 事件的 `source.userId` 取得
 4. 產生 webhook 密鑰並存成 `RELEASE_WEBHOOK_SECRET`：
    ```bash
    openssl rand -hex 32
@@ -68,8 +69,8 @@ GitHub 只會顯示**名稱與最後更新時間**，看不到值（設計如此
 
 - `RELEASE_WEBHOOK_SECRET`：push staging 後，Actions 的「Release Announcement Draft」
   不再出現「缺少 RELEASE_WEBHOOK_SECRET」，而是「草稿已建立」或「略過：…」。
-- `LINE_ANNOUNCE_*`：在 staging 後台對一則草稿只勾 LINE 發布，測試者手機收到
-  `[STAGING]` 卡片即代表 token 與 user ID 都正確。
+- `LINE_ANNOUNCE_*`：建立草稿時審核者會收到「📝 新的更新公告草稿待審核」通知；
+  或在 staging 後台對一則草稿只勾 LINE 發布，審核者收到 `[STAGING]` 卡片，即代表 token 與 user ID 都正確。
 
 ---
 
@@ -84,6 +85,7 @@ GitHub 只會顯示**名稱與最後更新時間**，看不到值（設計如此
 
 push staging（合併 Release PR）
   └─ CI：兩個標籤都有 → 讀 issue 留言 → 建立 staging 草稿（不呼叫 Vertex）
+         → LINE 推「待審核」通知給 LINE_ANNOUNCE_USER_ID
          沒有留言 → 退回「解析 release 標題 → Vertex AI」
          沒有 issue 編號 / 標籤不齊 → 不建草稿
 
@@ -93,9 +95,11 @@ push staging（合併 Release PR）
 
 push main（合併 staging → main PR）
   └─ CI：讀 PR 描述的統整區塊 → 建立 production 草稿
+         → LINE 推「待審核」通知給 LINE_ANNOUNCE_USER_ID
 
 管理者後台 /admin →「更新公告」（圖③）
   └─ 確認 / 修改內容 → 勾選 LINE、官網 → 發布
+       （production：broadcast 給所有好友；staging：只推給 LINE_ANNOUNCE_USER_ID）
 ```
 
 - **沒有 `📣 announce` 標籤 = 不需要發布**，CI 不會建立草稿。

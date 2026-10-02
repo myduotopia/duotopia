@@ -469,7 +469,8 @@ jobs:
         # LINE 官方帳號 / 官網更新公告（#804）
         # 必須是 Duotopia 官方帳號的 token（production 會 broadcast 給它的所有好友），
         # 刻意不與 CI 通知 bot 的 LINE_CHANNEL_ACCESS_TOKEN / LINE_USER_ID 共用。
-        # LINE_ANNOUNCE_TEST_USER_ID 讓非 production 環境只推播給測試者本人。
+        # LINE_ANNOUNCE_USER_ID：公告審核者 —— 建立草稿時收到待審核通知，
+        # 非 production 發布 LINE 也只推給這個人（production 才 broadcast 給所有好友）。
         # 只在 secret 有值時才加入：避免把空值塞進 --set-env-vars；
         # 未設定時後台發 LINE 會顯示「尚未設定官方帳號」。
         # 設定方式見 docs/integrations/RELEASE_ANNOUNCEMENT_SETUP.md
@@ -477,9 +478,9 @@ jobs:
         if [ -n "$LINE_TOKEN_VALUE" ]; then
           ENV_VARS="$ENV_VARS,LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN=$LINE_TOKEN_VALUE"
         fi
-        LINE_TEST_USER_VALUE="${{ secrets.LINE_ANNOUNCE_TEST_USER_ID }}"
-        if [ -n "$LINE_TEST_USER_VALUE" ]; then
-          ENV_VARS="$ENV_VARS,LINE_ANNOUNCE_TEST_USER_ID=$LINE_TEST_USER_VALUE"
+        LINE_ANNOUNCE_USER_VALUE="${{ secrets.LINE_ANNOUNCE_USER_ID }}"
+        if [ -n "$LINE_ANNOUNCE_USER_VALUE" ]; then
+          ENV_VARS="$ENV_VARS,LINE_ANNOUNCE_USER_ID=$LINE_ANNOUNCE_USER_VALUE"
         fi
         RELEASE_SECRET_VALUE="${{ secrets.RELEASE_WEBHOOK_SECRET }}"
         if [ -n "$RELEASE_SECRET_VALUE" ]; then

@@ -50,7 +50,9 @@ push staging / main
 ## 安全防呆
 
 - **只有 `ENVIRONMENT=production` 才 broadcast**；其他環境改 `push` 給
-  `LINE_ANNOUNCE_TEST_USER_ID`，標題加 `[STAGING]` 前綴，避免測試訊息轟炸真實好友。
+  `LINE_ANNOUNCE_USER_ID`（公告審核者），標題加 `[STAGING]` 前綴，避免測試訊息轟炸真實好友。
+- 新草稿建立時（staging / production）推一則「待審核」文字通知給 `LINE_ANNOUNCE_USER_ID`
+  （只推審核者，不 broadcast；未設定或失敗只記 log，不影響草稿；每則消耗 1 則訊息量）。
 - 發 LINE 只用官方帳號專用的 `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN`，**不與 CI 通知 bot 共用**，
   避免 broadcast 到錯的帳號；未設定時發 LINE 會失敗並顯示「尚未設定官方帳號」。
 - Webhook 需 `X-Release-Secret`（`secrets.compare_digest` 比對）；
@@ -68,7 +70,7 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 |------|------|------|
 | `RELEASE_WEBHOOK_SECRET` | GitHub secret | CI ↔ backend webhook 驗證 |
 | `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN` | GitHub secret | 官方帳號 Messaging API token |
-| `LINE_ANNOUNCE_TEST_USER_ID` | GitHub secret | 非 production 的 LINE 測試收件人 |
+| `LINE_ANNOUNCE_USER_ID` | GitHub secret | 公告審核者：草稿待審核通知 + 非 production 發布的收件人 |
 | `RELEASE_ANNOUNCEMENT_BANNER_URL` | GitHub repo variable（選填） | 公告樣板圖，未設定時用官網現有圖片佔位 |
 
 各值怎麼取得、用個人或官方帳號，見

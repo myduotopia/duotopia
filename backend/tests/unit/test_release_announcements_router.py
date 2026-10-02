@@ -96,6 +96,20 @@ class TestWebhook:
         row = test_db_session.get(ReleaseAnnouncement, resp.id)
         assert row.line_message_zh == "CI 帶來的現成文案"
 
+    @pytest.mark.asyncio
+    async def test_new_draft_notifies_announce_user_once(self, test_db_session):
+        with patch.object(
+            ra.ReleaseAnnouncementService,
+            "notify_draft_created",
+            new=AsyncMock(return_value=True),
+        ) as notify:
+            first = await _create(test_db_session, source_ref="notify-1")
+            # CI 重跑同一個 commit：草稿已存在，不再通知
+            await _create(test_db_session, source_ref="notify-1")
+
+        assert notify.await_count == 1
+        assert notify.await_args.args[0].id == first.id
+
     def test_content_fields_have_length_limits(self):
         with pytest.raises(ValidationError):
             ra.AnnouncementContent(line_message_zh="字" * 5001)
