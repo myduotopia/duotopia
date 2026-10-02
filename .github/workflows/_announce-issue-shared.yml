@@ -125,6 +125,8 @@ jobs:
         with:
           name: ${{ env.ARTIFACT }}
           path: .announce/issue-${{ inputs.issue_number }}.json
+          # upload-artifact v4.4+ 預設略過隱藏目錄（.announce/）
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
 
@@ -178,7 +180,8 @@ jobs:
   notify-failure:
     name: ⚠️ Notify failure
     needs: [check, generate, publish]
-    if: failure() && needs.check.outputs.run == 'true'
+    # check 自己失敗時 output 是空的，也要通知
+    if: failure() && (needs.check.result == 'failure' || needs.check.outputs.run == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read

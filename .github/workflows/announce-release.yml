@@ -70,6 +70,13 @@ jobs:
           PR="${EVENT_PR:-$INPUT_PR}"
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
 
+          # workflow_dispatch 手動輸入的 PR 編號必須是 staging → main
+          read -r HEAD BASE < <(gh pr view "$PR" --json headRefName,baseRefName -q '"\(.headRefName) \(.baseRefName)"')
+          if [ "$HEAD" != "staging" ] || [ "$BASE" != "main" ]; then
+            echo "❌ PR #$PR 不是 staging → main（$HEAD → $BASE）"
+            exit 1
+          fi
+
           python3 scripts/release_announcement.py pr-block "$PR" > block.json
           if [ "$(jq -r '.complete' block.json)" = "true" ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -168,6 +175,8 @@ jobs:
           path: |
             .announce/release.json
             .announce/issue-*.json
+          # upload-artifact v4.4+ 預設略過隱藏目錄（.announce/）
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
 
@@ -243,7 +252,8 @@ jobs:
   notify-failure:
     name: ⚠️ Notify failure
     needs: [scan, generate, publish]
-    if: failure() && needs.scan.outputs.run == 'true'
+    # scan 自己失敗時 output 是空的，也要通知
+    if: failure() && (needs.scan.result == 'failure' || needs.scan.outputs.run == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -261,4 +271,4 @@ jobs:
           PR: ${{ needs.scan.outputs.pr }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          bash scripts/ci/line_push.sh "$(printf '⚠️ staging → main PR #%s 的統整公告自動產生失敗，請在本機執行 /announce release。\n%s' "$PR" "$RUN_URL")"
+          bash scripts/ci/line_push.sh "$(printf '⚠️ staging → main PR #%s 的統整公告自動產生失敗，請在本機執行 /announce release。\n（部分 issue 的公告留言可能已寫入，重跑時會保留不覆蓋）\n%s' "${PR:-?}" "$RUN_URL")"
