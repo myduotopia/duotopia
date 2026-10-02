@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 
-import type { LayoutDoc } from "@/types/questionBank";
+import type { ExamPoint, LayoutDoc } from "@/types/questionBank";
 import {
   appendBlankToLayout,
   clozeBlankDiff,
@@ -36,6 +36,16 @@ import {
 } from "../questionDraft";
 import type { GroupDraft, QuestionDraft } from "../questionDraft";
 
+const EP: ExamPoint = {
+  id: 7,
+  code: "grammar.tense.present_perfect",
+  names: { "zh-TW": "現在完成式" },
+  parent_id: null,
+  status: "active",
+  order_index: 0,
+  aliases: [],
+};
+
 function doc(...paragraphs: string[]): LayoutDoc {
   return {
     version: 1,
@@ -55,13 +65,17 @@ function filled(q: QuestionDraft, n: number): QuestionDraft {
       { text: "the same", is_correct: false, image_url: null },
       ...q.options.slice(2),
     ],
-    exam_points: [{ id: 1, code: "g.tense", names: { zh: "時態" } }],
+    exam_points: [EP],
     visibility: "private",
   };
 }
 
 function clozeGroup(layout: LayoutDoc, blanks: number[]): GroupDraft {
-  const g = { ...emptyGroupDraft("cloze"), layout, visibility: "private" as const };
+  const g = {
+    ...emptyGroupDraft("cloze"),
+    layout,
+    visibility: "private" as const,
+  };
   return {
     ...g,
     questions: blanks.map((n) => filled(emptyGroupQuestion(g), n)),
@@ -223,7 +237,10 @@ describe("重新編號", () => {
 describe("sortClozeQuestions", () => {
   it("依編號升冪，沒編號排最後", () => {
     const g = emptyGroupDraft("cloze");
-    const mk = (n: number | null) => ({ ...emptyGroupQuestion(g), blank_index: n });
+    const mk = (n: number | null) => ({
+      ...emptyGroupQuestion(g),
+      blank_index: n,
+    });
     const sorted = sortClozeQuestions([mk(3), mk(null), mk(1)]);
     expect(sorted.map((q) => q.blank_index)).toEqual([1, 3, null]);
   });
@@ -234,7 +251,9 @@ describe("sortClozeQuestions", () => {
 describe("clozeBlankError / validateGroupDraft", () => {
   it("一一對應 → 通過（順序無關）", () => {
     expect(clozeBlankError([1, 2], [2, 1])).toBeNull();
-    expect(validateGroupDraft(clozeGroup(doc("a {{1}} b {{2}}"), [1, 2]))).toBeNull();
+    expect(
+      validateGroupDraft(clozeGroup(doc("a {{1}} b {{2}}"), [1, 2])),
+    ).toBeNull();
   });
 
   it("文章沒有空格", () => {

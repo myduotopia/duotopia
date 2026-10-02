@@ -433,7 +433,9 @@ export function nextClozeBlankIndex(g: GroupDraft): number {
 }
 
 /** 小題依空格編號升冪（沒編號的排最後）；克漏字不開放拖曳排序 */
-export function sortClozeQuestions(questions: QuestionDraft[]): QuestionDraft[] {
+export function sortClozeQuestions(
+  questions: QuestionDraft[],
+): QuestionDraft[] {
   return [...questions].sort(
     (a, b) => (a.blank_index ?? Infinity) - (b.blank_index ?? Infinity),
   );
@@ -509,7 +511,9 @@ export function renumberClozeBlanks(g: GroupDraft): GroupDraft {
       g.questions.map((q) => ({
         ...q,
         blank_index:
-          q.blank_index === null ? null : map.get(q.blank_index) ?? q.blank_index,
+          q.blank_index === null
+            ? null
+            : (map.get(q.blank_index) ?? q.blank_index),
       })),
     ),
   };
