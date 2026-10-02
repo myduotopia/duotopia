@@ -229,7 +229,8 @@ def test_create_rejects_bad_grade_range(test_client, teacher_a):
 def test_create_rejects_unopened_type(test_client, teacher_a):
     resp = test_client.post(
         "/api/question-bank/questions",
-        json=_mc_payload(question_type="cloze"),
+        # cloze 已開放（但只能經題組端點建）→ 改用仍未開放的題型
+        json=_mc_payload(question_type="listening"),
         headers=_headers(teacher_a),
     )
     assert resp.status_code == 422  # Literal 擋在 schema 層

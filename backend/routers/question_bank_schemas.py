@@ -24,16 +24,21 @@ from services.question_bank_ai import (
 )
 from services.question_bank_layout import (
     LayoutError,
+    assert_no_cloze_blanks,
     layout_to_plain_text,
+    validate_cloze_blanks,
     validate_glossary,
     validate_layout,
 )
 
 # 可建立的題型：單題端點只收 multiple_choice；reading 只能經題組端點建（#1082）
 SINGLE_CREATABLE_TYPES = (QUESTION_TYPE_MULTIPLE_CHOICE,)
-GROUP_CREATABLE_TYPES = ("reading",)
+GROUP_CREATABLE_TYPES = ("reading", "cloze")
 CREATABLE_TYPES = SINGLE_CREATABLE_TYPES + GROUP_CREATABLE_TYPES
 MAX_GROUP_QUESTIONS = 20
+# 克漏字空格編號範圍（{{n}} 的 n；會考題本原始題號可能到三位數）
+BLANK_INDEX_MIN = 1
+BLANK_INDEX_MAX = 999
 MIN_OPTIONS = 2
 MAX_OPTIONS = 6
 
@@ -122,6 +127,8 @@ class GroupQuestionIn(QuestionBase):
     options: List[OptionIn] = Field(..., min_length=MIN_OPTIONS, max_length=MAX_OPTIONS)
     # 不給就照陣列順序
     group_order: Optional[int] = Field(None, ge=0)
+    # 克漏字小題對應的空格編號（layout 內 {{n}} 的 n）；非克漏字題組留 None（#1085）
+    blank_index: Optional[int] = Field(None, ge=BLANK_INDEX_MIN, le=BLANK_INDEX_MAX)
 
     @model_validator(mode="after")
     def _answers(self):
@@ -132,7 +139,7 @@ class GroupQuestionIn(QuestionBase):
 class QuestionGroupCreate(BaseModel):
     """題組：主圖文 + 小題，一次建立。layout 深度驗證在閱讀題組編輯器那段再做。"""
 
-    question_type: Literal["reading"] = "reading"
+    question_type: Literal["reading", "cloze"] = "reading"
     stimulus_type: Literal["passage", "audio", "dialogue", "image", "mixed"] = "passage"
     title: Optional[str] = Field(None, max_length=200)
     passage_text: Optional[str] = Field(None, max_length=20000)
@@ -171,6 +178,9 @@ class QuestionGroupCreate(BaseModel):
         _validate_layout_fields(self.layout, self.glossary)
         if not (self.passage_text or self.image_url or self.layout):
             raise ValueError("題組需要文章、圖片或排版內容")
+        check_group_blanks(
+            self.question_type, self.layout, [q.blank_index for q in self.questions]
+        )
         return self
 
 
@@ -179,6 +189,23 @@ def _validate_layout_fields(layout, glossary) -> None:
     try:
         validate_layout(layout)
         validate_glossary(glossary)
+    except LayoutError as e:
+        raise ValueError(f"{e.path}: {e.message}") from e
+
+
+def check_group_blanks(question_type: str, layout, blank_indexes: list) -> None:
+    """題組的空格對應檢查（#1085）。不合格拋 ``ValueError("path: message")``。
+
+    - ``cloze``：layout 的 ``{{n}}`` 與小題 ``blank_index`` 必須一一對應
+    - 其他題型（reading）：文章不得含 ``{{n}}``，請改用克漏字題組
+
+    建立時由 schema 呼叫（Pydantic → 422），PATCH 時由 router 用合併後的狀態呼叫。
+    """
+    try:
+        if question_type == "cloze":
+            validate_cloze_blanks(layout, blank_indexes)
+        else:
+            assert_no_cloze_blanks(layout)
     except LayoutError as e:
         raise ValueError(f"{e.path}: {e.message}") from e
 

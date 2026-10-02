@@ -91,6 +91,7 @@ def _question_out(
         "school_id": str(q.school_id) if q.school_id else None,
         "group_id": q.group_id,
         "group_order": q.group_order,
+        "blank_index": q.blank_index,
         "is_owner": q.teacher_id == teacher.id,
         "can_edit": _can_edit(db, teacher, q, perm_cache),
         "options": [

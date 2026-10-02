@@ -245,3 +245,39 @@ def layout_to_plain_text(layout: Any) -> str:
     """layout 所有文字區塊拼成純文字副本（passage_text 用；與前端 layoutToPlainText 對齊）。"""
     parts = [strip_inline_markup(t).strip() for t in _iter_texts(layout)]
     return "\n\n".join(p for p in parts if p)
+
+
+def _fmt(nums) -> str:
+    return "、".join(str(n) for n in nums)
+
+
+def validate_cloze_blanks(layout: Any, blank_indexes: list) -> None:
+    """克漏字題組（#1085）：layout 的 ``{{n}}`` 與小題 ``blank_index`` 必須一一對應。
+
+    ``blank_indexes`` 依小題順序給（可含 ``None`` 代表沒填）。空格編號就是權威：
+    文章有空格卻沒小題、小題指向不存在的空格、或編號重複，都不准儲存。
+    """
+    blanks = layout_blank_indexes(layout)
+    if not blanks:
+        raise LayoutError("layout", "克漏字題組的文章需要至少一個 {{1}} 空格")
+    if any(b is None for b in blank_indexes):
+        raise LayoutError("questions", "每個克漏字小題都要對應一個空格編號")
+    counts: dict[int, int] = {}
+    for b in blank_indexes:
+        counts[b] = counts.get(b, 0) + 1
+    dup = sorted(n for n, c in counts.items() if c > 1)
+    if dup:
+        raise LayoutError("questions", f"有多個小題對應同一個空格：{_fmt(dup)}")
+    missing = sorted(set(blanks) - set(counts))
+    if missing:
+        raise LayoutError("questions", f"文章的空格沒有對應小題：{_fmt(missing)}")
+    extra = sorted(set(counts) - set(blanks))
+    if extra:
+        raise LayoutError("questions", f"小題對應的空格不在文章裡：{_fmt(extra)}")
+
+
+def assert_no_cloze_blanks(layout: Any) -> None:
+    """非克漏字題組不允許文章含 ``{{n}}``（會被 renderer 當空格渲染卻沒有小題）。"""
+    blanks = layout_blank_indexes(layout)
+    if blanks:
+        raise LayoutError("layout", f"文章含空格 {_fmt(blanks)}，請改用克漏字題組")

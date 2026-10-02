@@ -14,9 +14,11 @@ import pytest
 from services.question_bank_layout import (
     MAX_BLOCKS_TOTAL,
     LayoutError,
+    assert_no_cloze_blanks,
     layout_blank_indexes,
     layout_to_plain_text,
     strip_inline_markup,
+    validate_cloze_blanks,
     validate_glossary,
     validate_layout,
 )
@@ -222,3 +224,43 @@ def test_layout_to_plain_text_and_blank_indexes():
     assert "Below is the street map" in text
     assert layout_blank_indexes(dialogue) == []
     assert layout_to_plain_text(None) == ""
+
+
+# ---------------------------------------------------------------- cloze (#1085)
+
+
+def test_validate_cloze_blanks_accepts_matching_sets():
+    cloze = _load(SAMPLES_DIR / "q40-43-cloze.json")
+    # 小題順序與空格順序無關，只看集合是否相等
+    validate_cloze_blanks(cloze, [43, 40, 42, 41])
+
+
+@pytest.mark.parametrize(
+    "blank_indexes, expect",
+    [
+        ([40, 41, 42], "沒有對應小題"),  # 缺 43
+        ([40, 41, 42, 43, 44], "不在文章裡"),  # 多出 44
+        ([40, 40, 42, 43], "同一個空格"),  # 重複
+        ([40, 41, 42, None], "空格編號"),  # 沒填
+    ],
+)
+def test_validate_cloze_blanks_rejects_mismatch(blank_indexes, expect):
+    cloze = _load(SAMPLES_DIR / "q40-43-cloze.json")
+    with pytest.raises(LayoutError) as e:
+        validate_cloze_blanks(cloze, blank_indexes)
+    assert expect in e.value.message
+
+
+def test_validate_cloze_blanks_requires_at_least_one_blank():
+    reading = _load(SAMPLES_DIR / "q25-27-inline-figure.json")
+    with pytest.raises(LayoutError) as e:
+        validate_cloze_blanks(reading, [])
+    assert "至少一個" in e.value.message
+
+
+def test_assert_no_cloze_blanks():
+    assert_no_cloze_blanks(_load(SAMPLES_DIR / "q25-27-inline-figure.json"))
+    assert_no_cloze_blanks(None)
+    with pytest.raises(LayoutError) as e:
+        assert_no_cloze_blanks(_load(SAMPLES_DIR / "q40-43-cloze.json"))
+    assert "克漏字" in e.value.message

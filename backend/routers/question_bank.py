@@ -84,6 +84,7 @@ from routers.question_bank_schemas import (
     QuestionUpdate,
     SINGLE_CREATABLE_TYPES,
     SourceCreate,
+    check_group_blanks,
     _effective_passage_text,
     _validate_options,
 )
@@ -387,6 +388,7 @@ def create_question_group(
                 organization_id=org_uuid,
                 school_id=school_uuid,
                 group_order=qin.group_order if qin.group_order is not None else i,
+                blank_index=qin.blank_index,
             )
             qbs.replace_options(question, [o.model_dump() for o in qin.options])
             qbs.replace_exam_points(
@@ -456,6 +458,7 @@ def _apply_group_question(
     question.organization_id = group.organization_id
     question.school_id = group.school_id
     question.group_order = order
+    question.blank_index = qin.blank_index
     flush_db = None if is_new else db
     qbs.replace_options(question, [o.model_dump() for o in qin.options], db=flush_db)
     qbs.replace_exam_points(
@@ -536,6 +539,8 @@ def update_question_group(
                         if g.questions
                         else "reading",
                         teacher_id=teacher.id,
+                        # 明確給值：Column default 要等 flush 才套，空格檢查需要先讀得到
+                        is_active=True,
                     )
                     _apply_group_question(
                         db, teacher, g, question, qin, order, is_new=True
@@ -555,6 +560,19 @@ def update_question_group(
                         q.grade_min = g.grade_min
                     if "grade_max" in data:
                         q.grade_max = g.grade_max
+
+        # 空格對應以「合併後」的狀態檢查：只改 layout 刪掉空格也要被擋下（#1085）
+        active = [q for q in g.questions if q.is_active]
+        try:
+            check_group_blanks(
+                active[0].question_type if active else "reading",
+                g.layout,
+                [q.blank_index for q in active],
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+            ) from e
 
         g.updated_at = now
         db.commit()
