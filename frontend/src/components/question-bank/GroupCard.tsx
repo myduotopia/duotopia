@@ -595,7 +595,9 @@ export default function GroupCard({
                     index={i}
                     draft={q}
                     onChange={(next) => updateQuestion(q.key, next)}
-                    onRemove={readOnly ? undefined : () => removeQuestion(q.key)}
+                    onRemove={
+                      readOnly ? undefined : () => removeQuestion(q.key)
+                    }
                     excludeId={q.existingId ?? undefined}
                     ttsSettings={ttsSettings}
                     programs={programs}
@@ -686,7 +688,9 @@ export default function GroupCard({
                   variant="ghost"
                   size="sm"
                   className="gap-1.5 text-xs"
-                  onClick={() => onChange(renumberClozeBlanks(draftRef.current))}
+                  onClick={() =>
+                    onChange(renumberClozeBlanks(draftRef.current))
+                  }
                   disabled={disabled}
                   data-testid={`qg-${index}-renumber-blanks`}
                 >

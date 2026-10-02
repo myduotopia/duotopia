@@ -292,72 +292,74 @@ export default function QuestionCard({
       {clozeBlank === null && (
         <>
           <div className="flex gap-2 items-start">
-        <Textarea
-          value={draft.stem}
-          onChange={(e) => patch({ stem: e.target.value, serverError: null })}
-          placeholder={t(
-            stemOptional
-              ? "questionBank.form.stemOptionalPlaceholder"
-              : "questionBank.form.stemPlaceholder",
-          )}
-          rows={2}
-          disabled={locked}
-          className="flex-1"
-          data-testid={tid("stem")}
-        />
-        {/* 語音按鈕組（直排，樣式同單字集）：沒語音 → 只有麥克風；有語音 → 只有播放＋移除 */}
-        <div className="flex flex-col items-center gap-1 shrink-0 self-start">
-          {!draft.stem_audio_url && (
-            <button
-              type="button"
-              onClick={generateAudio}
-              disabled={locked || !stemTrimmed || ttsBusy}
-              className="p-1.5 rounded disabled:opacity-50 text-gray-600 bg-yellow-100 hover:bg-yellow-200"
-              title={t("contentEditor.tooltips.openTTSRecording")}
-              aria-label={t("questionBank.form.generateAudio")}
-              data-testid={tid("mic")}
-            >
-              {ttsBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Mic className="h-4 w-4" />
+            <Textarea
+              value={draft.stem}
+              onChange={(e) =>
+                patch({ stem: e.target.value, serverError: null })
+              }
+              placeholder={t(
+                stemOptional
+                  ? "questionBank.form.stemOptionalPlaceholder"
+                  : "questionBank.form.stemPlaceholder",
               )}
-            </button>
-          )}
-          {draft.stem_audio_url && (
-            <button
-              type="button"
-              onClick={playAudio}
-              className="p-1.5 rounded text-green-600 hover:bg-green-100"
-              title={t("contentEditor.tooltips.playAudio")}
-              aria-label={t("contentEditor.tooltips.playAudio")}
-              data-testid={tid("play")}
-            >
-              <Play className="h-4 w-4" />
-            </button>
-          )}
-          {draft.stem_audio_url && !readOnly && (
-            <button
-              type="button"
-              onClick={() => patch({ stem_audio_url: null })}
-              className="p-1.5 rounded text-red-600 hover:bg-red-100"
-              title={t("contentEditor.tooltips.removeAudio")}
-              aria-label={t("contentEditor.tooltips.removeAudio")}
-              data-testid={tid("audio-remove")}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {/* 題幹插圖（#1083）：與選項圖片同一顆按鈕與上傳路徑 */}
-          <OptionImageButton
-            imageUrl={draft.image_url}
-            onChange={(url) => patch({ image_url: url, serverError: null })}
-            disabled={locked}
-            label={t("questionBank.form.stemImage")}
-            testId={tid("stem-image")}
-          />
-        </div>
-      </div>
+              rows={2}
+              disabled={locked}
+              className="flex-1"
+              data-testid={tid("stem")}
+            />
+            {/* 語音按鈕組（直排，樣式同單字集）：沒語音 → 只有麥克風；有語音 → 只有播放＋移除 */}
+            <div className="flex flex-col items-center gap-1 shrink-0 self-start">
+              {!draft.stem_audio_url && (
+                <button
+                  type="button"
+                  onClick={generateAudio}
+                  disabled={locked || !stemTrimmed || ttsBusy}
+                  className="p-1.5 rounded disabled:opacity-50 text-gray-600 bg-yellow-100 hover:bg-yellow-200"
+                  title={t("contentEditor.tooltips.openTTSRecording")}
+                  aria-label={t("questionBank.form.generateAudio")}
+                  data-testid={tid("mic")}
+                >
+                  {ttsBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+              {draft.stem_audio_url && (
+                <button
+                  type="button"
+                  onClick={playAudio}
+                  className="p-1.5 rounded text-green-600 hover:bg-green-100"
+                  title={t("contentEditor.tooltips.playAudio")}
+                  aria-label={t("contentEditor.tooltips.playAudio")}
+                  data-testid={tid("play")}
+                >
+                  <Play className="h-4 w-4" />
+                </button>
+              )}
+              {draft.stem_audio_url && !readOnly && (
+                <button
+                  type="button"
+                  onClick={() => patch({ stem_audio_url: null })}
+                  className="p-1.5 rounded text-red-600 hover:bg-red-100"
+                  title={t("contentEditor.tooltips.removeAudio")}
+                  aria-label={t("contentEditor.tooltips.removeAudio")}
+                  data-testid={tid("audio-remove")}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {/* 題幹插圖（#1083）：與選項圖片同一顆按鈕與上傳路徑 */}
+              <OptionImageButton
+                imageUrl={draft.image_url}
+                onChange={(url) => patch({ image_url: url, serverError: null })}
+                disabled={locked}
+                label={t("questionBank.form.stemImage")}
+                testId={tid("stem-image")}
+              />
+            </div>
+          </div>
           {draft.image_url && (
             <img
               src={draft.image_url}

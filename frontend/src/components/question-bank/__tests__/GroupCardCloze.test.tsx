@@ -271,11 +271,17 @@ describe("GroupCard 克漏字", () => {
 
   it("「依閱讀順序重新編號」只在編號不是 1..k 時出現，按下後文章與小題一起改", async () => {
     const user = userEvent.setup();
-    render(<Harness initial={clozeDraft(doc("x {{40}} y", "z {{41}} w"), [41, 40])} />);
+    render(
+      <Harness
+        initial={clozeDraft(doc("x {{40}} y", "z {{41}} w"), [41, 40])}
+      />,
+    );
     await user.click(screen.getByTestId("qg-0-renumber-blanks"));
     expect(screen.getByTestId("qg-0-layout-stub").dataset.blanks).toBe("1,2");
     expect(
-      screen.getAllByTestId(/^qg-0-q-\d+-blank-badge$/).map((e) => e.textContent),
+      screen
+        .getAllByTestId(/^qg-0-q-\d+-blank-badge$/)
+        .map((e) => e.textContent),
     ).toEqual([
       "questionBank.group.questions.blankN:1",
       "questionBank.group.questions.blankN:2",
