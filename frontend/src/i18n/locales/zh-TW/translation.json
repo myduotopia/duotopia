@@ -5337,10 +5337,10 @@
       "letters": "差 {{count}} 個字母"
     },
     "grading": {
-      "methodLabel": "評分方式",
-      "pointsPerWord": "每錯一個單字扣 {{points}} 分",
-      "pointsPerLetter": "每錯一個字母扣 {{points}} 分",
-      "caseSensitiveOn": "區分大小寫",
+      "methodPrefix": "評分方式：",
+      "pointsPerWord": "（每錯一個單字扣 {{points}} 分）",
+      "pointsPerLetter": "（每錯一個字母扣 {{points}} 分）",
+      "caseSensitiveSuffix": " · 區分大小寫",
       "partialReason": "{{reason}}，預設扣 {{points}} 分"
     },
     "errors": {
@@ -5350,6 +5350,7 @@
     "confirm": {
       "title": "要用新的評分方式重算成績嗎？",
       "description": "已交卷的 {{count}} 位學生，成績會依新的評分方式重新計算；您之前手動修改過的扣分和總分，會被新的結果取代。",
+      "descriptionUnknownCount": "已交卷學生的成績會依新的評分方式重新計算；您之前手動修改過的扣分和總分，會被新的結果取代。",
       "confirm": "確定重算",
       "cancel": "取消"
     },

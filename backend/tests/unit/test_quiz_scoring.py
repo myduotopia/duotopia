@@ -264,3 +264,30 @@ def test_total_score_with_partial_deductions():
 def test_total_score_clamps_at_zero():
     per_q = 50.0
     assert total_score(per_q, [per_q, per_q]) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 全錯必須剛好全扣（先乘後除；舊寫法先除再加總會少一點點 → 被當部分扣分）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("method", [PER_WORD, PER_WORD_LENIENT])
+def test_all_wrong_words_is_exact_full_deduction_22_questions(method):
+    per_q = 100 / 22
+    assert _ded(method, ["abc", "def", "ghi"], per_q=per_q) == per_q
+
+
+@pytest.mark.parametrize("method", [PER_WORD, PER_WORD_LENIENT])
+def test_all_wrong_words_is_exact_full_deduction_7_words(method):
+    per_q = 100 / 3
+    correct = "one two three four five six seven"
+    student = ["a", "b", "c", "d", "e", "f", "g"]
+    assert _ded(method, student, per_q=per_q, correct=correct) == per_q
+
+
+def test_22_all_wrong_lenient_questions_total_zero():
+    per_q = 100 / 22
+    deductions = [
+        _ded(PER_WORD_LENIENT, ["abc", "def", "ghi"], per_q=per_q) for _ in range(22)
+    ]
+    assert total_score(per_q, deductions) == 0.0

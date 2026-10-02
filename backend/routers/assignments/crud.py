@@ -308,7 +308,8 @@ def _quiz_scoring_points_required(practice_mode: Optional[str], method: str):
 
 
 def _to_points(value: Optional[float]) -> Optional[Decimal]:
-    # validator 已捨到小數兩位；轉 Decimal 與 NUMERIC(5,2) 讀回的型別一致
+    # validator 已擋掉超過一位小數／範圍外的值（不捨入）；轉 Decimal 與
+    # NUMERIC(5,2) 讀回的型別一致
     return None if value is None else Decimal(str(value)).quantize(Decimal("0.01"))
 
 

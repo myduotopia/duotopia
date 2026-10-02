@@ -5309,10 +5309,10 @@
       "letters": "{{count}} letter(s) off"
     },
     "grading": {
-      "methodLabel": "Scoring method",
-      "pointsPerWord": "{{points}} points per wrong word",
-      "pointsPerLetter": "{{points}} points per wrong letter",
-      "caseSensitiveOn": "Case-sensitive",
+      "methodPrefix": "Scoring method: ",
+      "pointsPerWord": " ({{points}} points per wrong word)",
+      "pointsPerLetter": " ({{points}} points per wrong letter)",
+      "caseSensitiveSuffix": " · Case-sensitive",
       "partialReason": "{{reason}}; default deduction {{points}}"
     },
     "errors": {
@@ -5322,6 +5322,7 @@
     "confirm": {
       "title": "Recalculate scores with the new method?",
       "description": "Scores for the {{count}} student(s) who have submitted will be recalculated with the new scoring method. Any deductions or totals you changed by hand will be replaced.",
+      "descriptionUnknownCount": "Scores for students who have submitted will be recalculated with the new scoring method. Any deductions or totals you changed by hand will be replaced.",
       "confirm": "Recalculate",
       "cancel": "Cancel"
     },

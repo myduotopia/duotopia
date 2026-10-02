@@ -188,6 +188,10 @@ export function AssignmentDetailSheet({
   const [editScoring, setEditScoring] =
     useState<QuizScoringSettings>(EMPTY_QUIZ_SCORING);
   const [confirmRecomputeOpen, setConfirmRecomputeOpen] = useState(false);
+  // #1092: /progress 是否載入成功；失敗時不知道交卷人數，改評分方式一律跳確認
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  // #1092: 防止快速連點確認鈕送出兩次 PATCH
+  const savingRef = useRef(false);
 
   const fetchAssignmentData = useCallback(async () => {
     if (!assignment) return;
@@ -198,7 +202,15 @@ export function AssignmentDetailSheet({
         apiClient.get(`/api/teachers/assignments/${assignment.id}`),
         apiClient
           .get(`/api/teachers/assignments/${assignment.id}/progress`)
-          .catch(() => []),
+          // #1092: 記下進度是否載入成功（失敗時改評分方式仍要跳確認）
+          .then((data) => {
+            setProgressLoaded(true);
+            return data;
+          })
+          .catch(() => {
+            setProgressLoaded(false);
+            return [];
+          }),
       ]);
 
       // Store full detail response for advanced settings
@@ -344,7 +356,7 @@ export function AssignmentDetailSheet({
     // Issue #1092: 評分方式未完成（未選 / 扣分不合法）不可儲存
     if (isTypedQuiz && !isQuizScoringComplete(editScoring)) return;
     // Issue #1092: 評分設定有變且已有人交卷 → 先確認（會重算、取代手動扣分）
-    if (scoringChanged && submittedCount > 0) {
+    if (scoringChanged && (!progressLoaded || submittedCount > 0)) {
       setConfirmRecomputeOpen(true);
       return;
     }
@@ -353,6 +365,8 @@ export function AssignmentDetailSheet({
 
   const performSave = async () => {
     if (!assignment || !detailData) return;
+    if (savingRef.current) return; // #1092: 連點確認鈕不重送
+    savingRef.current = true;
     setSaving(true);
     try {
       const response = (await apiClient.patch(
@@ -426,6 +440,7 @@ export function AssignmentDetailSheet({
       }
       toast.error(t("assignmentDetail.messages.updateError", "儲存失敗"));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -1096,9 +1111,12 @@ export function AssignmentDetailSheet({
         open={confirmRecomputeOpen}
         onOpenChange={setConfirmRecomputeOpen}
         title={t("quizScoring.confirm.title")}
-        description={t("quizScoring.confirm.description", {
-          count: submittedCount,
-        })}
+        description={
+          progressLoaded
+            ? t("quizScoring.confirm.description", { count: submittedCount })
+            : // 進度沒載入成功：不知道人數，用不帶數字的說法
+              t("quizScoring.confirm.descriptionUnknownCount")
+        }
         confirmText={t("quizScoring.confirm.confirm")}
         cancelText={t("quizScoring.confirm.cancel")}
         onConfirm={() => {

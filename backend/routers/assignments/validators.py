@@ -67,11 +67,25 @@ def _validate_quiz_scoring_points(value: Optional[float]) -> Optional[float]:
     if not math.isfinite(value):
         raise ValueError("quiz_scoring_points must be a finite number")
     dec = Decimal(str(value))
-    if dec != dec.quantize(_ONE_DECIMAL):
-        raise ValueError("quiz_scoring_points allows at most one decimal place")
+    # 先檢查範圍再檢查小數位：超大值（如 1e30）quantize 會丟 InvalidOperation → 500
     if dec < _MIN_QUIZ_SCORING_POINTS or dec > _MAX_QUIZ_SCORING_POINTS:
         raise ValueError("quiz_scoring_points must be between 0.1 and 100")
+    if dec != dec.quantize(_ONE_DECIMAL):
+        raise ValueError("quiz_scoring_points allows at most one decimal place")
     return float(dec)
+
+
+def _reject_non_finite_points(value: Any) -> Any:
+    """before 驗證：NaN / ±Infinity 換成無法解析的字串，讓 float 型別回標準 422。
+
+    若交給 after validator 擋，錯誤內容的 ``input`` 會是 float nan/inf，FastAPI 預設的
+    422 handler 以 JSON 序列化時不允許 NaN/Infinity → 變成 500。這裡只作用於
+    ``quiz_scoring_points`` 這一個欄位，回應格式仍是 FastAPI 預設的錯誤清單
+    （``type: float_parsing``、``input: "non-finite number"``），不影響其他端點／欄位。
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return "non-finite number"
+    return value
 
 
 class CreateAssignmentRequest(BaseModel):
@@ -118,6 +132,11 @@ class CreateAssignmentRequest(BaseModel):
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("quiz_scoring_points", mode="before")
+    @classmethod
+    def _non_finite_quiz_scoring_points(cls, v: Any) -> Any:
+        return _reject_non_finite_points(v)
 
     @field_validator("quiz_scoring_points")
     @classmethod
@@ -171,6 +190,11 @@ class UpdateAssignmentRequest(BaseModel):
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("quiz_scoring_points", mode="before")
+    @classmethod
+    def _non_finite_quiz_scoring_points(cls, v: Any) -> Any:
+        return _reject_non_finite_points(v)
 
     @field_validator("quiz_scoring_points")
     @classmethod

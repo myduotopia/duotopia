@@ -234,16 +234,18 @@ export function questionDeduction(
   const n = evaluation.wordTotal;
   if (m === "whole_question" || n === 0 || evaluation.isBlank) return perQ;
 
+  // B / C 一律先乘後除、只除一次（與後端一致；全錯時剛好等於 perQ → 全扣）
   let raw: number;
   if (m === "per_word") {
     raw = (perQ * evaluation.wrongWords) / n;
   } else if (m === "per_word_lenient") {
-    const perWord = perQ / n;
-    raw = 0;
+    // 以「半格」計數：整字錯 2、只差 1 字母 1 → perQ × units / (2N)
+    let units = 0;
     evaluation.perWordDistance.forEach((d, i) => {
       if (d === 0) return;
-      raw += evaluation.perWordHalf[i] ? perWord / 2 : perWord;
+      units += evaluation.perWordHalf[i] ? 1 : 2;
     });
+    raw = (perQ * units) / (2 * n);
   } else if (m === "fixed_per_word") {
     raw = (points || 0) * evaluation.wrongWords;
   } else if (m === "fixed_per_letter") {

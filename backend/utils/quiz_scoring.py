@@ -219,18 +219,21 @@ def question_deduction(
         return per_q
 
     per_q_dec = _to_decimal(per_q)
+    # B / C 一律「先乘後除、只除一次」：先除再逐字加總會在 Decimal 精度下少一點點，
+    # 全錯時算出來 < per_q 而被當成部分扣分（例：22 題、3 字全錯 → 4.5 而非全扣）。
     if method == PER_WORD:
         raw = per_q_dec * int(evaluation.get("wrong_words") or 0) / n
     elif method == PER_WORD_LENIENT:
-        per_word = per_q_dec / n
-        raw = Decimal(0)
+        # 以「半格」為單位計數：整字錯 2、只差 1 字母 1 → 扣 per_q × units / (2N)
+        units = 0
         for d, half in zip(
             evaluation.get("per_word_distance") or [],
             evaluation.get("per_word_half") or [],
         ):
             if d == 0:
                 continue
-            raw += per_word / 2 if half else per_word
+            units += 1 if half else 2
+        raw = per_q_dec * units / (2 * n)
     elif method == FIXED_PER_WORD:
         raw = _to_decimal(points or 0) * int(evaluation.get("wrong_words") or 0)
     elif method == FIXED_PER_LETTER:

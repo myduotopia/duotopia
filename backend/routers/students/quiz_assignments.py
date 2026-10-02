@@ -483,7 +483,8 @@ def _typed_answer_data(
     if request.typed_words is not None:
         data["typed_words"] = list(request.typed_words)
         # typed_answer 一律由 typed_words 在後端產生（非空格以單一空白相接），
-        # 不信任 client 送的值 → 學生複盤頁與老師批改頁看到的答案永遠一致
+        # 不信任 client 送的值 → 學生複盤頁與老師批改頁看到的答案內容一致
+        # （批改頁另以「＿」標出空格，複盤頁顯示相接後的文字）
         data["typed_answer"] = " ".join(
             w.strip() for w in request.typed_words if w and w.strip()
         )
@@ -505,6 +506,31 @@ def _typed_is_correct(
         correct_answer,
         bool(getattr(assignment, "quiz_case_sensitive", False)),
     )["is_correct"]
+
+
+def _existing_typed_answers_rejudged(
+    db: Session,
+    assignment: Assignment,
+    items: List[ContentItem],
+    session: PracticeSession,
+) -> Dict[int, PracticeAnswer]:
+    """打字小考 start：先以作業目前設定重判本 session 的答案再回傳（Issue #1092）。
+
+    作答中／訂正中老師改了大小寫開關時，已存的 ``is_correct`` 會過期；前端依
+    ``prior_is_correct`` 鎖定「已答對」題，過期的 True 會讓訂正永遠交不出去。
+    這裡讓 start 自我修正並 commit（設定沒變時 ``is_correct`` 重判結果不變；
+    ``session.correct_count`` 會同步成本作業題目的去重計數）。選擇題小考不經過這裡。
+    """
+    existing = _existing_answers_for_session(db, session.id)
+    items_by_id = {it.id: it for it in items}
+    _sync_typed_correctness(
+        assignment,
+        items_by_id,
+        {k: v for k, v in existing.items() if k in items_by_id},
+        session,
+    )
+    db.commit()
+    return existing
 
 
 def _attach_question_numbers(items: List[ContentItem], builder) -> List[Dict[str, Any]]:
@@ -783,7 +809,7 @@ async def start_word_spelling_quiz(
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
     )
-    existing = _existing_answers_for_session(db, session.id)
+    existing = _existing_typed_answers_rejudged(db, assignment, items, session)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
         prior = existing.get(item.id)
@@ -1025,7 +1051,7 @@ async def start_word_cloze_quiz(
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
     )
-    existing = _existing_answers_for_session(db, session.id)
+    existing = _existing_typed_answers_rejudged(db, assignment, items, session)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
         prior = existing.get(item.id)
@@ -1284,7 +1310,10 @@ def recompute_quiz_scores(db: Session, assignment: Assignment) -> int:
           被新算法取代）
         - 直接寫 ``sa.score``；**不經** ``finalize_quiz_submission``，不動 status／時間戳
           （被退回訂正中的學生仍是 RETURNED）
+    另外，每位學生「還沒交卷」的 session（作答中、訂正中）也重判 ``is_correct``
+    （不寫分數），避免訂正中被鎖定的題目在新設定下變錯而卡住交卷。
     未作答題扣整題。只處理打字小考，其他模式回 0。不 commit，由呼叫端 commit。
+    回傳值只算「已交卷、分數被重算」的人數。
     """
     mode = assignment.practice_mode or ""
     if mode not in TYPED_QUIZ_MODES:
@@ -1302,6 +1331,25 @@ def recompute_quiz_scores(db: Session, assignment: Assignment) -> int:
     )
     recomputed = 0
     for sa in student_assignments:
+        # 還沒交卷的 session（第一次作答中、訂正中）也用新設定重判 is_correct，
+        # 只寫 is_correct / correct_count，不寫分數、不動 status／時間戳。
+        # 否則訂正 session 裡被鎖定的「已答對」題，交卷時會被重判成錯 → 永遠卡在
+        # QUIZ_REVISION_INCOMPLETE（400 會 rollback 重判結果、該題又一直鎖住）。
+        for open_session in (
+            db.query(PracticeSession)
+            .filter(
+                PracticeSession.student_assignment_id == sa.id,
+                PracticeSession.practice_mode == mode,
+                PracticeSession.completed_at.is_(None),
+            )
+            .all()
+        ):
+            _sync_typed_correctness(
+                assignment,
+                items_by_id,
+                latest_quiz_answers_by_item(db, open_session.id, item_ids),
+                open_session,
+            )
         session = _first_completed_quiz_session(db, sa.id, mode)
         if session is None:
             continue

@@ -837,9 +837,99 @@ def test_typed_answer_is_derived_from_typed_words(setup_database):
     assert by_item[1]["student_answer"] == "forward to"
 
 
+def test_case_toggle_during_revision_does_not_deadlock(setup_database):
+    """訂正中改大小寫開關不會卡死：
+    答 Apple（不分大小寫 → 對）→ 交卷 → 退回訂正（訂正 session 帶著「已答對」的 Apple）
+    → 老師改成分大小寫 → start 回傳該題 prior_is_correct=False（解鎖）→ 學生改答 apple
+    → /complete 成功；分數仍是重算後的第一次作答分數（訂正不覆寫）。"""
+    _seed_fresh_quiz("whole_question")
+    s_headers = _student_headers(1)
+    t_headers = _teacher_headers()
+    first = _start(s_headers)
+    assert not _answer(
+        s_headers, first, 1, "look forwerd to", ["look", "forwerd", "to"]
+    )["is_correct"]
+    assert _answer(s_headers, first, 2, "Apple", ["Apple"])["is_correct"]
+    assert _complete(s_headers, first)["score"] == 50.0
+
+    back = client.post(
+        "/api/teachers/assignments/1/return-for-revision",
+        headers=t_headers,
+        json={"student_id": 1},
+    )
+    assert back.status_code == 200, back.text
+    assert _sa(1).status == AssignmentStatus.RETURNED
+
+    resp = _patch(t_headers, quiz_case_sensitive=True)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["recomputed_count"] == 1
+    # 第一次作答重算：兩題都錯 → 0；訂正中狀態不變
+    assert _sa(1).score == 0.0
+    assert _sa(1).status == AssignmentStatus.RETURNED
+
+    start = client.get(
+        "/api/students/assignments/1/vocabulary/spelling_quiz/start",
+        headers=s_headers,
+    )
+    assert start.status_code == 200, start.text
+    revision_session = start.json()["session_id"]
+    assert revision_session != first
+    prior = {w["content_item_id"]: w for w in start.json()["words"]}
+    assert prior[2]["prior_is_correct"] is False  # 解鎖，可重答
+
+    assert _answer(
+        s_headers, revision_session, 1, "look forward to", ["look", "forward", "to"]
+    )["is_correct"]
+    assert _answer(s_headers, revision_session, 2, "apple", ["apple"])["is_correct"]
+    done = _complete(s_headers, revision_session)
+    assert done["score"] == 0.0
+    sa = _sa(1)
+    assert sa.status == AssignmentStatus.RESUBMITTED
+    assert sa.score == 0.0  # 凍結的是重算後的第一次作答分數
+
+
+def test_start_self_heals_stale_revision_session(setup_database):
+    """設定已改但訂正 session 沒被重算（例如舊資料）→ start 時自行重判並解鎖。"""
+    _seed_fresh_quiz("whole_question")
+    s_headers = _student_headers(1)
+    first = _start(s_headers)
+    _answer(s_headers, first, 2, "Apple", ["Apple"])
+    _complete(s_headers, first)
+    back = client.post(
+        "/api/teachers/assignments/1/return-for-revision",
+        headers=_teacher_headers(),
+        json={"student_id": 1},
+    )
+    assert back.status_code == 200, back.text
+    # 直接改 DB（不經 PATCH → 不會觸發 recompute），模擬過期的訂正 session
+    db = TestingSessionLocal()
+    try:
+        db.query(Assignment).filter_by(id=1).one().quiz_case_sensitive = True
+        db.commit()
+    finally:
+        db.close()
+    start = client.get(
+        "/api/students/assignments/1/vocabulary/spelling_quiz/start",
+        headers=s_headers,
+    )
+    assert start.status_code == 200, start.text
+    prior = {w["content_item_id"]: w for w in start.json()["words"]}
+    assert prior[2]["prior_is_correct"] is False
+
+
 @pytest.mark.parametrize(
     "raw_points",
-    ["NaN", "Infinity", "-Infinity", "0.05", "1.25", "0", "100.1"],
+    [
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        "0.05",
+        "1.25",
+        "0",
+        "100.1",
+        "1e30",
+        "-1",
+    ],
 )
 def test_create_rejects_invalid_points_values(setup_database, raw_points):
     """扣分：0.1～100、最多一位小數；NaN / Infinity 一律 422（不是 500）。"""

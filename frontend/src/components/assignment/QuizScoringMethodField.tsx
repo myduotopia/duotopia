@@ -110,7 +110,9 @@ export function QuizScoringMethodField({
   useEffect(() => {
     // 外部重設（例如取消編輯）時同步草稿
     setPointsDraft((prev) => {
-      const parsed = prev.trim() === "" ? null : Number(prev);
+      // 輸入中的「.」等解析成 NaN 的草稿視同 null，不被重設（才能打出 .5）
+      const num = prev.trim() === "" ? null : Number(prev);
+      const parsed = num != null && Number.isNaN(num) ? null : num;
       return parsed === value.points
         ? prev
         : value.points != null

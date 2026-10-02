@@ -253,27 +253,20 @@ export function QuizGradingPanel({
               className="mt-3 border-t pt-2 text-center text-xs text-gray-600"
               data-testid="quiz-scoring-summary"
             >
-              {t("quizScoring.grading.methodLabel")}：
+              {/* 標點（：（）·）都放在 i18n 字串裡，英文介面不會出現全形符號 */}
+              {t("quizScoring.grading.methodPrefix")}
               {t(`quizScoring.methods.${scoringMethod}.label`)}
               {scoringPoints != null &&
                 (scoringMethod === "fixed_per_word" ||
-                  scoringMethod === "fixed_per_letter") && (
-                  <span className="ml-1">
-                    （
-                    {t(
-                      scoringMethod === "fixed_per_letter"
-                        ? "quizScoring.grading.pointsPerLetter"
-                        : "quizScoring.grading.pointsPerWord",
-                      { points: scoringPoints },
-                    )}
-                    ）
-                  </span>
+                  scoringMethod === "fixed_per_letter") &&
+                t(
+                  scoringMethod === "fixed_per_letter"
+                    ? "quizScoring.grading.pointsPerLetter"
+                    : "quizScoring.grading.pointsPerWord",
+                  { points: scoringPoints },
                 )}
-              {settings?.quiz_case_sensitive && (
-                <span className="ml-1">
-                  · {t("quizScoring.grading.caseSensitiveOn")}
-                </span>
-              )}
+              {settings?.quiz_case_sensitive &&
+                t("quizScoring.grading.caseSensitiveSuffix")}
             </div>
           )}
         </Card>

@@ -219,6 +219,40 @@ describe("總分", () => {
   });
 });
 
+describe("全錯必須剛好全扣（先乘後除，與後端一致）", () => {
+  it.each(["per_word", "per_word_lenient"] as const)(
+    "%s：22 題、3 個單字全錯 → 全扣 perQ",
+    (method) => {
+      const perQ = 100 / 22;
+      expect(ded(method, ["abc", "def", "ghi"], null, perQ)).toBe(perQ);
+    },
+  );
+
+  it.each(["per_word", "per_word_lenient"] as const)(
+    "%s：3 題、7 個單字全錯 → 全扣 perQ",
+    (method) => {
+      const perQ = 100 / 3;
+      expect(
+        ded(
+          method,
+          ["a", "b", "c", "d", "e", "f", "g"],
+          null,
+          perQ,
+          "one two three four five six seven",
+        ),
+      ).toBe(perQ);
+    },
+  );
+
+  it("22 題 C 方式全錯 → 總分 0", () => {
+    const perQ = 100 / 22;
+    const deductions = Array.from({ length: 22 }, () =>
+      ded("per_word_lenient", ["abc", "def", "ghi"], null, perQ),
+    );
+    expect(totalScore(perQ, deductions)).toBe(0);
+  });
+});
+
 describe("扣分數值驗證（0.1～100、最多一位小數，與後端一致）", () => {
   it.each([0.1, 0.5, 2, 2.5, 100])("%s 合法", (p) => {
     expect(isValidScoringPoints(p)).toBe(true);

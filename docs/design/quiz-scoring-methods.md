@@ -75,7 +75,8 @@
   同一 transaction 內重算，回應 `recomputed_count`；沒變不重算。
 - 學生作答 `POST .../spelling_quiz/answer`、`.../cloze_quiz/answer`：可帶 `typed_words`。
   有帶時，存下的 `answer_data.typed_answer` 由後端從 `typed_words` 產生（非空格以單一空白相接），
-  不採用 client 送的值 —— 學生複盤頁與老師批改頁永遠顯示同一份答案。
+  不採用 client 送的值 —— 學生複盤頁與老師批改頁的答案內容一致；差別只在呈現：
+  批改頁以「＿」標出空格（如 `＿ forward to`），複盤頁顯示相接後的文字（`forward to`）。
 
 ## 作答中改設定
 
@@ -84,6 +85,16 @@
 `is_correct` 並寫回、同步 `session.correct_count`；答對題數、整題計分的扣分、訂正「全對才能交」
 都用重判後的值。例：學生作答中答 `Apple`（不分大小寫 → 對），老師改成區分大小寫後學生交卷 →
 該題判錯、扣分。舊作答在設定沒變時重判結果與當初相同。
+
+此外，**還沒交卷的 session**（第一次作答中、被退回後的訂正 session）在兩個時間點也會以
+目前設定重判 `is_correct`（只寫 `is_correct` / `correct_count`，不寫分數、不動狀態與時間）：
+
+1. 老師在作業詳情改評分設定時（`recompute_quiz_scores` 一併處理；`recomputed_count` 仍只算
+   「已交卷、分數被重算」的人數）。
+2. 學生打開拼寫／克漏字小考（`start`）時，回傳 `prior_is_correct` 前先重判（自我修正）。
+
+否則訂正 session 裡被前端鎖定的「已答對」題（例如 `Apple`），在改成區分大小寫後交卷時會被
+重判成錯 → 永遠卡在 `QUIZ_REVISION_INCOMPLETE`。訂正交卷仍不覆寫分數（成績以第一次作答為準）。
 
 ## 已知的舊資料細節（可接受）
 

@@ -581,7 +581,11 @@ export default function WordSpellingQuizActivity({
       setPreviewOverlayOpen(true);
     } else {
       // #1045 階段 4c：答錯 → 輸入格直接顯示紅色正解並鎖定，不播動畫
-      setTypedByItem((m) => ({ ...m, [itemId]: currentWord.text || "" }));
+      // #1092: 正解先正規化空白（單一空白分隔），髒資料的連續／開頭空白才不會錯格
+      setTypedByItem((m) => ({
+        ...m,
+        [itemId]: (currentWord.text || "").trim().split(/\s+/).join(" "),
+      }));
     }
   }, [
     currentWord,
