@@ -18,6 +18,7 @@ from models import (
     School,
     Organization,
     TeacherSchool,
+    TeacherOrganization,
     Classroom,
     ClassroomSchool,
 )
@@ -554,3 +555,83 @@ class TestSchoolBatchGrade:
             json={"items": [{"classroom_id": c1.id, "grade": grade}]},
         )
         assert response.status_code == 422
+
+    def test_batch_admin_of_other_school_is_403(
+        self, client, test_db, school, other_school
+    ):
+        """另一間學校的 school_admin 不能改這間學校的班級"""
+        other_admin = _make_teacher(test_db, "other-admin@test.com", "Other Admin")
+        test_db.add(
+            TeacherSchool(
+                teacher_id=other_admin.id,
+                school_id=other_school.id,
+                roles=["school_admin"],
+                is_active=True,
+            )
+        )
+        test_db.commit()
+
+        c1 = _make_classroom(test_db, "C1", grade="5")
+        _link_to_school(test_db, c1, school)
+
+        response = client.post(
+            self._url(school.id),
+            headers=_auth(other_admin),
+            json={"items": [{"classroom_id": c1.id, "grade": 6}]},
+        )
+        assert response.status_code == 403
+        test_db.refresh(c1)
+        assert c1.grade == "5"
+
+    def test_batch_classroom_of_other_school_via_own_url_is_404(
+        self, client, test_db, school, other_school, school_admin
+    ):
+        """用自己學校的 URL 夾帶他校班級 id → 404，他校班級不被改動"""
+        foreign = _make_classroom(test_db, "Foreign", grade="5")
+        _link_to_school(test_db, foreign, other_school)
+
+        response = client.post(
+            self._url(school.id),
+            headers=_auth(school_admin),
+            json={"items": [{"classroom_id": foreign.id, "grade": 6}]},
+        )
+        assert response.status_code == 404
+        test_db.refresh(foreign)
+        assert foreign.grade == "5"
+
+    def test_batch_org_owner_without_school_role_succeeds(
+        self, client, test_db, organization, school
+    ):
+        """機構 org_owner（沒有 TeacherSchool 角色）透過機構權限可批次設定"""
+        owner = _make_teacher(test_db, "owner@test.com", "Org Owner")
+        test_db.add(
+            TeacherOrganization(
+                teacher_id=owner.id,
+                organization_id=organization.id,
+                role="org_owner",
+                is_active=True,
+            )
+        )
+        test_db.commit()
+
+        c1 = _make_classroom(test_db, "C1", grade="2")
+        c2 = _make_classroom(test_db, "C2")
+        for c in (c1, c2):
+            _link_to_school(test_db, c, school)
+
+        response = client.post(
+            self._url(school.id),
+            headers=_auth(owner),
+            json={
+                "items": [
+                    {"classroom_id": c1.id, "grade": 3},
+                    {"classroom_id": c2.id, "grade": 8},
+                ]
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["count"] == 2
+        test_db.refresh(c1)
+        test_db.refresh(c2)
+        assert c1.grade == "3"
+        assert c2.grade == "8"
