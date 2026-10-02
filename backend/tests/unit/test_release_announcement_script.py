@@ -155,6 +155,18 @@ class TestBlockStatus:
         }
 
 
+class TestPrBlockCommand:
+    def test_reads_pr_body_through_public_method(self, monkeypatch, capsys):
+        body = ra.render_block(CONTENT, issues=[1046])
+        monkeypatch.setattr(ra.GhCli, "_detect_repo", lambda self: "o/r")
+        monkeypatch.setattr(
+            ra.GhCli, "get_pr", lambda self, number: {"number": number, "body": body}
+        )
+        ra.main(["pr-block", "1072"])
+        out = __import__("json").loads(capsys.readouterr().out)
+        assert out == {"has_block": True, "complete": True, "issues": [1046]}
+
+
 class TestIssueNumbers:
     @pytest.mark.parametrize(
         "title, expected",

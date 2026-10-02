@@ -364,6 +364,9 @@ class GhCli:
         out = self._run(["api", "--paginate", "--slurp", f"repos/{self.repo}/{path}"])
         return [item for page in json.loads(out or "[]") for item in page]
 
+    def get_pr(self, number: int) -> Dict[str, Any]:
+        return self._api(f"pulls/{number}")
+
     def issue(self, number: int) -> Dict[str, Any]:
         return self._api(f"issues/{number}")
 
@@ -446,7 +449,7 @@ class GhCli:
         return json.loads(out)["html_url"]
 
     def update_pr_body(self, number: int, block: str) -> str:
-        pr = self._api(f"pulls/{number}")
+        pr = self.get_pr(number)
         out = self._run(
             ["api", "-X", "PATCH", f"repos/{self.repo}/pulls/{number}", "--input", "-"],
             stdin=json.dumps({"body": replace_block(pr.get("body"), block)}),
@@ -517,9 +520,7 @@ def cmd_release_scan(args: argparse.Namespace) -> None:
 
 def cmd_pr_block(args: argparse.Namespace) -> None:
     """PR 描述內公告區塊的狀態（CI 判斷要不要自動統整）。"""
-    gh = GhCli()
-    pr = gh._api(f"pulls/{args.pr}")
-    _print(block_status(pr.get("body")))
+    _print(block_status(GhCli().get_pr(args.pr).get("body")))
 
 
 def cmd_render(args: argparse.Namespace) -> None:
