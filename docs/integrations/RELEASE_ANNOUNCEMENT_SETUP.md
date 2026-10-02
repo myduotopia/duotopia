@@ -125,3 +125,21 @@ push main（合併 staging → main PR）
 ![後台更新公告頁](../screenshots/issue-804/announce-admin-page.png)
 
 > 截圖以範例資料產生：圖①② 由 GitHub 官方 markdown API 渲染，圖③ 為本機後台畫面。
+
+---
+
+## 4. 端到端驗證清單
+
+調整公告流程（workflow、腳本、LINE 設定）之後，用一個測試 issue 照順序驗證（範例：#1102）。
+
+| # | 動作 | 預期結果 | 失敗時先查 |
+|---|------|---------|-----------|
+| 1 | 測試 issue 加上 `📣 announce` 與 `✅ tested-in-staging` | CI 自動開進 staging 的 Release PR | Actions →「Automated Release PR」 |
+| 2 | 等待約數分鐘 | issue 出現 `📣 更新公告內容` 留言；`LINE_USER_ID` 收到「公告留言已自動產生」 | Actions →「Announce Issue」（需已合併進 main） |
+| 3 | 合併 Release PR 進 staging | `LINE_ANNOUNCE_USER_ID` 收到「📝 新的更新公告草稿待審核（staging）」 | Actions →「Release Announcement Draft」的「結果」摘要 |
+| 4 | staging 後台 `/admin` →「更新公告」 | 出現該草稿，內容與 issue 留言相同（不是 Vertex 產生） | 草稿的「AI 產生草稿失敗」提醒、issue 留言者是否為團隊成員 |
+| 5 | 只勾 LINE 按「發布」 | `LINE_ANNOUNCE_USER_ID` 收到 `[STAGING]` 卡片 | 草稿的 LINE 錯誤訊息、審核者是否已加官方帳號好友 |
+| 6 | 開 staging → main PR | PR 描述自動出現統整公告；`LINE_USER_ID` 收到通知 | Actions →「Announce Release」 |
+
+- 第 2 步的自動留言（`announce-issue.yml`）**合併進 main 後才生效**；之前請改用本機 `/announce #N`。
+- 測試用公告**不要在 production 後台發布**，production 草稿出現時直接「捨棄」。
