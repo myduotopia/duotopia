@@ -258,8 +258,8 @@ export default function QuestionBankTab({
   // 題組類題型在列表與篩選裡顯示「閱讀題組」，新增清單仍顯示「閱讀測驗」
   const groupTypeLabel = useMemo(
     () => (type: QuestionType) =>
-      type === "reading"
-        ? t("questionBank.groupTypes.reading")
+      type === "reading" || type === "cloze"
+        ? t(`questionBank.groupTypes.${type}`)
         : typeLabel(type),
     [t, typeLabel],
   );

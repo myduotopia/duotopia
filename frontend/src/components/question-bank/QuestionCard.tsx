@@ -69,6 +69,11 @@ export interface QuestionCardProps {
   disabled?: boolean;
   /** 克漏字小題：題幹可空（只顯示編號與選項）；閱讀／單題恆 false */
   stemOptional?: boolean;
+  /**
+   * 克漏字小題對應的空格編號（#1085）：有值時卡片標題改成「空格 n」，
+   * 並隱藏題幹文字框與題幹插圖 —— 題目就是文章裡那個空格，不另外出題幹。
+   */
+  clozeBlank?: number | null;
   /** data-testid 前綴；題組內的小題用 `qg-<n>-q` 避免與外層單題撞名 */
   testIdPrefix?: string;
   /** 題組內的小題：不畫外框，只靠編號與上方淡分隔線區隔（單題流程不用） */
@@ -91,6 +96,7 @@ export default function QuestionCard({
   readOnly = false,
   disabled = false,
   stemOptional = false,
+  clozeBlank = null,
   testIdPrefix = "qc",
   compact = false,
 }: QuestionCardProps) {
@@ -245,9 +251,18 @@ export default function QuestionCard({
     >
       {/* 卡片標題列 */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700">
-          {t("questionBank.form.questionN", { n: index + 1 })}
-        </span>
+        {clozeBlank === null ? (
+          <span className="text-sm font-semibold text-gray-700">
+            {t("questionBank.form.questionN", { n: index + 1 })}
+          </span>
+        ) : (
+          <span
+            className="rounded bg-sky-100 px-2 py-0.5 text-sm font-semibold text-sky-700"
+            data-testid={tid("blank-badge")}
+          >
+            {t("questionBank.group.questions.blankN", { n: clozeBlank })}
+          </span>
+        )}
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-gray-600">
             <Switch
@@ -273,8 +288,10 @@ export default function QuestionCard({
         </div>
       </div>
 
-      {/* 題幹 + 麥克風 */}
-      <div className="flex gap-2 items-start">
+      {/* 題幹 + 麥克風；克漏字小題整段不渲染（題目就是文章裡的那個空格） */}
+      {clozeBlank === null && (
+        <>
+          <div className="flex gap-2 items-start">
         <Textarea
           value={draft.stem}
           onChange={(e) => patch({ stem: e.target.value, serverError: null })}
@@ -341,13 +358,15 @@ export default function QuestionCard({
           />
         </div>
       </div>
-      {draft.image_url && (
-        <img
-          src={draft.image_url}
-          alt=""
-          className="max-h-48 rounded border border-gray-200 object-contain"
-          data-testid={tid("stem-image-preview")}
-        />
+          {draft.image_url && (
+            <img
+              src={draft.image_url}
+              alt=""
+              className="max-h-48 rounded border border-gray-200 object-contain"
+              data-testid={tid("stem-image-preview")}
+            />
+          )}
+        </>
       )}
 
       {/* 重複／相似提示 */}

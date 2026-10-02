@@ -5984,7 +5984,9 @@
         "visibilityRequired": "Choose whether to share the questions",
         "groupNeedsQuestions": "A group needs at least one question",
         "groupNeedsContent": "A group needs a passage, an image or a layout",
-        "layoutIncomplete": "The layout has unfinished blocks (empty text, an image without a file, or a dialogue line missing content)"
+        "layoutIncomplete": "The layout has unfinished blocks (empty text, an image without a file, or a dialogue line missing content)",
+        "clozeNeedsBlank": "A cloze group needs at least one blank in the passage",
+        "clozeBlankMismatch": "Blanks and questions do not match (check for missing, extra or duplicate blank numbers)"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -6108,6 +6110,7 @@
         "bold": "Bold",
         "underline": "Underline",
         "doubleUnderline": "Double underline",
+        "insertBlank": "Insert blank",
         "headingPlaceholder": "Heading text",
         "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
         "imageUpload": "Upload image",
@@ -6157,14 +6160,21 @@
         "title": "Sub-questions ({{count}})",
         "add": "Add sub-question",
         "empty": "No sub-questions yet",
-        "drag": "Drag to reorder"
+        "drag": "Drag to reorder",
+        "blankN": "Blank {{n}}",
+        "blankMissing": "Blank {{n}} is not in the passage",
+        "reinsertBlank": "Re-insert at the end",
+        "removeBlank": "Delete sub-question",
+        "appendBlank": "Insert a blank at the end",
+        "renumber": "Renumber in reading order"
       },
       "render": {
         "zoomImage": "Zoom image"
       }
     },
     "groupTypes": {
-      "reading": "Reading group"
+      "reading": "Reading group",
+      "cloze": "Cloze group"
     }
   },
   "orgMaterials": {

@@ -18,6 +18,7 @@ import {
   ImagePlus,
   Loader2,
   Plus,
+  SquareDashedBottom,
   Trash2,
   Underline,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { LayoutBlock, LayoutDialogueLine } from "@/types/questionBank";
 import type { EditorBlock } from "./layoutEditorModel";
 import type { Marker } from "./layoutInline";
+import { insertBlankIntoText } from "./clozeDraft";
 import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
 import { DOC_TEXTAREA_CLASS, useAutoGrow } from "./useAutoGrow";
 
@@ -45,6 +47,10 @@ export interface LayoutBlockEditorProps {
   onChange: (patch: Partial<LayoutBlock>) => void;
   disabled?: boolean;
   testId: string;
+  /** 克漏字題組：段落工具列多一顆「插入空格」（#1085） */
+  clozeMode?: boolean;
+  /** 下一個要插入的空格編號（目前最大編號 + 1） */
+  nextBlankIndex?: number;
 }
 
 /** 在 textarea 目前選取範圍兩側包上標記；沒選取就插入一對標記讓游標停在中間 */
@@ -128,23 +134,47 @@ function TextBlockFields({
   onChange,
   disabled,
   testId,
+  clozeMode,
+  nextBlankIndex,
 }: {
   block: Extract<EditorBlock, { type: "heading" | "paragraph" }>;
   onChange: (patch: Partial<LayoutBlock>) => void;
   disabled?: boolean;
   testId: string;
+  clozeMode?: boolean;
+  nextBlankIndex?: number;
 }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
   useAutoGrow(ref, block.text);
-  const wrap = (marker: Marker) => {
-    const { next, cursor } = wrapSelection(ref.current, block.text, marker);
-    onChange({ text: next });
+  const moveCursor = (cursor: number) => {
     window.setTimeout(() => {
       ref.current?.focus();
       ref.current?.setSelectionRange(cursor, cursor);
     }, 0);
+  };
+  const wrap = (marker: Marker) => {
+    const { next, cursor } = wrapSelection(ref.current, block.text, marker);
+    onChange({ text: next });
+    moveCursor(cursor);
+  };
+  /**
+   * 插入 `{{n}}`（非包裹式）。只改文字 —— 對應的小題卡由 GroupCard 的
+   * `syncClozeQuestions` 從空格差集自動建立，避免兩邊各自記一份狀態。
+   */
+  const insertBlank = () => {
+    const el = ref.current;
+    const start = el?.selectionStart ?? block.text.length;
+    const end = el?.selectionEnd ?? block.text.length;
+    const { text, cursor } = insertBlankIntoText(
+      block.text,
+      start,
+      end,
+      nextBlankIndex ?? 1,
+    );
+    onChange({ text });
+    moveCursor(cursor);
   };
   const isHeading = block.type === "heading";
   return (
@@ -180,6 +210,20 @@ function TextBlockFields({
             </Select>
           )}
           <MarkupToolbar onWrap={wrap} disabled={disabled} testId={testId} />
+          {clozeMode && !isHeading && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={insertBlank}
+              disabled={disabled}
+              className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-50"
+              title={t("questionBank.group.layout.insertBlank")}
+              data-testid={`${testId}-insert-blank`}
+            >
+              <SquareDashedBottom size={14} />
+              {t("questionBank.group.layout.insertBlank")}
+            </button>
+          )}
         </div>
       )}
       <Textarea
@@ -464,6 +508,8 @@ export default function LayoutBlockEditor({
   onChange,
   disabled,
   testId,
+  clozeMode,
+  nextBlankIndex,
 }: LayoutBlockEditorProps) {
   switch (block.type) {
     case "heading":
@@ -474,6 +520,8 @@ export default function LayoutBlockEditor({
           onChange={onChange}
           disabled={disabled}
           testId={testId}
+          clozeMode={clozeMode}
+          nextBlankIndex={nextBlankIndex}
         />
       );
     case "image":

@@ -34,7 +34,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import {
+  GripVertical,
+  ListOrdered,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
@@ -47,16 +54,25 @@ import { Textarea } from "@/components/ui/textarea";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import type { Program } from "@/types";
-import type { GlossaryEntry } from "@/types/questionBank";
+import type { GlossaryEntry, LayoutDoc } from "@/types/questionBank";
 import LayoutEditor from "./LayoutEditor";
 import QuestionCard from "./QuestionCard";
 import { DOC_TEXTAREA_CLASS, useAutoGrow } from "./useAutoGrow";
 import {
+  appendClozeBlank,
+  clozeCanRenumber,
+  clozeOrphanBlanksOf,
   emptyGroupQuestion,
   glossaryToText,
   groupDerivedText,
   groupPassageText,
+  isClozeGroup,
+  nextClozeBlankIndex,
   parseGlossaryText,
+  reinsertClozeBlank,
+  renumberClozeBlanks,
+  sortClozeQuestions,
+  syncClozeQuestions,
   validateDraft,
   type GroupDraft,
   type QuestionDraft,
@@ -296,14 +312,16 @@ export default function GroupCard({
       questions: draft.questions.map((q) => (q.key === key ? next : q)),
       serverError: null,
     });
+  const scrollToCard = (key: string) =>
+    window.setTimeout(() => {
+      document
+        .getElementById(`question-card-${key}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
   const addQuestion = () => {
     const q = emptyGroupQuestion(draft);
     patch({ questions: [...draft.questions, q] });
-    window.setTimeout(() => {
-      document
-        .getElementById(`question-card-${q.key}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
+    scrollToCard(q.key);
   };
   const removeQuestion = (key: string) =>
     patch({ questions: draft.questions.filter((q) => q.key !== key) });
@@ -315,13 +333,44 @@ export default function GroupCard({
     if (from < 0 || to < 0) return;
     patch({ questions: arrayMove(draft.questions, from, to) });
   };
+  // 以 key 為索引：克漏字的顯示順序依 blank_index 排，與陣列順序不一定相同
   const questionErrors = useMemo(
     () =>
-      draft.questions.map((q) =>
-        validateDraft({ ...q, visibility: draft.visibility ?? q.visibility }),
+      new Map(
+        draft.questions.map((q) => [
+          q.key,
+          validateDraft({ ...q, visibility: draft.visibility ?? q.visibility }),
+        ]),
       ),
     [draft.questions, draft.visibility],
   );
+
+  // ---- 克漏字（#1085）----
+  const isCloze = isClozeGroup(draft);
+  /**
+   * 排版改動一律經過這裡：空格差集 → 新空格自動建卡、消失的空白小題自動移除。
+   * 只有完整 `{{n}}` 配對才算空格，所以打字打到 `{{4` 不會誤新增。
+   */
+  const setLayout = (layout: LayoutDoc | null) => {
+    const base = draftRef.current;
+    const before = base.questions;
+    const synced = syncClozeQuestions(base, base.layout, layout);
+    onChange({ ...synced, layout, serverError: null });
+    const added = synced.questions.find(
+      (q) => !before.some((p) => p.key === q.key),
+    );
+    if (added) scrollToCard(added.key);
+  };
+  const orphanBlanks = clozeOrphanBlanksOf(draft);
+  const addClozeBlank = () => {
+    const base = draftRef.current;
+    const next = appendClozeBlank(base);
+    onChange({ ...next, serverError: null });
+    const added = next.questions.find(
+      (q) => !base.questions.some((p) => p.key === q.key),
+    );
+    if (added) scrollToCard(added.key);
+  };
 
   // ---- 單字註解 ----
   const setGlossary = (glossary: GlossaryEntry[]) => patch({ glossary });
@@ -451,10 +500,12 @@ export default function GroupCard({
             <LayoutEditor
               key={draft.key}
               layout={draft.layout}
-              onChange={(layout) => patch({ layout, serverError: null })}
+              onChange={setLayout}
               glossary={draft.glossary}
               disabled={locked}
               testId={`qg-${index}-layout`}
+              clozeMode={isCloze}
+              nextBlankIndex={isCloze ? nextClozeBlankIndex(draft) : undefined}
             />
           </TabsContent>
           <TabsContent value="text" className="mt-0">
@@ -493,62 +544,157 @@ export default function GroupCard({
               {t("questionBank.group.questions.empty")}
             </p>
           )}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={onQuestionDragEnd}
-          >
-            <SortableContext
-              items={draft.questions.map((q) => q.key)}
-              strategy={verticalListSortingStrategy}
+          {isCloze ? (
+            // 克漏字：排序由空格編號決定（拖曳沒有意義），所以不包 dnd-kit
+            <div className="divide-y divide-gray-100">
+              {sortClozeQuestions(draft.questions).map((q, i) => (
+                <div key={q.key} className="py-1">
+                  {q.blank_index !== null &&
+                    orphanBlanks.includes(q.blank_index) && (
+                      <div
+                        className="mb-1 flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-700"
+                        data-testid={`qg-${index}-q-${i}-blank-missing`}
+                      >
+                        <span>
+                          {t("questionBank.group.questions.blankMissing", {
+                            n: q.blank_index,
+                          })}
+                        </span>
+                        {!readOnly && (
+                          <>
+                            <button
+                              type="button"
+                              className="underline disabled:opacity-50"
+                              disabled={disabled}
+                              onClick={() =>
+                                onChange(
+                                  reinsertClozeBlank(
+                                    draftRef.current,
+                                    q.blank_index as number,
+                                  ),
+                                )
+                              }
+                              data-testid={`qg-${index}-q-${i}-reinsert-blank`}
+                            >
+                              {t("questionBank.group.questions.reinsertBlank")}
+                            </button>
+                            <button
+                              type="button"
+                              className="underline disabled:opacity-50"
+                              disabled={disabled}
+                              onClick={() => removeQuestion(q.key)}
+                              data-testid={`qg-${index}-q-${i}-remove-blank`}
+                            >
+                              {t("questionBank.group.questions.removeBlank")}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  <QuestionCard
+                    index={i}
+                    draft={q}
+                    onChange={(next) => updateQuestion(q.key, next)}
+                    onRemove={readOnly ? undefined : () => removeQuestion(q.key)}
+                    excludeId={q.existingId ?? undefined}
+                    ttsSettings={ttsSettings}
+                    programs={programs}
+                    errorMessage={
+                      questionErrors.get(q.key)
+                        ? t(
+                            `questionBank.form.errors.${questionErrors.get(q.key)}`,
+                          )
+                        : null
+                    }
+                    readOnly={readOnly}
+                    disabled={disabled}
+                    stemOptional
+                    clozeBlank={q.blank_index}
+                    testIdPrefix={`qg-${index}-q`}
+                    compact
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onQuestionDragEnd}
             >
-              <div className="divide-y divide-gray-100">
-                {draft.questions.map((q, i) => (
-                  <SortableQuestion
-                    key={q.key}
-                    id={q.key}
-                    disabled={locked}
-                    handleLabel={t("questionBank.group.questions.drag")}
-                  >
-                    <QuestionCard
-                      index={i}
-                      draft={q}
-                      onChange={(next) => updateQuestion(q.key, next)}
-                      onRemove={
-                        readOnly ? undefined : () => removeQuestion(q.key)
-                      }
-                      excludeId={q.existingId ?? undefined}
-                      ttsSettings={ttsSettings}
-                      programs={programs}
-                      errorMessage={
-                        questionErrors[i]
-                          ? t(`questionBank.form.errors.${questionErrors[i]}`)
-                          : null
-                      }
-                      readOnly={readOnly}
-                      disabled={disabled}
-                      stemOptional={draft.question_type === "cloze"}
-                      testIdPrefix={`qg-${index}-q`}
-                      compact
-                    />
-                  </SortableQuestion>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+              <SortableContext
+                items={draft.questions.map((q) => q.key)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="divide-y divide-gray-100">
+                  {draft.questions.map((q, i) => (
+                    <SortableQuestion
+                      key={q.key}
+                      id={q.key}
+                      disabled={locked}
+                      handleLabel={t("questionBank.group.questions.drag")}
+                    >
+                      <QuestionCard
+                        index={i}
+                        draft={q}
+                        onChange={(next) => updateQuestion(q.key, next)}
+                        onRemove={
+                          readOnly ? undefined : () => removeQuestion(q.key)
+                        }
+                        excludeId={q.existingId ?? undefined}
+                        ttsSettings={ttsSettings}
+                        programs={programs}
+                        errorMessage={
+                          questionErrors.get(q.key)
+                            ? t(
+                                `questionBank.form.errors.${questionErrors.get(q.key)}`,
+                              )
+                            : null
+                        }
+                        readOnly={readOnly}
+                        disabled={disabled}
+                        testIdPrefix={`qg-${index}-q`}
+                        compact
+                      />
+                    </SortableQuestion>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
           {!readOnly && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full gap-1.5"
-              onClick={addQuestion}
-              disabled={disabled}
-              data-testid={`qg-${index}-add-question`}
-            >
-              <Plus size={14} />
-              {t("questionBank.group.questions.add")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5"
+                onClick={isCloze ? addClozeBlank : addQuestion}
+                disabled={disabled}
+                data-testid={`qg-${index}-add-question`}
+              >
+                <Plus size={14} />
+                {t(
+                  isCloze
+                    ? "questionBank.group.questions.appendBlank"
+                    : "questionBank.group.questions.add",
+                )}
+              </Button>
+              {isCloze && clozeCanRenumber(draft) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() => onChange(renumberClozeBlanks(draftRef.current))}
+                  disabled={disabled}
+                  data-testid={`qg-${index}-renumber-blanks`}
+                >
+                  <ListOrdered size={14} />
+                  {t("questionBank.group.questions.renumber")}
+                </Button>
+              )}
+            </div>
           )}
         </div>
 

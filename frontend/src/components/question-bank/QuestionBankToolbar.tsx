@@ -42,11 +42,11 @@ const CREATE_TYPES_ORDER: QuestionType[] = [
 /** 題型下拉的選項順序（同新增清單） */
 export const TYPE_FILTERS: QuestionType[] = CREATE_TYPES_ORDER;
 
-/** 「新增題目 ▽」的題型清單；選擇題與閱讀題組可用（#1082），其餘後續題型接上 */
+/** 「新增題目 ▽」的題型清單；選擇題、閱讀題組（#1082）、克漏字題組（#1085）可用 */
 const CREATE_TYPES: { type: QuestionType; enabled: boolean }[] = [
   { type: "multiple_choice", enabled: true },
   { type: "reading", enabled: true },
-  { type: "cloze", enabled: false },
+  { type: "cloze", enabled: true },
   { type: "fill_in", enabled: false },
   { type: "listening", enabled: false },
   { type: "listening_image", enabled: false },

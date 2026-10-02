@@ -336,7 +336,7 @@ describe("QuestionBankTab", () => {
     expect(listQuestions).not.toHaveBeenCalled();
   });
 
-  it("「新增題目」下拉：選擇題與閱讀題組可點，其餘 disabled；點選呼叫 onCreateQuestion(type)", async () => {
+  it("「新增題目」下拉：選擇題、閱讀與克漏字題組可點，其餘 disabled；點選呼叫 onCreateQuestion(type)", async () => {
     listQuestions.mockResolvedValue(respond([]));
     const onCreate = vi.fn();
     const user = userEvent.setup();
@@ -347,12 +347,15 @@ describe("QuestionBankTab", () => {
     const mc = await screen.findByTestId("question-bank-add-multiple_choice");
     const reading = screen.getByTestId("question-bank-add-reading");
     const cloze = screen.getByTestId("question-bank-add-cloze");
-    expect(cloze.getAttribute("data-disabled")).not.toBeNull();
+    const fillIn = screen.getByTestId("question-bank-add-fill_in");
+    expect(fillIn.getAttribute("data-disabled")).not.toBeNull();
+    // 克漏字題組已開放（#1085）
+    expect(cloze.getAttribute("data-disabled")).toBeNull();
     expect(reading.getAttribute("data-disabled")).toBeNull();
     expect(mc.getAttribute("data-disabled")).toBeNull();
 
-    await user.click(reading);
-    expect(onCreate).toHaveBeenCalledWith("reading");
+    await user.click(cloze);
+    expect(onCreate).toHaveBeenCalledWith("cloze");
   });
 
   it("沒傳 onCreateQuestion 時點選擇題顯示提示", async () => {

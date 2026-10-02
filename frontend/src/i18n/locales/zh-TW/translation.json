@@ -6028,7 +6028,9 @@
         "visibilityRequired": "請選擇是否公開分享考題",
         "groupNeedsQuestions": "題組至少要有一個小題",
         "groupNeedsContent": "題組需要文章、圖片或排版內容",
-        "layoutIncomplete": "排版裡有尚未填完的區塊（空白文字、沒有圖片或對話缺內容）"
+        "layoutIncomplete": "排版裡有尚未填完的區塊（空白文字、沒有圖片或對話缺內容）",
+        "clozeNeedsBlank": "克漏字題組的文章需要至少一個空格",
+        "clozeBlankMismatch": "空格與小題沒有一一對應（請檢查缺少、多餘或重複的空格編號）"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
@@ -6152,6 +6154,7 @@
         "bold": "粗體",
         "underline": "底線",
         "doubleUnderline": "雙底線",
+        "insertBlank": "插入空格",
         "headingPlaceholder": "標題文字",
         "paragraphPlaceholder": "段落內容（**粗體**、__底線__）",
         "imageUpload": "上傳圖片",
@@ -6201,14 +6204,21 @@
         "title": "小題（{{count}}）",
         "add": "新增小題",
         "empty": "還沒有小題",
-        "drag": "拖曳排序"
+        "drag": "拖曳排序",
+        "blankN": "空格 {{n}}",
+        "blankMissing": "找不到空格 {{n}}",
+        "reinsertBlank": "重新插入到文末",
+        "removeBlank": "刪除小題",
+        "appendBlank": "在文末插入空格",
+        "renumber": "依閱讀順序重新編號"
       },
       "render": {
         "zoomImage": "放大圖片"
       }
     },
     "groupTypes": {
-      "reading": "閱讀題組"
+      "reading": "閱讀題組",
+      "cloze": "克漏字題組"
     }
   },
   "orgMaterials": {

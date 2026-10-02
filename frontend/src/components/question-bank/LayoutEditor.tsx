@@ -83,6 +83,10 @@ export interface LayoutEditorProps {
   glossary?: GlossaryEntry[];
   disabled?: boolean;
   testId?: string;
+  /** 克漏字題組：段落工具列多一顆「插入空格」（#1085） */
+  clozeMode?: boolean;
+  /** 下一個要插入的空格編號 */
+  nextBlankIndex?: number;
 }
 
 const BLOCK_TYPES: LayoutBlock["type"][] = [
@@ -209,6 +213,8 @@ function RowView({
   disabled,
   indexOf,
   testId,
+  clozeMode,
+  nextBlankIndex,
 }: {
   row: EditorRow;
   doc: EditorDoc;
@@ -219,6 +225,8 @@ function RowView({
   disabled: boolean;
   indexOf: (blockId: string) => number;
   testId: string;
+  clozeMode?: boolean;
+  nextBlankIndex?: number;
 }) {
   const template = row.columns.map((c) => `minmax(0, ${c.span}fr)`).join(" ");
   const rowRef = useRef<HTMLDivElement>(null);
@@ -264,6 +272,8 @@ function RowView({
                   onChange={(patch) => setDoc(updateBlock(doc, b.id, patch))}
                   disabled={disabled}
                   testId={tid}
+                  clozeMode={clozeMode}
+                  nextBlankIndex={nextBlankIndex}
                 />
               </LayoutBlockChrome>
             );
@@ -282,6 +292,8 @@ export default function LayoutEditor({
   glossary,
   disabled = false,
   testId = "layout-editor",
+  clozeMode,
+  nextBlankIndex,
 }: LayoutEditorProps) {
   const { t } = useTranslation();
   const [doc, setDocState] = useState<EditorDoc>(() => toEditorDoc(layout));
@@ -419,6 +431,8 @@ export default function LayoutEditor({
           disabled={disabled}
           indexOf={indexOf}
           testId={testId}
+          clozeMode={clozeMode}
+          nextBlankIndex={nextBlankIndex}
         />
         <Inserter
           onAdd={(type) => addAt(type, { rowId: row.id, position: "after" })}
