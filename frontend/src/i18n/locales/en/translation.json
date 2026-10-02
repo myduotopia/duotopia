@@ -6115,7 +6115,45 @@
     },
     "messages": {
       "saveSuccess": "Updated grade for {{count}} classroom(s)",
-      "saveFailed": "Failed to update grades. Please try again."
+      "saveFailed": "Failed to update grades. Please try again.",
+      "forbidden": "You don't have permission to adjust classroom grades in this school"
+    },
+    "limitExceeded": "You can adjust up to {{max}} classrooms at a time. Use the grade filter to work in batches."
+  },
+  "schoolClassrooms": {
+    "labels": {
+      "level": "Language Level",
+      "teacher": "Homeroom Teacher",
+      "studentCount": "Students",
+      "status": "Status",
+      "activeToggle": "Classroom active"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "buttons": {
+      "assignTeacher": "Assign teacher",
+      "dispatch": "Assign",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "placeholders": {
+      "name": "e.g. Grade 1 Class A",
+      "level": "Select level"
+    },
+    "dialogs": {
+      "createTitle": "Create Classroom",
+      "createDescription": "Create a new classroom for {{school}}",
+      "schoolFallback": "the school",
+      "editDescription": "Update details for {{name}}"
+    },
+    "messages": {
+      "nameTooLong": "Classroom name cannot exceed 100 characters",
+      "schoolIdMissing": "School ID not found",
+      "createSuccess": "Classroom created",
+      "createFailed": "Failed to create classroom. Please try again later.",
+      "updateSuccess": "Classroom updated"
     }
   }
 }

@@ -62,8 +62,9 @@ export function EditClassroomDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
+  // 每次打開都從班級資料重新帶入，取消後再開不會殘留上次未儲存的修改（#1097）
   useEffect(() => {
-    if (classroom) {
+    if (open && classroom) {
       setFormData({
         name: classroom.name,
         description: "", // API response may not include description
@@ -72,7 +73,7 @@ export function EditClassroomDialog({
         is_active: classroom.is_active,
       });
     }
-  }, [classroom]);
+  }, [classroom, open]);
 
   const handleClose = () => {
     onOpenChange(false);
@@ -85,12 +86,12 @@ export function EditClassroomDialog({
     // Validation
     const trimmedName = formData.name.trim();
     if (!trimmedName) {
-      toast.error("請輸入班級名稱");
+      toast.error(t("teacherClassrooms.messages.nameRequired"));
       return;
     }
 
     if (trimmedName.length > 100) {
-      toast.error("班級名稱不能超過 100 個字元");
+      toast.error(t("schoolClassrooms.messages.nameTooLong"));
       return;
     }
 
@@ -112,7 +113,7 @@ export function EditClassroomDialog({
         is_active: formData.is_active,
       });
 
-      toast.success("班級更新成功");
+      toast.success(t("schoolClassrooms.messages.updateSuccess"));
       onSuccess();
       handleClose();
     } catch (error) {
@@ -120,7 +121,7 @@ export function EditClassroomDialog({
         classroomId: classroom.id,
         formData,
       });
-      toast.error("更新班級失敗，請稍後再試");
+      toast.error(t("teacherClassrooms.messages.updateFailed"));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -133,12 +134,18 @@ export function EditClassroomDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>編輯班級</DialogTitle>
-          <DialogDescription>更新 {classroom.name} 的資訊</DialogDescription>
+          <DialogTitle>{t("teacherClassrooms.dialogs.editTitle")}</DialogTitle>
+          <DialogDescription>
+            {t("schoolClassrooms.dialogs.editDescription", {
+              name: classroom.name,
+            })}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="edit-name">班級名稱 *</Label>
+            <Label htmlFor="edit-name">
+              {t("teacherClassrooms.labels.classroomName")} *
+            </Label>
             <Input
               id="edit-name"
               value={formData.name}
@@ -150,10 +157,12 @@ export function EditClassroomDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-description">描述</Label>
+            <Label htmlFor="edit-description">
+              {t("teacherClassrooms.labels.description")}
+            </Label>
             <Input
               id="edit-description"
-              placeholder="班級描述（選填）"
+              placeholder={t("teacherClassrooms.placeholders.description")}
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
@@ -163,7 +172,9 @@ export function EditClassroomDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-level">語言程度 *</Label>
+            <Label htmlFor="edit-level">
+              {t("schoolClassrooms.labels.level")} *
+            </Label>
             <Select
               value={formData.level}
               onValueChange={(value) =>
@@ -172,7 +183,9 @@ export function EditClassroomDialog({
               disabled={isSubmitting}
             >
               <SelectTrigger id="edit-level">
-                <SelectValue placeholder="選擇程度" />
+                <SelectValue
+                  placeholder={t("schoolClassrooms.placeholders.level")}
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="PREA">PRE-A</SelectItem>
@@ -210,7 +223,9 @@ export function EditClassroomDialog({
               disabled={isSubmitting}
               className="h-4 w-4"
             />
-            <Label htmlFor="edit-active">啟用班級</Label>
+            <Label htmlFor="edit-active">
+              {t("schoolClassrooms.labels.activeToggle")}
+            </Label>
           </div>
         </div>
         <DialogFooter>
@@ -219,10 +234,12 @@ export function EditClassroomDialog({
             onClick={handleClose}
             disabled={isSubmitting}
           >
-            取消
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting ? "儲存中..." : "儲存"}
+            {isSubmitting
+              ? t("schoolClassrooms.buttons.saving")
+              : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

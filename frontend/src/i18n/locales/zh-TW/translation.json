@@ -6159,7 +6159,45 @@
     },
     "messages": {
       "saveSuccess": "已更新 {{count}} 個班級的年級",
-      "saveFailed": "更新年級失敗，請稍後再試"
+      "saveFailed": "更新年級失敗，請稍後再試",
+      "forbidden": "您沒有權限調整此學校的班級年級"
+    },
+    "limitExceeded": "一次最多調整 {{max}} 個班級，請用年級篩選分批處理"
+  },
+  "schoolClassrooms": {
+    "labels": {
+      "level": "語言程度",
+      "teacher": "導師",
+      "studentCount": "學生數量",
+      "status": "狀態",
+      "activeToggle": "啟用班級"
+    },
+    "status": {
+      "active": "啟用",
+      "inactive": "停用"
+    },
+    "buttons": {
+      "assignTeacher": "指派導師",
+      "dispatch": "派發",
+      "creating": "建立中...",
+      "saving": "儲存中..."
+    },
+    "placeholders": {
+      "name": "例如：一年級 A 班",
+      "level": "選擇程度"
+    },
+    "dialogs": {
+      "createTitle": "建立新班級",
+      "createDescription": "為 {{school}} 建立一個新的班級",
+      "schoolFallback": "學校",
+      "editDescription": "更新 {{name}} 的資訊"
+    },
+    "messages": {
+      "nameTooLong": "班級名稱不能超過 100 個字元",
+      "schoolIdMissing": "找不到學校 ID",
+      "createSuccess": "班級建立成功",
+      "createFailed": "建立班級失敗，請稍後再試",
+      "updateSuccess": "班級更新成功"
     }
   }
 }

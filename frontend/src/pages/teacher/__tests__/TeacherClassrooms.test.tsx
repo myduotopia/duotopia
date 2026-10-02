@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
@@ -115,6 +115,26 @@ vi.mock("react-i18next", () => ({
           "{{count}} classroom(s) have no grade set",
         "classroomGrade.banner.action": "Set now",
         "classroomGrade.adjust.button": "Adjust grade",
+        "classroomGrade.adjust.title": "Adjust grade dialog",
+        "classroomGrade.adjust.description": "Choose a direction",
+        "classroomGrade.adjust.up": "Up one grade",
+        "classroomGrade.adjust.down": "Down one grade",
+        "classroomGrade.adjust.changesTitle":
+          "{{count}} classroom(s) will change",
+        "classroomGrade.adjust.skippedTitle": "{{count}} classroom(s) skipped",
+        "classroomGrade.adjust.nothingToChange":
+          "No classrooms can be adjusted",
+        "classroomGrade.adjust.reason.max": "Already Grade {{grade}}",
+        "classroomGrade.adjust.reason.min": "Already Grade {{grade}}",
+        "classroomGrade.adjust.reason.unset": "Grade not set",
+        "classroomGrade.adjust.confirm": "Apply ({{count}})",
+        "classroomGrade.missingDialog.title": "Set classroom grades",
+        "classroomGrade.missingDialog.description": "Choose a grade",
+        "classroomGrade.missingDialog.rowLabel": "Grade for {{name}}",
+        "classroomGrade.missingDialog.save": "Save ({{count}})",
+        "classroomGrade.limitExceeded": "Up to {{max}} classrooms at a time",
+        "classroomGrade.messages.saveSuccess": "Updated {{count}} classroom(s)",
+        "classroomGrade.messages.saveFailed": "Failed to update grades",
       };
       if (key === "teacherClassrooms.messages.totalCount" && opts) {
         return `Total ${opts.count} classrooms`;
@@ -221,6 +241,11 @@ describe("TeacherClassrooms", () => {
     mockWorkspace.selectedSchool = null;
     mockWorkspace.selectedOrganization = null;
     mockWorkspace.organizations = [];
+  });
+
+  // Vitest 3: restores vi.spyOn spies only (module-level vi.fn mocks are untouched)
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("Rendering", () => {
@@ -707,7 +732,6 @@ describe("TeacherClassrooms", () => {
           expect.objectContaining({ name: "New", grade: 4 }),
         );
       });
-      alertSpy.mockRestore();
     });
 
     it("does not expand the row when clicking its checkbox", async () => {
@@ -759,6 +783,108 @@ describe("TeacherClassrooms", () => {
         expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
       });
       expect(screen.queryByText(/have no grade set/)).not.toBeInTheDocument();
+    });
+
+    const tickRow = async (
+      user: ReturnType<typeof userEvent.setup>,
+      name: string,
+    ) => {
+      const checkbox = screen
+        .getAllByRole("checkbox", { name: `Select ${name}` })
+        .find((el) => el.closest("tr"));
+      expect(checkbox).toBeDefined();
+      await user.click(checkbox!);
+    };
+
+    it("adjusts only the classrooms that can move and skips unset ones", async () => {
+      const user = userEvent.setup();
+      mockBatchSetClassroomGrades.mockResolvedValue({
+        updated: [{ id: 1, grade: 4 }],
+        count: 1,
+      });
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await tickRow(user, "Alpha Class"); // grade 3
+      await tickRow(user, "Charlie Class"); // unset
+      expect(screen.getByText("2 classroom(s) selected")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /Adjust grade/ }));
+      await waitFor(() => {
+        expect(screen.getByText("Adjust grade dialog")).toBeInTheDocument();
+      });
+      // Default direction is "up"; Charlie is listed as skipped
+      expect(screen.getByText("1 classroom(s) skipped")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Apply (1)" }));
+
+      await waitFor(() => {
+        expect(mockBatchSetClassroomGrades).toHaveBeenCalledTimes(1);
+      });
+      expect(mockBatchSetClassroomGrades).toHaveBeenCalledWith([
+        { classroom_id: 1, grade: 4 },
+      ]);
+      // Selection is cleared after a successful adjust
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/classroom\(s\) selected/),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("keeps the row selection when saving from the fill-in dialog", async () => {
+      const user = userEvent.setup();
+      mockBatchSetClassroomGrades.mockResolvedValue({
+        updated: [{ id: 3, grade: 2 }],
+        count: 1,
+      });
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await tickRow(user, "Alpha Class");
+      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Set now" }));
+      const rowSelect = await screen.findByLabelText("Grade for Charlie Class");
+      await user.selectOptions(rowSelect, "2");
+      await user.click(screen.getByRole("button", { name: "Save (1)" }));
+
+      await waitFor(() => {
+        expect(mockBatchSetClassroomGrades).toHaveBeenCalledWith([
+          { classroom_id: 3, grade: 2 },
+        ]);
+      });
+      await waitFor(() => {
+        expect(
+          screen.queryByText("Set classroom grades"),
+        ).not.toBeInTheDocument();
+      });
+      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+    });
+
+    it("clears the selection when the grade filter changes", async () => {
+      const user = userEvent.setup();
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha Class").length).toBeGreaterThan(0);
+      });
+
+      await tickRow(user, "Alpha Class");
+      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+
+      await user.selectOptions(findGradeFilter()!, "3");
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/classroom\(s\) selected/),
+        ).not.toBeInTheDocument();
+      });
     });
 
     it("hides checkboxes and the banner in organization mode", async () => {

@@ -5,8 +5,14 @@
  * 計算在 classroomGrade.computeGradeAdjust；API 呼叫交給呼叫端的 onConfirm：
  * 回傳 true 代表成功並關閉視窗，false 代表失敗、保留視窗。
  * 沒有任何班級會變動時，套用按鈕停用。班級名稱不會被更改。
+ * 會變動的班級超過 BATCH_GRADE_MAX_ITEMS（後端上限）時停用套用並提示分批。
+ *
+ * 狀態處理：
+ * - 每次打開時於 render 階段重設方向（不用 effect），重新打開不會先閃出上次的方向。
+ * - 關閉動畫期間沿用最後一次開啟時的班級清單，父層清空勾選或背景重新載入
+ *   時不會閃出「0 個班級」。
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
 import {
@@ -19,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  BATCH_GRADE_MAX_ITEMS,
   GRADE_MAX,
   GRADE_MIN,
   computeGradeAdjust,
@@ -46,17 +53,28 @@ export function AdjustGradeDialog<Id extends string | number>({
   const [direction, setDirection] = useState<GradeAdjustDirection>("up");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // 打開的那一次 render 就重設方向
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) setDirection("up");
-  }, [open]);
+  }
+
+  // 關閉期間顯示最後一次開啟時的清單
+  const [lastOpenClassrooms, setLastOpenClassrooms] = useState(classrooms);
+  if (open && lastOpenClassrooms !== classrooms) {
+    setLastOpenClassrooms(classrooms);
+  }
+  const shownClassrooms = open ? classrooms : lastOpenClassrooms;
 
   const { changes, skipped } = useMemo(
-    () => computeGradeAdjust(classrooms, direction),
-    [classrooms, direction],
+    () => computeGradeAdjust(shownClassrooms, direction),
+    [shownClassrooms, direction],
   );
+  const overLimit = changes.length > BATCH_GRADE_MAX_ITEMS;
 
   const handleConfirm = async () => {
-    if (changes.length === 0 || saving) return;
+    if (changes.length === 0 || overLimit || saving) return;
     setSaving(true);
     try {
       const ok = await onConfirm(
@@ -86,6 +104,7 @@ export function AdjustGradeDialog<Id extends string | number>({
       variant={direction === value ? "default" : "outline"}
       aria-pressed={direction === value}
       onClick={() => setDirection(value)}
+      disabled={saving}
       className="flex-1"
     >
       {icon}
@@ -176,6 +195,12 @@ export function AdjustGradeDialog<Id extends string | number>({
           )}
         </div>
 
+        {overLimit && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {t("classroomGrade.limitExceeded", { max: BATCH_GRADE_MAX_ITEMS })}
+          </p>
+        )}
+
         <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
           <Button
             variant="outline"
@@ -187,7 +212,7 @@ export function AdjustGradeDialog<Id extends string | number>({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={changes.length === 0 || saving}
+            disabled={changes.length === 0 || overLimit || saving}
             className="w-full sm:w-auto"
           >
             {t("classroomGrade.adjust.confirm", { count: changes.length })}

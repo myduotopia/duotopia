@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import {
   GRADE_FILTER_ALL,
   isValidGrade,
@@ -149,10 +149,14 @@ export default function SchoolClassroomsPage() {
     }
   };
 
-  const fetchClassrooms = async () => {
+  // silent：背景重新載入（批次設定年級後，#1097），不切換 loading／error，
+  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容；失敗只記錄。
+  const loadClassrooms = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
 
       const response = await fetch(
         `${API_URL}/api/schools/${schoolId}/classrooms`,
@@ -164,16 +168,18 @@ export default function SchoolClassroomsPage() {
       if (response.ok) {
         const data = await response.json();
         setClassrooms(data);
-      } else {
+      } else if (!silent) {
         setError(`載入班級列表失敗：${response.status}`);
       }
     } catch (error) {
       logError("Failed to fetch classrooms", error, { schoolId });
-      setError("網路連線錯誤");
+      if (!silent) setError("網路連線錯誤");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  const fetchClassrooms = () => loadClassrooms();
 
   const fetchTeachers = async () => {
     if (!schoolId) return;
@@ -250,7 +256,14 @@ export default function SchoolClassroomsPage() {
     });
   };
 
-  // 補填與升降共用批次端點；回傳 true 讓對話框關閉
+  // 使用者改變篩選時清空勾選
+  const handleGradeFilterChange = (value: string) => {
+    setGradeFilter(value);
+    setSelectedIds(new Set());
+  };
+
+  // 補填與升降共用批次端點；回傳 true 讓對話框關閉。
+  // 不動勾選：只有批次調整成功才清（見 handleAdjustGrades）。
   const handleBatchSetGrades = async (
     items: GradeUpdateItem<string>[],
   ): Promise<boolean> => {
@@ -263,16 +276,30 @@ export default function SchoolClassroomsPage() {
       toast.success(
         t("classroomGrade.messages.saveSuccess", { count: res.count }),
       );
-      setSelectedIds(new Set());
-      setShowAdjustGrade(false);
-      setShowMissingGrade(false);
-      fetchClassrooms();
+      void loadClassrooms({ silent: true });
       return true;
     } catch (error) {
       logError("Failed to batch set classroom grades", error, { schoolId });
-      toast.error(t("classroomGrade.messages.saveFailed"));
+      // apiClient 對非 2xx 回應丟 ApiError（含 HTTP status）
+      if (error instanceof ApiError && error.status === 403) {
+        toast.error(t("classroomGrade.messages.forbidden"));
+      } else {
+        toast.error(t("classroomGrade.messages.saveFailed"));
+      }
       return false;
     }
+  };
+
+  // 批次調整成功：先關對話框再清勾選（對話框關閉期間沿用原清單，不會閃出空狀態）
+  const handleAdjustGrades = async (
+    items: GradeUpdateItem<string>[],
+  ): Promise<boolean> => {
+    const ok = await handleBatchSetGrades(items);
+    if (ok) {
+      setShowAdjustGrade(false);
+      setSelectedIds(new Set());
+    }
+    return ok;
   };
 
   return (
@@ -332,7 +359,7 @@ export default function SchoolClassroomsPage() {
             <div className="space-y-3 mb-4">
               <GradeFilterSelect
                 value={gradeFilter}
-                onChange={setGradeFilter}
+                onChange={handleGradeFilterChange}
               />
               {selectedClassrooms.length > 0 && (
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 bg-blue-50 rounded-md">
@@ -423,7 +450,7 @@ export default function SchoolClassroomsPage() {
         open={showAdjustGrade}
         onOpenChange={setShowAdjustGrade}
         classrooms={selectedClassrooms}
-        onConfirm={handleBatchSetGrades}
+        onConfirm={handleAdjustGrades}
       />
 
       {/* Assign Teacher Dialog */}

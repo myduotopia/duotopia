@@ -18,6 +18,13 @@ export const GRADE_OPTIONS: readonly number[] = Array.from(
   (_, i) => GRADE_MIN + i,
 );
 
+/**
+ * 批次設定年級一次最多送出幾個班級。
+ * 必須與後端 BATCH_GRADE_MAX_ITEMS（backend/routers/schemas/classroom.py）一致；
+ * 超過時對話框停用送出並提示分批，不自動切批。
+ */
+export const BATCH_GRADE_MAX_ITEMS = 200;
+
 /** 篩選值：全部／未設定／"1"–"12" */
 export const GRADE_FILTER_ALL = "all";
 export const GRADE_FILTER_UNSET = "unset";

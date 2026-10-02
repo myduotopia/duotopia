@@ -107,14 +107,20 @@ export function ClassroomListTable({
               />
             </TableHead>
           )}
-          <TableHead>班級名稱</TableHead>
-          <TableHead>語言程度</TableHead>
+          <TableHead>{t("teacherClassrooms.labels.classroomName")}</TableHead>
+          <TableHead>{t("schoolClassrooms.labels.level")}</TableHead>
           <TableHead>{t("teacherClassrooms.labels.grade")}</TableHead>
-          <TableHead>導師</TableHead>
-          <TableHead>學生數量</TableHead>
-          {onAssignHomework && <TableHead>派發作業</TableHead>}
-          <TableHead>狀態</TableHead>
-          {onEdit && <TableHead>操作</TableHead>}
+          <TableHead>{t("schoolClassrooms.labels.teacher")}</TableHead>
+          <TableHead>{t("schoolClassrooms.labels.studentCount")}</TableHead>
+          {onAssignHomework && (
+            <TableHead>
+              {t("teacherClassrooms.buttons.dispatchAssignment")}
+            </TableHead>
+          )}
+          <TableHead>{t("schoolClassrooms.labels.status")}</TableHead>
+          {onEdit && (
+            <TableHead>{t("teacherClassrooms.labels.actions")}</TableHead>
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -159,7 +165,7 @@ export function ClassroomListTable({
                   className="text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1"
                 >
                   <UserPlus className="h-4 w-4" />
-                  <span>指派導師</span>
+                  <span>{t("schoolClassrooms.buttons.assignTeacher")}</span>
                 </button>
               )}
             </TableCell>
@@ -181,7 +187,7 @@ export function ClassroomListTable({
                   className="gap-1 text-blue-600 hover:text-blue-800"
                 >
                   <Send className="h-4 w-4" />
-                  派發
+                  {t("schoolClassrooms.buttons.dispatch")}
                 </Button>
               </TableCell>
             )}
@@ -193,7 +199,9 @@ export function ClassroomListTable({
                     : "bg-gray-100 text-gray-800"
                 }`}
               >
-                {classroom.is_active ? "啟用" : "停用"}
+                {classroom.is_active
+                  ? t("schoolClassrooms.status.active")
+                  : t("schoolClassrooms.status.inactive")}
               </span>
             </TableCell>
             {onEdit && (
@@ -205,7 +213,7 @@ export function ClassroomListTable({
                   className="gap-1"
                 >
                   <Edit2 className="h-4 w-4" />
-                  編輯
+                  {t("common.edit")}
                 </Button>
               </TableCell>
             )}

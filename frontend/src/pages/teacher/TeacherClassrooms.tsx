@@ -238,41 +238,59 @@ export default function TeacherClassrooms() {
     }
   };
 
-  const fetchClassrooms = useCallback(async () => {
-    try {
-      setLoading(true);
+  // silent：背景重新載入（批次設定年級後），不切換整頁 loading，
+  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容（#1097）
+  const fetchClassrooms = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      try {
+        if (!silent) setLoading(true);
 
-      // Build API params based on workspace context
-      const apiParams: {
-        mode?: string;
-        school_id?: string;
-        organization_id?: string;
-      } = {};
+        // Build API params based on workspace context
+        const apiParams: {
+          mode?: string;
+          school_id?: string;
+          organization_id?: string;
+        } = {};
 
-      if (mode === "personal") {
-        apiParams.mode = "personal";
-      } else if (selectedSchool) {
-        apiParams.mode = "school";
-        apiParams.school_id = selectedSchool.id;
-      } else if (selectedOrganization) {
-        apiParams.mode = "organization";
-        apiParams.organization_id = selectedOrganization.id;
+        if (mode === "personal") {
+          apiParams.mode = "personal";
+        } else if (selectedSchool) {
+          apiParams.mode = "school";
+          apiParams.school_id = selectedSchool.id;
+        } else if (selectedOrganization) {
+          apiParams.mode = "organization";
+          apiParams.organization_id = selectedOrganization.id;
+        }
+
+        const data = (await apiClient.getTeacherClassrooms(
+          apiParams,
+        )) as ClassroomDetail[];
+        setClassrooms(data);
+      } catch (err) {
+        console.error("Fetch classrooms error:", err);
+      } finally {
+        if (!silent) setLoading(false);
       }
-
-      const data = (await apiClient.getTeacherClassrooms(
-        apiParams,
-      )) as ClassroomDetail[];
-      setClassrooms(data);
-    } catch (err) {
-      console.error("Fetch classrooms error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [mode, selectedSchool, selectedOrganization]);
+    },
+    [mode, selectedSchool, selectedOrganization],
+  );
 
   useEffect(() => {
     fetchClassrooms();
   }, [fetchClassrooms]);
+
+  // 使用者改變列出範圍（篩選、搜尋、工作區）時清空勾選（#1097）
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [
+    searchQuery,
+    levelFilter,
+    gradeFilter,
+    mode,
+    selectedSchool,
+    selectedOrganization,
+  ]);
 
   const handleEdit = (classroom: ClassroomDetail) => {
     setEditingClassroom(classroom);
@@ -361,7 +379,8 @@ export default function TeacherClassrooms() {
     }
   };
 
-  // 補填年級與批次升降共用同一個批次端點（#1097）；回傳 true 讓對話框關閉
+  // 補填年級與批次升降共用同一個批次端點（#1097）；回傳 true 讓對話框關閉。
+  // 不動勾選：補填不應清掉使用者的勾選，只有批次調整成功才清（見 handleAdjustGrades）。
   const handleBatchSetGrades = async (
     items: GradeUpdateItem<number>[],
   ): Promise<boolean> => {
@@ -372,16 +391,25 @@ export default function TeacherClassrooms() {
       toast.success(
         t("classroomGrade.messages.saveSuccess", { count: res.count }),
       );
-      setSelectedIds(new Set());
-      setShowAdjustGrade(false);
-      setShowMissingGrade(false);
-      await fetchClassrooms();
+      void fetchClassrooms({ silent: true });
       return true;
     } catch (err) {
       console.error("Failed to set classroom grades:", err);
       toast.error(t("classroomGrade.messages.saveFailed"));
       return false;
     }
+  };
+
+  // 批次調整成功：先關對話框再清勾選（對話框關閉期間沿用原清單，不會閃出空狀態）
+  const handleAdjustGrades = async (
+    items: GradeUpdateItem<number>[],
+  ): Promise<boolean> => {
+    const ok = await handleBatchSetGrades(items);
+    if (ok) {
+      setShowAdjustGrade(false);
+      setSelectedIds(new Set());
+    }
+    return ok;
   };
 
   const formatDate = (dateString?: string) => {
@@ -603,7 +631,7 @@ export default function TeacherClassrooms() {
         </h2>
         <div className="flex items-center space-x-2 sm:space-x-4 w-full sm:w-auto">
           <Button
-            onClick={fetchClassrooms}
+            onClick={() => fetchClassrooms()}
             variant="outline"
             size="sm"
             className="flex-1 sm:flex-none"
@@ -1524,7 +1552,7 @@ export default function TeacherClassrooms() {
         open={showAdjustGrade}
         onOpenChange={setShowAdjustGrade}
         classrooms={selectedClassrooms}
-        onConfirm={handleBatchSetGrades}
+        onConfirm={handleAdjustGrades}
       />
 
       {/* Assignment Dialog */}

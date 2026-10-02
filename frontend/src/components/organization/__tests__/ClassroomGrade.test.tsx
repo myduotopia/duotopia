@@ -1,6 +1,9 @@
 /**
  * 機構後台班級年級（#1097）：ClassroomListTable 年級欄／勾選欄、
- * CreateClassroomDialog 與 EditClassroomDialog 的年級必填。
+ * CreateClassroomDialog 與 EditClassroomDialog 的年級必填與 i18n。
+ *
+ * react-i18next 的 mock 直接讀 zh-TW translation.json，確保轉成 i18n 後
+ * 中文畫面與原本寫死的文字一字不差。
  *
  * SchoolClassroomsPage 本身用 raw fetch + auth store + router 載入資料，
  * 這裡不測頁面層的篩選／批次調整接線。
@@ -13,27 +16,31 @@ import { EditClassroomDialog } from "../EditClassroomDialog";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, opts?: Record<string, unknown>) => {
-      const translations: Record<string, string> = {
-        "teacherClassrooms.labels.grade": "Grade",
-        "classroomGrade.gradeLabel": "Grade {{grade}}",
-        "classroomGrade.unset": "Not set",
-        "classroomGrade.selectPlaceholder": "Select a grade",
-        "classroomGrade.required": "Please select a grade",
-        "classroomGrade.selection.selectAll": "Select all listed classrooms",
-        "classroomGrade.selection.selectRow": "Select {{name}}",
-      };
-      const template = translations[key];
-      if (!template) return key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(opts?.[name] ?? ""),
+vi.mock("react-i18next", async () => {
+  const zh = (await import("@/i18n/locales/zh-TW/translation.json")).default;
+  const lookup = (key: string): unknown =>
+    key
+      .split(".")
+      .reduce<unknown>(
+        (node, part) =>
+          node && typeof node === "object"
+            ? (node as Record<string, unknown>)[part]
+            : undefined,
+        zh,
       );
-    },
-    i18n: { language: "en" },
-  }),
-}));
+  return {
+    useTranslation: () => ({
+      t: (key: string, opts?: Record<string, unknown>) => {
+        const template = lookup(key);
+        if (typeof template !== "string") return key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(opts?.[name] ?? ""),
+        );
+      },
+      i18n: { language: "zh-TW" },
+    }),
+  };
+});
 
 vi.mock("@/lib/api", () => ({
   apiClient: {
@@ -73,14 +80,43 @@ const classrooms: Classroom[] = [
   { ...baseClassroom, id: "3", name: "停用班", grade: 5, is_active: false },
 ];
 
-describe("ClassroomListTable grade (#1097)", () => {
-  it("renders the grade column with labels and Not set", () => {
+describe("ClassroomListTable (#1097)", () => {
+  it("renders the same zh-TW headers and badges as before the i18n conversion", () => {
+    render(
+      <ClassroomListTable
+        classrooms={classrooms}
+        onEdit={vi.fn()}
+        onAssignHomework={vi.fn()}
+      />,
+    );
+
+    for (const header of [
+      "班級名稱",
+      "語言程度",
+      "年級",
+      "導師",
+      "學生數量",
+      "派發作業",
+      "狀態",
+      "操作",
+    ]) {
+      expect(
+        screen.getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.getAllByText("指派導師")).toHaveLength(3);
+    expect(screen.getAllByText("派發")).toHaveLength(3);
+    expect(screen.getAllByText("編輯")).toHaveLength(3);
+    expect(screen.getAllByText("啟用")).toHaveLength(2);
+    expect(screen.getByText("停用")).toBeInTheDocument();
+  });
+
+  it("renders the grade column with labels and 未設定", () => {
     render(<ClassroomListTable classrooms={classrooms} />);
 
-    expect(screen.getByText("Grade")).toBeInTheDocument();
-    expect(screen.getByText("Grade 3")).toBeInTheDocument();
-    expect(screen.getByText("Not set")).toBeInTheDocument();
-    expect(screen.getByText("Grade 5")).toBeInTheDocument();
+    expect(screen.getByText("3 年級")).toBeInTheDocument();
+    expect(screen.getByText("未設定")).toBeInTheDocument();
+    expect(screen.getByText("5 年級")).toBeInTheDocument();
   });
 
   it("hides the checkbox column when selection props are not passed", () => {
@@ -99,13 +135,13 @@ describe("ClassroomListTable grade (#1097)", () => {
     );
 
     expect(
-      screen.getByRole("checkbox", { name: "Select 一年級 A 班" }),
+      screen.getByRole("checkbox", { name: "選取 一年級 A 班" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("checkbox", { name: "Select 二年級 B 班" }),
+      screen.getByRole("checkbox", { name: "選取 二年級 B 班" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("checkbox", { name: "Select 停用班" }),
+      screen.queryByRole("checkbox", { name: "選取 停用班" }),
     ).not.toBeInTheDocument();
   });
 
@@ -121,13 +157,11 @@ describe("ClassroomListTable grade (#1097)", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Select 一年級 A 班" }),
-    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取 一年級 A 班" }));
     expect(onToggle).toHaveBeenCalledWith("1", true);
 
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Select all listed classrooms" }),
+      screen.getByRole("checkbox", { name: "全選目前列出的班級" }),
     );
     expect(onToggleAll).toHaveBeenCalledWith(true);
   });
@@ -143,14 +177,38 @@ describe("ClassroomListTable grade (#1097)", () => {
     );
 
     expect(
-      screen.getByRole("checkbox", { name: "Select all listed classrooms" }),
+      screen.getByRole("checkbox", { name: "全選目前列出的班級" }),
     ).toHaveAttribute("data-state", "checked");
   });
 });
 
-describe("CreateClassroomDialog grade (#1097)", () => {
+describe("CreateClassroomDialog (#1097)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("renders the same zh-TW texts as before the i18n conversion", () => {
+    render(
+      <CreateClassroomDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        schoolId="school-1"
+        schoolName="測試學校"
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("建立新班級")).toBeInTheDocument();
+    expect(
+      screen.getByText("為 測試學校 建立一個新的班級"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("例如：一年級 A 班"),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("班級描述（選填）")).toBeInTheDocument();
+    expect(screen.getByLabelText("描述")).toBeInTheDocument();
+    expect(screen.getByText("語言程度 *")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
   });
 
   it("blocks submit without a grade, then sends the chosen grade", async () => {
@@ -171,10 +229,10 @@ describe("CreateClassroomDialog grade (#1097)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "建立" }));
 
-    expect(toast.error).toHaveBeenCalledWith("Please select a grade");
+    expect(toast.error).toHaveBeenCalledWith("請選擇年級");
     expect(apiClient.createSchoolClassroom).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Grade *"), {
+    fireEvent.change(screen.getByLabelText("年級 *"), {
       target: { value: "3" },
     });
     fireEvent.click(screen.getByRole("button", { name: "建立" }));
@@ -186,12 +244,29 @@ describe("CreateClassroomDialog grade (#1097)", () => {
       );
     });
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(toast.success).toHaveBeenCalledWith("班級建立成功");
   });
 });
 
-describe("EditClassroomDialog grade (#1097)", () => {
+describe("EditClassroomDialog (#1097)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("renders the same zh-TW texts as before the i18n conversion", () => {
+    render(
+      <EditClassroomDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        classroom={baseClassroom}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("編輯班級")).toBeInTheDocument();
+    expect(screen.getByText("更新 一年級 A 班 的資訊")).toBeInTheDocument();
+    expect(screen.getByLabelText("啟用班級")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "儲存" })).toBeInTheDocument();
   });
 
   it("requires picking a grade when the classroom has none", async () => {
@@ -206,10 +281,10 @@ describe("EditClassroomDialog grade (#1097)", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "儲存" }));
-    expect(toast.error).toHaveBeenCalledWith("Please select a grade");
+    expect(toast.error).toHaveBeenCalledWith("請選擇年級");
     expect(apiClient.updateSchoolClassroom).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Grade *"), {
+    fireEvent.change(screen.getByLabelText("年級 *"), {
       target: { value: "7" },
     });
     fireEvent.click(screen.getByRole("button", { name: "儲存" }));
@@ -233,7 +308,7 @@ describe("EditClassroomDialog grade (#1097)", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Grade *")).toHaveValue("3");
+    expect(screen.getByLabelText("年級 *")).toHaveValue("3");
     fireEvent.click(screen.getByRole("button", { name: "儲存" }));
 
     await waitFor(() => {
@@ -242,5 +317,29 @@ describe("EditClassroomDialog grade (#1097)", () => {
         expect.objectContaining({ grade: 3 }),
       );
     });
+  });
+
+  it("discards unsaved edits when the dialog is cancelled and reopened", async () => {
+    const props = {
+      onOpenChange: vi.fn(),
+      classroom: baseClassroom,
+      onSuccess: vi.fn(),
+    };
+    const { rerender } = render(<EditClassroomDialog open={true} {...props} />);
+
+    fireEvent.change(screen.getByLabelText("年級 *"), {
+      target: { value: "9" },
+    });
+    expect(screen.getByLabelText("年級 *")).toHaveValue("9");
+
+    // Cancel: the parent closes the dialog without saving
+    rerender(<EditClassroomDialog open={false} {...props} />);
+    // Reopen the same classroom
+    rerender(<EditClassroomDialog open={true} {...props} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("年級 *")).toHaveValue("3");
+    });
+    expect(apiClient.updateSchoolClassroom).not.toHaveBeenCalled();
   });
 });

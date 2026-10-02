@@ -64,12 +64,12 @@ export function CreateClassroomDialog({
     // Validation
     const trimmedName = formData.name.trim();
     if (!trimmedName) {
-      toast.error("請輸入班級名稱");
+      toast.error(t("teacherClassrooms.messages.nameRequired"));
       return;
     }
 
     if (trimmedName.length > 100) {
-      toast.error("班級名稱不能超過 100 個字元");
+      toast.error(t("schoolClassrooms.messages.nameTooLong"));
       return;
     }
 
@@ -81,7 +81,7 @@ export function CreateClassroomDialog({
     }
 
     if (!schoolId) {
-      toast.error("找不到學校 ID");
+      toast.error(t("schoolClassrooms.messages.schoolIdMissing"));
       return;
     }
 
@@ -95,12 +95,12 @@ export function CreateClassroomDialog({
         grade,
       });
 
-      toast.success("班級建立成功");
+      toast.success(t("schoolClassrooms.messages.createSuccess"));
       onSuccess();
       handleClose();
     } catch (error) {
       logError("Failed to create classroom", error, { schoolId, formData });
-      toast.error("建立班級失敗，請稍後再試");
+      toast.error(t("schoolClassrooms.messages.createFailed"));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -111,17 +111,22 @@ export function CreateClassroomDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>建立新班級</DialogTitle>
+          <DialogTitle>{t("schoolClassrooms.dialogs.createTitle")}</DialogTitle>
           <DialogDescription>
-            為 {schoolName || "學校"} 建立一個新的班級
+            {t("schoolClassrooms.dialogs.createDescription", {
+              school:
+                schoolName || t("schoolClassrooms.dialogs.schoolFallback"),
+            })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="name">班級名稱 *</Label>
+            <Label htmlFor="name">
+              {t("teacherClassrooms.labels.classroomName")} *
+            </Label>
             <Input
               id="name"
-              placeholder="例如：一年級 A 班"
+              placeholder={t("schoolClassrooms.placeholders.name")}
               value={formData.name}
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
@@ -131,10 +136,12 @@ export function CreateClassroomDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">描述</Label>
+            <Label htmlFor="description">
+              {t("teacherClassrooms.labels.description")}
+            </Label>
             <Input
               id="description"
-              placeholder="班級描述（選填）"
+              placeholder={t("teacherClassrooms.placeholders.description")}
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
@@ -144,7 +151,9 @@ export function CreateClassroomDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="level">語言程度 *</Label>
+            <Label htmlFor="level">
+              {t("schoolClassrooms.labels.level")} *
+            </Label>
             <Select
               value={formData.level}
               onValueChange={(value) =>
@@ -153,7 +162,9 @@ export function CreateClassroomDialog({
               disabled={isSubmitting}
             >
               <SelectTrigger id="level">
-                <SelectValue placeholder="選擇程度" />
+                <SelectValue
+                  placeholder={t("schoolClassrooms.placeholders.level")}
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="PREA">PRE-A</SelectItem>
@@ -184,10 +195,12 @@ export function CreateClassroomDialog({
             onClick={handleClose}
             disabled={isSubmitting}
           >
-            取消
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting ? "建立中..." : "建立"}
+            {isSubmitting
+              ? t("schoolClassrooms.buttons.creating")
+              : t("teacherClassrooms.buttons.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
