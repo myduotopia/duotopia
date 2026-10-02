@@ -15,6 +15,7 @@ import type { Program } from "@/types";
 import GroupCard from "./GroupCard";
 import QuestionCard from "./QuestionCard";
 import {
+  errorKeyParts,
   unitKey,
   type GroupDraft,
   type QuestionDraft,
@@ -50,8 +51,10 @@ export default function QuestionUnitList({
   return (
     <>
       {units.map((u, i) => {
-        const errorMessage = errorKeys[i]
-          ? t(`questionBank.form.errors.${errorKeys[i]}`)
+        const key = errorKeys[i];
+        const parts = key ? errorKeyParts(key) : null;
+        const errorMessage = parts
+          ? t(`questionBank.form.errors.${parts.key}`, parts.params)
           : null;
         return u.kind === "single" ? (
           <QuestionCard

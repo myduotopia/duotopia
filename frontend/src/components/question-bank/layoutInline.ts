@@ -188,6 +188,22 @@ export function layoutToNumberedText(
     .join("\n\n");
 }
 
+/**
+ * layout 內出現的克漏字編號，**不去重**（依出現順序）。
+ *
+ * 去重版本看不出「同一個 `{{3}}` 在文章裡貼了兩次」—— 那是兩個空格卻只能對一張
+ * 小題，必須擋下，所以重複偵測要用這個版本（#1085）。
+ */
+export function layoutBlankOccurrences(
+  layout: LayoutDoc | null | undefined,
+): number[] {
+  const out: number[] = [];
+  for (const t of layoutTexts(layout)) {
+    for (const m of t.matchAll(BLANK_RE)) out.push(Number(m[1]));
+  }
+  return out;
+}
+
 /** layout 內出現的克漏字編號（依出現順序、去重） */
 export function layoutBlankIndexes(
   layout: LayoutDoc | null | undefined,

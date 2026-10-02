@@ -14,22 +14,32 @@
  */
 
 import type { LayoutBlock, LayoutDoc, LayoutNode } from "@/types/questionBank";
-import { layoutBlankIndexes } from "./layoutInline";
+import { layoutBlankIndexes, layoutBlankOccurrences } from "./layoutInline";
 
 /** 空格編號上限與後端 BLANK_INDEX_MAX 一致 */
 export const BLANK_INDEX_MAX = 999;
 
-/** 下一個可用的空格編號 = 目前（文章與小題）最大編號 + 1；都沒有就從 1 開始 */
+/**
+ * 下一個可用的空格編號 = **最小的未使用正整數**（文章與小題都算用過）。
+ *
+ * 不用「最大 + 1」：那會在接近上限時撞號（最大已經是 999 時 clamp 回 999，
+ * 而 999 已經有人用了 → 兩張小題對同一個空格）。補洞也比較符合直覺：
+ * 刪掉空格 2 之後再插入，會拿回 2 而不是跳到 5。
+ *
+ * 1..999 全部用完時回 `null`，呼叫端要把插入按鈕 disable。
+ */
 export function nextBlankIndex(
   layoutBlanks: number[],
   questionBlanks: (number | null)[],
-): number {
-  const used = [
+): number | null {
+  const used = new Set<number>([
     ...layoutBlanks,
     ...questionBlanks.filter((n): n is number => n !== null),
-  ];
-  if (used.length === 0) return 1;
-  return Math.min(Math.max(...used) + 1, BLANK_INDEX_MAX);
+  ]);
+  for (let n = 1; n <= BLANK_INDEX_MAX; n += 1) {
+    if (!used.has(n)) return n;
+  }
+  return null;
 }
 
 /** 文字改動前後的空格差集（新增／消失的編號） */
@@ -70,8 +80,12 @@ export function clozeMissingQuestions(
 export function clozeBlankError(
   layoutBlanks: number[],
   questionBlanks: (number | null)[],
+  layoutOccurrences: number[] = layoutBlanks,
 ): string | null {
   if (layoutBlanks.length === 0) return "clozeNeedsBlank";
+  // 文章裡同一個編號貼了兩次：兩個空格卻只能對一張小題（後端同規則，422）
+  const dup = duplicateBlankInLayout(layoutOccurrences);
+  if (dup !== null) return `clozeDuplicateBlank#${dup}`;
   if (questionBlanks.some((n) => n === null)) return "clozeBlankMismatch";
   const seen = new Set<number>();
   for (const n of questionBlanks) {
@@ -82,6 +96,16 @@ export function clozeBlankError(
     return "clozeBlankMismatch";
   if (clozeOrphanBlanks(layoutBlanks, questionBlanks).length > 0)
     return "clozeBlankMismatch";
+  return null;
+}
+
+/** 文章裡第一個重複出現的空格編號（依出現順序）；沒有重複 → null */
+export function duplicateBlankInLayout(occurrences: number[]): number | null {
+  const seen = new Set<number>();
+  for (const n of occurrences) {
+    if (seen.has(n)) return n;
+    seen.add(n);
+  }
   return null;
 }
 
@@ -192,8 +216,9 @@ export function appendBlankToLayout(
       ],
     };
   }
+  // 空段落（剛新增的區塊）直接放 token，不要多一個開頭空格
   return mapLayoutTexts(doc, (text, index) =>
-    index === target ? `${text} ${token}` : text,
+    index === target ? (text.trim() ? `${text} ${token}` : token) : text,
   );
 }
 
@@ -226,4 +251,4 @@ function lastParagraphTextIndex(layout: LayoutDoc): number | null {
 }
 
 /** layout 的空格編號（依閱讀順序、去重）；re-export 讓 cloze 相關運算都從這裡拿 */
-export { layoutBlankIndexes };
+export { layoutBlankIndexes, layoutBlankOccurrences };

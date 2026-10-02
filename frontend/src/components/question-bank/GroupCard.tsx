@@ -333,20 +333,24 @@ export default function GroupCard({
     if (from < 0 || to < 0) return;
     patch({ questions: arrayMove(draft.questions, from, to) });
   };
-  // 以 key 為索引：克漏字的顯示順序依 blank_index 排，與陣列順序不一定相同
+  // ---- 克漏字（#1085）----
+  const isCloze = isClozeGroup(draft);
+  // 以 key 為索引：克漏字的顯示順序依 blank_index 排，與陣列順序不一定相同。
+  // 克漏字小題沒有自己的題幹（題幹就是文章裡的空格），所以要關掉 stemRequired。
   const questionErrors = useMemo(
     () =>
       new Map(
         draft.questions.map((q) => [
           q.key,
-          validateDraft({ ...q, visibility: draft.visibility ?? q.visibility }),
+          validateDraft(
+            { ...q, visibility: draft.visibility ?? q.visibility },
+            { stemOptional: isCloze },
+          ),
         ]),
       ),
-    [draft.questions, draft.visibility],
+    [draft.questions, draft.visibility, isCloze],
   );
 
-  // ---- 克漏字（#1085）----
-  const isCloze = isClozeGroup(draft);
   /**
    * 排版改動一律經過這裡：空格差集 → 新空格自動建卡、消失的空白小題自動移除。
    * 只有完整 `{{n}}` 配對才算空格，所以打字打到 `{{4` 不會誤新增。
@@ -362,6 +366,8 @@ export default function GroupCard({
     if (added) scrollToCard(added.key);
   };
   const orphanBlanks = clozeOrphanBlanksOf(draft);
+  // 1..999 全部用完 → 不能再插空格（插了會跟既有小題撞號）
+  const blankLimitReached = isCloze && nextClozeBlankIndex(draft) === null;
   const addClozeBlank = () => {
     const base = draftRef.current;
     const next = appendClozeBlank(base);
@@ -505,7 +511,9 @@ export default function GroupCard({
               disabled={locked}
               testId={`qg-${index}-layout`}
               clozeMode={isCloze}
-              nextBlankIndex={isCloze ? nextClozeBlankIndex(draft) : undefined}
+              nextBlankIndex={
+                isCloze ? (nextClozeBlankIndex(draft) ?? undefined) : undefined
+              }
             />
           </TabsContent>
           <TabsContent value="text" className="mt-0">
@@ -672,7 +680,12 @@ export default function GroupCard({
                 size="sm"
                 className="flex-1 gap-1.5"
                 onClick={isCloze ? addClozeBlank : addQuestion}
-                disabled={disabled}
+                disabled={disabled || (isCloze && blankLimitReached)}
+                title={
+                  isCloze && blankLimitReached
+                    ? t("questionBank.group.layout.blankLimit")
+                    : undefined
+                }
                 data-testid={`qg-${index}-add-question`}
               >
                 <Plus size={14} />

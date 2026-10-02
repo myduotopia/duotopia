@@ -37,6 +37,7 @@ import type {
 } from "@/types/questionBank";
 import {
   layoutBlankIndexes,
+  layoutBlankOccurrences,
   layoutToNumberedText,
   layoutToPlainText,
 } from "./layoutInline";
@@ -243,6 +244,19 @@ export function validateDraft(
   return null;
 }
 
+/**
+ * 驗證回傳的 key 可能帶一個數字參數（例如 `clozeDuplicateBlank#3`）。
+ * 拆成 i18n key 與插值參數，讓 `t()` 能把「文章裡的空格 {{n}} 出現了兩次」填完整。
+ */
+export function errorKeyParts(key: string): {
+  key: string;
+  params?: { n: number };
+} {
+  const at = key.indexOf("#");
+  if (at < 0) return { key };
+  return { key: key.slice(0, at), params: { n: Number(key.slice(at + 1)) } };
+}
+
 /** 同一批內題幹正規化後相同的 key 集合 */
 export function findBatchDuplicateKeys(drafts: QuestionDraft[]): Set<string> {
   const seen = new Map<string, string>();
@@ -418,17 +432,22 @@ export function isClozeGroup(g: GroupDraft): boolean {
   return g.question_type === "cloze";
 }
 
-/** 題組（文章）內的空格編號，依閱讀順序 */
+/** 題組（文章）內的空格編號，依閱讀順序（去重） */
 export function clozeBlanks(g: GroupDraft): number[] {
   return layoutBlankIndexes(g.layout);
+}
+
+/** 題組（文章）內的空格編號，依出現順序、**不去重**（偵測同編號貼兩次用） */
+export function clozeBlankOccurrences(g: GroupDraft): number[] {
+  return layoutBlankOccurrences(g.layout);
 }
 
 function questionBlanks(g: GroupDraft): (number | null)[] {
   return g.questions.map((q) => q.blank_index);
 }
 
-/** 手動插入時要用的新編號 = 目前最大編號 + 1 */
-export function nextClozeBlankIndex(g: GroupDraft): number {
+/** 手動插入時要用的新編號 = 最小未使用編號；1..999 全滿回 null（按鈕要 disable） */
+export function nextClozeBlankIndex(g: GroupDraft): number | null {
   return nextBlankIndex(clozeBlanks(g), questionBlanks(g));
 }
 
@@ -522,6 +541,7 @@ export function renumberClozeBlanks(g: GroupDraft): GroupDraft {
 /** 「在文末插入空格」：layout 文末加 `{{n}}` 並建對應小題卡 */
 export function appendClozeBlank(g: GroupDraft): GroupDraft {
   const n = nextClozeBlankIndex(g);
+  if (n === null) return g; // 編號用完了，不做事（UI 會 disable 按鈕）
   const layout = appendBlankToLayout(g.layout, n);
   return {
     ...g,
@@ -612,7 +632,11 @@ export function validateGroupDraft(g: GroupDraft): string | null {
   if (g.questions.length === 0) return "groupNeedsQuestions";
   if (isClozeGroup(g)) {
     // 空格與小題必須一一對應（後端同規則，不合格 422）
-    const err = clozeBlankError(clozeBlanks(g), questionBlanks(g));
+    const err = clozeBlankError(
+      clozeBlanks(g),
+      questionBlanks(g),
+      clozeBlankOccurrences(g),
+    );
     if (err) return err;
   }
   const stemOptional = groupStemOptional(g);

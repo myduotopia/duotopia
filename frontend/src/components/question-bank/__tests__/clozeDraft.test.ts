@@ -13,11 +13,16 @@ import {
   clozeNeedsRenumber,
   clozeOrphanBlanks,
   insertBlankIntoText,
+  duplicateBlankInLayout,
   nextBlankIndex,
   renumberLayoutBlanks,
   renumberMap,
 } from "../clozeDraft";
-import { layoutBlankIndexes, layoutToNumberedText } from "../layoutInline";
+import {
+  layoutBlankIndexes,
+  layoutBlankOccurrences,
+  layoutToNumberedText,
+} from "../layoutInline";
 import {
   appendClozeBlank,
   clozeAiStem,
@@ -89,11 +94,19 @@ describe("nextBlankIndex", () => {
     expect(nextBlankIndex([], [])).toBe(1);
   });
 
-  it("取目前最大編號 + 1（含只存在於小題的編號）", () => {
+  it("取最小未使用編號（含只存在於小題的編號）", () => {
     expect(nextBlankIndex([1, 2, 3], [1, 2, 3])).toBe(4);
-    // 擷取進來的題本編號原樣保留 → 下一個是 44
-    expect(nextBlankIndex([40, 41, 42, 43], [40, 41, 42, 43])).toBe(44);
-    expect(nextBlankIndex([1], [1, 7])).toBe(8);
+    // 中間有洞就補洞：刪掉 2 之後再插入會拿回 2，不會跳號
+    expect(nextBlankIndex([1, 3], [1, 3])).toBe(2);
+    // 只存在於小題的編號也算用過
+    expect(nextBlankIndex([1], [1, 2])).toBe(3);
+  });
+
+  it("接近上限時不撞號：999 已被用掉 → 回 null 而不是 clamp 回 999", () => {
+    const all = Array.from({ length: 999 }, (_, i) => i + 1);
+    expect(nextBlankIndex([999], [999])).toBe(1);
+    expect(nextBlankIndex(all.slice(0, 998), [])).toBe(999);
+    expect(nextBlankIndex(all, [])).toBeNull();
   });
 });
 
@@ -188,6 +201,26 @@ describe("appendClozeBlank", () => {
     expect(next.questions.map((q) => q.blank_index)).toEqual([1, 2]);
   });
 
+  it("空段落插入空格不會多一個開頭空格", () => {
+    const after = appendBlankToLayout(doc(""), 1);
+    expect(JSON.stringify(after)).toContain('"text":"{{1}}"');
+    expect(JSON.stringify(after)).not.toContain('" {{1}}"');
+  });
+
+  it("編號用完時 appendClozeBlank 不做事", () => {
+    const g = clozeGroup(doc("a {{1}} b"), [1]);
+    const full = {
+      ...g,
+      questions: Array.from({ length: 999 }, (_, i) => ({
+        ...g.questions[0],
+        key: `k${i}`,
+        blank_index: i + 1,
+      })),
+    };
+    expect(nextClozeBlankIndex(full)).toBeNull();
+    expect(appendClozeBlank(full)).toBe(full);
+  });
+
   it("空題組從 1 開始", () => {
     const g = { ...emptyGroupDraft("cloze"), visibility: "private" as const };
     const next = appendClozeBlank(g);
@@ -267,6 +300,21 @@ describe("clozeBlankError / validateGroupDraft", () => {
     expect(clozeBlankError([1], [1, 9])).toBe("clozeBlankMismatch");
     expect(clozeBlankError([1, 2], [1, 1])).toBe("clozeBlankMismatch");
     expect(clozeBlankError([1, 2], [1, null])).toBe("clozeBlankMismatch");
+  });
+
+  it("文章裡同一個編號貼了兩次 → clozeDuplicateBlank#n", () => {
+    expect(duplicateBlankInLayout([1, 2, 1])).toBe(1);
+    expect(duplicateBlankInLayout([1, 2, 3])).toBeNull();
+    const dupLayout = doc("a {{1}} b {{2}}", "c {{1}}");
+    expect(layoutBlankOccurrences(dupLayout)).toEqual([1, 2, 1]);
+    // 去重版本看不出重複，所以兩個都要傳
+    expect(layoutBlankIndexes(dupLayout)).toEqual([1, 2]);
+    expect(clozeBlankError([1, 2], [1, 2], [1, 2, 1])).toBe(
+      "clozeDuplicateBlank#1",
+    );
+    expect(validateGroupDraft(clozeGroup(dupLayout, [1, 2]))).toBe(
+      "clozeDuplicateBlank#1",
+    );
   });
 
   it("clozeOrphanBlanks 回傳升冪編號", () => {

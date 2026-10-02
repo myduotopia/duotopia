@@ -69,6 +69,7 @@ import {
   emptyBatchDefaults,
   emptyDraft,
   emptyGroupDraft,
+  errorKeyParts,
   findBatchDuplicateKeys,
   groupDraftFromGroup,
   mapUnitQuestions,
@@ -404,7 +405,10 @@ export default function QuestionSheet({
     : firstErrorIndex >= 0
       ? t("questionBank.form.errors.atQuestion", {
           n: firstErrorIndex + 1,
-          message: t(`questionBank.form.errors.${errorKeys[firstErrorIndex]}`),
+          message: (() => {
+            const parts = errorKeyParts(errorKeys[firstErrorIndex] as string);
+            return t(`questionBank.form.errors.${parts.key}`, parts.params);
+          })(),
         })
       : null;
 

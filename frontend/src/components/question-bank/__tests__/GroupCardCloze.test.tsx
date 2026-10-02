@@ -19,7 +19,7 @@ import {
   type GroupDraft,
 } from "../questionDraft";
 import { layoutBlankIndexes } from "../layoutInline";
-import type { LayoutBlock, LayoutDoc } from "@/types/questionBank";
+import type { ExamPoint, LayoutBlock, LayoutDoc } from "@/types/questionBank";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 
 vi.mock("react-i18next", () => ({
@@ -98,6 +98,25 @@ function clozeDraft(layout: LayoutDoc | null, blanks: number[]): GroupDraft {
         { text: "b", is_correct: false, image_url: null },
       ],
     })),
+  };
+}
+
+const EP: ExamPoint = {
+  id: 7,
+  code: "grammar.tense.present_perfect",
+  names: { "zh-TW": "現在完成式" },
+  parent_id: null,
+  status: "active",
+  order_index: 0,
+  aliases: [],
+};
+
+/** 選項、答案、考點都填好的克漏字題組（只缺題幹 —— 克漏字本來就沒有題幹） */
+function filledClozeDraft(layout: LayoutDoc | null, blanks: number[]) {
+  const g = clozeDraft(layout, blanks);
+  return {
+    ...g,
+    questions: g.questions.map((q) => ({ ...q, exam_points: [EP] })),
   };
 }
 
@@ -204,6 +223,15 @@ describe("GroupCard 克漏字", () => {
     const stub = screen.getByTestId("qg-0-layout-stub");
     expect(stub.dataset.cloze).toBe("1");
     expect(stub.dataset.nextBlank).toBe("2");
+  });
+
+  it("填好選項與答案的克漏字小題不顯示 stemRequired", () => {
+    // 卡片層驗證要帶 stemOptional：克漏字小題沒有自己的題幹（題幹是文章的空格）
+    render(<Harness initial={filledClozeDraft(doc("a {{1}} b"), [1])} />);
+    expect(screen.queryByTestId("qg-0-q-0-error")).toBeNull();
+    expect(
+      screen.queryByText(/questionBank\.form\.errors\.stemRequired/),
+    ).toBeNull();
   });
 
   it("閱讀題組不開啟 clozeMode，且小題有拖曳把手", () => {

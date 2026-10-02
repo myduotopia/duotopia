@@ -49,7 +49,7 @@ export interface LayoutBlockEditorProps {
   testId: string;
   /** 克漏字題組：段落工具列多一顆「插入空格」（#1085） */
   clozeMode?: boolean;
-  /** 下一個要插入的空格編號（目前最大編號 + 1） */
+  /** 下一個要插入的空格編號（最小未使用編號）；編號用完時不給 → 按鈕 disabled */
   nextBlankIndex?: number;
 }
 
@@ -164,6 +164,7 @@ function TextBlockFields({
    * `syncClozeQuestions` 從空格差集自動建立，避免兩邊各自記一份狀態。
    */
   const insertBlank = () => {
+    if (nextBlankIndex === undefined) return;
     const el = ref.current;
     const start = el?.selectionStart ?? block.text.length;
     const end = el?.selectionEnd ?? block.text.length;
@@ -171,7 +172,7 @@ function TextBlockFields({
       block.text,
       start,
       end,
-      nextBlankIndex ?? 1,
+      nextBlankIndex,
     );
     onChange({ text });
     moveCursor(cursor);
@@ -215,9 +216,13 @@ function TextBlockFields({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={insertBlank}
-              disabled={disabled}
+              disabled={disabled || nextBlankIndex === undefined}
               className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-50"
-              title={t("questionBank.group.layout.insertBlank")}
+              title={t(
+                nextBlankIndex === undefined
+                  ? "questionBank.group.layout.blankLimit"
+                  : "questionBank.group.layout.insertBlank",
+              )}
               data-testid={`${testId}-insert-blank`}
             >
               <SquareDashedBottom size={14} />

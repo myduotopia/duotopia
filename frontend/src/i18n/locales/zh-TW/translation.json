@@ -6030,7 +6030,8 @@
         "groupNeedsContent": "題組需要文章、圖片或排版內容",
         "layoutIncomplete": "排版裡有尚未填完的區塊（空白文字、沒有圖片或對話缺內容）",
         "clozeNeedsBlank": "克漏字題組的文章需要至少一個空格",
-        "clozeBlankMismatch": "空格與小題沒有一一對應（請檢查缺少、多餘或重複的空格編號）"
+        "clozeBlankMismatch": "空格與小題沒有一一對應（請檢查缺少、多餘或重複的空格編號）",
+        "clozeDuplicateBlank": "文章裡的空格 {{n}} 出現了兩次"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
@@ -6155,6 +6156,7 @@
         "underline": "底線",
         "doubleUnderline": "雙底線",
         "insertBlank": "插入空格",
+        "blankLimit": "空格編號 1–999 已經全部用完",
         "headingPlaceholder": "標題文字",
         "paragraphPlaceholder": "段落內容（**粗體**、__底線__）",
         "imageUpload": "上傳圖片",

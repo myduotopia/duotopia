@@ -5986,7 +5986,8 @@
         "groupNeedsContent": "A group needs a passage, an image or a layout",
         "layoutIncomplete": "The layout has unfinished blocks (empty text, an image without a file, or a dialogue line missing content)",
         "clozeNeedsBlank": "A cloze group needs at least one blank in the passage",
-        "clozeBlankMismatch": "Blanks and questions do not match (check for missing, extra or duplicate blank numbers)"
+        "clozeBlankMismatch": "Blanks and questions do not match (check for missing, extra or duplicate blank numbers)",
+        "clozeDuplicateBlank": "Blank {{n}} appears twice in the passage"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -6111,6 +6112,7 @@
         "underline": "Underline",
         "doubleUnderline": "Double underline",
         "insertBlank": "Insert blank",
+        "blankLimit": "All blank numbers (1–999) are in use",
         "headingPlaceholder": "Heading text",
         "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
         "imageUpload": "Upload image",
