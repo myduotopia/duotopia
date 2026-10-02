@@ -5,7 +5,7 @@
  * - 文末插入空格／缺空格警告與兩個動作／依閱讀順序重新編號
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,6 +21,12 @@ import {
 import { layoutBlankIndexes } from "../layoutInline";
 import type { ExamPoint, LayoutBlock, LayoutDoc } from "@/types/questionBank";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
+
+// jsdom 沒有 scrollIntoView（GroupCard 插入／新增小題後會捲到該卡）；
+// 不改產品碼，只在這支測試檔補 stub，避免 setTimeout 裡丟 unhandled error。
+beforeAll(() => {
+  Element.prototype.scrollIntoView = () => {};
+});
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({

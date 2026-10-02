@@ -94,19 +94,22 @@ describe("nextBlankIndex", () => {
     expect(nextBlankIndex([], [])).toBe(1);
   });
 
-  it("取最小未使用編號（含只存在於小題的編號）", () => {
+  it("取目前最大編號 + 1（含只存在於小題的編號）", () => {
     expect(nextBlankIndex([1, 2, 3], [1, 2, 3])).toBe(4);
-    // 中間有洞就補洞：刪掉 2 之後再插入會拿回 2，不會跳號
-    expect(nextBlankIndex([1, 3], [1, 3])).toBe(2);
-    // 只存在於小題的編號也算用過
-    expect(nextBlankIndex([1], [1, 2])).toBe(3);
+    // 擷取進來的題本編號原樣保留 → 下一個是 44
+    expect(nextBlankIndex([40, 41, 42, 43], [40, 41, 42, 43])).toBe(44);
+    expect(nextBlankIndex([1], [1, 7])).toBe(8);
   });
 
-  it("接近上限時不撞號：999 已被用掉 → 回 null 而不是 clamp 回 999", () => {
-    const all = Array.from({ length: 999 }, (_, i) => i + 1);
+  it("max + 1 超過上限時才退回最小未使用編號（不再 clamp 回已用掉的 999）", () => {
     expect(nextBlankIndex([999], [999])).toBe(1);
-    expect(nextBlankIndex(all.slice(0, 998), [])).toBe(999);
+    expect(nextBlankIndex([1, 2, 999], [1, 2, 999])).toBe(3);
+  });
+
+  it("1..999 全滿 → null", () => {
+    const all = Array.from({ length: 999 }, (_, i) => i + 1);
     expect(nextBlankIndex(all, [])).toBeNull();
+    expect(nextBlankIndex(all.slice(0, 998), [])).toBe(999);
   });
 });
 

@@ -20,11 +20,11 @@ import { layoutBlankIndexes, layoutBlankOccurrences } from "./layoutInline";
 export const BLANK_INDEX_MAX = 999;
 
 /**
- * 下一個可用的空格編號 = **最小的未使用正整數**（文章與小題都算用過）。
+ * 下一個可用的空格編號 = **目前（文章與小題）最大編號 + 1**；都沒有就從 1 開始。
  *
- * 不用「最大 + 1」：那會在接近上限時撞號（最大已經是 999 時 clamp 回 999，
- * 而 999 已經有人用了 → 兩張小題對同一個空格）。補洞也比較符合直覺：
- * 刪掉空格 2 之後再插入，會拿回 2 而不是跳到 5。
+ * 維持 max+1 是為了手感：擷取進來的題本編號（如 40–43）原樣保留，接著插入會拿到 44，
+ * 不會跳回 1。只有 max + 1 超過上限（999）時才退回「最小未使用編號」—— 以前是 clamp
+ * 回 999，但 999 已經有人用了，會變成兩張小題對同一個空格。
  *
  * 1..999 全部用完時回 `null`，呼叫端要把插入按鈕 disable。
  */
@@ -36,6 +36,9 @@ export function nextBlankIndex(
     ...layoutBlanks,
     ...questionBlanks.filter((n): n is number => n !== null),
   ]);
+  if (used.size === 0) return 1;
+  const next = Math.max(...used) + 1;
+  if (next <= BLANK_INDEX_MAX) return next;
   for (let n = 1; n <= BLANK_INDEX_MAX; n += 1) {
     if (!used.has(n)) return n;
   }
