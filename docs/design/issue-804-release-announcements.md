@@ -71,7 +71,7 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 | `RELEASE_WEBHOOK_SECRET` | GitHub secret | CI ↔ backend webhook 驗證 |
 | `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN` | GitHub secret | 官方帳號 Messaging API token |
 | `LINE_ANNOUNCE_USER_ID` | GitHub secret | 公告審核者：草稿待審核通知 + 非 production 發布的收件人 |
-| `RELEASE_ANNOUNCEMENT_BANNER_URL` | GitHub repo variable（選填） | 公告樣板圖，未設定時用官網現有圖片佔位 |
+| `RELEASE_ANNOUNCEMENT_BANNER_URL` | GitHub repo variable（選填） | 公告樣板圖，未設定時用 `release-announcement-banner.png`（1200×780，LINE hero 20:13） |
 
 各值怎麼取得、用個人或官方帳號，見
 [`RELEASE_ANNOUNCEMENT_SETUP.md`](../integrations/RELEASE_ANNOUNCEMENT_SETUP.md)。

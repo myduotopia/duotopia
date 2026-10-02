@@ -7,6 +7,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
+from urllib.parse import quote, unquote
 
 from models import BlogPost
 from models.blog import BlogCategory, BlogPostCategory
@@ -576,7 +577,12 @@ class TestPublishBothChannels:
             .filter(BlogPost.id == result.published_blog_post_id)
             .one()
         )
-        assert f"https://duotopia.co/blog/{zh.slug}" in str(broadcast.await_args[0][0])
+        flex = broadcast.await_args[0][0][0]
+        uri = flex["contents"]["footer"]["contents"][0]["action"]["uri"]
+        # LINE 只接受 percent-encoded 的 ASCII URI；中文 slug 未編碼會被拒（Invalid action URI）
+        assert uri.isascii()
+        assert uri == f"https://duotopia.co/blog/{quote(zh.slug, safe='-')}"
+        assert unquote(uri) == f"https://duotopia.co/blog/{zh.slug}"
 
     @pytest.mark.asyncio
     async def test_rejects_unknown_channel(self, test_db_session):
