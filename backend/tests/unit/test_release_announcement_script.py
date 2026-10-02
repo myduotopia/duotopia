@@ -136,6 +136,25 @@ class TestBlock:
         assert ra.parse_block(new)["content"] == CONTENT
 
 
+class TestBlockStatus:
+    """CI 自動化用：已經有完整區塊（例如本機 /announce 寫過）就不再自動產生"""
+
+    def test_complete_block(self):
+        status = ra.block_status(ra.render_block(CONTENT, issues=[1046]))
+        assert status == {"has_block": True, "complete": True, "issues": [1046]}
+
+    def test_incomplete_block(self):
+        body = ra.render_block({**CONTENT, "line_message_zh": ""})
+        assert ra.block_status(body)["complete"] is False
+
+    def test_no_block(self):
+        assert ra.block_status("## 本次發版內容") == {
+            "has_block": False,
+            "complete": False,
+            "issues": [],
+        }
+
+
 class TestIssueNumbers:
     @pytest.mark.parametrize(
         "title, expected",

@@ -173,3 +173,6 @@ backend/summary_*.py
 
 # Claude Code per-user local settings (do not commit)
 .claude/settings.local.json
+
+# /announce CI 暫存的公告 JSON（issue #804）
+.announce/

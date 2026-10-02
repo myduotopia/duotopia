@@ -145,6 +145,18 @@ def is_complete(content: Optional[Dict[str, str]]) -> bool:
     return all((content.get(field) or "").strip() for field in REQUIRED_FIELDS)
 
 
+def block_status(text: Optional[str]) -> Dict[str, Any]:
+    """CI 自動化用：是否已有區塊、內容是否完整、列了哪些 issue。"""
+    parsed = parse_block(text)
+    if not parsed:
+        return {"has_block": False, "complete": False, "issues": []}
+    return {
+        "has_block": True,
+        "complete": is_complete(parsed["content"]),
+        "issues": parsed["issues"],
+    }
+
+
 def replace_block(body: Optional[str], block: str) -> str:
     """把 body 內既有的公告區塊換成新的；沒有就接在最後。"""
     body = (body or "").replace("\r\n", "\n")
@@ -503,6 +515,13 @@ def cmd_release_scan(args: argparse.Namespace) -> None:
     _print(scan_release(GhCli(), messages))
 
 
+def cmd_pr_block(args: argparse.Namespace) -> None:
+    """PR 描述內公告區塊的狀態（CI 判斷要不要自動統整）。"""
+    gh = GhCli()
+    pr = gh._api(f"pulls/{args.pr}")
+    _print(block_status(pr.get("body")))
+
+
 def cmd_render(args: argparse.Namespace) -> None:
     issues = [int(n) for n in args.issues.split(",")] if args.issues else None
     print(render_block(_load_content(args.content), issues))
@@ -554,6 +573,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base", default="origin/main")
     p.add_argument("--head", default="origin/staging")
     p.set_defaults(func=cmd_release_scan)
+
+    p = sub.add_parser("pr-block", help="PR 描述內公告區塊的狀態")
+    p.add_argument("pr", type=int)
+    p.set_defaults(func=cmd_pr_block)
 
     p = sub.add_parser("render", help="預覽公告區塊（不寫入 GitHub）")
     p.add_argument("--content", required=True, help="六個欄位的 JSON 檔")

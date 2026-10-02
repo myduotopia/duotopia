@@ -92,3 +92,13 @@ jobs:
       issue_number: ${{ github.event.issue.number }}
       issue_title: ${{ github.event.issue.title }}
     secrets: inherit
+
+  # issue #804：bot 加的 '✅ tested-in-staging' 不會觸發 announce-issue.yml，
+  # 這裡直接串接自動產生公告留言（沒有「📣 announce」標籤時會自行略過）
+  announce:
+    needs: detect-approval
+    if: needs.detect-approval.outputs.approved == 'true'
+    uses: ./.github/workflows/_announce-issue-shared.yml
+    with:
+      issue_number: ${{ github.event.issue.number }}
+    secrets: inherit

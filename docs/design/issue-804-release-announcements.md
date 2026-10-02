@@ -104,6 +104,19 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 - 有未儲存的修改時：「發布」會先儲存再發布（按鈕顯示「儲存並發布」），「併入這一則」停用
 - 圖片網址必須是 `https://` 開頭的完整網址（前後端一致），清空則不帶圖
 
+## 自動產生（PR4）
+
+| Workflow | 觸發 | 做什麼 |
+|----------|------|--------|
+| `announce-issue.yml` → `_announce-issue-shared.yml` | 人工加上 `📣 announce` / `✅ tested-in-staging` | 兩個標籤齊了、還沒有留言 → Claude Code 產生 → issue 留言 → LINE 通知 |
+| `automation-auto-approve.yml`（`announce` job） | 「測試通過」留言（bot 加標籤不會觸發 workflow，故直接串接） | 同上 |
+| `announce-release.yml` | staging → main PR opened / reopened、workflow_dispatch | 統整 → PR 描述 → LINE 通知 |
+
+- Claude Code（`claude-code-action`，`--model claude-opus-5-5`）只拿唯讀 `GITHUB_TOKEN`、只能寫 JSON 檔；
+  GitHub 寫入在後續步驟用 `RELEASE_PAT`（myduotopia，OWNER）完成，留言才會被視為團隊成員內容
+- 本機版本優先：開始前與寫入前都檢查一次，已有留言 / 完整區塊就不覆蓋
+- 通知走 CI bot（`LINE_CHANNEL_ACCESS_TOKEN` → `LINE_USER_ID`），與 Release PR 通知相同
+
 ## /announce 與公告區塊（PR3）
 
 - skill：`.claude/skills/announce/SKILL.md`

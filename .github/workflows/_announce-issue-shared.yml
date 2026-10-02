@@ -1,0 +1,152 @@
+name: Announce Issue (Reusable)
+
+# issue #804 — 自動產生單一 issue 的更新公告留言（等同本機 `/announce #N`）。
+#
+# 呼叫來源：
+#   - announce-issue.yml           （人工加上「📣 announce」或「✅ tested-in-staging」標籤）
+#   - automation-auto-approve.yml  （「測試通過」留言 → bot 加標籤；bot 加的標籤不會觸發 workflow）
+#
+# 流程：
+#   1. scripts/release_announcement.py check：兩個標籤都有、而且還沒有團隊成員寫的公告留言才繼續
+#      （本機已執行 /announce #N 就略過 —— 本機版本優先）
+#   2. Claude Code（Opus 5.5）依 .claude/skills/announce/SKILL.md 的寫作原則產生內容，只寫 JSON 檔
+#   3. 用 RELEASE_PAT 寫成 issue 留言（留言者為團隊成員，CI 才會採用；bot 身分的留言會被忽略）
+#   4. LINE 通知 LINE_USER_ID（與 Release PR 通知同一個 CI bot）
+#
+# Claude 只拿到唯讀的 GITHUB_TOKEN，所有 GitHub 寫入都在後續步驟以 RELEASE_PAT 完成。
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  id-token: write # claude-code-action exchanges OIDC token for app token
+
+jobs:
+  announce-issue:
+    name: 📣 Announce issue content
+    runs-on: ubuntu-latest
+    # 兩個標籤幾乎同時加上會觸發兩次：排隊執行，第二次會看到已有留言而略過
+    concurrency:
+      group: announce-issue-${{ inputs.issue_number }}
+      cancel-in-progress: false
+    env:
+      ISSUE_NUM: ${{ inputs.issue_number }}
+    steps:
+      # issues 事件預設 checkout default branch（main）；腳本與 skill 以 staging 為準
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 0
+
+      - name: Check labels and existing announcement
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_announcement.py check "$ISSUE_NUM" > check.json
+          jq '{issue, title, labels, eligible, message, has_content: (.content != null)}' check.json
+
+          if [ "$(jq -r '.eligible' check.json)" != "true" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "⏭️ $(jq -r '.message' check.json)"
+          elif [ "$(jq -r '.content != null' check.json)" = "true" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "⏭️ 已有公告留言（本機 /announce 或先前的自動產生），不覆蓋"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            mkdir -p .announce
+          fi
+
+      - name: Generate announcement with Claude Code
+        if: steps.check.outputs.run == 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            你在 GitHub Actions 中自動整理 Duotopia 對外更新公告（issue #804 的 /announce 流程，模式 A）。
+            目標 issue：#${{ inputs.issue_number }}（已確認同時有「📣 announce」與「✅ tested-in-staging」）。
+
+            1. 先讀 `.claude/skills/announce/SKILL.md`，嚴格遵守其中的「寫作原則」與「不要做」。
+            2. 了解這個 issue 對使用者帶來的改變：
+               - `gh issue view ${{ inputs.issue_number }} --json title,body,comments`
+               - 相關 PR：`gh pr list --state all --search "${{ inputs.issue_number }} in:title,body" --json number,title,body,headRefName,state`
+               - 程式差異：`git branch -r | grep "issue-${{ inputs.issue_number }}"` 找分支後
+                 `git diff origin/staging...<branch> --stat` 與重點檔案；
+                 已合併的話 `git log origin/staging --grep "#${{ inputs.issue_number }}" --format=%H` 找 commit 再 `git show`
+            3. 產生六個欄位，用 Write 寫成 JSON 檔：
+               `${{ github.workspace }}/.announce/issue-${{ inputs.issue_number }}.json`
+               欄位：line_message_zh, line_message_en, article_title_zh, article_body_zh, article_title_en, article_body_en
+               （line_message_zh 與 article_title_zh 必填；值一律是字串）
+            4. 用 `python3 scripts/release_announcement.py render --content <該 JSON 檔>` 確認格式正確。
+
+            限制：
+            - **不要**寫入 GitHub（不要留言、不要編輯 issue / PR），寫入由後續步驟處理。
+            - **不要**詢問使用者，這是非互動環境；資訊不足時以 issue 標題與內文為準，寫保守的內容。
+            - 不要修改 repo 內任何檔案，只寫上述 JSON 檔。
+          claude_args: >-
+            --model claude-opus-5-5
+            --max-turns 40
+            --allowed-tools "Read,Write,Glob,Grep,Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git branch:*),Bash(gh issue view:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(python3 scripts/release_announcement.py render:*),Bash(python3 scripts/release_announcement.py check:*)"
+
+      - name: Write issue comment (as team member via RELEASE_PAT)
+        id: publish
+        if: steps.check.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          set -euo pipefail
+          CONTENT=".announce/issue-${ISSUE_NUM}.json"
+          if [ ! -s "$CONTENT" ]; then
+            echo "❌ Claude 沒有產生 $CONTENT"
+            exit 1
+          fi
+          # render 會驗證欄位與型別；upsert-issue 會再檢查一次標籤
+          python3 scripts/release_announcement.py render --content "$CONTENT" > /dev/null
+          # 產生期間若有人在本機執行了 /announce #N，以本機版本為準，不覆蓋
+          if [ "$(python3 scripts/release_announcement.py check "$ISSUE_NUM" | jq -r '.content != null')" = "true" ]; then
+            echo "⏭️ 產生期間已有人寫入公告留言，保留既有版本"
+            exit 0
+          fi
+          URL=$(python3 scripts/release_announcement.py upsert-issue "$ISSUE_NUM" --content "$CONTENT")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "✅ 公告留言：$URL"
+
+      - name: Notify LINE - announcement ready
+        if: steps.publish.outputs.url != ''
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
+          URL: ${{ steps.publish.outputs.url }}
+        run: |
+          TEXT=$(printf '📣 Issue #%s 的更新公告留言已自動產生，請確認內容：\n%s\n\n要修改可直接編輯留言，或在本機執行 /announce #%s 重寫。' "$ISSUE_NUM" "$URL" "$ISSUE_NUM")
+          jq -n --arg to "$LINE_TO" --arg text "$TEXT" \
+            '{to: $to, messages: [{type: "text", text: $text}]}' > line.json
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $LINE_TOKEN" \
+            -d @line.json || true
+
+      - name: Notify LINE - generation failed
+        if: failure() && steps.check.outputs.run == 'true'
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TEXT=$(printf '⚠️ Issue #%s 的更新公告留言自動產生失敗，請在本機執行 /announce #%s。\n%s' "$ISSUE_NUM" "$ISSUE_NUM" "$RUN_URL")
+          jq -n --arg to "$LINE_TO" --arg text "$TEXT" \
+            '{to: $to, messages: [{type: "text", text: $text}]}' > line.json
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $LINE_TOKEN" \
+            -d @line.json || true
