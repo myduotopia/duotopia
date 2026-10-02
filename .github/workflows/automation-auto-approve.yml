@@ -98,6 +98,9 @@ jobs:
   announce:
     needs: detect-approval
     if: needs.detect-approval.outputs.approved == 'true'
+    concurrency:
+      group: announce-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
     uses: ./.github/workflows/_announce-issue-shared.yml
     with:
       issue_number: ${{ github.event.issue.number }}

@@ -112,8 +112,11 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 | `automation-auto-approve.yml`（`announce` job） | 「測試通過」留言（bot 加標籤不會觸發 workflow，故直接串接） | 同上 |
 | `announce-release.yml` | staging → main PR opened / reopened、workflow_dispatch | 統整 → PR 描述 → LINE 通知 |
 
-- Claude Code（`claude-code-action`，`--model claude-opus-5-5`）只拿唯讀 `GITHUB_TOKEN`、只能寫 JSON 檔；
-  GitHub 寫入在後續步驟用 `RELEASE_PAT`（myduotopia，OWNER）完成，留言才會被視為團隊成員內容
+- **防 prompt injection（repo 公開）**：Claude Code（`claude-code-action`，`--model claude-opus-5-5`）在獨立的
+  `generate` job，只拿唯讀 `GITHUB_TOKEN`、拿不到 `RELEASE_PAT` / LINE token，產出只以 JSON artifact 傳出；
+  `publish` job 重新 checkout，執行 repo 內原始腳本、以欄位白名單 / 字串型別驗證 JSON 後，
+  才用 `RELEASE_PAT`（myduotopia，OWNER）寫入，留言才會被視為團隊成員內容
+- LINE 通知統一走 `scripts/ci/line_push.sh`：失敗不讓 job 失敗，但留下 `::warning::`
 - 本機版本優先：開始前與寫入前都檢查一次，已有留言 / 完整區塊就不覆蓋
 - 通知走 CI bot（`LINE_CHANNEL_ACCESS_TOKEN` → `LINE_USER_ID`），與 Release PR 通知相同
 

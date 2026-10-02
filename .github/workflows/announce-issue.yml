@@ -22,6 +22,9 @@ jobs:
     if: >-
       github.event.label.name == '📣 announce' ||
       github.event.label.name == '✅ tested-in-staging'
+    concurrency:
+      group: announce-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
     uses: ./.github/workflows/_announce-issue-shared.yml
     with:
       issue_number: ${{ github.event.issue.number }}
