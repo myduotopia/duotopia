@@ -24,6 +24,9 @@
  * #1092：輸入格填在第幾格就是第幾格（作答值只去尾端空白，開頭空白＝第 1 格沒填）；
  * 送出時另附 typed_words（逐格、空格為 ""，長度＝正解單字數），後端以它判分。
  * 本機對錯判斷（老師預覽）改用 lib/quizScoring.evaluateAnswer 並吃 quiz_case_sensitive。
+ * 訂正交卷回 400 QUIZ_REVISION_INCOMPLETE（老師改了評分設定，鎖定的已答對題被重判成錯）→
+ * 重新呼叫 start 更新鎖定狀態（本機已輸入的答案保留）、游標跳到第一題要改的題目並提示；
+ * 每次失敗只重抓一次、不自動再交卷。
  */
 
 import {
@@ -71,6 +74,9 @@ import {
   allCorrect,
   firstUnresolvedIndex,
   nextUnresolvedIndex,
+  priorCorrectFromStart,
+  priorTypedFromStart,
+  isRevisionIncompleteError,
 } from "./shared/useQuizRevision";
 
 interface QuizWord {
@@ -288,15 +294,8 @@ export default function WordClozeQuizActivity({
         if (cancelled) return;
         setWords(data.words);
         setSessionId(data.session_id);
-        const initialTyped: Record<number, string> = {};
-        const initialCorrect: Record<number, boolean | null> = {};
-        data.words.forEach((w) => {
-          if (w.prior_answer != null)
-            initialTyped[w.content_item_id] = w.prior_answer;
-          if (w.prior_is_correct != null)
-            initialCorrect[w.content_item_id] = w.prior_is_correct;
-        });
-        setTypedByItem(initialTyped);
+        const initialCorrect = priorCorrectFromStart(data.words);
+        setTypedByItem(priorTypedFromStart(data.words));
         setCorrectByItem(initialCorrect);
         setQuizStatus(data.status ?? null);
         // 訂正模式（退回後 RETURNED）：游標直接停在第一題錯題（略過已答對題）
@@ -433,6 +432,35 @@ export default function WordClozeQuizActivity({
     [currentIndex, persistAnswer, words.length],
   );
 
+  // #1092：訂正交卷被擋（QUIZ_REVISION_INCOMPLETE，通常是老師改了評分設定、鎖定的
+  // 「已答對」題被後端重判成錯）→ 重新呼叫 start 取最新對錯，解鎖變錯的題目；
+  // 本機已輸入的答案保留。每次交卷失敗只重抓一次、不自動再交卷（不會循環）。
+  const reloadRevisionState = useCallback(async () => {
+    try {
+      const data = (await apiClient.get(
+        `/api/students/assignments/${assignmentId}/vocabulary/cloze_quiz/start`,
+      )) as StartResponse;
+      const freshCorrect = priorCorrectFromStart(data.words);
+      setSessionId(data.session_id);
+      setQuizStatus(data.status ?? null);
+      setCorrectByItem(freshCorrect);
+      setTypedByItem((prev) => priorTypedFromStart(data.words, prev));
+      const firstWrong = firstUnresolvedIndex(words, freshCorrect);
+      if (firstWrong < 0) {
+        // 重抓後仍全對（非評分設定造成）→ 一般失敗提示
+        toast.error(t("wordCloze.toast.submitFailed") || "Submit failed");
+        return;
+      }
+      setCurrentIndex(firstWrong);
+      toast.warning(
+        t("wordQuiz.revision.settingsChanged") ||
+          "老師調整了評分方式，有題目需要再修正，請修改標示的題目後再交卷。",
+      );
+    } catch {
+      toast.error(t("wordCloze.toast.submitFailed") || "Submit failed");
+    }
+  }, [assignmentId, t, words]);
+
   const handleSubmitAll = useCallback(async () => {
     if (isLivePreview) {
       // #1045 階段 4：考前說明 → 不組複盤資料，不揭示分數/對錯/正解
@@ -507,7 +535,12 @@ export default function WordClozeQuizActivity({
       );
       toast.success(t("wordCloze.toast.completed") || "Quiz submitted");
       onComplete?.();
-    } catch {
+    } catch (err: unknown) {
+      if (isRevisionIncompleteError(err)) {
+        completingRef.current = false;
+        await reloadRevisionState();
+        return;
+      }
       toast.error(t("wordCloze.toast.submitFailed") || "Submit failed");
       completingRef.current = false;
     } finally {
@@ -518,6 +551,7 @@ export default function WordClozeQuizActivity({
     previewOriginalTyped,
     assignmentId,
     isDemoMode,
+    reloadRevisionState,
     isLivePreview,
     onComplete,
     persistAnswer,

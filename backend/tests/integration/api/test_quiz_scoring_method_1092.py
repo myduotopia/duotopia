@@ -3,8 +3,9 @@
 * create：打字小考未帶 ``quiz_scoring_method`` → 422 ``QUIZ_SCORING_METHOD_REQUIRED``；
   D/E 沒帶 points → 422 ``QUIZ_SCORING_POINTS_REQUIRED``；選擇題小考不需要、存 NULL。
 * PATCH：評分設定有變 → 同 transaction 重算已交卷學生（``recomputed_count``）、清掉
-  老師手動扣分、RETURNED 學生 status 不變、沒交卷的不算；未變更 → 不重算。
-* 大小寫開關變更 → 重判 is_correct、同步 session.correct_count。
+  老師手動扣分、RETURNED 學生 status 不變、沒交卷的不重算分數；未變更 → 不重算。
+* 大小寫開關變更 → 重判 is_correct、同步 session.correct_count（含還沒交卷的
+  session：只重判 is_correct / correct_count、不寫分數）；學生 start 時也會重判。
 * 學生端作答帶 ``typed_words`` → 存進 answer_data、prior_answer 保留空格位置；
   批改頁每題回 ``default_deduction`` / ``deduction_detail``、quiz_settings 帶設定。
 """
@@ -148,7 +149,8 @@ def _seed_quiz(method="whole_question", case_sensitive=None) -> None:
     * sa 1：SUBMITTED，item1 打 ``look forwerd to``（錯 1 字）、item2 ``Apple`` 對；
       老師手動把 item1 扣分改成 10、總分改 90。
     * sa 2：RETURNED（曾退回），第一次 completed session 同上答案。
-    * sa 3：IN_PROGRESS，沒有 completed session（不應被重算）。
+    * sa 3：IN_PROGRESS，沒有 completed session（分數不應被重算；PATCH 仍會重判
+      其作答中 session 的 is_correct / correct_count）。
     """
     _seed_base()
     db = TestingSessionLocal()
@@ -518,8 +520,8 @@ def test_patch_case_sensitive_rejudges_is_correct(setup_database):
         assert ans.is_correct is False  # Apple ≠ apple（分大小寫）
         session = db.query(PracticeSession).filter_by(id=1).one()
         assert session.correct_count == 0
-        # 沒有 completed session 的 sa 3 不動
-        assert db.query(PracticeSession).filter_by(id=3).one().correct_count == 1
+        # 還沒交卷的 sa 3 session 也重判（只改 is_correct / correct_count，不寫分數）
+        assert db.query(PracticeSession).filter_by(id=3).one().correct_count == 0
     finally:
         db.close()
     assert _sa(1).score == 0.0
@@ -746,7 +748,8 @@ def _complete(s_headers, session_id, path="spelling_quiz"):
 
 def test_case_toggle_mid_quiz_rejudges_in_progress_answers(setup_database):
     """作答中（IN_PROGRESS）答 Apple 對 apple 為對；老師改成分大小寫後交卷 →
-    該題改判錯、整題扣分、答對題數不含它（重算只處理已交卷，這裡靠交卷時重判）。"""
+    該題改判錯、整題扣分、答對題數不含它（PATCH 只重判作答中 session 的 is_correct、
+    不寫分數；交卷時以目前設定再重判並算分）。"""
     _seed_fresh_quiz("whole_question")
     s_headers = _student_headers(1)
     session_id = _start(s_headers)

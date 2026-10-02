@@ -11,6 +11,9 @@ import {
   allCorrect,
   firstUnresolvedIndex,
   nextUnresolvedIndex,
+  priorCorrectFromStart,
+  priorTypedFromStart,
+  isRevisionIncompleteError,
 } from "../useQuizRevision";
 
 const words = (...ids: number[]) =>
@@ -103,5 +106,49 @@ describe("useQuizRevision hook", () => {
     act(() => result.current.recordResult(7, false, "morning"));
     act(() => result.current.recordResult(7, true));
     expect(result.current.revealByItem).toEqual({});
+  });
+});
+
+describe("#1092 訂正交卷被擋後重新載入", () => {
+  const startWords = [
+    {
+      content_item_id: 1,
+      prior_answer: "look forwerd to",
+      prior_is_correct: false,
+    },
+    { content_item_id: 2, prior_answer: "Apple", prior_is_correct: false },
+    { content_item_id: 3, prior_answer: null, prior_is_correct: null },
+  ];
+
+  it("priorCorrectFromStart：以後端對錯為準，未判過的題不放", () => {
+    expect(priorCorrectFromStart(startWords)).toEqual({ 1: false, 2: false });
+  });
+
+  it("priorTypedFromStart：本機已輸入的答案優先，其餘補後端 prior_answer", () => {
+    expect(priorTypedFromStart(startWords)).toEqual({
+      1: "look forwerd to",
+      2: "Apple",
+    });
+    expect(
+      priorTypedFromStart(startWords, { 1: "look forward to", 3: "x" }),
+    ).toEqual({ 1: "look forward to", 2: "Apple", 3: "x" });
+  });
+
+  it("isRevisionIncompleteError 只認 QUIZ_REVISION_INCOMPLETE", () => {
+    expect(
+      isRevisionIncompleteError({
+        detail: {
+          code: "QUIZ_REVISION_INCOMPLETE",
+          correct_count: 1,
+          total: 2,
+        },
+      }),
+    ).toBe(true);
+    expect(isRevisionIncompleteError({ detail: { code: "QUIZ_CLOSED" } })).toBe(
+      false,
+    );
+    expect(isRevisionIncompleteError({ detail: "boom" })).toBe(false);
+    expect(isRevisionIncompleteError(new Error("x"))).toBe(false);
+    expect(isRevisionIncompleteError(undefined)).toBe(false);
   });
 });

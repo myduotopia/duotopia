@@ -5383,7 +5383,8 @@
     },
     "revision": {
       "hint": "訂正模式：答錯會顯示正解，全部改對才能提交",
-      "correctAnswer": "正解：{{answer}}"
+      "correctAnswer": "正解：{{answer}}",
+      "settingsChanged": "老師調整了評分方式，有題目需要再修正，請修改標示的題目後再交卷。"
     }
   },
   "wordSpelling": {
