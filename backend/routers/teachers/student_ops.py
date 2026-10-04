@@ -684,63 +684,6 @@ async def reset_student_password(
     }
 
 
-@router.get("/classrooms/{classroom_id}/students")
-async def get_classroom_students(
-    classroom_id: int,
-    current_teacher: Teacher = Depends(get_current_teacher),
-    db: Session = Depends(get_db),
-):
-    """取得班級的學生列表"""
-    # 驗證班級存在且屬於當前教師
-    classroom = (
-        db.query(Classroom)
-        .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_teacher.id,
-            Classroom.is_active.is_(True),
-            Classroom.deleted_at.is_(None),
-        )
-        .first()
-    )
-
-    if not classroom:
-        raise HTTPException(
-            status_code=404, detail="Classroom not found or you don't have permission"
-        )
-
-    # 取得班級學生
-    students = (
-        db.query(Student)
-        .join(ClassroomStudent)
-        .filter(
-            ClassroomStudent.classroom_id == classroom_id,
-            Student.is_active.is_(True),
-            ClassroomStudent.is_active.is_(True),
-        )
-        .all()
-    )
-
-    return [
-        {
-            "id": s.id,
-            "name": s.name,
-            "email": s.email,
-            "student_number": s.student_number,
-            "birthdate": s.birthdate.isoformat() if s.birthdate else None,
-            "phone": getattr(s, "phone", ""),
-            "password_changed": s.password_changed,
-            "last_login": (s.last_login.isoformat() if s.last_login else None),
-            "status": "active" if s.is_active else "inactive",
-            "created_at": (s.created_at.isoformat() if s.created_at else None),
-            "email_verified": s.email_verified,
-            "classroom_created_at": (
-                classroom.created_at.isoformat() if classroom.created_at else None
-            ),
-        }
-        for s in students
-    ]
-
-
 @router.post("/classrooms/{classroom_id}/students/batch")
 async def batch_create_students(
     classroom_id: int,

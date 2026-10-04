@@ -48,6 +48,8 @@ def _get_classrooms_for_student(db: Session, student_id: int) -> list:
             Classroom.is_active.is_(True),
             Classroom.deleted_at.is_(None),
         )
+        # 與 profile._first_visible_classroom 一致：預設班級＝最早加入的可見班級
+        .order_by(ClassroomStudent.id)
         .all()
     )
 

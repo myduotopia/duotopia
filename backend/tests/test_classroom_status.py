@@ -226,6 +226,8 @@ class TestClassroomDisplayName:
             ("12", "Grade 5", "12"),  # 歷史雜值視為未設定
             ("12", "13", "12"),  # 超出範圍
             (None, None, ""),
+            (" 12 ", "8", "8年12班"),  # 前後空白去除
+            ("   ", "8", "   "),  # 去空白後為空 → 回原字串
         ],
     )
     def test_rules(self, name, grade, expected):
@@ -448,13 +450,25 @@ class TestTeacherDeleteVsDeactivate:
         assert doomed.deleted_at is not None
         assert doomed.is_active is False
 
+        # 預設（選單用）：只列啟用班級
         response = client.get("/api/teachers/classrooms", headers=_auth(teacher))
         assert response.status_code == 200
         by_id = {c["id"]: c for c in response.json()}
-        assert doomed.id not in by_id
-        assert by_id[inactive.id]["is_active"] is False
+        assert set(by_id) == {active.id}
         assert by_id[active.id]["is_active"] is True
         assert by_id[active.id]["grade"] == 8
+
+        # include_inactive=true（我的班級頁）：含停用班級，已刪除仍排除
+        response = client.get(
+            "/api/teachers/classrooms",
+            params={"include_inactive": "true"},
+            headers=_auth(teacher),
+        )
+        assert response.status_code == 200
+        by_id = {c["id"]: c for c in response.json()}
+        assert set(by_id) == {active.id, inactive.id}
+        assert by_id[inactive.id]["is_active"] is False
+        assert by_id[active.id]["is_active"] is True
 
     def test_deleted_classroom_is_404_on_detail_update_delete(
         self, client, test_db, teacher
@@ -492,6 +506,119 @@ class TestTeacherDeleteVsDeactivate:
         test_db.refresh(classroom)
         assert classroom.is_active is True
         assert classroom.deleted_at is None
+
+    @pytest.mark.parametrize(
+        "level,expected",
+        [("preA", "preA"), ("PRE_A", "preA"), ("a1", "A1"), ("b2", "B2")],
+    )
+    def test_put_level_is_normalized(self, client, test_db, teacher, level, expected):
+        classroom = _make_classroom(test_db, "C", teacher_id=teacher.id)
+        response = client.put(
+            f"/api/teachers/classrooms/{classroom.id}",
+            headers=_auth(teacher),
+            json={"level": level},
+        )
+        assert response.status_code == 200
+        assert response.json()["level"] == expected
+        test_db.refresh(classroom)
+        assert classroom.level == ProgramLevel(expected)
+
+    def test_put_invalid_level_is_422(self, client, test_db, teacher):
+        classroom = _make_classroom(test_db, "C", teacher_id=teacher.id)
+        response = client.put(
+            f"/api/teachers/classrooms/{classroom.id}",
+            headers=_auth(teacher),
+            json={"level": "D9"},
+        )
+        assert response.status_code == 422
+        test_db.refresh(classroom)
+        assert classroom.level == ProgramLevel.A1
+
+    def test_create_level_normalized_and_invalid_rejected(self, client, teacher):
+        response = client.post(
+            "/api/teachers/classrooms",
+            headers=_auth(teacher),
+            json={"name": "P", "level": "PRE_A", "grade": 1},
+        )
+        assert response.status_code == 200
+        assert response.json()["level"] == "preA"
+
+        response = client.post(
+            "/api/teachers/classrooms",
+            headers=_auth(teacher),
+            json={"name": "Bad", "level": "beginner", "grade": 1},
+        )
+        assert response.status_code == 422
+
+
+# ============ 停用班級政策：老師端可用，但不可派新作業 ============
+
+
+class TestInactiveClassroomTeacherPolicy:
+    def test_create_assignment_on_inactive_classroom_is_400(
+        self, client, test_db, teacher
+    ):
+        inactive = _make_classroom(
+            test_db, "Inactive", teacher_id=teacher.id, is_active=False
+        )
+        response = client.post(
+            "/api/teachers/assignments/create",
+            headers=_auth(teacher),
+            json={"title": "HW", "classroom_id": inactive.id, "content_ids": [1]},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "班級已停用，無法派發作業"
+        assert test_db.query(Assignment).count() == 0
+
+    def test_create_assignment_on_deleted_classroom_is_404(
+        self, client, test_db, teacher
+    ):
+        deleted = _make_classroom(
+            test_db, "Deleted", teacher_id=teacher.id, is_active=False, deleted=True
+        )
+        response = client.post(
+            "/api/teachers/assignments/create",
+            headers=_auth(teacher),
+            json={"title": "HW", "classroom_id": deleted.id, "content_ids": [1]},
+        )
+        assert response.status_code == 404
+
+    def test_inactive_classroom_of_other_teacher_is_404_not_400(
+        self, client, test_db, teacher, other_teacher
+    ):
+        """授權檢查在停用檢查之前，不對無權限者透露班級狀態"""
+        theirs = _make_classroom(
+            test_db, "Theirs", teacher_id=other_teacher.id, is_active=False
+        )
+        response = client.post(
+            "/api/teachers/assignments/create",
+            headers=_auth(teacher),
+            json={"title": "HW", "classroom_id": theirs.id, "content_ids": [1]},
+        )
+        assert response.status_code == 404
+
+    def test_groups_and_students_readable_for_inactive_classroom(
+        self, client, test_db, teacher
+    ):
+        inactive = _make_classroom(
+            test_db, "Inactive", teacher_id=teacher.id, is_active=False
+        )
+        response = client.get(
+            f"/api/teachers/classrooms/{inactive.id}/groups", headers=_auth(teacher)
+        )
+        assert response.status_code == 200
+        response = client.get(
+            f"/api/teachers/classrooms/{inactive.id}/students", headers=_auth(teacher)
+        )
+        assert response.status_code == 200
+
+        deleted = _make_classroom(
+            test_db, "Deleted", teacher_id=teacher.id, is_active=False, deleted=True
+        )
+        response = client.get(
+            f"/api/teachers/classrooms/{deleted.id}/groups", headers=_auth(teacher)
+        )
+        assert response.status_code == 404
 
 
 # ============ 學生端 ============
@@ -605,6 +732,46 @@ class TestStudentVisibility:
         )
         assert len(response.json()) == 3
 
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/api/students/assignments/{id}/activities",
+            "/api/students/assignments/{id}/submit",
+            "/api/students/assignments/{id}/practice-words",
+            "/api/students/assignments/{id}/rearrangement-questions",
+            "/api/students/assignments/{id}/quiz/status",
+        ],
+    )
+    @pytest.mark.parametrize("which", ["inactive", "deleted"])
+    def test_assignment_detail_blocked_for_hidden_classroom(
+        self, client, test_db, teacher, student_setup, path, which
+    ):
+        student = student_setup["student"]
+        sa = _assign(test_db, teacher, student_setup[which], student, "Hidden")
+        url = path.format(id=sa.id)
+        method = client.post if path.endswith("/submit") else client.get
+
+        response = method(url, headers=_student_auth(student))
+        assert response.status_code == 403
+        assert response.json()["detail"] == "classroom_inactive"
+
+    def test_assignment_detail_guard_skips_other_students_assignment(
+        self, client, test_db, teacher, student_setup
+    ):
+        """別人的作業 id 不由守門回 403，交給端點本身處理（不透露班級狀態）"""
+        other = Student(name="Other", is_active=True)
+        test_db.add(other)
+        test_db.commit()
+        sa = _assign(test_db, teacher, student_setup["inactive"], other, "NotMine")
+
+        response = client.get(
+            f"/api/students/assignments/{sa.id}/activities",
+            headers=_student_auth(student_setup["student"]),
+        )
+        assert response.status_code != 403 or (
+            response.json().get("detail") != "classroom_inactive"
+        )
+
 
 # ============ 公開端與機構端 ============
 
@@ -648,8 +815,18 @@ class TestPublicAndSchoolLists:
         for c in (active, inactive, deleted):
             _link_to_school(test_db, c, school)
 
+        # 預設只列啟用班級
         response = client.get(
             f"/api/schools/{school.id}/classrooms", headers=_auth(admin)
+        )
+        assert response.status_code == 200
+        assert {c["id"] for c in response.json()} == {str(active.id)}
+
+        # include_inactive=true：含停用，已刪除仍排除
+        response = client.get(
+            f"/api/schools/{school.id}/classrooms",
+            params={"include_inactive": "true"},
+            headers=_auth(admin),
         )
         assert response.status_code == 200
         by_id = {c["id"]: c for c in response.json()}

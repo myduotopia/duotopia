@@ -4,7 +4,7 @@ Classroom-School Relationship API Routes
 Manages the linking of classrooms to schools within the organization hierarchy.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -347,6 +347,7 @@ async def unlink_classroom_from_school(
 @router.get("/api/schools/{school_id}/classrooms", response_model=List[ClassroomInfo])
 async def list_school_classrooms(
     school_id: uuid.UUID,
+    include_inactive: bool = Query(False, description="true＝含停用班級（已刪除一律排除，#1097）"),
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
@@ -411,6 +412,15 @@ async def list_school_classrooms(
         .subquery()
     )
 
+    # #1097：預設只列啟用班級；include_inactive=true 時連停用班級一起列出
+    # （is_active 讓前端顯示「停用」徽章、可重新啟用）。已刪除一律排除。
+    classroom_filters = [
+        Classroom.id.in_(classroom_ids),
+        Classroom.deleted_at.is_(None),
+    ]
+    if not include_inactive:
+        classroom_filters.append(Classroom.is_active.is_(True))
+
     # Get classrooms with teacher preloaded and counts in a single query
     classrooms_query = (
         db.query(
@@ -423,9 +433,7 @@ async def list_school_classrooms(
         .outerjoin(student_counts, Classroom.id == student_counts.c.classroom_id)
         .outerjoin(assignment_counts, Classroom.id == assignment_counts.c.classroom_id)
         .outerjoin(program_counts, Classroom.id == program_counts.c.classroom_id)
-        # #1097：停用班級照常列出（is_active 讓前端顯示「停用」徽章、可重新啟用），
-        # 只排除已刪除
-        .filter(Classroom.id.in_(classroom_ids), Classroom.deleted_at.is_(None))
+        .filter(*classroom_filters)
         .all()
     )
 

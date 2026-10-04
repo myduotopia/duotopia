@@ -39,7 +39,10 @@ def classroom_display_name(name: Optional[str], grade: Any) -> str:
     前端有對應的 formatClassroomDisplayName（含英文規則），兩邊規則需一致。
     `grade` 可傳 DB 字串或整數，內部經 parse_grade 正規化。
     """
-    text = name or ""
+    raw = name or ""
+    text = raw.strip()
+    if not text:
+        return raw
     value = grade if isinstance(grade, int) else parse_grade(grade)
     if isinstance(value, bool) or value is None:
         return text

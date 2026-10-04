@@ -164,7 +164,7 @@ def test_complete_classroom_lifecycle(client, test_db):
     data = response.json()
     assert data["is_active"] is False
 
-    # Verify classroom not in active list
+    # Verify classroom not in default (active-only) list
     response = client.get(
         f"/api/schools/{school_id}/classrooms",
         headers={"Authorization": f"Bearer {token}"},
@@ -173,3 +173,14 @@ def test_complete_classroom_lifecycle(client, test_db):
     active_classrooms = response.json()
     # Convert classroom_id to string for comparison since API returns IDs as strings
     assert str(classroom_id) not in [c["id"] for c in active_classrooms]
+
+    # #1097：停用不是刪除 — include_inactive=true 時仍列出，標示 is_active=False
+    response = client.get(
+        f"/api/schools/{school_id}/classrooms",
+        params={"include_inactive": "true"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    by_id = {c["id"]: c for c in response.json()}
+    assert str(classroom_id) in by_id
+    assert by_id[str(classroom_id)]["is_active"] is False

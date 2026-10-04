@@ -308,12 +308,12 @@ async def create_assignment(
     # 支援兩種授權路徑：
     # 1. 班級導師（teacher_id == current_teacher.id）
     # 2. 機構管理員（透過 organization_id 驗證角色）
+    # #1097：先排除已刪除；停用班級在授權通過後回 400（停用班不可派新作業）
     classroom = (
         db.query(Classroom)
         .filter(
             and_(
                 Classroom.id == request.classroom_id,
-                Classroom.is_active.is_(True),
                 Classroom.deleted_at.is_(None),
             )
         )
@@ -360,6 +360,11 @@ async def create_assignment(
         raise HTTPException(
             status_code=404, detail="Classroom not found or you don't have permission"
         )
+
+    # #1097：停用（未刪除）的班級老師端其他功能照常可用，唯獨不能派新作業。
+    # 放在授權之後，避免對無權限者透露班級狀態。
+    if not classroom.is_active:
+        raise HTTPException(status_code=400, detail="班級已停用，無法派發作業")
 
     # 驗證所有 Content 存在並 eager load content_items
     contents = (
@@ -1419,7 +1424,7 @@ async def get_classroom_students(
             and_(
                 Classroom.id == classroom_id,
                 Classroom.teacher_id == current_teacher.id,
-                Classroom.is_active.is_(True),
+                # #1097：停用班級老師端仍可讀取，只排除已刪除
                 Classroom.deleted_at.is_(None),
             )
         )
@@ -1468,7 +1473,7 @@ async def get_available_contents(
                 and_(
                     Classroom.id == classroom_id,
                     Classroom.teacher_id == current_teacher.id,
-                    Classroom.is_active.is_(True),
+                    # #1097：停用班級老師端仍可讀取，只排除已刪除
                     Classroom.deleted_at.is_(None),
                 )
             )

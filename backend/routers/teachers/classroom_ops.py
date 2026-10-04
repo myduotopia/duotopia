@@ -40,19 +40,27 @@ async def get_teacher_classrooms(
         None, description="School UUID (requires mode=school)"
     ),
     organization_id: Optional[str] = Query(None, description="Organization UUID"),
+    include_inactive: bool = Query(False, description="true＝含停用班級（已刪除一律排除，#1097）"),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """取得教師的所有班級"""
+    """取得教師的所有班級
+
+    #1097：預設只回啟用且未刪除的班級（派作業、搬學生等選單用）；
+    「我的班級」頁帶 include_inactive=true 取得停用班級（回傳 is_active 供標示／篩選）。
+    已刪除的班級一律排除。
+    """
+    classroom_filters = [
+        Classroom.teacher_id == current_teacher.id,
+        Classroom.deleted_at.is_(None),
+    ]
+    if not include_inactive:
+        classroom_filters.append(Classroom.is_active.is_(True))
 
     # Get classrooms with students AND school/organization relationships.
-    # #1097：只排除已刪除；停用班級照常列出（回傳 is_active 供前端標示／篩選）
     classrooms = (
         db.query(Classroom)
-        .filter(
-            Classroom.teacher_id == current_teacher.id,
-            Classroom.deleted_at.is_(None),
-        )
+        .filter(*classroom_filters)
         .options(
             selectinload(Classroom.students).selectinload(ClassroomStudent.student),
             selectinload(Classroom.classroom_schools)
@@ -229,11 +237,8 @@ async def create_classroom(
     classroom = Classroom(
         name=classroom_data.name,
         description=classroom_data.description,
-        level=getattr(
-            ProgramLevel,
-            classroom_data.level.upper().replace("-", "_"),
-            ProgramLevel.A1,
-        ),
+        # level 已由 ClassroomCreate 正規化成 ProgramLevel 的 value（#1097）
+        level=ProgramLevel(classroom_data.level),
         grade=grade_to_storage(classroom_data.grade),
         teacher_id=current_teacher.id,
         is_active=True,
@@ -348,8 +353,8 @@ async def batch_update_classrooms(
             classroom.level = ProgramLevel(item.level)
         if item.is_active is not None:
             classroom.is_active = item.is_active
-    db.commit()
 
+    # commit 前組好回應，避免 commit 後屬性過期而逐列重新查詢
     updated = []
     for item in payload.items:
         classroom = classroom_map[item.classroom_id]
@@ -361,6 +366,7 @@ async def batch_update_classrooms(
                 "is_active": bool(classroom.is_active),
             }
         )
+    db.commit()
     return {"updated": updated, "count": len(updated)}
 
 
@@ -474,9 +480,8 @@ async def update_classroom(
     if update_data.description is not None:
         classroom.description = update_data.description
     if update_data.level is not None:
-        classroom.level = getattr(
-            ProgramLevel, update_data.level.upper().replace("-", "_"), ProgramLevel.A1
-        )
+        # 已由 ClassroomUpdate 正規化（無效值 → 422），#1097
+        classroom.level = ProgramLevel(update_data.level)
     if update_data.grade is not None:
         classroom.grade = grade_to_storage(update_data.grade)
     if update_data.is_active is not None:
