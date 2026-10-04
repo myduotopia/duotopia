@@ -6099,6 +6099,7 @@
     "list": {
       "selectAll": "全選／取消全選",
       "selectRow": "選取此題",
+      "imageOption": "(圖片)",
       "groupQuestionCount": "{{count}} 小題",
       "selected": "已選 {{count}} 題",
       "dirty": "{{count}} 題有未儲存的修改",

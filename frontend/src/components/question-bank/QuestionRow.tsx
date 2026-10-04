@@ -92,7 +92,7 @@ export default function QuestionRow({
           data-testid={`qb-stem-${q.id}`}
         >
           <div className="line-clamp-2 break-words">
-            {q.stem || (q.image_url ? "🖼" : "")}
+            {q.stem || (q.image_url ? t("questionBank.list.imageOption") : "")}
           </div>
           {q.question_type === "multiple_choice" && q.options.length > 0 && (
             <OptionGrid options={q.options} />

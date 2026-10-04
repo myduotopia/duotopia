@@ -6055,6 +6055,7 @@
     "list": {
       "selectAll": "Select / deselect all",
       "selectRow": "Select this question",
+      "imageOption": "(image)",
       "groupQuestionCount": "{{count}} questions",
       "selected": "{{count}} selected",
       "dirty": "{{count}} with unsaved changes",

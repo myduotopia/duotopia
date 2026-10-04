@@ -93,6 +93,7 @@ vi.mock("react-i18next", () => {
         "questionBank.messages.editorComingSoon": "editor soon",
         "questionBank.visibility.private": "私人",
         "questionBank.visibility.public": "公開",
+        "questionBank.list.imageOption": "(圖片)",
         "questionBank.list.selected": `selected ${opts?.count}`,
         "questionBank.list.confirmDelete": `delete ${opts?.count}?`,
         "questionBank.list.confirmDeleteWithGroups": `delete ${opts?.count}+${opts?.groups}g?`,
@@ -444,6 +445,33 @@ describe("QuestionBankTab", () => {
     expect(screen.getByTestId("qb-group-101-programs").textContent).toBe(
       "國中會考總複習 › Unit 3 時態",
     );
+  });
+
+  it("圖片選項（#1084）：沒有字只有圖的選項顯示「(圖片)」，排版仍是一列四格", async () => {
+    const imageOption = (i: number) => ({
+      id: i + 1,
+      order_index: i,
+      // 圖片選項在題本上沒有字：text 真的是空字串
+      text: "",
+      is_correct: i === 1,
+      audio_url: null,
+      image_url: `https://cdn/o${i}.png`,
+    });
+    listQuestions.mockResolvedValue(
+      respond([
+        makeQuestion({
+          id: 1,
+          stem: "Which picture?",
+          options: [0, 1, 2, 3].map(imageOption),
+        }),
+      ]),
+    );
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Which picture?");
+
+    const grid = screen.getByTestId("qb-option-grid");
+    expect(grid.getAttribute("data-layout")).toBe("1x4");
+    expect(grid.textContent).toBe("A. (圖片)B. (圖片)C. (圖片)D. (圖片)");
   });
 
   it("每頁筆數支援 10：URL size=10 時以 page_size 10 查詢，選單含 10 的選項", async () => {

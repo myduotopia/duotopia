@@ -3,7 +3,7 @@
  *
  * - ChipCell：chip 列純顯示，沒有值顯示「—」
  * - InlineVisibility：公開設定平常是文字，點了才出現下拉
- * - OptionGrid：選擇題選項預覽（短→一列四格、長→兩欄）
+ * - OptionGrid：選擇題選項預覽（短→一列四格、長→兩欄）；只有圖沒有字的選項顯示「(圖片)」
  * - formatGrade：年級只顯示數字
  * - programLinkLabel：教材欄 chip 文字（教材名 › 單元名）
  */
@@ -89,10 +89,29 @@ export function InlineVisibility({
 /** 選項全都短（≤ 12 字）且不超過 4 個 → 一列四格；否則兩欄 */
 const SHORT_OPTION_CHARS = 12;
 
+/**
+ * 列表要顯示的選項文字：沒有字只有圖的選項（#1084 圖片選項）顯示「(圖片)」。
+ * 「(圖片)」算短字，不會把一列四格擠成兩欄。
+ */
+export function optionCellText(
+  o: { text: string; image_url: string | null },
+  imageLabel: string,
+): string {
+  const text = o.text.trim();
+  if (text) return text;
+  return o.image_url ? imageLabel : "";
+}
+
 export function OptionGrid({ options }: { options: Question["options"] }) {
+  const { t } = useTranslation();
+  const imageLabel = t("questionBank.list.imageOption");
+  const texts = options.map((o) => optionCellText(o, imageLabel));
   const oneRow =
     options.length <= 4 &&
-    options.every((o) => o.text.trim().length <= SHORT_OPTION_CHARS);
+    // 「(圖片)」當短字：圖片選項的列表一樣排成一列四格
+    texts.every(
+      (text) => text === imageLabel || text.trim().length <= SHORT_OPTION_CHARS,
+    );
   return (
     <div
       className={`mt-1 grid gap-x-3 gap-y-0.5 text-xs text-gray-600 ${
@@ -102,14 +121,14 @@ export function OptionGrid({ options }: { options: Question["options"] }) {
       data-layout={oneRow ? "1x4" : "2x2"}
     >
       {options.map((o, i) => (
-        <span key={o.id} className="truncate" title={o.text}>
+        <span key={o.id} className="truncate" title={texts[i]}>
           {String.fromCharCode(65 + i)}.{" "}
           {o.is_correct ? (
             <span className="rounded bg-yellow-100 px-1 text-yellow-900">
-              {o.text || (o.image_url ? "🖼" : "")}
+              {texts[i]}
             </span>
           ) : (
-            o.text || (o.image_url ? "🖼" : "")
+            texts[i]
           )}
         </span>
       ))}
