@@ -14,7 +14,8 @@
  *
  * 克漏字（base.question_type === "cloze"）：段落直接採用 AI 重編後的 `{{n}}`，
  * 小題 `blank_index` 取 `question.blank`；AI 漏給或對不上時改依閱讀順序補配
- * （`matchClozeBlanks`）。閱讀題組若意外拿到 `{{n}}` 一律轉回底線，避免後端 422。
+ * （`matchClozeBlanks`）。閱讀題組若意外拿到 `{{n}}`，段落與文字版一律轉回底線，
+ * 避免後端 422。
  */
 
 import type {
@@ -46,6 +47,12 @@ const PLAIN_BLANK = "____";
 /** 把 `{{n}}` 換成底線（閱讀題組用；克漏字保留 token） */
 export function stripBlankTokens(text: string): string {
   return text.replace(/\{\{\d+\}\}/g, PLAIN_BLANK);
+}
+
+/** 素材文字版：克漏字保留 `{{n}}`，閱讀題組一律轉回底線 */
+function normalizeStimulusText(text: string, isCloze: boolean): string {
+  const trimmed = text.trim();
+  return isCloze ? trimmed : stripBlankTokens(trimmed);
 }
 
 /** box_2d 的座標尺度（Gemini 慣用 0–1000） */
@@ -163,13 +170,16 @@ export function matchClozeBlanks(
   );
 }
 
-/** 已裁好並上傳的圖片 URL（由 `uploadExtractedGroupImages` 準備） */
+/**
+ * 已裁好並上傳的題組圖片 URL（由 `extractedImages.ts` 的
+ * `uploadExtractedGroupImages` 準備；`extractedImages.ts` 直接用這個型別當回傳值）。
+ */
 export interface GroupExtractImages {
   /** kind=image 的整塊素材圖；裁不出來（PDF／失敗）為 null */
   stimulusUrl: string | null;
   /** kind=text 的文章插圖，與 `stimulus.figures` 等長 */
   figureUrls?: (string | null)[];
-  /** 小題的題幹圖與選項圖 */
+  /** 小題的題幹圖與選項圖，與 `questions` 等長 */
   questions?: ExtractedQuestionImages;
 }
 
@@ -193,7 +203,8 @@ export function groupDraftFromExtracted(
     .filter((g) => g.word !== "" && g.zh !== "");
 
   if (result.stimulus.kind === "image") {
-    const text = result.stimulus.text.trim();
+    // 閱讀題組的文字版同樣不能帶 `{{n}}`（後端對 reading 會 422）；克漏字保留
+    const text = normalizeStimulusText(result.stimulus.text, isCloze);
     return {
       ...base,
       title,
@@ -220,7 +231,9 @@ export function groupDraftFromExtracted(
   }));
   const layout = paragraphsToLayout(paragraphs, figures);
   // AI 沒切段落但有給整段文字：當老師版文字版，排版留空讓老師自己排
-  const fallbackText = layout ? "" : result.stimulus.text.trim();
+  const fallbackText = layout
+    ? ""
+    : normalizeStimulusText(result.stimulus.text, isCloze);
   return {
     ...base,
     title,

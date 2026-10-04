@@ -4750,6 +4750,7 @@
       "insertedNQuestions": "已擷取 {{count}} 題，已放入右側",
       "noGroupExtracted": "沒有擷取到題組內容，請換一張更清楚的圖片或 PDF",
       "insertedGroup": "已擷取題組（{{count}} 小題），已放入右側",
+      "croppedImageUploadFailed": "有 {{count}} 張圖片上傳失敗，請在卡片上手動補圖",
       "groupImageFallbackWhole": "AI 沒抓到素材區域，先放整張圖，你可以在排版裡換圖",
       "groupImageNeedsUpload": "PDF 無法在此裁圖：文字與空格已擷取，圖片（素材圖、插圖、題幹圖、選項圖）請手動補上",
       "pasteHint": "或按 Ctrl+V 貼上截圖／PDF"

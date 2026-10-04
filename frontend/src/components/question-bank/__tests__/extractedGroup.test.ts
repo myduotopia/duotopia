@@ -426,3 +426,68 @@ describe("groupDraftFromExtracted 克漏字", () => {
     expect(draft.questions.every((q) => q.blank_index === null)).toBe(true);
   });
 });
+
+describe("閱讀題組的文字版也要去掉 {{n}}", () => {
+  const withTokens = (over: Partial<MagicPasteGroupResult> = {}) =>
+    baseResult({
+      stimulus: {
+        kind: "text",
+        paragraphs: [],
+        text: "Dear Santa, I {{1}} a bike and I will {{2}} good.",
+        box_2d: null,
+        page: null,
+      },
+      ...over,
+    });
+
+  it("AI 沒切段落只給整段文字：reading 的 fallback 文字版轉回底線", () => {
+    const draft = groupDraftFromExtracted(
+      withTokens(),
+      emptyGroupDraft("reading"),
+      noImages,
+    );
+    expect(draft.layout).toBeNull();
+    expect(draft.passage_text).not.toContain("{{1}}");
+    expect(draft.passage_text).toContain("____");
+    expect(draft.passage_text_edited).toBe(true);
+  });
+
+  it("kind=image 的圖內文字：reading 轉回底線", () => {
+    const draft = groupDraftFromExtracted(
+      withTokens({
+        stimulus: {
+          kind: "image",
+          paragraphs: [],
+          text: "Choose: he {{1}} happy.",
+          box_2d: [0, 0, 500, 1000],
+          page: null,
+        },
+      }),
+      emptyGroupDraft("reading"),
+      stimulusImage,
+    );
+    expect(draft.passage_text).toBe("Choose: he ____ happy.");
+  });
+
+  it("克漏字不處理：fallback 與圖內文字都保留 {{n}}", () => {
+    expect(
+      groupDraftFromExtracted(withTokens(), emptyGroupDraft("cloze"), noImages)
+        .passage_text,
+    ).toContain("{{1}}");
+    expect(
+      groupDraftFromExtracted(
+        withTokens({
+          stimulus: {
+            kind: "image",
+            paragraphs: [],
+            text: "he {{1}} happy",
+            box_2d: [0, 0, 500, 1000],
+            page: null,
+          },
+        }),
+        emptyGroupDraft("cloze"),
+        stimulusImage,
+      ).passage_text,
+    ).toBe("he {{1}} happy");
+  });
+});

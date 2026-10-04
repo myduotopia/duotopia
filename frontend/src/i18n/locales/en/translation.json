@@ -4737,6 +4737,7 @@
       "insertedNQuestions": "Extracted {{count}} question(s) into the editor",
       "noGroupExtracted": "No question group found. Try a clearer image or PDF.",
       "insertedGroup": "Extracted the group ({{count}} sub-questions) into the editor",
+      "croppedImageUploadFailed": "{{count}} image(s) failed to upload. Please add them by hand on the card.",
       "groupImageFallbackWhole": "AI could not locate the stimulus area; the whole image was used. Replace it in the layout if needed.",
       "groupImageNeedsUpload": "Images cannot be cropped from a PDF here. The text and blanks were extracted; please add the pictures (stimulus, figures, question and option images) by hand.",
       "pasteHint": "or press Ctrl+V to paste a screenshot / PDF"

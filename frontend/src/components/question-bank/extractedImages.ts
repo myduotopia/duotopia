@@ -17,8 +17,11 @@ import type {
 } from "@/components/shared/MagicPasteInput";
 
 import { cropImageFileMany } from "./cropImage";
+import type { GroupExtractImages } from "./extractedGroup";
 import type { ExtractedQuestionImages } from "./questionDraft";
 import { uploadImageFile } from "./uploadImageFile";
+
+export type { GroupExtractImages };
 
 /** 擷取結果裡能裁圖的檔案類型（PDF 不行） */
 export function canCropFrom(file: File): boolean {
@@ -28,6 +31,9 @@ export function canCropFrom(file: File): boolean {
 /**
  * 依 boxes 裁圖並上傳，回傳與 boxes 等長的 url 陣列。
  * null 的位置代表「沒座標／裁不出來／上傳失敗」，呼叫端照樣往下走（老師可自己換圖）。
+ *
+ * 一次可能裁十幾張（四個圖片選項 × 多題），所以每張上傳都走 `silent`，
+ * 整批結束後只 toast 一次摘要，不讓老師被連續彈窗洗臉。
  */
 export async function uploadCroppedBoxes(
   file: File,
@@ -38,20 +44,22 @@ export async function uploadCroppedBoxes(
   if (boxes.length === 0) return [];
   const cropped = await cropImageFileMany(file, boxes, nameSuffix);
   const urls: (string | null)[] = [];
+  let failed = 0;
   for (const f of cropped) {
-    urls.push(f ? await uploadImageFile(f, t) : null);
+    if (!f) {
+      urls.push(null);
+      continue;
+    }
+    const url = await uploadImageFile(f, t, { silent: true });
+    if (url === null) failed += 1;
+    urls.push(url);
+  }
+  if (failed > 0) {
+    toast.error(
+      t("contentEditor.magicPaste.croppedImageUploadFailed", { count: failed }),
+    );
   }
   return urls;
-}
-
-/** 題組擷取的所有圖：整塊素材圖、文章插圖、每小題的題幹圖與選項圖 */
-export interface ExtractedGroupImages {
-  /** kind=image：整塊素材圖（裁不出來時退回整張原圖） */
-  stimulusUrl: string | null;
-  /** kind=text：文章插圖，與 `stimulus.figures` 等長 */
-  figureUrls: (string | null)[];
-  /** 小題的題幹圖與選項圖，與 `questions` 等長 */
-  questions: ExtractedQuestionImages;
 }
 
 /** 小題題幹圖 + 選項圖的座標攤平成一條（給 cropImageFileMany 一次解碼） */
@@ -122,7 +130,7 @@ export async function uploadExtractedGroupImages(
   result: MagicPasteGroupResult,
   file: File,
   t: TFunction,
-): Promise<ExtractedGroupImages> {
+): Promise<GroupExtractImages> {
   const figures = result.stimulus.figures ?? [];
   const isImageStimulus = result.stimulus.kind === "image";
   const qBoxes = questionBoxes(result.questions);
