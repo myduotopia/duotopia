@@ -812,11 +812,6 @@ export function AssignmentDetailSheet({
     }
   };
 
-  /**
-   * 關閉前：commit 尚未失焦的輸入（含滑桿可能在元件外放開的進階設定）、等佇列送完
-   * （最多 CLOSE_FLUSH_TIMEOUT_MS，逾時照樣關閉，之後失敗仍會 toast），有存過才通知班級頁重抓。
-   * 回傳 true ＝ 已關閉；正在關閉中再按一次回 false（不會永久吞掉：finally 一定釋放）。
-   */
   /** 把尚未失焦的欄位排進佇列（不等待）；評分需要確認的不存 */
   const commitPendingEdits = () => {
     if (!ready) return;
@@ -828,6 +823,11 @@ export function AssignmentDetailSheet({
     attemptScoringSave(editScoringRef.current, false);
   };
 
+  /**
+   * 關閉前：commit 尚未失焦的輸入（含滑桿可能在元件外放開的進階設定）、等佇列送完
+   * （最多 CLOSE_FLUSH_TIMEOUT_MS，逾時照樣關閉，之後失敗仍會 toast），有存過才通知班級頁重抓。
+   * 回傳 true ＝ 已關閉；正在關閉中再按一次回 false（不會永久吞掉：finally 一定釋放）。
+   */
   const requestClose = async (): Promise<boolean> => {
     if (closingRef.current) return false;
     closingRef.current = true;
