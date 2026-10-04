@@ -209,6 +209,55 @@ describe("useAssignmentAutoSave", () => {
     expect(onSaved).toHaveBeenCalledWith({ title: "New" }, { success: true });
   });
 
+  it("送出對象在排進佇列時決定：換作業後，舊作業排隊中的變動仍送給舊作業", async () => {
+    const a = controlledPatch();
+    const b = controlledPatch();
+    const { result, rerender } = renderHook(
+      ({ target, patch }) => useAssignmentAutoSave({ patch, target }),
+      { initialProps: { target: 1 as number, patch: a.patch } },
+    );
+    act(() => result.current.reset(SAVED));
+
+    let first!: Promise<unknown>;
+    let queued!: Promise<unknown>;
+    act(() => {
+      first = result.current.saveFields("basic", { title: "A" });
+      // 第一筆送出中 → 這筆排隊（作業 1）
+      queued = result.current.saveFields("advanced", {
+        shuffle_questions: true,
+      });
+    });
+
+    // 切到作業 2（新的 patch 函式）並重設已儲存值
+    rerender({ target: 2, patch: b.patch });
+    act(() => result.current.reset({ ...SAVED, title: "Other" }));
+    // 作業 1 排隊中的變動不算進作業 2 的 baseline
+    expect(result.current.baseline()).toMatchObject({
+      title: "Other",
+      shuffle_questions: false,
+    });
+
+    await act(async () => {
+      a.calls[0].resolve({});
+      await first;
+    });
+    // 排隊那筆仍用作業 1 的 patch 送出
+    expect(a.patch).toHaveBeenCalledTimes(2);
+    expect(a.calls[1].body).toEqual({ shuffle_questions: true });
+    expect(b.patch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      a.calls[1].resolve({});
+      await queued;
+    });
+    // 作業 1 的成功不會改到作業 2 的已儲存值與狀態
+    expect(result.current.baseline()).toMatchObject({
+      title: "Other",
+      shuffle_questions: false,
+    });
+    expect(result.current.saveStates.advanced).toBe("idle");
+  });
+
   it("flush() 等佇列全部送完；沒有排隊時立即完成", async () => {
     const { patch, calls } = controlledPatch();
     const { result } = renderHook(() => useAssignmentAutoSave({ patch }));

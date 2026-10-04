@@ -23,6 +23,15 @@
  * 詳情（GET）載入前所有控制項 disabled。畫面以 detailData／本地值為準（prop 只當開啟瞬間的
  * 佔位）。關閉（Esc／X／點外面／關閉鈕）前先 commit 尚未失焦的輸入並等佇列送完；本次有存過
  * 才在關閉時呼叫一次 onAssignmentUpdated（重算成功也會呼叫），不是每個開關都整頁重抓。
+ *
+ * Review 修正：
+ * - 關閉時等佇列最多 10 秒，逾時照樣關（PATCH 沒回應也不會卡住）；關閉前也補存進階設定
+ *   （滑桿可能在元件外放開）。批改／AI 批改按鈕先走同一條關閉流程再導去批改。
+ * - 日期以台北時區換算成 YYYY-MM-DD（API 回 UTC，開始日期直接切 "T" 會早一天）；打到一半
+ *   的日期（badInput、年份 < 2000）失焦時退回、不存，刻意清空才存 null。
+ * - 輸入法選字中的 Enter 不觸發儲存；合併送出的評分 patch 重算提示只出現一次。
+ * - 開啟時把上一份作業的進階設定／評分／進度全部清掉，載入中不露出舊資料；只採用最新一次
+ *   載入的回應。
  */
 import {
   useState,
@@ -141,6 +150,18 @@ const SCORING_KEYS = [
   "quiz_case_sensitive",
 ];
 
+/** #1092 review：關閉時等佇列送完的上限；逾時照樣關閉（之後失敗仍會 toast） */
+const CLOSE_FLUSH_TIMEOUT_MS = 10_000;
+/** 年份小於這個值視為還沒打完的日期（例如 Chrome 打年份時的 0202） */
+const MIN_DATE_YEAR = 2000;
+
+/** 日期輸入是否為打到一半的值（瀏覽器回報 badInput、或年份不合理）—— 這種值不存 */
+function isPartialDateInput(el: HTMLInputElement | null): boolean {
+  if (!el) return false;
+  if (el.validity.badInput) return true;
+  return el.value !== "" && Number(el.value.slice(0, 4)) < MIN_DATE_YEAR;
+}
+
 /** PATCH 回應（後端不回作業本身） */
 type PatchResponse = { success?: boolean; recomputed_count?: number } | null;
 
@@ -190,9 +211,17 @@ function advancedFromDetail(detail: Record<string, unknown>): AdvancedSettings {
   };
 }
 
-/** ISO 時間字串 → 日期輸入用的 YYYY-MM-DD（沿用原本的 split 寫法） */
+/**
+ * ISO 時間字串 → 日期輸入用的 YYYY-MM-DD，以台北時區換算（#1092 review：detail API 回 UTC，
+ * 開始日期 00:00+08:00 ＝ 前一天 16:00 UTC，直接切 "T" 會早一天）。送出的字串（+08:00）與
+ * API 回的 UTC 字串都走這裡，baseline 與畫面用同一種換算，不會出現沒改卻被 diff 成有改。
+ */
 function dateOnly(iso: unknown): string {
-  return typeof iso === "string" && iso ? iso.split("T")[0] : "";
+  if (typeof iso !== "string" || !iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.split("T")[0];
+  // en-CA 的日期格式就是 YYYY-MM-DD
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
 }
 // Taiwan-only product: hardcode TST (+08:00) for TIMESTAMPTZ columns
 const dueDateBody = (d: string) => (d ? `${d}T23:59:59+08:00` : null);
@@ -331,9 +360,16 @@ export function AssignmentDetailSheet({
   const pendingScoringRef = useRef<QuizScoringSettings | null>(null);
   // #1092: /progress 是否載入成功；失敗時不知道交卷人數，改評分方式一律跳確認
   const [progressLoaded, setProgressLoaded] = useState(false);
+  // #1092 review：合併送出的評分 patch 會 resolve 給多個呼叫端 → 重算後的副作用每筆回應只做一次
+  const handledResponsesRef = useRef(new WeakSet<object>());
+  const startDateInputRef = useRef<HTMLInputElement>(null);
+  const dueDateInputRef = useRef<HTMLInputElement>(null);
 
   const assignmentId = assignment?.id;
   const autoSave = useAssignmentAutoSave<PatchResponse>({
+    // #1092 review：每筆在排進佇列時記下作業 id 與這個 patch（閉包住當下的 assignmentId），
+    // 關閉後換到別份作業時，舊作業排隊中的變動不會送到新作業
+    target: assignmentId,
     patch: (body) =>
       apiClient.patch<PatchResponse>(
         `/api/teachers/assignments/${assignmentId}`,
@@ -345,8 +381,12 @@ export function AssignmentDetailSheet({
   });
   const { reset: resetAutoSave } = autoSave;
 
+  // #1092 review：只採用最新一次載入的回應（快速切換作業時，舊作業較晚回來的資料不蓋掉新的）
+  const fetchSeqRef = useRef(0);
+
   const fetchAssignmentData = useCallback(async () => {
     if (!assignment) return;
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       // Fetch assignment detail (includes contents) and student progress in parallel
@@ -364,6 +404,7 @@ export function AssignmentDetailSheet({
             return [];
           }),
       ]);
+      if (seq !== fetchSeqRef.current) return;
 
       const detail = detailResponse as Record<string, unknown>;
       setDetailData(detail);
@@ -391,10 +432,11 @@ export function AssignmentDetailSheet({
 
       setStudentProgress(progressList(progressResponse));
     } catch {
+      if (seq !== fetchSeqRef.current) return;
       setStudentProgress([]);
       setAssignmentContents([]);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [assignment, resetAutoSave]);
 
@@ -426,7 +468,18 @@ export function AssignmentDetailSheet({
       setAssignmentContents([]);
       setContentDetails({});
       setExpandedContentId(null);
+      setEditingContentId(null);
+      // #1092 review：上一份作業的設定／進度不可在載入中露出
+      setEditAdvanced(DEFAULT_ADVANCED);
+      setEditScoring(EMPTY_QUIZ_SCORING);
+      editScoringRef.current = EMPTY_QUIZ_SCORING;
+      setStudentProgress([]);
+      setProgressLoaded(false);
+      setIsEditingStudents(false);
+      setPendingStudentIds(null);
+      setConfirmRecomputeOpen(false);
       pendingScoringRef.current = null;
+      handledResponsesRef.current = new WeakSet();
       listDirtyRef.current = false;
       fetchAssignmentData();
     }
@@ -605,15 +658,41 @@ export function AssignmentDetailSheet({
           "開始日期不可晚於截止日期",
         ),
       );
-      const base = autoSave.baseline();
-      setEditStartDate(dateOnly(base.start_date));
-      setEditDueDate(dateOnly(base.due_date));
+      revertDates();
       return;
     }
     void save("basic", {
       start_date: startDateBody(start),
       due_date: dueDateBody(due),
     });
+  };
+
+  /** 兩個日期輸入任一個是打到一半的值 */
+  const datesPartial = () =>
+    isPartialDateInput(startDateInputRef.current) ||
+    isPartialDateInput(dueDateInputRef.current);
+
+  /** 退回兩個日期到最後儲存值 */
+  const revertDates = () => {
+    const base = autoSave.baseline();
+    setEditStartDate(dateOnly(base.start_date));
+    setEditDueDate(dateOnly(base.due_date));
+  };
+
+  /**
+   * 日期失焦：打到一半（badInput／年份 < 2000）→ 退回、不存；刻意清空（空值且非 badInput）
+   * 照常存 null。
+   */
+  const handleDateBlur = () => {
+    if (!ready) return;
+    if (datesPartial()) {
+      toast.error(t("assignmentDetail.messages.invalidDate"), {
+        id: "assignment-settings-invalid-date",
+      });
+      revertDates();
+      return;
+    }
+    commitDates(editStartDate, editDueDate);
   };
 
   const commitAdvanced = (next: AdvancedSettings) => {
@@ -625,10 +704,15 @@ export function AssignmentDetailSheet({
   const performScoringSave = async (next: QuizScoringSettings) => {
     const result = await save("scoring", quizScoringPayload(next));
     if (!result) return;
+    // 同一筆（合併後）回應只處理一次（body 物件對所有等待者是同一個）
+    if (handledResponsesRef.current.has(result.body)) return;
+    handledResponsesRef.current.add(result.body);
     const recomputed = result.response?.recomputed_count ?? 0;
     void fetchProgress();
     if (recomputed > 0) {
-      toast.success(t("quizScoring.recomputed", { count: recomputed }));
+      toast.success(t("quizScoring.recomputed", { count: recomputed }), {
+        id: "assignment-settings-recomputed",
+      });
       onAssignmentUpdated?.();
     }
   };
@@ -673,20 +757,35 @@ export function AssignmentDetailSheet({
     }
   };
 
-  /** 關閉前：commit 尚未失焦的輸入、等佇列送完，有存過才通知班級頁重抓。 */
-  const requestClose = async () => {
-    if (closingRef.current) return;
+  /**
+   * 關閉前：commit 尚未失焦的輸入（含滑桿可能在元件外放開的進階設定）、等佇列送完
+   * （最多 CLOSE_FLUSH_TIMEOUT_MS，逾時照樣關閉，之後失敗仍會 toast），有存過才通知班級頁重抓。
+   * 回傳 true ＝ 已關閉；正在關閉中再按一次回 false（不會永久吞掉：finally 一定釋放）。
+   */
+  const requestClose = async (): Promise<boolean> => {
+    if (closingRef.current) return false;
     closingRef.current = true;
     setClosing(true);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       if (ready) {
         commitTitle();
         commitInstructions();
-        commitDates(editStartDate, editDueDate);
+        // 打到一半的日期不存（下次開啟會重新載入）
+        if (!datesPartial()) commitDates(editStartDate, editDueDate);
+        commitAdvanced(editAdvanced);
         attemptScoringSave(editScoringRef.current, false);
       }
-      await autoSave.flush();
+      await Promise.race([
+        autoSave.flush(),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, CLOSE_FLUSH_TIMEOUT_MS);
+        }),
+      ]);
+    } catch {
+      // flush 不會 reject；保險起見任何例外都照樣關閉
     } finally {
+      if (timer) clearTimeout(timer);
       closingRef.current = false;
       setClosing(false);
     }
@@ -695,6 +794,14 @@ export function AssignmentDetailSheet({
       onAssignmentUpdated?.();
     }
     onOpenChange(false);
+    return true;
+  };
+
+  /** 批改／AI 批改：先走同一條關閉流程（commit＋flush＋通知），關閉後才導去批改 */
+  const closeThen = async (action?: (id: number) => void) => {
+    if (!assignment) return;
+    const id = assignment.id;
+    if (await requestClose()) action?.(id);
   };
 
   const handleSheetOpenChange = (nextOpen: boolean) => {
@@ -827,7 +934,8 @@ export function AssignmentDetailSheet({
     ? (detailData.student_ids as unknown[]).length
     : assignment.student_count;
   const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    // 輸入法選字中的 Enter 不算（不然選字就會存）
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       e.currentTarget.blur();
     }
@@ -905,7 +1013,7 @@ export function AssignmentDetailSheet({
                 <div className="flex gap-2">
                   <Button
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white"
-                    onClick={() => onGradeClick?.(assignment.id)}
+                    onClick={() => void closeThen(onGradeClick)}
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
                     {t("assignmentDetail.buttons.gradeAssignment", "批改作業")}
@@ -913,7 +1021,7 @@ export function AssignmentDetailSheet({
                   {canUseAiGrading && (
                     <Button
                       className="flex-1 bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700 dark:text-white"
-                      onClick={() => onBatchGradeClick?.(assignment.id)}
+                      onClick={() => void closeThen(onBatchGradeClick)}
                     >
                       <Sparkles className="h-4 w-4 mr-2" />
                       {t("assignmentDetail.buttons.batchGrade", "AI 批改")}
@@ -945,11 +1053,12 @@ export function AssignmentDetailSheet({
                   </label>
                   <Input
                     id="assignment-settings-start-date"
+                    ref={startDateInputRef}
                     type="date"
                     value={editStartDate}
                     disabled={!ready}
                     onChange={(e) => setEditStartDate(e.target.value)}
-                    onBlur={() => commitDates(editStartDate, editDueDate)}
+                    onBlur={handleDateBlur}
                     onKeyDown={blurOnEnter}
                     className="mt-1 h-8 w-full min-w-0 px-2 text-sm font-semibold bg-white dark:bg-gray-900"
                   />
@@ -963,11 +1072,12 @@ export function AssignmentDetailSheet({
                   </label>
                   <Input
                     id="assignment-settings-due-date"
+                    ref={dueDateInputRef}
                     type="date"
                     value={editDueDate}
                     disabled={!ready}
                     onChange={(e) => setEditDueDate(e.target.value)}
-                    onBlur={() => commitDates(editStartDate, editDueDate)}
+                    onBlur={handleDateBlur}
                     onKeyDown={blurOnEnter}
                     className="mt-1 h-8 w-full min-w-0 px-2 text-sm font-semibold bg-white dark:bg-gray-900"
                   />

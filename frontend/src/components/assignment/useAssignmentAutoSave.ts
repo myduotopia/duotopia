@@ -17,6 +17,9 @@
  * - **回傳**：成功時 resolve `{ body, response }`（呼叫端可讀 `recomputed_count`）；失敗時 reject
  *   原始錯誤，呼叫端據 422/400 code 提示並用 `baseline()` 把欄位退回。失敗不會中斷佇列。
  * - **狀態**：每區一個 SaveState（idle／saving／saved／failed），給區塊標題的儲存狀態用。
+ * - **送出對象在排進佇列時就決定**（review 修正）：每筆記下當下的 `target`（作業 id）與 `patch`
+ *   函式，送出時不再讀「現在的」作業 —— 關閉後切到另一份作業時，舊作業排隊中的變動不會被送到
+ *   新作業。不同 target 不合併；baseline／狀態／onSaved 只看目前 target 的那幾筆。
  * - **flush()**：等佇列全部送完（關閉 sheet 前呼叫）；`hasSaved()` 回報本次開啟後是否成功存過，
  *   sheet 關閉時據此決定要不要呼叫 onAssignmentUpdated。
  */
@@ -39,6 +42,10 @@ interface Waiter<R> {
 
 interface Entry<R> {
   section: AutoSaveSection;
+  /** 排進佇列當下的作業（送出對象） */
+  target: unknown;
+  /** 排進佇列當下的 patch 函式（送出時不讀最新 render 的） */
+  patch: (body: PatchBody) => Promise<R>;
   body: PatchBody;
   waiters: Waiter<R>[];
 }
@@ -59,14 +66,17 @@ export function diffFields(base: PatchBody, next: PatchBody): PatchBody {
 }
 
 interface Options<R> {
-  /** 送出 PATCH；回傳後端回應 */
+  /** 送出 PATCH；回傳後端回應。排進佇列時就把當下的函式記在該筆上 */
   patch: (body: PatchBody) => Promise<R>;
+  /** 送出對象（作業 id）；排進佇列時記下，換對象後舊的那幾筆不影響新對象 */
+  target?: unknown;
   /** 每次成功後通知（sheet 用來把欄位併進 detailData） */
   onSaved?: (body: PatchBody, response: R) => void;
 }
 
 export function useAssignmentAutoSave<R = unknown>({
   patch,
+  target,
   onSaved,
 }: Options<R>) {
   const [saveStates, setSaveStates] =
@@ -75,6 +85,8 @@ export function useAssignmentAutoSave<R = unknown>({
   // 存檔迴圈內讀最新的 callback，不閉包住過期 render
   const patchRef = useRef(patch);
   patchRef.current = patch;
+  const targetRef = useRef(target);
+  targetRef.current = target;
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
 
@@ -93,8 +105,13 @@ export function useAssignmentAutoSave<R = unknown>({
 
   const baseline = useCallback((): PatchBody => {
     const merged: PatchBody = { ...savedRef.current };
-    if (inFlightRef.current) Object.assign(merged, inFlightRef.current.body);
-    for (const e of queueRef.current) Object.assign(merged, e.body);
+    const cur = targetRef.current;
+    if (inFlightRef.current && Object.is(inFlightRef.current.target, cur)) {
+      Object.assign(merged, inFlightRef.current.body);
+    }
+    for (const e of queueRef.current) {
+      if (Object.is(e.target, cur)) Object.assign(merged, e.body);
+    }
     return merged;
   }, []);
 
@@ -105,23 +122,33 @@ export function useAssignmentAutoSave<R = unknown>({
       while (queueRef.current.length > 0) {
         const entry = queueRef.current.shift() as Entry<R>;
         inFlightRef.current = entry;
-        setState(entry.section, "saving");
+        // 已換到別的作業 → 舊作業的這筆照送，但不動新作業的狀態／已儲存值
+        const isCurrent = () => Object.is(entry.target, targetRef.current);
+        if (isCurrent()) setState(entry.section, "saving");
         try {
-          const response = await patchRef.current(entry.body);
-          savedRef.current = { ...savedRef.current, ...entry.body };
+          const response = await entry.patch(entry.body);
           savedAnyRef.current = true;
           inFlightRef.current = null;
-          onSavedRef.current?.(entry.body, response);
-          // 同一區後面還有排隊的就維持「儲存中」
-          if (!queueRef.current.some((e) => e.section === entry.section)) {
-            setState(entry.section, "saved");
+          if (isCurrent()) {
+            savedRef.current = { ...savedRef.current, ...entry.body };
+            onSavedRef.current?.(entry.body, response);
+            // 同一區後面還有排隊的就維持「儲存中」
+            if (
+              !queueRef.current.some(
+                (e) =>
+                  e.section === entry.section &&
+                  Object.is(e.target, entry.target),
+              )
+            ) {
+              setState(entry.section, "saved");
+            }
           }
           entry.waiters.forEach((w) =>
             w.resolve({ body: entry.body, response }),
           );
         } catch (error) {
           inFlightRef.current = null;
-          setState(entry.section, "failed");
+          if (isCurrent()) setState(entry.section, "failed");
           entry.waiters.forEach((w) => w.reject(error));
         }
       }
@@ -149,10 +176,17 @@ export function useAssignmentAutoSave<R = unknown>({
         const waiter: Waiter<R> = { resolve, reject };
         const queue = queueRef.current;
         const last = queue[queue.length - 1];
-        if (last && last.section === section) {
+        const cur = targetRef.current;
+        if (last && last.section === section && Object.is(last.target, cur)) {
           // 併進尚未送出的同區最後一筆；併完跟已儲存值相同的 key 拿掉
           const mergedBody = diffFields(
-            { ...savedRef.current, ...(inFlightRef.current?.body ?? {}) },
+            {
+              ...savedRef.current,
+              ...(inFlightRef.current &&
+              Object.is(inFlightRef.current.target, cur)
+                ? inFlightRef.current.body
+                : {}),
+            },
             { ...last.body, ...diff },
           );
           last.waiters.push(waiter);
@@ -163,7 +197,13 @@ export function useAssignmentAutoSave<R = unknown>({
           }
           last.body = mergedBody;
         } else {
-          queue.push({ section, body: diff, waiters: [waiter] });
+          queue.push({
+            section,
+            target: cur,
+            patch: patchRef.current,
+            body: diff,
+            waiters: [waiter],
+          });
         }
         void drain();
       });

@@ -126,7 +126,7 @@ test.describe('Assignment Dashboard Complete Test Suite', () => {
 
       // Verify assignment details dialog opens
       await expect(page.locator('[role="dialog"]')).toBeVisible();
-      await expect(page.locator('text=作業設定')).toBeVisible();
+      await expect(page.getByRole('dialog').getByText('作業設定', { exact: true })).toBeVisible();
 
       // Check if student completion dashboard is visible
       await expect(page.locator('text=學生列表')).toBeVisible();

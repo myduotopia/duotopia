@@ -148,6 +148,7 @@
       "updateSuccess": "作業資訊已更新",
       "updateError": "儲存失敗",
       "startDateAfterDueDate": "開始日期不可晚於截止日期",
+      "invalidDate": "日期還沒填完整，已還原為原本的日期",
       "notFound": "找不到作業資料",
       "loadError": "無法載入作業詳情",
       "titleRequired": "請輸入作業標題",
