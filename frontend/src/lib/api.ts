@@ -1820,6 +1820,8 @@ class ApiClient {
       points_per_image: number;
       paid_quota_remaining: number;
       can_use: boolean;
+      /** 管理者帳號（is_admin）不受張數限制 */
+      unlimited?: boolean;
     }>("/api/programs/magic-paste/quota");
   }
 
@@ -1869,6 +1871,7 @@ class ApiClient {
         free_remaining: number;
         free_limit: number;
         can_use: boolean;
+        unlimited?: boolean;
       };
       estimated_cost_usd: number;
       provider: string;
