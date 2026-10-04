@@ -311,7 +311,10 @@ describe("paragraphsToLayout 文章插圖", () => {
     });
     expect(
       rowShapes(
-        paragraphsToLayout(["one"], [fig("https://cdn/a.png"), fig("https://cdn/b.png")]),
+        paragraphsToLayout(
+          ["one"],
+          [fig("https://cdn/a.png"), fig("https://cdn/b.png")],
+        ),
       ),
     ).toEqual(["paragraph(2) | image(1)", "image(1)"]);
   });
