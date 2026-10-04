@@ -510,3 +510,183 @@ def test_endpoint_reading_group_mode_returns_single_group_and_charges_once(
     assert body["items"][0]["stimulus"]["box_2d"] == [0, 0, 600, 1000]
     assert body["charge"]["charged"] == "free"
     assert body["quota"]["free_used"] == 1
+
+
+# ------------------------------------- 插圖 / 題幹圖 / 選項圖 / 克漏字空格（#1084 / #1086）
+
+
+def test_reading_group_prompt_asks_for_figures_blanks_and_option_boxes():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    # 文章內插圖：座標 + 在第幾段之後
+    assert "`stimulus.figures`" in prompt
+    assert "after_paragraph" in prompt
+    # 克漏字：印刷空格重編為 {{n}}
+    assert "{{n}}" in prompt
+    assert "blanks_renumbered" in prompt
+    assert "`questions[i].blank`" in prompt
+    # 題幹圖與選項圖
+    assert "`questions[i].stem_box_2d`" in prompt
+    assert "`questions[i].option_boxes`" in prompt
+    # 圖片選項不准編字
+    assert "never invent words for a picture choice" in prompt
+
+
+def test_multiple_choice_prompt_asks_for_stem_and_option_boxes():
+    from services.magic_paste_service import EXTRACT_MODE_MULTIPLE_CHOICE
+
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_MULTIPLE_CHOICE)
+    assert "`stem_box_2d`" in prompt
+    assert "`option_boxes`" in prompt
+    assert "[ymin, xmin, ymax, xmax]" in prompt
+
+
+def test_normalize_mc_items_keeps_image_only_options():
+    """四個圖片選項（題本第 29 題）：text 全空字串，靠 option_boxes 認。"""
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "Which picture shows the answer?",
+                    "stem_box_2d": [10, 10, 100, 200],
+                    "options": ["", "", "", ""],
+                    "option_boxes": [
+                        [100, 0, 200, 250],
+                        [100, 250, 200, 500],
+                        [100, 500, 200, 750],
+                        [100, 750, 200, 1000],
+                    ],
+                    "correct_indexes": [2],
+                }
+            ]
+        }
+    )
+    assert len(items) == 1
+    it = items[0]
+    assert it["options"] == ["", "", "", ""]
+    assert it["stem_box_2d"] == [10, 10, 100, 200]
+    assert it["option_boxes"][1] == [100, 250, 200, 500]
+    assert it["correct_indexes"] == [2]
+
+
+def test_normalize_mc_items_drops_options_without_text_or_box():
+    """沒字也沒圖的位置不算選項；剩不到兩個就整題丟掉。"""
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "mixed",
+                    "options": ["cat", "", "dog", ""],
+                    "option_boxes": [None, [0, 0, 10, 10], None],
+                },
+                {"stem": "too few", "options": ["", ""], "option_boxes": []},
+            ]
+        }
+    )
+    assert len(items) == 1
+    assert items[0]["options"] == ["cat", "", "dog"]
+    assert items[0]["option_boxes"] == [None, [0, 0, 10, 10], None]
+
+
+def test_normalize_mc_items_drops_bad_boxes_but_keeps_question():
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "bad boxes",
+                    "stem_box_2d": [500, 0, 100, 1000],  # ymin >= ymax
+                    "options": ["a", "b"],
+                    "option_boxes": [[0, 0, 10, 2000], "nope"],  # 超範圍 / 非 list
+                }
+            ]
+        }
+    )
+    assert len(items) == 1
+    assert items[0]["stem_box_2d"] is None
+    assert items[0]["option_boxes"] == [None, None]
+
+
+def test_normalize_mc_items_keeps_empty_stem_only_for_cloze_or_stem_image():
+    """克漏字小題題本上只印選項（題幹真的是空字串），不能被當成壞題丟掉。"""
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {"stem": "", "blank": 2, "options": ["in", "on", "at", "by"]},
+                {
+                    "stem": "",
+                    "stem_box_2d": [0, 0, 100, 100],
+                    "options": ["a", "b"],
+                },
+                {"stem": "", "options": ["a", "b"]},  # 沒 blank 沒圖 → 丟掉
+            ]
+        }
+    )
+    assert len(items) == 2
+    assert items[0]["blank"] == 2
+    assert items[1]["stem_box_2d"] == [0, 0, 100, 100]
+
+
+@pytest.mark.parametrize("bad", [0, -1, 1000, "3", True, None, 2.5e9])
+def test_normalize_blank_index_rejects_out_of_range(bad):
+    assert MagicPasteService._normalize_blank_index(bad) is None
+
+
+def test_normalize_reading_group_figures_clamped_to_paragraphs():
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["First paragraph.", "Second paragraph."],
+            "figures": [
+                {
+                    "box_2d": [0, 600, 300, 1000],
+                    "after_paragraph": 0,
+                    "caption": " 聖誕老人 ",
+                },
+                {"box_2d": [400, 600, 600, 1000], "after_paragraph": 9},  # 夾到最後一段
+                {"box_2d": [700, 0, 800, 100], "after_paragraph": -5},  # 夾到文章前
+                {"box_2d": [0, 0, 0, 0]},  # 面積 0 → 丟掉
+                {"after_paragraph": 1},  # 沒座標 → 丟掉
+                "garbage",
+            ],
+        },
+        "questions": [],
+    }
+    g = MagicPasteService._normalize_reading_group(raw)[0]
+    figures = g["stimulus"]["figures"]
+    assert [f["after_paragraph"] for f in figures] == [0, 1, -1]
+    assert figures[0]["caption"] == "聖誕老人"
+    assert figures[1]["caption"] == ""
+
+
+def test_normalize_reading_group_cloze_blanks_and_renumber_flag():
+    raw = {
+        "title": "Santa's Letter",
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["Dear Santa, I {{1}} a bike.", "I will {{2}} good."],
+            "blanks_renumbered": True,
+        },
+        "questions": [
+            {"stem": "", "blank": 1, "options": ["want", "wants", "wanted", "wanting"]},
+            {"stem": "", "blank": 2, "options": ["be", "being", "been", "to be"]},
+        ],
+    }
+    g = MagicPasteService._normalize_reading_group(raw)[0]
+    assert g["stimulus"]["blanks_renumbered"] is True
+    assert [q["blank"] for q in g["questions"]] == [1, 2]
+    # 連號檢查交前端驗證：normalize 不改寫段落文字
+    assert g["stimulus"]["paragraphs"][0] == "Dear Santa, I {{1}} a bike."
+
+
+def test_normalize_reading_group_image_kind_drops_figures():
+    raw = {
+        "stimulus": {
+            "kind": "image",
+            "text": "poster text",
+            "box_2d": [0, 0, 500, 1000],
+            "figures": [{"box_2d": [0, 0, 100, 100], "after_paragraph": 0}],
+        },
+        "questions": [],
+    }
+    g = MagicPasteService._normalize_reading_group(raw)[0]
+    assert g["stimulus"]["figures"] == []
+    assert g["stimulus"]["blanks_renumbered"] is False

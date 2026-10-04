@@ -44,6 +44,9 @@ MC_MAX_OPTIONS = 6
 # reading_group 的素材區域座標：Gemini 慣用 [ymin, xmin, ymax, xmax]，0–1000 正規化
 BOX_2D_MAX = 1000
 STIMULUS_KINDS = ("text", "image")
+# 克漏字空格編號上限：與 routers/question_bank_schemas.BLANK_INDEX_MAX 一致
+# （services 不 import routers，避免反向依賴）
+BLANK_INDEX_MAX = 999
 # 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
 GROUP_TITLE_MAX_CHARS = 200
 
@@ -149,9 +152,15 @@ class MagicPasteService:
                 "Return JSON of the exact shape: "
                 '{"title": "...", '
                 '"stimulus": {"kind": "text" | "image", "paragraphs": ["..."], '
-                '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1}, '
+                '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1, '
+                '"blanks_renumbered": true, '
+                '"figures": [{"box_2d": [ymin, xmin, ymax, xmax], '
+                '"after_paragraph": 0, "caption": "..."}]}, '
                 '"glossary": [{"word": "...", "zh": "..."}], '
-                '"questions": [{"stem": "...", "options": ["...", "..."], '
+                '"questions": [{"stem": "...", "blank": 1, '
+                '"stem_box_2d": [ymin, xmin, ymax, xmax], '
+                '"options": ["...", "..."], '
+                '"option_boxes": [[ymin, xmin, ymax, xmax], null], '
                 '"correct_indexes": [0], "explanation": "..."}]}\n'
                 "Rules:\n"
                 "- `title`: ALWAYS return a title. If a title is printed for the "
@@ -168,10 +177,26 @@ class MagicPasteService:
                 "strip, map, menu, timetable, chart, advertisement, or any block with "
                 "drawings.\n"
                 '- When kind is "text": `paragraphs` = the passage split into its '
-                "printed paragraphs, in order, text exactly as printed. Keep blanks such "
-                'as "__40__" as printed. You may mark printed bold as **bold** and '
-                'printed underline as __underlined__. Set `text` to "" and omit '
-                "`box_2d`.\n"
+                "printed paragraphs, in order, text exactly as printed. You may mark "
+                "printed bold as **bold** and printed underline as __underlined__. Set "
+                '`text` to "" and omit `box_2d`.\n'
+                "- BLANKS (cloze / fill-in-the-blank passages): if the passage contains "
+                'printed answer blanks — written as "__40__", "___(40)___", "(40)", '
+                '"40.____" or similar — rewrite EVERY one of them as "{{n}}" where n '
+                "numbers the blanks 1, 2, 3 ... in reading order (the FIRST blank in the "
+                'passage is always "{{1}}", no matter which number is printed on the '
+                "paper). Use each number exactly once. Keep the surrounding words "
+                "unchanged, and do not leave any printed underscores or printed blank "
+                "numbers behind. Set `blanks_renumbered` to true when you did this, "
+                "false otherwise.\n"
+                "- `stimulus.figures`: pictures that are printed INSIDE a prose passage "
+                '(only when kind is "text"); [] when there are none. For each picture: '
+                "`box_2d` = its bounding box as [ymin, xmin, ymax, xmax] on a 0-1000 "
+                "scale relative to the page, covering the drawing / photo ONLY and no "
+                "surrounding passage text; `after_paragraph` = the 0-based index of the "
+                "paragraph in `paragraphs` that the picture comes after (use -1 for a "
+                "picture printed before the first paragraph); `caption` = the caption "
+                'printed under the picture, or "" if none.\n'
                 '- When kind is "image": `box_2d` = the bounding box of the stimulus '
                 "area ONLY (exclude the questions and their options), as "
                 "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page. "
@@ -191,6 +216,24 @@ class MagicPasteService:
                 "the answer is printed (answer key, circled / ticked / bold choice); "
                 "otherwise []. Never guess. `explanation`: copy ONLY a printed "
                 'explanation; otherwise "".\n'
+                "- `questions[i].blank`: for a cloze / fill-in-the-blank passage, the "
+                "NEW number of the blank this question answers, matching the "
+                '"{{n}}" you wrote in the passage (so the question for the first blank '
+                "gets 1). This is REQUIRED for every question of a cloze paper — those "
+                "questions usually print only choices and no question text, so match "
+                "them to the blanks by their printed order. Use null when the group is "
+                "an ordinary reading-comprehension group with no blanks.\n"
+                "- `questions[i].stem_box_2d`: bounding box of a picture or diagram "
+                "printed as part of THAT question's own text (e.g. a Venn diagram above "
+                "the choices), [ymin, xmin, ymax, xmax] on the same 0-1000 scale; null "
+                "when the question has no picture of its own.\n"
+                "- `questions[i].option_boxes`: an array the SAME length as `options`. "
+                "For a choice that is a picture, put its bounding box (covering the "
+                'picture only, not the "(A)" label); for a text choice put null. Return '
+                "[] when no choice in this question is a picture. When a choice is a "
+                'picture with no words, keep its `options` entry as the empty string "" '
+                "and its box in `option_boxes` at the same position — never invent words "
+                "for a picture choice.\n"
                 "- Do NOT put the passage or the picture text into any `stem`.\n"
                 "- If the file contains no reading group at all, return "
                 '{"title": "", "stimulus": {"kind": "text", "paragraphs": [], '
@@ -201,14 +244,29 @@ class MagicPasteService:
             return (
                 "Extract every multiple-choice question from the uploaded file.\n"
                 "Return JSON of the exact shape: "
-                '{"items": [{"stem": "...", "options": ["...", "..."], '
+                '{"items": [{"stem": "...", '
+                '"stem_box_2d": [ymin, xmin, ymax, xmax], '
+                '"options": ["...", "..."], '
+                '"option_boxes": [[ymin, xmin, ymax, xmax], null], '
                 '"correct_indexes": [0], "explanation": "..."}]}\n'
                 "Rules:\n"
                 "- `stem`: the question text exactly as printed. Keep blanks such as "
                 '"____" as-is. Remove the leading question number (e.g. "12." or "(3)").\n'
+                "- `stem_box_2d`: bounding box of a picture or diagram printed as part "
+                "of the question text (e.g. a still-life drawing, a Venn diagram), as "
+                "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page, "
+                "covering the picture ONLY and no text; null when the question has no "
+                "picture.\n"
                 f"- `options`: the choices in printed order ({MC_MIN_OPTIONS}–{MC_MAX_OPTIONS}). "
                 "Remove leading labels such as (A) B. (C) 甲 乙. Do NOT invent options; "
                 f"if a question has fewer than {MC_MIN_OPTIONS} choices, skip it.\n"
+                "- `option_boxes`: an array the SAME length as `options`. For a choice "
+                "that is a picture, put its bounding box (covering the picture only, not "
+                'the "(A)" label); for a text choice put null. Return [] when no choice '
+                "in this question is a picture. When a choice is a picture with no "
+                'words, keep its `options` entry as the empty string "" and its box in '
+                "`option_boxes` at the same position — never invent words for a picture "
+                "choice.\n"
                 "- `correct_indexes`: 0-based indexes of the correct options ONLY if the "
                 "answer is printed in the file (an answer key, a circled/ticked choice, "
                 "bold or underlined choice). Otherwise return []. Never guess.\n"
@@ -420,9 +478,18 @@ class MagicPasteService:
                 items.append(parsed)
         return items
 
-    @staticmethod
-    def _normalize_mc_items(raw: Any) -> List[Dict[str, Any]]:
-        """選擇題擷取結果整理：題幹空或選項 < 2 的丟掉；correct_indexes 只留合法範圍。"""
+    @classmethod
+    def _normalize_mc_items(cls, raw: Any) -> List[Dict[str, Any]]:
+        """
+        選擇題擷取結果整理（單題與題組小題共用）。
+
+        - 選項「有字 or 有座標」才留（圖片選項無字時 text 為 ""，#1084）；< 2 個就丟掉整題
+        - 題幹可以空，但必須有別的東西認得這一題：題幹圖座標，或克漏字的 `blank`
+          （克漏字小題題本上通常只印選項，#1086）
+        - `option_boxes` 與回傳的 options 等長（不是圖的位置為 None）
+        - `stem_box_2d` / `option_boxes` 內不合法的座標丟成 None（前端改由老師自己補圖）
+        - `correct_indexes` 只留合法範圍
+        """
         if isinstance(raw, dict):
             raw_items = raw.get("items", [])
         elif isinstance(raw, list):
@@ -436,13 +503,26 @@ class MagicPasteService:
                 continue
             stem = str(entry.get("stem") or "").strip()
             options_raw = entry.get("options")
-            options = (
-                [str(o or "").strip() for o in options_raw]
-                if isinstance(options_raw, list)
-                else []
-            )
-            options = [o for o in options if o][:MC_MAX_OPTIONS]
-            if not stem or len(options) < MC_MIN_OPTIONS:
+            options_raw = options_raw if isinstance(options_raw, list) else []
+            boxes_raw = entry.get("option_boxes")
+            boxes_raw = boxes_raw if isinstance(boxes_raw, list) else []
+            pairs: List[Tuple[str, Optional[List[int]]]] = []
+            for i, o in enumerate(options_raw):
+                text = str(o or "").strip()
+                box = (
+                    cls._normalize_box_2d(boxes_raw[i]) if i < len(boxes_raw) else None
+                )
+                # 有字或有圖才是一個選項；兩者都沒有的位置是模型多給的空殼
+                if text or box:
+                    pairs.append((text, box))
+            pairs = pairs[:MC_MAX_OPTIONS]
+            options = [p[0] for p in pairs]
+            option_boxes = [p[1] for p in pairs]
+            stem_box = cls._normalize_box_2d(entry.get("stem_box_2d"))
+            blank = cls._normalize_blank_index(entry.get("blank"))
+            if len(options) < MC_MIN_OPTIONS:
+                continue
+            if not stem and stem_box is None and blank is None:
                 continue
             idx_raw = entry.get("correct_indexes")
             correct = (
@@ -461,12 +541,23 @@ class MagicPasteService:
             items.append(
                 {
                     "stem": stem,
+                    "blank": blank,
+                    "stem_box_2d": stem_box,
                     "options": options,
+                    "option_boxes": option_boxes,
                     "correct_indexes": correct,
                     "explanation": str(entry.get("explanation") or "").strip(),
                 }
             )
         return items
+
+    @staticmethod
+    def _normalize_blank_index(raw: Any) -> Optional[int]:
+        """克漏字空格編號：1..BLANK_INDEX_MAX 的整數；其他一律 None。"""
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        n = int(raw)
+        return n if 1 <= n <= BLANK_INDEX_MAX else None
 
     @staticmethod
     def _normalize_box_2d(raw: Any) -> Optional[List[int]]:
@@ -487,12 +578,48 @@ class MagicPasteService:
         return box
 
     @classmethod
+    def _normalize_figures(cls, raw: Any, paragraph_count: int) -> List[Dict[str, Any]]:
+        """
+        文章內插圖（#1084）：座標不合法就整項丟掉（沒有座標就裁不出圖）。
+
+        `after_paragraph` 夾在 -1（第一段之前）到 paragraph_count - 1；缺值當 -1。
+        """
+        if not isinstance(raw, list):
+            return []
+        figures: List[Dict[str, Any]] = []
+        upper = paragraph_count - 1
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            box = cls._normalize_box_2d(item.get("box_2d"))
+            if box is None:
+                continue
+            after_raw = item.get("after_paragraph")
+            after = (
+                int(after_raw)
+                if isinstance(after_raw, (int, float))
+                and not isinstance(after_raw, bool)
+                else -1
+            )
+            after = max(-1, min(after, upper))
+            figures.append(
+                {
+                    "box_2d": box,
+                    "after_paragraph": after,
+                    "caption": str(item.get("caption") or "").strip(),
+                }
+            )
+        return figures
+
+    @classmethod
     def _normalize_reading_group(cls, raw: Any) -> List[Dict[str, Any]]:
         """
         閱讀題組擷取結果整理：回傳 0 或 1 個元素的 list（沿用 endpoint 的 items 形狀）。
 
         - stimulus.kind 只接受 text / image；缺或不合法時依內容推斷（有段落→text，否則→image）
         - box_2d 不合法就丟掉（前端改用整張圖）；page 只留正整數
+        - figures（文章內插圖）只在 kind=text 保留；座標不合法整項丟掉
+        - blanks_renumbered：模型是否把印刷空格改寫成 `{{n}}`（克漏字用，#1086）
         - title 截到 GROUP_TITLE_MAX_CHARS（DB 上限）；模型沒給時留空字串不視為錯誤
         - glossary 兩欄皆非空才留；questions 沿用 _normalize_mc_items 規則
         - 完全沒素材也沒小題 → []（不扣配額）
@@ -523,11 +650,14 @@ class MagicPasteService:
         kind = str(stim.get("kind") or "").strip().lower()
         if kind not in STIMULUS_KINDS:
             kind = "text" if paragraphs else "image"
+        figures = cls._normalize_figures(stim.get("figures"), len(paragraphs))
         if kind == "text":
             box = None
             page = None
         else:
             paragraphs = []
+            # 整塊當圖時沒有「第幾段之後」可以掛，插圖一律併進那張圖裡
+            figures = []
 
         glossary: List[Dict[str, str]] = []
         glossary_raw = raw.get("glossary")
@@ -554,6 +684,8 @@ class MagicPasteService:
                     "text": text,
                     "box_2d": box,
                     "page": page,
+                    "figures": figures,
+                    "blanks_renumbered": bool(stim.get("blanks_renumbered")),
                 },
                 "glossary": glossary,
                 "questions": questions,
