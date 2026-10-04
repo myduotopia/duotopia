@@ -749,7 +749,12 @@ export default function QuestionSheet({
           : groupMode
             ? t("questionBank.group.titleCreate", { type: groupTypeLabel })
             : t("questionBank.form.titleCreate");
-  const hasAnyStem = drafts.some((d) => d.stem.trim() !== "");
+  // AI 兩鍵的開關：有題幹，**或**是題組小題（題幹由文章承擔）。克漏字小題題幹一律是空的，
+  // 只看 d.stem 會讓整個克漏字題組的 AI 作答／考點分析永遠 disabled（#1086）。
+  // 判定與 `draftsEligibleForAi` 的第一個條件一致；選項不足 2 個仍由 runAi 的提示處理。
+  const hasAnyStem = drafts.some(
+    (d) => d.stem.trim() !== "" || passageByKey.has(d.key),
+  );
   // 新增與批次編輯可擷取／用 AI（題組模式也可：擷取走 reading_group，AI 帶文章上下文）；
   // 「新增題目」只有單題的新增／批次編輯有（題組一次一個單元）
   const canExtract =

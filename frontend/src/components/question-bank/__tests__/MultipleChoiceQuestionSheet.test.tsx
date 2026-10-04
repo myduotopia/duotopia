@@ -30,6 +30,7 @@ const {
   cropImageFileManyMock,
   uploadImageFileMock,
   GROUP_RESULT,
+  CLOZE_RESULT,
   MC_ITEMS,
 } = vi.hoisted(() => ({
   cropImageFileMock: vi.fn(),
@@ -51,6 +52,35 @@ const {
       explanation: "",
     },
   ],
+  // 克漏字擷取（#1086）：文章有 {{n}}、小題題幹一律是空字串
+  CLOZE_RESULT: {
+    title: "Santa's Letter",
+    stimulus: {
+      kind: "text",
+      paragraphs: ["Dear Santa, I {{1}} a bike.", "I will {{2}} good."],
+      text: "",
+      box_2d: null,
+      page: null,
+      blanks_renumbered: true,
+    },
+    glossary: [],
+    questions: [
+      {
+        stem: "",
+        blank: 1,
+        options: ["want", "wants", "wanted", "wanting"],
+        correct_indexes: [0],
+        explanation: "",
+      },
+      {
+        stem: "",
+        blank: 2,
+        options: ["be", "being", "been", "to be"],
+        correct_indexes: [0],
+        explanation: "",
+      },
+    ],
+  },
   GROUP_RESULT: {
     title: "Lantern",
     stimulus: {
@@ -85,6 +115,16 @@ vi.mock("@/components/shared/MagicPasteInput", () => ({
         onClick={() =>
           void props.onInsertGroup?.(
             GROUP_RESULT,
+            new File(["x"], "paper.png", { type: "image/png" }),
+          )
+        }
+      />
+      <button
+        type="button"
+        data-testid="mp-trigger-cloze"
+        onClick={() =>
+          void props.onInsertGroup?.(
+            CLOZE_RESULT,
             new File(["x"], "paper.png", { type: "image/png" }),
           )
         }
@@ -642,6 +682,32 @@ describe("MultipleChoiceQuestionSheet", () => {
     await user.click(screen.getByTestId("mp-trigger-group"));
     await user.click(await screen.findByTestId("qb-extract-overwrite-confirm"));
     await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("克漏字擷取後（#1086）：小題題幹是空的，AI 作答／考點分析仍可按（題幹由文章承擔）", async () => {
+    cropImageFileManyMock.mockReset().mockResolvedValue([]);
+    uploadImageFileMock.mockReset();
+    const user = userEvent.setup();
+    renderSheet({ createType: "cloze" });
+
+    // 擷取前：沒有任何題幹也沒有文章 → 兩鍵 disabled
+    expect(
+      (screen.getByTestId("qb-ai-answer") as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await user.click(screen.getByTestId("mp-trigger-cloze"));
+
+    // 擷取後：小題卡只有「空格 n」徽章、沒有題幹文字框，但文章有 {{1}}／{{2}} → 兩鍵要可按
+    expect(await screen.findByTestId("qg-0-q-0-blank-badge")).toBeTruthy();
+    expect(screen.queryByTestId("qg-0-q-0-stem")).toBeNull();
+    await waitFor(() =>
+      expect(
+        (screen.getByTestId("qb-ai-answer") as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+    expect(
+      (screen.getByTestId("qb-ai-analyze") as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   it("單題擷取（#1084）：帶原始檔裁題幹圖與選項圖，圖片選項沒有字也填進卡片", async () => {
