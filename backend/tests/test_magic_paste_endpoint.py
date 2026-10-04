@@ -880,3 +880,24 @@ def test_figure_width_rejects_bad_values_and_uses_box(bad):
     assert MagicPasteService._figure_width(bad, [0, 650, 300, 970]) == pytest.approx(
         1 / 3
     )
+
+
+def test_normalize_reading_group_caps_figure_count():
+    """模型誤框一堆小圖時只留前 MAX_FIGURES 張（插圖與段落各佔 layout 一列）。"""
+    from services.magic_paste_service import MAX_FIGURES
+
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["First."],
+            "figures": [
+                {"box_2d": [i, 0, i + 10, 100], "after_paragraph": 0}
+                for i in range(MAX_FIGURES + 5)
+            ],
+        },
+        "questions": [],
+    }
+    figures = MagicPasteService._normalize_reading_group(raw)[0]["stimulus"]["figures"]
+    assert len(figures) == MAX_FIGURES
+    # 留的是前面幾張（依閱讀順序）
+    assert figures[0]["box_2d"] == [0, 0, 10, 100]

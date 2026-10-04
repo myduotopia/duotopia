@@ -54,6 +54,9 @@ FIGURE_SIDES = ("left", "right")
 # 並排時圖可以佔的寬度：對齊 layout 的 span 整數比例（1:2／1:1／2:1）與前端分隔線的
 # 吸附點（`SPLIT_SPANS`），AI 給的 width 一律吸到最近的一個，老師一碰分隔線才不會跳動
 FIGURE_WIDTHS = (1 / 3, 1 / 2, 2 / 3)
+# 一篇文章最多收幾張插圖：`services.question_bank_layout.MAX_ROWS` 是 100 列，插圖與段落
+# 各佔一列，留 30 張給插圖仍有充足餘裕（模型若誤框一堆小圖也不會把整份 layout 撐爆）
+MAX_FIGURES = 30
 # 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
 GROUP_TITLE_MAX_CHARS = 200
 # 文章插圖說明上限：對齊 `services.question_bank_layout.MAX_SHORT_TEXT_CHARS`
@@ -630,6 +633,7 @@ class MagicPasteService:
         - `width`：圖在版面上佔的寬度比例，**由 AI 依原卷判斷**，吸附到 1/3、1/2、2/3
           （layout 的 span 只能是整數）；AI 沒給或不合法時用 box_2d 的寬度推算
         - `caption` 截到 FIGURE_CAPTION_MAX_CHARS（排版驗證的短文字上限）
+        - 最多保留 MAX_FIGURES 張（插圖與段落各佔一列，不讓 layout 列數爆掉）
         """
         if not isinstance(raw, list):
             return []
@@ -661,6 +665,8 @@ class MagicPasteService:
                     "caption": caption[:FIGURE_CAPTION_MAX_CHARS],
                 }
             )
+            if len(figures) >= MAX_FIGURES:
+                break
         return figures
 
     @classmethod

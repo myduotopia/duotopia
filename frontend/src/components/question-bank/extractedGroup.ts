@@ -133,7 +133,9 @@ function imageBlock(f: ExtractedFigure): LayoutImageBlock {
  * - `placement: "beside"`：與 `after_paragraph` 那一段同一列並排，左右由 `side` 決定，
  *   寬度由 `width` 吸附到 1/3・1/2・2/3（對齊欄間分隔線的吸附點）
  * 同一段有多張 beside 的圖時只有第一張並排，其餘退回整行（避免一列超過上限欄數）。
- * url 為 null 的插圖（PDF／裁切失敗）直接略過。
+ * `after_paragraph` 超出段落範圍的插圖**不丟掉**：小於 0 收在文章最前面、大於最後一段
+ * 收在文章最後面，兩端都是整行（沒有段落可以並排）。url 為 null 的插圖（PDF／裁切失敗）
+ * 直接略過。
  */
 export function paragraphsToLayout(
   paragraphs: string[],
@@ -141,28 +143,34 @@ export function paragraphsToLayout(
 ): LayoutDoc | null {
   const texts = paragraphs.map((p) => p.trim()).filter((p) => p !== "");
   const placed = figures.filter((f) => f.url !== null);
+  const last = texts.length - 1;
+  // 超出段落範圍的插圖收到頭尾兩桶（整行），不丟掉：
+  // 後端 normalize 會夾範圍，但這裡的 texts 又濾掉了空段落，索引可能因此落在範圍外
+  const head = placed.filter((f) => f.after_paragraph < 0);
+  const tail = placed.filter((f) => f.after_paragraph > last);
+  const inside = placed.filter(
+    (f) => f.after_paragraph >= 0 && f.after_paragraph <= last,
+  );
   // 每段最多一張並排的圖（第一張），其餘一律整行
   const besides = new Map<number, ExtractedFigure>();
-  for (const f of placed) {
-    if (
-      f.placement === "beside" &&
-      f.after_paragraph >= 0 &&
-      !besides.has(f.after_paragraph)
-    ) {
+  for (const f of inside) {
+    if (f.placement === "beside" && !besides.has(f.after_paragraph)) {
       besides.set(f.after_paragraph, f);
     }
   }
   const besideFor = (i: number) => besides.get(i);
   const fullAfter = (i: number) =>
-    placed.filter((f) => f.after_paragraph === i && besides.get(i) !== f);
+    inside.filter((f) => f.after_paragraph === i && besides.get(i) !== f);
   const row = (...blocks: LayoutBlock[]): LayoutRow => ({
     columns: blocks.map((b) => ({ span: 1, blocks: [b] })),
   });
   const fullRows = (i: number) => fullAfter(i).map((f) => row(imageBlock(f)));
+  const edgeRows = (bucket: ExtractedFigure[]) =>
+    bucket.map((f) => row(imageBlock(f)));
 
   const rows: LayoutRow[] = [
-    // after_paragraph = -1：排在第一段之前（整行；文章前沒有段落可以並排）
-    ...fullRows(-1),
+    // 文章最前面（整行；第一段之前沒有段落可以並排）
+    ...edgeRows(head),
     ...texts.flatMap((text, i) => {
       const paragraph: LayoutBlock = { type: "paragraph", text };
       const beside = besideFor(i);
@@ -181,6 +189,8 @@ export function paragraphsToLayout(
             ];
       return [{ columns }, ...fullRows(i)];
     }),
+    // 文章最後面（整行）：索引超過最後一段的插圖，含 beside —— 沒有段落可以並排
+    ...edgeRows(tail),
   ];
   if (rows.length === 0) return null;
   return { version: 1, rows };

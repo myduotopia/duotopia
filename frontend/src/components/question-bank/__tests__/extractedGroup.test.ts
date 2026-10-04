@@ -319,6 +319,26 @@ describe("paragraphsToLayout 文章插圖", () => {
     ).toEqual(["paragraph(2) | image(1)", "image(1)"]);
   });
 
+  it("after_paragraph 超出段落範圍 → 收到文章最後面的整行列，不丟掉", () => {
+    expect(
+      rowShapes(
+        paragraphsToLayout(
+          ["one"],
+          [
+            {
+              after_paragraph: 5,
+              caption: "",
+              url: "https://cdn/a.png",
+              placement: "beside",
+              side: "right",
+              width: 1 / 3,
+            },
+          ],
+        ),
+      ),
+    ).toEqual(["paragraph(1)", "image(1)"]);
+  });
+
   it("beside 但 after_paragraph = -1（文章前沒有段落可並排）→ 整行", () => {
     expect(
       rowShapes(
@@ -478,6 +498,32 @@ describe("groupDraftFromExtracted 克漏字", () => {
       ],
       ...over,
     });
+
+  it("段落旁有 beside 插圖時，空格編號的閱讀順序不受影響", async () => {
+    const { layoutBlankIndexes } = await import("../layoutInline");
+    const result = clozeResult();
+    result.stimulus.figures = [
+      {
+        box_2d: [0, 600, 300, 1000],
+        after_paragraph: 0,
+        caption: "",
+        placement: "beside",
+        side: "right",
+        width: 1 / 3,
+      },
+    ];
+    const draft = groupDraftFromExtracted(result, emptyGroupDraft("cloze"), {
+      stimulusUrl: null,
+      figureUrls: ["https://cdn/santa.png"],
+    });
+    // 第一段與圖並排（圖在右欄），空格仍是 1 → 2
+    expect(rowShapes(draft.layout)).toEqual([
+      "paragraph(2) | image(1)",
+      "paragraph(1)",
+    ]);
+    expect(layoutBlankIndexes(draft.layout)).toEqual([1, 2]);
+    expect(draft.questions.map((q) => q.blank_index)).toEqual([1, 2]);
+  });
 
   it("保留 {{n}}、小題 blank_index 取 AI 的 blank、題幹可空", () => {
     const draft = groupDraftFromExtracted(
