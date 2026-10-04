@@ -94,6 +94,8 @@ interface QuotaState {
   free_remaining: number;
   free_limit: number;
   can_use: boolean;
+  /** 管理者帳號不受張數限制（後端 `is_admin`）：顯示「不限張數」 */
+  unlimited?: boolean;
 }
 
 interface MagicPasteInputProps {
@@ -230,6 +232,8 @@ export default function MagicPasteInput({
         free_limit: prev?.free_limit ?? result.quota.free_limit,
         free_remaining: result.quota.free_remaining,
         can_use: result.quota.can_use,
+        // 後端沒回（舊版）時沿用前一次的判定，不要把「不限」退回有限
+        unlimited: result.quota.unlimited ?? prev?.unlimited,
       }));
       if (isGroupMode) {
         // 題組：不預覽；整份檔 = 一個題組，交給呼叫端裁圖／組草稿
@@ -310,10 +314,12 @@ export default function MagicPasteInput({
       {/* 配額提示 */}
       {quota && (
         <p className="text-xs text-gray-500">
-          {t("contentEditor.magicPaste.quota", {
-            remaining: quota.free_remaining,
-            limit: quota.free_limit,
-          })}
+          {quota.unlimited
+            ? t("contentEditor.magicPaste.quotaUnlimited")
+            : t("contentEditor.magicPaste.quota", {
+                remaining: quota.free_remaining,
+                limit: quota.free_limit,
+              })}
         </p>
       )}
 

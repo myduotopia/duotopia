@@ -4714,6 +4714,7 @@
       "extractFailed": "AI extraction failed. Please try again later.",
       "selectAtLeastOne": "Please select at least one item.",
       "quota": "{{remaining}} / {{limit}} free left this month; overage billed with points.",
+      "quotaUnlimited": "Admin account: unlimited extractions",
       "cancel": "Cancel",
       "pickFile": "Choose an image or PDF (one at a time)",
       "autoFillHint": "After extraction, missing fields are auto-filled on insert per the AI translate / audio / example settings above.",

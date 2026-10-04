@@ -901,3 +901,52 @@ def test_normalize_reading_group_caps_figure_count():
     assert len(figures) == MAX_FIGURES
     # 留的是前面幾張（依閱讀順序）
     assert figures[0]["box_2d"] == [0, 0, 10, 100]
+
+
+# ---------------------------------------------- 管理者不受配額限制（is_admin，2026-10-04）
+
+
+def test_admin_quota_status_is_unlimited(shared_test_session, demo_teacher):
+    """管理者帳號：狀態回 unlimited，can_use 恆真。"""
+    demo_teacher.is_admin = True
+    shared_test_session.commit()
+
+    status = mpq.get_quota_status(shared_test_session, demo_teacher)
+    assert status["unlimited"] is True
+    assert status["can_use"] is True
+
+    demo_teacher.is_admin = False
+    shared_test_session.commit()
+    assert mpq.get_quota_status(shared_test_session, demo_teacher)["unlimited"] is False
+
+
+def test_admin_consume_does_not_count_or_charge(shared_test_session, demo_teacher):
+    """管理者擷取不寫計數列、不扣點數，連續用超過免費上限也不會被擋。"""
+    demo_teacher.is_admin = True
+    shared_test_session.commit()
+
+    for _ in range(mpq.FREE_MONTHLY_LIMIT + 3):
+        charge = mpq.consume(shared_test_session, demo_teacher)
+        assert charge["charged"] == "unlimited"
+        assert charge["points_used"] == 0
+
+    # 沒有建立當月計數列（一般老師會有）
+    assert (
+        mpq._get_usage(shared_test_session, demo_teacher.id, mpq.current_year_month())
+        is None
+    )
+    status = mpq.get_quota_status(shared_test_session, demo_teacher)
+    assert status["can_use"] is True
+    assert status["free_used"] == 0
+
+
+def test_non_admin_still_limited(shared_test_session, demo_teacher):
+    """一般老師維持原規則：免費額度會被扣掉。"""
+    demo_teacher.is_admin = False
+    shared_test_session.commit()
+
+    charge = mpq.consume(shared_test_session, demo_teacher)
+    assert charge["charged"] == "free"
+    status = mpq.get_quota_status(shared_test_session, demo_teacher)
+    assert status["unlimited"] is False
+    assert status["free_used"] == 1
