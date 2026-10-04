@@ -42,7 +42,9 @@ function mockCropByIndex() {
   cropManyMock.mockImplementation((_file: File, boxes: unknown[]) =>
     Promise.resolve(
       boxes.map((b, i) =>
-        b ? new File(["x"], `crop-${i}.png`, { type: "image/png" }) : null,
+        b && (b as number[])[0] !== FAILS_TO_CROP
+          ? new File(["x"], `crop-${i}.png`, { type: "image/png" })
+          : null,
       ),
     ),
   );
@@ -52,6 +54,9 @@ function mockCropByIndex() {
 }
 
 const url = (i: number) => `https://cdn/crop-${i}.png`;
+
+/** 這個 ymin 的框讓裁切 mock 回 null（模擬有座標但裁不出來） */
+const FAILS_TO_CROP = 999;
 
 const box = (n: number) => [n, n, n + 10, n + 10];
 
@@ -122,8 +127,10 @@ describe("uploadExtractedQuestionImages（單題擷取）", () => {
     );
     expect(cropManyMock).not.toHaveBeenCalled();
     expect(images.stemUrls).toEqual([null, null, null]);
-    expect(images.optionUrls.map((o) => o.length)).toEqual([2, 4, 6]);
-    expect(images.optionUrls.flat().every((u) => u === null)).toBe(true);
+    expect((images.optionUrls ?? []).map((o) => o.length)).toEqual([2, 4, 6]);
+    expect((images.optionUrls ?? []).flat().every((u) => u === null)).toBe(
+      true,
+    );
   });
 });
 
@@ -144,7 +151,11 @@ describe("uploadExtractedGroupImages（題組擷取）", () => {
       page: null,
       figures: [
         { box_2d: box(20), after_paragraph: 0, caption: "santa" },
-        { box_2d: null, after_paragraph: 1, caption: "missing" },
+        {
+          box_2d: [FAILS_TO_CROP, 0, 1000, 10],
+          after_paragraph: 1,
+          caption: "missing",
+        },
         { box_2d: box(21), after_paragraph: 1, caption: "tree" },
       ],
     },
@@ -197,9 +208,9 @@ describe("uploadExtractedGroupImages（題組擷取）", () => {
       t,
     );
 
-    expect(images.questions?.optionUrls.flat().every((u) => u === null)).toBe(
-      true,
-    );
+    expect(
+      (images.questions?.optionUrls ?? []).flat().every((u) => u === null),
+    ).toBe(true);
     const errors = vi.mocked(toast.error).mock.calls;
     expect(errors).toHaveLength(1);
     expect(errors[0][0]).toBe(
