@@ -48,6 +48,12 @@ STIMULUS_KINDS = ("text", "image")
 # 克漏字空格編號上限：與 routers/question_bank_schemas.BLANK_INDEX_MAX 一致
 # （services 不 import routers，避免反向依賴）
 BLANK_INDEX_MAX = 999
+# 文章插圖的擺放方式（#1084）：beside = 與某一段並排、full = 自己佔一整行
+FIGURE_PLACEMENTS = ("beside", "full")
+FIGURE_SIDES = ("left", "right")
+# 並排時圖可以佔的寬度：對齊 layout 的 span 整數比例（1:2／1:1／2:1）與前端分隔線的
+# 吸附點（`SPLIT_SPANS`），AI 給的 width 一律吸到最近的一個，老師一碰分隔線才不會跳動
+FIGURE_WIDTHS = (1 / 3, 1 / 2, 2 / 3)
 # 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
 GROUP_TITLE_MAX_CHARS = 200
 # 文章插圖說明上限：對齊 `services.question_bank_layout.MAX_SHORT_TEXT_CHARS`
@@ -159,7 +165,8 @@ class MagicPasteService:
                 '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1, '
                 '"blanks_renumbered": true, '
                 '"figures": [{"box_2d": [ymin, xmin, ymax, xmax], '
-                '"after_paragraph": 0, "caption": "..."}]}, '
+                '"placement": "beside" | "full", "after_paragraph": 0, '
+                '"side": "left" | "right", "width": 0.33, "caption": "..."}]}, '
                 '"glossary": [{"word": "...", "zh": "..."}], '
                 '"questions": [{"stem": "...", "blank": 1, '
                 '"stem_box_2d": [ymin, xmin, ymax, xmax], '
@@ -194,13 +201,26 @@ class MagicPasteService:
                 "numbers behind. Set `blanks_renumbered` to true when you did this, "
                 "false otherwise.\n"
                 "- `stimulus.figures`: pictures that are printed INSIDE a prose passage "
-                '(only when kind is "text"); [] when there are none. For each picture: '
-                "`box_2d` = its bounding box as [ymin, xmin, ymax, xmax] on a 0-1000 "
+                '(only when kind is "text"); [] when there are none. For each picture:\n'
+                "  - `box_2d` = its bounding box as [ymin, xmin, ymax, xmax] on a 0-1000 "
                 "scale relative to the page, covering the drawing / photo ONLY and no "
-                "surrounding passage text; `after_paragraph` = the 0-based index of the "
-                "paragraph in `paragraphs` that the picture comes after (use -1 for a "
-                "picture printed before the first paragraph); `caption` = the caption "
-                'printed under the picture, or "" if none.\n'
+                "surrounding passage text.\n"
+                '  - `placement` = "beside" when the picture is printed next to a '
+                "paragraph with the text wrapping or running alongside it in its own "
+                'column; "full" when the picture has the passage width to itself, with '
+                "text above and below it. Judge this from the printed page.\n"
+                "  - `after_paragraph` = the 0-based index of the paragraph in "
+                '`paragraphs` the picture belongs to: for "full" the paragraph it comes '
+                "AFTER (-1 for a picture printed before the first paragraph); for "
+                '"beside" the paragraph it sits NEXT TO.\n'
+                '  - `side` = "left" or "right": which side of that paragraph the '
+                'picture is printed on (only meaningful for "beside"; use "right" when '
+                "unsure).\n"
+                "  - `width` = how much of the passage width the picture takes up on the "
+                "printed page, as a decimal between 0.2 and 0.8 (e.g. a narrow portrait "
+                "picture in the margin ≈ 0.3, a picture taking half the width ≈ 0.5). "
+                "Estimate it from the printed layout; do not default to one value.\n"
+                '  - `caption` = the caption printed under the picture, or "" if none.\n'
                 '- When kind is "image": `box_2d` = the bounding box of the stimulus '
                 "area ONLY (exclude the questions and their options), as "
                 "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page. "
@@ -604,8 +624,12 @@ class MagicPasteService:
         """
         文章內插圖（#1084）：座標不合法就整項丟掉（沒有座標就裁不出圖）。
 
-        `after_paragraph` 夾在 -1（第一段之前）到 paragraph_count - 1；缺值當 -1。
-        `caption` 截到 FIGURE_CAPTION_MAX_CHARS（排版驗證的短文字上限）。
+        - `after_paragraph` 夾在 -1（第一段之前）到 paragraph_count - 1；缺值當 -1
+        - `placement`：beside（與該段並排）／full（獨占一行）；不合法當 full
+        - `side`：left／right；不合法當 right
+        - `width`：圖在版面上佔的寬度比例，**由 AI 依原卷判斷**，吸附到 1/3、1/2、2/3
+          （layout 的 span 只能是整數）；AI 沒給或不合法時用 box_2d 的寬度推算
+        - `caption` 截到 FIGURE_CAPTION_MAX_CHARS（排版驗證的短文字上限）
         """
         if not isinstance(raw, list):
             return []
@@ -620,15 +644,40 @@ class MagicPasteService:
             after_value = cls._as_finite_number(item.get("after_paragraph"))
             after = int(after_value) if after_value is not None else -1
             after = max(-1, min(after, upper))
+            placement = str(item.get("placement") or "").strip().lower()
+            if placement not in FIGURE_PLACEMENTS:
+                placement = "full"
+            side = str(item.get("side") or "").strip().lower()
+            if side not in FIGURE_SIDES:
+                side = "right"
             caption = str(item.get("caption") or "").strip()
             figures.append(
                 {
                     "box_2d": box,
+                    "placement": placement,
                     "after_paragraph": after,
+                    "side": side,
+                    "width": cls._figure_width(item.get("width"), box),
                     "caption": caption[:FIGURE_CAPTION_MAX_CHARS],
                 }
             )
         return figures
+
+    @classmethod
+    def _figure_width(cls, raw: Any, box: List[int]) -> float:
+        """
+        插圖寬度比例 → 吸附到 `FIGURE_WIDTHS` 其中一個。
+
+        AI 給的 width 不在 0.1–0.9（或沒給、非有限數）時，退回用 box_2d 的寬度佔頁面比例
+        —— 單欄版面時這個值已經很接近實際佔比。
+        """
+        value = cls._as_finite_number(raw)
+        ratio = (
+            float(value)
+            if value is not None and 0.1 <= float(value) <= 0.9
+            else (box[3] - box[1]) / BOX_2D_MAX
+        )
+        return min(FIGURE_WIDTHS, key=lambda w: abs(w - ratio))
 
     @classmethod
     def _normalize_reading_group(cls, raw: Any) -> List[Dict[str, Any]]:

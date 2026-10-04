@@ -814,3 +814,69 @@ def test_normalize_handles_non_finite_numbers():
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
 def test_normalize_blank_index_rejects_non_finite(bad):
     assert MagicPasteService._normalize_blank_index(bad) is None
+
+
+def test_reading_group_prompt_asks_ai_to_decide_figure_placement_and_width():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    assert "`placement`" in prompt
+    assert "`side`" in prompt
+    assert "`width`" in prompt
+    # 寬度要 AI 依原卷判斷，不准固定一個值
+    assert "do not default to one value" in prompt
+
+
+def test_normalize_reading_group_figure_placement_side_and_width():
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["First.", "Second."],
+            "figures": [
+                {
+                    "box_2d": [0, 600, 300, 1000],
+                    "placement": "BESIDE",
+                    "after_paragraph": 1,
+                    "side": "Left",
+                    "width": 0.48,
+                },
+                # placement／side 不合法 → full / right；width 吸附到 2/3
+                {
+                    "box_2d": [400, 0, 600, 1000],
+                    "placement": "floating",
+                    "after_paragraph": 0,
+                    "side": "middle",
+                    "width": 0.7,
+                },
+            ],
+        },
+        "questions": [],
+    }
+    figures = MagicPasteService._normalize_reading_group(raw)[0]["stimulus"]["figures"]
+    assert figures[0]["placement"] == "beside"
+    assert figures[0]["side"] == "left"
+    assert figures[0]["width"] == 0.5
+    assert figures[1]["placement"] == "full"
+    assert figures[1]["side"] == "right"
+    assert figures[1]["width"] == pytest.approx(2 / 3)
+
+
+@pytest.mark.parametrize(
+    "box,expected",
+    [
+        # AI 沒給 width → 用 box_2d 寬度佔頁面比例推：320/1000 → 1/3
+        ([0, 650, 300, 970], 1 / 3),
+        # 半版寬 → 1/2
+        ([0, 0, 300, 520], 1 / 2),
+        # 幾乎整行 → 2/3（可用比例的上限）
+        ([0, 0, 300, 950], 2 / 3),
+    ],
+)
+def test_figure_width_falls_back_to_box_geometry(box, expected):
+    assert MagicPasteService._figure_width(None, box) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("bad", ["0.5", True, None, 0.05, 1.5, float("nan")])
+def test_figure_width_rejects_bad_values_and_uses_box(bad):
+    # 一律退回 box 幾何（這個 box 是 1/3）
+    assert MagicPasteService._figure_width(bad, [0, 650, 300, 970]) == pytest.approx(
+        1 / 3
+    )

@@ -84,15 +84,14 @@ describe("boxToPixelRect", () => {
 });
 
 describe("paragraphsToLayout", () => {
-  it("一段一區塊、單欄；空段落丟掉；全空回 null", () => {
+  it("一個區塊一列（才能拖成並排）；空段落丟掉；全空回 null", () => {
     const layout = paragraphsToLayout(["  a ", "", "b"]);
     expect(layout).not.toBeNull();
-    const row = layout!.rows[0];
-    expect(row.type === "section").toBe(false);
-    const col = (row as { columns: { blocks: unknown[] }[] }).columns[0];
-    expect(col.blocks).toEqual([
-      { type: "paragraph", text: "a" },
-      { type: "paragraph", text: "b" },
+    expect(layout!.rows).toHaveLength(2);
+    expect(layout!.rows[0].type === "section").toBe(false);
+    expect(layout!.rows).toEqual([
+      { columns: [{ span: 1, blocks: [{ type: "paragraph", text: "a" }] }] },
+      { columns: [{ span: 1, blocks: [{ type: "paragraph", text: "b" }] }] },
     ]);
     expect(paragraphsToLayout([" ", ""])).toBeNull();
   });
@@ -109,7 +108,8 @@ describe("groupDraftFromExtracted", () => {
     const draft = groupDraftFromExtracted(baseResult(), base, noImages);
     expect(draft.key).toBe(base.key);
     expect(draft.title).toBe("Vivaldi");
-    expect(draft.layout?.rows).toHaveLength(1);
+    // 兩個非空段落 → 兩列（一個區塊一列）
+    expect(draft.layout?.rows).toHaveLength(2);
     expect(draft.passage_text).toBe("");
     expect(draft.passage_text_edited).toBe(false);
     expect(draft.glossary).toEqual([{ word: "timeline", zh: "時間軸" }]);
@@ -216,12 +216,21 @@ describe("groupDraftFromExtracted", () => {
 
 // ---- 插圖 / 選項圖 / 克漏字（#1084 / #1086）----
 
-type Blocks = { columns: { blocks: Record<string, unknown>[] }[] };
-const firstColumnBlocks = (draft: { layout: unknown }) =>
-  ((draft.layout as { rows: Blocks[] }).rows[0] as Blocks).columns[0].blocks;
+type Blocks = {
+  columns: { span: number; blocks: Record<string, unknown>[] }[];
+};
+/** 每列攤成 `區塊型別(span)` 的字串，方便一眼比對列與欄 */
+const rowShapes = (layout: unknown) =>
+  (layout as { rows: Blocks[] }).rows.map((r) =>
+    r.columns.map((c) => `${c.blocks[0].type}(${c.span})`).join(" | "),
+  );
+const allBlocks = (layout: unknown) =>
+  (layout as { rows: Blocks[] }).rows.flatMap((r) =>
+    r.columns.flatMap((c) => c.blocks),
+  );
 
 describe("paragraphsToLayout 文章插圖", () => {
-  it("插圖依 after_paragraph 排在該段之後，-1 排在最前面；有 caption 才帶", () => {
+  it("插圖依 after_paragraph 自己一列排在該段之後，-1 排在最前面；有 caption 才帶", () => {
     const layout = paragraphsToLayout(
       ["one", "two"],
       [
@@ -230,9 +239,13 @@ describe("paragraphsToLayout 文章插圖", () => {
         { after_paragraph: 1, caption: "", url: null },
       ],
     );
-    const blocks = (layout as unknown as { rows: Blocks[] }).rows[0].columns[0]
-      .blocks;
-    expect(blocks).toEqual([
+    expect(rowShapes(layout)).toEqual([
+      "image(1)",
+      "paragraph(1)",
+      "image(1)",
+      "paragraph(1)",
+    ]);
+    expect(allBlocks(layout)).toEqual([
       { type: "image", url: "https://cdn/head.png", align: "center" },
       { type: "paragraph", text: "one" },
       {
@@ -243,6 +256,84 @@ describe("paragraphsToLayout 文章插圖", () => {
       },
       { type: "paragraph", text: "two" },
     ]);
+  });
+
+  it("placement=beside：與該段同一列並排，side 決定左右、width 決定 span（AI 依原卷給）", () => {
+    const beside = (over: Record<string, unknown> = {}) =>
+      paragraphsToLayout(
+        ["one", "two"],
+        [
+          {
+            after_paragraph: 1,
+            caption: "",
+            url: "https://cdn/a.png",
+            placement: "beside" as const,
+            side: "right" as const,
+            width: 1 / 3,
+            ...over,
+          },
+        ],
+      );
+    // 圖在右、佔 1/3 → 文字 span 2 + 圖 span 1
+    expect(rowShapes(beside())).toEqual([
+      "paragraph(1)",
+      "paragraph(2) | image(1)",
+    ]);
+    // 圖在左、佔 2/3 → 圖 span 2 + 文字 span 1
+    expect(rowShapes(beside({ side: "left", width: 2 / 3 }))).toEqual([
+      "paragraph(1)",
+      "image(2) | paragraph(1)",
+    ]);
+    // 一半 → 1:1；AI 給的奇怪值吸附到最近的比例（0.45 → 1/2）
+    expect(rowShapes(beside({ width: 1 / 2 }))).toEqual([
+      "paragraph(1)",
+      "paragraph(1) | image(1)",
+    ]);
+    expect(rowShapes(beside({ width: 0.45 }))).toEqual([
+      "paragraph(1)",
+      "paragraph(1) | image(1)",
+    ]);
+    // 沒給 width → 預設 1/3
+    expect(rowShapes(beside({ width: undefined }))).toEqual([
+      "paragraph(1)",
+      "paragraph(2) | image(1)",
+    ]);
+  });
+
+  it("同一段有兩張 beside 的圖：只有第一張並排，第二張退回整行", () => {
+    const fig = (url: string) => ({
+      after_paragraph: 0,
+      caption: "",
+      url,
+      placement: "beside" as const,
+      side: "right" as const,
+      width: 1 / 3,
+    });
+    expect(
+      rowShapes(
+        paragraphsToLayout(["one"], [fig("https://cdn/a.png"), fig("https://cdn/b.png")]),
+      ),
+    ).toEqual(["paragraph(2) | image(1)", "image(1)"]);
+  });
+
+  it("beside 但 after_paragraph = -1（文章前沒有段落可並排）→ 整行", () => {
+    expect(
+      rowShapes(
+        paragraphsToLayout(
+          ["one"],
+          [
+            {
+              after_paragraph: -1,
+              caption: "",
+              url: "https://cdn/a.png",
+              placement: "beside",
+              side: "right",
+              width: 1 / 3,
+            },
+          ],
+        ),
+      ),
+    ).toEqual(["image(1)", "paragraph(1)"]);
   });
 
   it("只有插圖沒有段落也能出排版；全部沒 url 回 null", () => {
@@ -302,7 +393,7 @@ describe("groupDraftFromExtracted 小題圖與選項圖", () => {
     expect(q.options[1].is_correct).toBe(true);
   });
 
-  it("插圖進排版（文章插圖＋段落同一欄直排）", () => {
+  it("插圖進排版（整行插圖排在該段之後，各自一列）", () => {
     const result = baseResult({
       stimulus: {
         kind: "text",
@@ -319,11 +410,38 @@ describe("groupDraftFromExtracted 小題圖與選項圖", () => {
       stimulusUrl: null,
       figureUrls: ["https://cdn/santa.png"],
     });
-    expect(firstColumnBlocks(draft).map((b) => b.type)).toEqual([
-      "paragraph",
-      "image",
-      "paragraph",
+    expect(rowShapes(draft.layout)).toEqual([
+      "paragraph(1)",
+      "image(1)",
+      "paragraph(1)",
     ]);
+  });
+
+  it("插圖的 placement／side／width 會從擷取結果傳到排版", () => {
+    const result = baseResult({
+      stimulus: {
+        kind: "text",
+        paragraphs: ["Santa is busy."],
+        text: "",
+        box_2d: null,
+        page: null,
+        figures: [
+          {
+            box_2d: [0, 600, 300, 1000],
+            after_paragraph: 0,
+            caption: "",
+            placement: "beside",
+            side: "left",
+            width: 1 / 2,
+          },
+        ],
+      },
+    });
+    const draft = groupDraftFromExtracted(result, emptyGroupDraft("reading"), {
+      stimulusUrl: null,
+      figureUrls: ["https://cdn/santa.png"],
+    });
+    expect(rowShapes(draft.layout)).toEqual(["image(1) | paragraph(1)"]);
   });
 });
 

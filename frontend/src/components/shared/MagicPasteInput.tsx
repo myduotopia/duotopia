@@ -74,7 +74,13 @@ export interface MagicPasteGroupResult {
      */
     figures?: {
       box_2d: number[];
+      /** beside = 與該段並排（AI 依原卷判斷）、full = 自己佔一整行 */
+      placement?: "beside" | "full";
       after_paragraph: number;
+      /** 並排時圖在那一段的哪一側 */
+      side?: "left" | "right";
+      /** 圖佔的寬度比例，後端已吸附到 1/3、1/2、2/3 */
+      width?: number;
       caption: string;
     }[];
     /** AI 是否已把印刷空格（`__40__`…）改寫成 `{{n}}`（克漏字，#1086） */

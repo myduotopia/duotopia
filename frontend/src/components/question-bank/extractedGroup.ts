@@ -4,8 +4,9 @@
  * 純函式，供 QuestionSheet 在 AI 擷取完成後把結果填進右側的 GroupCard：
  * - `boxToPixelRect`：AI 回的 box_2d（[ymin, xmin, ymax, xmax]，0–1000 正規化）→ 像素矩形，
  *   裁圖用（實際裁切在 cropImage.ts，上傳在 extractedImages.ts）
- * - `paragraphsToLayout`：散文段落（＋文章插圖）→ 單欄 layout，插圖依
- *   `after_paragraph` 自己一行（center、不設寬度，老師可再拖成並排）
+ * - `paragraphsToLayout`：散文段落（＋文章插圖）→ layout，**一個區塊一列**（這樣老師才能
+ *   把區塊互相拖成並排）；插圖的位置／左右／寬度由 AI 依原卷回的
+ *   `after_paragraph`／`placement`／`side`／`width` 決定
  * - `groupDraftFromExtracted`：以既有（通常是空的）GroupDraft 為底，填入標題／排版／文字版／
  *   註解／小題；保留 key、公開設定、來源、年段等左欄已定的值；AI 沒給標題時保留既有標題
  *
@@ -22,7 +23,12 @@ import type {
   MagicPasteGroupResult,
   MagicPasteMcItem,
 } from "@/components/shared/MagicPasteInput";
-import type { LayoutDoc } from "@/types/questionBank";
+import type {
+  LayoutBlock,
+  LayoutDoc,
+  LayoutImageBlock,
+  LayoutRow,
+} from "@/types/questionBank";
 
 import { layoutBlankIndexes } from "./layoutInline";
 import { singleImageDoc, toLayoutDoc } from "./layoutEditorModel";
@@ -39,6 +45,12 @@ export interface ExtractedFigure {
   after_paragraph: number;
   caption: string;
   url: string | null;
+  /** AI 依原卷判斷：與該段並排，或自己佔一整行（預設 full） */
+  placement?: "beside" | "full";
+  /** 並排時圖在那一段的哪一側（預設 right） */
+  side?: "left" | "right";
+  /** 並排時圖佔的寬度比例（後端已吸附 1/3・1/2・2/3；缺值當 1/3） */
+  width?: number;
 }
 
 /** 閱讀題組（非克漏字）誤帶 `{{n}}` 時改回印刷空格的底線 */
@@ -87,11 +99,41 @@ export function boxToPixelRect(
   return { x: x1, y: y1, width, height };
 }
 
+/** 並排時圖佔的寬度 → 欄的 span 配對（layout 的 span 只能是整數；對齊編輯器吸附點） */
+const FIGURE_SPANS: { width: number; figure: number; text: number }[] = [
+  { width: 1 / 3, figure: 1, text: 2 },
+  { width: 1 / 2, figure: 1, text: 1 },
+  { width: 2 / 3, figure: 2, text: 1 },
+];
+
+function figureSpans(width: number | undefined) {
+  const target = width ?? 1 / 3;
+  return FIGURE_SPANS.reduce((best, s) =>
+    Math.abs(s.width - target) < Math.abs(best.width - target) ? s : best,
+  );
+}
+
+function imageBlock(f: ExtractedFigure): LayoutImageBlock {
+  return {
+    type: "image",
+    url: f.url as string,
+    align: "center",
+    ...(f.caption ? { caption: f.caption } : {}),
+  };
+}
+
 /**
- * 散文段落（＋文章插圖）→ 單欄、一段一區塊的排版；完全沒內容回 null。
+ * 散文段落（＋文章插圖）→ layout；完全沒內容回 null。
  *
- * 插圖依 `after_paragraph` 排在那一段之後（-1 = 第一段之前），同一欄直排，
- * 不嘗試自動並排（老師可在編輯器把圖拖到段落旁邊）。url 為 null 的插圖直接略過。
+ * **一個區塊一列**：編輯器的 `canPlaceBeside` 只讓「單區塊欄」拖成並排，所以擷取出來的
+ * 段落與插圖都各自獨立一列，老師才能把它們互相拖到左右（多區塊欄會被當舊資料鎖住）。
+ *
+ * 插圖的擺法由 AI 依原卷決定（#1084）：
+ * - `placement: "full"`（預設）：自己佔一整行，排在 `after_paragraph` 那一段之後（-1 = 文章前）
+ * - `placement: "beside"`：與 `after_paragraph` 那一段同一列並排，左右由 `side` 決定，
+ *   寬度由 `width` 吸附到 1/3・1/2・2/3（對齊欄間分隔線的吸附點）
+ * 同一段有多張 beside 的圖時只有第一張並排，其餘退回整行（避免一列超過上限欄數）。
+ * url 為 null 的插圖（PDF／裁切失敗）直接略過。
  */
 export function paragraphsToLayout(
   paragraphs: string[],
@@ -99,25 +141,49 @@ export function paragraphsToLayout(
 ): LayoutDoc | null {
   const texts = paragraphs.map((p) => p.trim()).filter((p) => p !== "");
   const placed = figures.filter((f) => f.url !== null);
-  const imageBlocks = (after: number) =>
-    placed
-      .filter((f) => f.after_paragraph === after)
-      .map((f) => ({
-        type: "image" as const,
-        url: f.url as string,
-        align: "center" as const,
-        ...(f.caption ? { caption: f.caption } : {}),
-      }));
-  const blocks = [
-    // after_paragraph = -1：插在第一段之前
-    ...imageBlocks(-1),
-    ...texts.flatMap((text, i) => [
-      { type: "paragraph" as const, text },
-      ...imageBlocks(i),
-    ]),
+  // 每段最多一張並排的圖（第一張），其餘一律整行
+  const besides = new Map<number, ExtractedFigure>();
+  for (const f of placed) {
+    if (
+      f.placement === "beside" &&
+      f.after_paragraph >= 0 &&
+      !besides.has(f.after_paragraph)
+    ) {
+      besides.set(f.after_paragraph, f);
+    }
+  }
+  const besideFor = (i: number) => besides.get(i);
+  const fullAfter = (i: number) =>
+    placed.filter((f) => f.after_paragraph === i && besides.get(i) !== f);
+  const row = (...blocks: LayoutBlock[]): LayoutRow => ({
+    columns: blocks.map((b) => ({ span: 1, blocks: [b] })),
+  });
+  const fullRows = (i: number) => fullAfter(i).map((f) => row(imageBlock(f)));
+
+  const rows: LayoutRow[] = [
+    // after_paragraph = -1：排在第一段之前（整行；文章前沒有段落可以並排）
+    ...fullRows(-1),
+    ...texts.flatMap((text, i) => {
+      const paragraph: LayoutBlock = { type: "paragraph", text };
+      const beside = besideFor(i);
+      if (!beside) return [row(paragraph), ...fullRows(i)];
+      const spans = figureSpans(beside.width);
+      const image = imageBlock(beside);
+      const columns =
+        beside.side === "left"
+          ? [
+              { span: spans.figure, blocks: [image] },
+              { span: spans.text, blocks: [paragraph] },
+            ]
+          : [
+              { span: spans.text, blocks: [paragraph] },
+              { span: spans.figure, blocks: [image] },
+            ];
+      return [{ columns }, ...fullRows(i)];
+    }),
   ];
-  if (blocks.length === 0) return null;
-  return { version: 1, rows: [{ columns: [{ span: 1, blocks }] }] };
+  if (rows.length === 0) return null;
+  return { version: 1, rows };
 }
 
 /** 擷取到的小題 → 題組小題（帶題組的 key／題型／公開／來源／年段／教材） */
@@ -227,6 +293,9 @@ export function groupDraftFromExtracted(
   const figures = (result.stimulus.figures ?? []).map((f, i) => ({
     after_paragraph: f.after_paragraph,
     caption: f.caption,
+    placement: f.placement,
+    side: f.side,
+    width: f.width,
     url: images.figureUrls?.[i] ?? null,
   }));
   const layout = paragraphsToLayout(paragraphs, figures);
