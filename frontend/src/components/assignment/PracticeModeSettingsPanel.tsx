@@ -11,6 +11,13 @@
  * Stage 3.5 的 AssignmentDetailSheet 可直接複用。
  *
  * 範圍：只含「進階條件設定區」。模式 chip 列、頂部 score badge、右側即時預覽不在此元件。
+ *
+ * Issue #1092（作業設定 sheet 改完即存）：
+ * - `onCommit`（選填）：「這個值可以存了」。開關／選單／segmented 每次變動都會同時呼叫
+ *   onChange 與 onCommit；熟練度滑桿拖曳中只呼叫 onChange，放開（pointer up／key up／失焦）
+ *   才呼叫 onCommit，避免每一格都 PATCH。派發 dialog 不傳，行為不變。
+ * - `context.liveQuizOpen`：live 小考開考中（已開放、未收卷）時「即時小考」開關已開就
+ *   disabled＋提示（後端不允許開考中關閉）。
  */
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
@@ -69,19 +76,33 @@ export interface PracticeModeSettingsPanelProps {
   value: PracticeModeSettings;
   onChange: (next: PracticeModeSettings) => void;
   /**
+   * Issue #1092：值「定案、可以存了」時呼叫（作業設定 sheet 改完即存用）。滑桿只在放開時呼叫，
+   * 其餘控制每次變動都呼叫。不傳就只有 onChange（派發 dialog）。
+   */
+  onCommit?: (next: PracticeModeSettings) => void;
+  /** Issue #1092：詳情尚未載入完成時整區 disabled */
+  disabled?: boolean;
+  /**
    * runtime 限制傳入口（registry 說「能調什麼」、context 說「現在能不能調」）。
    * - `locked`：學生已開始作答（Stage 3.5 AssignmentDetailSheet），鎖住影響計分的
    *   segmented 控制（播放音檔 / 題目呈現方式），避免改動 score_category。
    * - `hasMissingImage`：購物車有項目缺題目圖片時，禁止開啟「顯示選項圖片」（Issue #631），
    *   否則學生會看到空白圖框。
+   * - `liveQuizOpen`：live 小考開考中（Issue #1092），「即時小考」開關已開時不可關閉。
    */
-  context?: { locked?: boolean; hasMissingImage?: boolean };
+  context?: {
+    locked?: boolean;
+    hasMissingImage?: boolean;
+    liveQuizOpen?: boolean;
+  };
 }
 
 export function PracticeModeSettingsPanel({
   mode,
   value,
   onChange,
+  onCommit,
+  disabled: allDisabled = false,
   context,
 }: PracticeModeSettingsPanelProps) {
   const { t } = useTranslation();
@@ -90,10 +111,15 @@ export function PracticeModeSettingsPanel({
 
   const locked = Boolean(context?.locked);
   const hasMissingImage = Boolean(context?.hasMissingImage);
+  const liveQuizOpen = Boolean(context?.liveQuizOpen);
 
   const v = value as unknown as Record<SettingKey, SettingValue>;
-  const apply = (spec: SettingSpec, raw: SettingValue) =>
-    onChange(applySettingChange(value, spec, raw));
+  const apply = (spec: SettingSpec, raw: SettingValue) => {
+    const next = applySettingChange(value, spec, raw);
+    onChange(next);
+    // #1092：滑桿拖曳中不 commit，放開才 commit（見 renderNumber）
+    if (spec.kind !== "number") onCommit?.(next);
+  };
 
   // 「(預設)」標記參考值：跟著各模式自己的單題時間預設跑（無覆寫者 fallback 30）。
   const timeDefault = Number(config.defaults.time_limit_per_question ?? 30);
@@ -112,7 +138,11 @@ export function PracticeModeSettingsPanel({
     // Issue #631：缺題目圖片時禁止「開啟」顯示選項圖片（已開啟者可關閉）。
     const lockedByMissingImage =
       spec.key === "show_option_images" && hasMissingImage && !v[spec.key];
-    const disabled = lockedByAudio || lockedByMissingImage;
+    // Issue #1092：live 小考開考中不能關閉「即時小考」（後端 400），先收卷才行
+    const lockedByLiveOpen =
+      spec.key === "is_live_quiz" && liveQuizOpen && Boolean(v[spec.key]);
+    const disabled =
+      allDisabled || lockedByAudio || lockedByMissingImage || lockedByLiveOpen;
     return (
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 h-9">
@@ -145,6 +175,11 @@ export function PracticeModeSettingsPanel({
             {t(`${PM}.showOptionImagesMissing`)}
           </p>
         )}
+        {lockedByLiveOpen && (
+          <p className="text-xs text-amber-600">
+            {t("assignmentDetail.sheet.liveQuizOpenHint")}
+          </p>
+        )}
       </div>
     );
   };
@@ -155,6 +190,7 @@ export function PracticeModeSettingsPanel({
         {t(SELECT_LABEL[spec.key] ?? "")}
       </Label>
       <select
+        disabled={allDisabled}
         value={Number(v[spec.key])}
         onChange={(e) => apply(spec, Number(e.target.value))}
         className="w-full h-9 px-3 rounded-md border border-gray-200 text-sm dark:border-gray-600 dark:bg-gray-800"
@@ -197,7 +233,12 @@ export function PracticeModeSettingsPanel({
         max={spec.max}
         step={spec.step}
         value={Number(v[spec.key])}
+        disabled={allDisabled}
         onChange={(e) => apply(spec, Number(e.target.value))}
+        // #1092：放開滑桿（滑鼠／觸控／鍵盤）或失焦才 commit；值沒變時由呼叫端 diff 略過
+        onPointerUp={() => onCommit?.(value)}
+        onKeyUp={() => onCommit?.(value)}
+        onBlur={() => onCommit?.(value)}
         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
       />
       <p className="text-xs text-gray-500">
@@ -223,11 +264,11 @@ export function PracticeModeSettingsPanel({
             <button
               type="button"
               key={String(opt.value)}
-              disabled={locked}
+              disabled={locked || allDisabled}
               onClick={() => apply(spec, opt.value)}
               className={cn(
                 "flex-1 p-3 rounded-lg border text-sm",
-                locked && "opacity-50 cursor-not-allowed",
+                (locked || allDisabled) && "opacity-50 cursor-not-allowed",
                 active
                   ? "border-blue-500 bg-blue-50 text-blue-700"
                   : "border-gray-200 hover:border-gray-300",

@@ -2,7 +2,9 @@
 Assignment detail and progress endpoints
 
 Issue #1092: GET 詳情回 ``quiz_scoring_method`` / ``quiz_scoring_points`` /
-``quiz_case_sensitive``（``_quiz_scoring_settings``，批改頁 quiz_settings 共用）。
+``quiz_case_sensitive``（``_quiz_scoring_settings``，批改頁 quiz_settings 共用），
+以及唯讀的 ``quiz_opened_at`` / ``quiz_closed_at``（作業設定 sheet 判斷 live 小考
+開考中、停用「即時小考」開關）。
 """
 
 import logging
@@ -387,6 +389,14 @@ async def get_assignment_detail(
         # Issue #835: 編輯 sheet 讀回 live 模式原始值
         "quiz_time_limit_seconds": assignment.quiz_time_limit_seconds,
         "is_live_quiz": bool(getattr(assignment, "is_live_quiz", False)),
+        # Issue #1092: 作業設定 sheet 判斷 live 小考是否開考中（已開放、未收卷）——
+        # 開考中不能關掉 is_live_quiz（PATCH 會 400），前端改成 disabled＋提示。唯讀。
+        "quiz_opened_at": (
+            assignment.quiz_opened_at.isoformat() if assignment.quiz_opened_at else None
+        ),
+        "quiz_closed_at": (
+            assignment.quiz_closed_at.isoformat() if assignment.quiz_closed_at else None
+        ),
         # Issue #1092: 打字類小考評分設定（編輯 sheet 讀回原始值；NULL ＝ 舊作業整題計分）
         **_quiz_scoring_settings(assignment),
     }

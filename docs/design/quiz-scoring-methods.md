@@ -6,7 +6,7 @@
 
 小考每題配分 = 100 ÷ 題數。選擇題答錯扣整題沒問題，但打字小考的答案常是好幾個單字，
 只錯一個單字或一個字母也被扣整題；而且每位老師的寬嚴標準不同。所以派發打字小考時，
-老師**必須**選一種評分方式（沒有預設值），之後也能在作業詳情改。
+老師**必須**選一種評分方式（沒有預設值），之後也能在班級頁「作業設定」面板改。
 
 選擇題小考（`word_selection_quiz`）固定整題計分，不顯示這個設定。
 
@@ -89,7 +89,7 @@
 此外，**還沒交卷的 session**（第一次作答中、被退回後的訂正 session）在兩個時間點也會以
 目前設定重判 `is_correct`（只寫 `is_correct` / `correct_count`，不寫分數、不動狀態與時間）：
 
-1. 老師在作業詳情改評分設定時（`recompute_quiz_scores` 一併處理；`recomputed_count` 仍只算
+1. 老師在「作業設定」面板改評分設定時（`recompute_quiz_scores` 一併處理；`recomputed_count` 仍只算
    「已交卷、分數被重算」的人數）。
 2. 學生打開拼寫／克漏字小考（`start`）時，回傳 `prior_is_correct` 前先重判（自我修正）。
 
@@ -109,8 +109,11 @@
 
 ## 重算（`recompute_quiz_scores`）
 
-老師在作業詳情改了評分設定，且已有學生交卷（或學生進度載入失敗、不知道有沒有人交卷，
-此時確認視窗改用不帶人數的說法）→ 前端先跳確認視窗 → 確定才 PATCH：
+老師在班級頁「作業設定」面板（`AssignmentDetailSheet`）改評分設定 —— 面板沒有編輯模式，評分方式
+永遠顯示、原位修改、改完即存：換方式／大小寫立即存，扣分輸入失焦才存；設定不完整（選了固定扣分
+但還沒填扣分）或有效值沒變就不送。若已有學生交卷（或學生進度載入失敗、不知道有沒有人交卷，
+此時確認視窗改用不帶人數的說法）→ 存之前先跳確認視窗 → 確定才 PATCH（依 `recomputed_count`
+提示並重抓學生進度）；取消則把評分方式退回最後儲存值：
 
 - 對每位「有已完成作答」的學生，取**第一次**完成的作答（＝成績紀錄那筆）。
 - 用新的大小寫設定重判每題 `is_correct`，同步 `session.correct_count`。
@@ -127,5 +130,5 @@
    與 `questionDeduction`（試算用，數字必須與後端一致）；`quizScoring.methods.<code>` 的 zh-TW / en
    文案；補 `frontend/src/lib/__tests__/quizScoring.test.ts`（與後端同一組案例）。
 
-派發／編輯 UI（`components/assignment/QuizScoringMethodField.tsx`，下拉選單只列名稱、下方只顯示選到那一種的說明）
+派發 dialog／「作業設定」面板 UI（`components/assignment/QuizScoringMethodField.tsx`，下拉選單只列名稱、下方只顯示選到那一種的說明）
 與批改頁會自動列出新方式。

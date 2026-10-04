@@ -117,7 +117,7 @@ test.describe('Assignment Dashboard Complete Test Suite', () => {
     await page.click('button:has-text("作業管理")');
 
     // Check if there are any assignments
-    const viewDetailsButtons = page.locator('button:has-text("查看詳情")');
+    const viewDetailsButtons = page.locator('button:has-text("作業設定")');
     const count = await viewDetailsButtons.count();
 
     if (count > 0) {
@@ -126,7 +126,7 @@ test.describe('Assignment Dashboard Complete Test Suite', () => {
 
       // Verify assignment details dialog opens
       await expect(page.locator('[role="dialog"]')).toBeVisible();
-      await expect(page.locator('text=作業詳情')).toBeVisible();
+      await expect(page.locator('text=作業設定')).toBeVisible();
 
       // Check if student completion dashboard is visible
       await expect(page.locator('text=學生列表')).toBeVisible();
@@ -151,7 +151,7 @@ test.describe('Assignment Dashboard Complete Test Suite', () => {
     await page.locator('.classroom-card').first().click();
     await page.click('button:has-text("作業管理")');
 
-    const viewDetailsButtons = page.locator('button:has-text("查看詳情")');
+    const viewDetailsButtons = page.locator('button:has-text("作業設定")');
     const count = await viewDetailsButtons.count();
 
     if (count > 0) {
@@ -194,7 +194,7 @@ test.describe('Assignment Dashboard Complete Test Suite', () => {
     await page.locator('.classroom-card').first().click();
     await page.click('button:has-text("作業管理")');
 
-    const viewDetailsButtons = page.locator('button:has-text("查看詳情")');
+    const viewDetailsButtons = page.locator('button:has-text("作業設定")');
     const count = await viewDetailsButtons.count();
 
     if (count > 0) {
@@ -404,7 +404,7 @@ test('Smoke Test - Complete User Journey', async ({ page }) => {
 
   // Test assignment details
   await page.click('button:has-text("作業管理")');
-  const viewButtons = page.locator('button:has-text("查看詳情")');
+  const viewButtons = page.locator('button:has-text("作業設定")');
   if (await viewButtons.count() > 0) {
     await viewButtons.first().click();
     await page.waitForSelector('[role="dialog"]');

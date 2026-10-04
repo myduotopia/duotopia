@@ -1,7 +1,8 @@
 /**
  * QuizScoringMethodField — 打字類小考「評分方式」設定（Issue #1092）
  *
- * 派發 dialog（AssignmentDialog 最後一步）與作業詳情編輯（AssignmentDetailSheet）共用，
+ * 派發 dialog（AssignmentDialog 最後一步）與班級頁「作業設定」面板（AssignmentDetailSheet，
+ * 原位修改、改完即存；扣分輸入失焦時以 `onPointsBlur` 通知面板儲存）共用，
  * 只用於 word_spelling_quiz / word_cloze_quiz。內容：
  *   - 評分方式下拉選單（shadcn Select，選項只列名稱；新派發不預選、顯示 placeholder，
  *     trigger 以 amber 框提醒，必須選一種才能送出）
@@ -64,6 +65,11 @@ interface QuizScoringMethodFieldProps {
   questionCount?: number | null;
   /** 讓同頁多個實例的 element id 不衝突 */
   idPrefix?: string;
+  /**
+   * #1092：扣分輸入失焦時呼叫（作業設定 sheet 改完即存：扣分打字中不存，失焦才存）。
+   * 派發 dialog 不傳。
+   */
+  onPointsBlur?: () => void;
 }
 
 /** 讀題目答案；失敗或沒有就回 null（試算改用內建例句、題數維持未知）。 */
@@ -109,6 +115,7 @@ export function QuizScoringMethodField({
   contentIds,
   questionCount,
   idPrefix = "quiz-scoring",
+  onPointsBlur,
 }: QuizScoringMethodFieldProps) {
   const { t } = useTranslation();
   const answers = useQuizAnswers(contentIds, practiceMode);
@@ -271,6 +278,7 @@ export function QuizScoringMethodField({
                     parsed != null && Number.isFinite(parsed) ? parsed : null,
                 });
               }}
+              onBlur={onPointsBlur}
               aria-invalid={pointsInvalid}
               aria-describedby={`${idPrefix}-points-hint`}
               placeholder="0.1–100"
