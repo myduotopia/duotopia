@@ -5,6 +5,7 @@ AI 呼叫全程 mock，只驗證：驗證、配額、擷取結果整形、成本
 """
 
 import io
+import json
 
 import pytest
 
@@ -15,6 +16,8 @@ from services.magic_paste_service import (
     EXTRACT_MODE_SENTENCE,
     EXTRACT_MODE_READING_GROUP,
     GROUP_TITLE_MAX_CHARS,
+    FIGURE_CAPTION_MAX_CHARS,
+    MC_MAX_OPTIONS,
 )
 from services import magic_paste_quota as mpq
 
@@ -690,3 +693,124 @@ def test_normalize_reading_group_image_kind_drops_figures():
     g = MagicPasteService._normalize_reading_group(raw)[0]
     assert g["stimulus"]["figures"] == []
     assert g["stimulus"]["blanks_renumbered"] is False
+
+
+def test_normalize_mc_items_remaps_correct_indexes_after_compaction():
+    """選項壓縮（丟掉無字無 box 的位置）後，correct_indexes 要指回新位置（#1084）。"""
+    raw = {
+        "stem": "Which picture?",
+        "stem_box_2d": [10, 10, 100, 200],
+        "options": ["", "", "", ""],
+        # 第 2 個 box 壞掉 → 該位置無字無圖被丟掉，存活 3 個選項
+        "option_boxes": [
+            [100, 0, 200, 250],
+            "nope",
+            [100, 500, 200, 750],
+            [100, 750, 200, 1000],
+        ],
+    }
+    it = MagicPasteService._normalize_mc_items(
+        {"items": [{**raw, "correct_indexes": [2]}]}
+    )[0]
+    assert len(it["options"]) == 3
+    assert it["correct_indexes"] == [1]
+
+    it = MagicPasteService._normalize_mc_items(
+        {"items": [{**raw, "correct_indexes": [3]}]}
+    )[0]
+    assert it["correct_indexes"] == [2]
+
+    # 被丟掉的位置本身是答案 → 排除（寧可沒答案，也不要指到別的選項）
+    it = MagicPasteService._normalize_mc_items(
+        {"items": [{**raw, "correct_indexes": [1]}]}
+    )[0]
+    assert it["correct_indexes"] == []
+
+
+def test_normalize_mc_items_remaps_correct_indexes_for_text_options():
+    it = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "text options",
+                    "options": ["cat", "", "dog", "bird"],
+                    "correct_indexes": [3],
+                }
+            ]
+        }
+    )[0]
+    assert it["options"] == ["cat", "dog", "bird"]
+    assert it["correct_indexes"] == [2]
+
+
+def test_normalize_mc_items_drops_correct_index_beyond_max_options():
+    """超過 MC_MAX_OPTIONS 被截掉的位置不能留在 correct_indexes。"""
+    it = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "seven options",
+                    "options": ["a", "b", "c", "d", "e", "f", "g"],
+                    "correct_indexes": [6],
+                }
+            ]
+        }
+    )[0]
+    assert len(it["options"]) == MC_MAX_OPTIONS
+    assert it["correct_indexes"] == []
+
+
+def test_normalize_figures_truncates_long_caption():
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["Only paragraph."],
+            "figures": [{"box_2d": [0, 0, 100, 100], "caption": "長" * 500}],
+        },
+        "questions": [],
+    }
+    caption = MagicPasteService._normalize_reading_group(raw)[0]["stimulus"]["figures"][
+        0
+    ]["caption"]
+    assert len(caption) == FIGURE_CAPTION_MAX_CHARS == 300
+
+
+def test_normalize_handles_non_finite_numbers():
+    """`json.loads` 預設吃得下 NaN／Infinity；一律當沒給，不能拋例外（#1084）。"""
+    payload = json.loads(
+        """
+        {
+          "stimulus": {
+            "kind": "text",
+            "paragraphs": ["Only paragraph."],
+            "page": NaN,
+            "figures": [
+              {"box_2d": [0, 0, 100, Infinity], "after_paragraph": 0},
+              {"box_2d": [0, 0, 100, 100], "after_paragraph": NaN}
+            ]
+          },
+          "questions": [
+            {
+              "stem": "",
+              "blank": Infinity,
+              "stem_box_2d": [0, 0, 100, 100],
+              "options": ["a", "b"],
+              "correct_indexes": [NaN, 1]
+            }
+          ]
+        }
+        """
+    )
+    g = MagicPasteService._normalize_reading_group(payload)[0]
+    assert g["stimulus"]["page"] is None
+    # 含 Infinity 的座標整項丟掉；after_paragraph 是 NaN 退回 -1
+    figures = g["stimulus"]["figures"]
+    assert len(figures) == 1
+    assert figures[0]["after_paragraph"] == -1
+    assert g["questions"][0]["blank"] is None
+    assert g["questions"][0]["correct_indexes"] == [1]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_normalize_blank_index_rejects_non_finite(bad):
+    assert MagicPasteService._normalize_blank_index(bad) is None

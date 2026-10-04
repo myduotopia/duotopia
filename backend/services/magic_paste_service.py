@@ -14,6 +14,7 @@
 import re
 import json
 import logging
+import math
 from typing import List, Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,9 @@ STIMULUS_KINDS = ("text", "image")
 BLANK_INDEX_MAX = 999
 # 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
 GROUP_TITLE_MAX_CHARS = 200
+# 文章插圖說明上限：對齊 `services.question_bank_layout.MAX_SHORT_TEXT_CHARS`
+# （排版驗證對 image 區塊的 caption 上限；此處先截掉，避免存檔時整份 layout 被打回）
+FIGURE_CAPTION_MAX_CHARS = 300
 
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
@@ -488,7 +492,8 @@ class MagicPasteService:
           （克漏字小題題本上通常只印選項，#1086）
         - `option_boxes` 與回傳的 options 等長（不是圖的位置為 None）
         - `stem_box_2d` / `option_boxes` 內不合法的座標丟成 None（前端改由老師自己補圖）
-        - `correct_indexes` 只留合法範圍
+        - `correct_indexes` 指的是模型原始的選項位置：壓縮／截斷後重新對應成新 index，
+          被丟掉的位置直接排除（#1084）
         """
         if isinstance(raw, dict):
             raw_items = raw.get("items", [])
@@ -506,7 +511,8 @@ class MagicPasteService:
             options_raw = options_raw if isinstance(options_raw, list) else []
             boxes_raw = entry.get("option_boxes")
             boxes_raw = boxes_raw if isinstance(boxes_raw, list) else []
-            pairs: List[Tuple[str, Optional[List[int]]]] = []
+            # 帶原始 index，壓縮掉空殼後才能把 correct_indexes 重新對應回新位置
+            pairs: List[Tuple[int, str, Optional[List[int]]]] = []
             for i, o in enumerate(options_raw):
                 text = str(o or "").strip()
                 box = (
@@ -514,10 +520,11 @@ class MagicPasteService:
                 )
                 # 有字或有圖才是一個選項；兩者都沒有的位置是模型多給的空殼
                 if text or box:
-                    pairs.append((text, box))
+                    pairs.append((i, text, box))
             pairs = pairs[:MC_MAX_OPTIONS]
-            options = [p[0] for p in pairs]
-            option_boxes = [p[1] for p in pairs]
+            kept = [p[0] for p in pairs]
+            options = [p[1] for p in pairs]
+            option_boxes = [p[2] for p in pairs]
             stem_box = cls._normalize_box_2d(entry.get("stem_box_2d"))
             blank = cls._normalize_blank_index(entry.get("blank"))
             if len(options) < MC_MIN_OPTIONS:
@@ -525,14 +532,14 @@ class MagicPasteService:
             if not stem and stem_box is None and blank is None:
                 continue
             idx_raw = entry.get("correct_indexes")
+            # 指向的是「模型原本的選項位置」，要換算成壓縮／截斷後的新位置；
+            # 被丟掉（空殼或超過 MC_MAX_OPTIONS）的位置直接排除
             correct = (
                 sorted(
                     {
-                        int(i)
-                        for i in idx_raw
-                        if isinstance(i, (int, float))
-                        and not isinstance(i, bool)
-                        and 0 <= int(i) < len(options)
+                        kept.index(int(n))
+                        for n in (cls._as_finite_number(i) for i in idx_raw)
+                        if n is not None and int(n) in kept
                     }
                 )
                 if isinstance(idx_raw, list)
@@ -552,23 +559,38 @@ class MagicPasteService:
         return items
 
     @staticmethod
-    def _normalize_blank_index(raw: Any) -> Optional[int]:
-        """克漏字空格編號：1..BLANK_INDEX_MAX 的整數；其他一律 None。"""
+    def _as_finite_number(raw: Any) -> Optional[float]:
+        """
+        只接受有限的數字（int／float，bool 不算）。
+
+        `json.loads` 預設吃得下 `NaN`／`Infinity`，而 `int(float("nan"))` 會丟
+        ValueError／OverflowError，所以模型亂回時一律當「沒給」處理。
+        """
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
             return None
-        n = int(raw)
+        value = float(raw)
+        return value if math.isfinite(value) else None
+
+    @classmethod
+    def _normalize_blank_index(cls, raw: Any) -> Optional[int]:
+        """克漏字空格編號：1..BLANK_INDEX_MAX 的整數；其他一律 None。"""
+        value = cls._as_finite_number(raw)
+        if value is None:
+            return None
+        n = int(value)
         return n if 1 <= n <= BLANK_INDEX_MAX else None
 
-    @staticmethod
-    def _normalize_box_2d(raw: Any) -> Optional[List[int]]:
+    @classmethod
+    def _normalize_box_2d(cls, raw: Any) -> Optional[List[int]]:
         """[ymin, xmin, ymax, xmax]，四個 0–1000 整數且 ymin<ymax、xmin<xmax；否則 None。"""
         if not isinstance(raw, list) or len(raw) != 4:
             return None
         box: List[int] = []
         for v in raw:
-            if isinstance(v, bool) or not isinstance(v, (int, float)):
+            value = cls._as_finite_number(v)
+            if value is None:
                 return None
-            n = int(round(v))
+            n = int(round(value))
             if n < 0 or n > BOX_2D_MAX:
                 return None
             box.append(n)
@@ -583,6 +605,7 @@ class MagicPasteService:
         文章內插圖（#1084）：座標不合法就整項丟掉（沒有座標就裁不出圖）。
 
         `after_paragraph` 夾在 -1（第一段之前）到 paragraph_count - 1；缺值當 -1。
+        `caption` 截到 FIGURE_CAPTION_MAX_CHARS（排版驗證的短文字上限）。
         """
         if not isinstance(raw, list):
             return []
@@ -594,19 +617,15 @@ class MagicPasteService:
             box = cls._normalize_box_2d(item.get("box_2d"))
             if box is None:
                 continue
-            after_raw = item.get("after_paragraph")
-            after = (
-                int(after_raw)
-                if isinstance(after_raw, (int, float))
-                and not isinstance(after_raw, bool)
-                else -1
-            )
+            after_value = cls._as_finite_number(item.get("after_paragraph"))
+            after = int(after_value) if after_value is not None else -1
             after = max(-1, min(after, upper))
+            caption = str(item.get("caption") or "").strip()
             figures.append(
                 {
                     "box_2d": box,
                     "after_paragraph": after,
-                    "caption": str(item.get("caption") or "").strip(),
+                    "caption": caption[:FIGURE_CAPTION_MAX_CHARS],
                 }
             )
         return figures
@@ -638,13 +657,9 @@ class MagicPasteService:
         paragraphs = [p for p in paragraphs if p]
         text = str(stim.get("text") or "").strip()
         box = cls._normalize_box_2d(stim.get("box_2d"))
-        page_raw = stim.get("page")
+        page_value = cls._as_finite_number(stim.get("page"))
         page = (
-            int(page_raw)
-            if isinstance(page_raw, (int, float))
-            and not isinstance(page_raw, bool)
-            and int(page_raw) >= 1
-            else None
+            int(page_value) if page_value is not None and int(page_value) >= 1 else None
         )
 
         kind = str(stim.get("kind") or "").strip().lower()
