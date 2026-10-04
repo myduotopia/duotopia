@@ -3,13 +3,18 @@
  *
  * 派發 dialog（AssignmentDialog 最後一步）與作業詳情編輯（AssignmentDetailSheet）共用，
  * 只用於 word_spelling_quiz / word_cloze_quiz。內容：
- *   - 五種評分方式單選（新派發不預選，必須選一種才能送出）
- *   - 「每錯一個單字／字母扣固定分數」需填扣分（0.1～100、最多一位小數，與後端驗證一致；
- *     不合法時即時提示且不可送出）
- *   - 區分大小寫開關（預設關）
+ *   - 評分方式下拉選單（shadcn Select，選項只列名稱；新派發不預選、顯示 placeholder，
+ *     trigger 以 amber 框提醒，必須選一種才能送出）
+ *   - 下拉選單下方只顯示「目前選到那一種」的說明；未選時不顯示任何說明
+ *   - 「每錯一個單字／字母扣固定分數」選到才出現扣分輸入（0.1～100、最多一位小數，
+ *     與後端驗證一致；不合法時即時提示且不可送出）
+ *   - 區分大小寫開關（預設關；開關＋短說明同一行，放在試算表上方）
  *   - 每題配分 X 分（共 Q 題）—— 題數未知時不顯示數字
- *   - 即時試算表：用本次題目中單字最多的答案（抓不到題目就用內建例句），
+ *   - 即時試算表（選好評分方式才出現）：用本次題目中單字最多的答案（抓不到題目就用內建例句），
  *     固定列「全對／差 1 字母／錯 1 單字／漏填 1 格／沒作答」，選項或數字一變就更新
+ *
+ * Select 選單內容 portal 到 body；與專案其他 Dialog/Sheet 內的 Select 相同，
+ * SelectContent 的 z-50 疊在 Sheet（z-50、較早掛載）之上，不需額外 container。
  *
  * 試算只是預覽，用 lib/quizScoring.ts（後端 utils/quiz_scoring.py 的前端鏡像）；
  * 實際成績一律由後端計算。題目答案由 contentIds 逐一讀 getContentDetail 取得
@@ -20,6 +25,13 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -50,7 +62,7 @@ interface QuizScoringMethodFieldProps {
   contentIds?: number[];
   /** 已知的總題數（例如購物車 itemsCount 加總）；未知傳 null，會改用抓到的題目數 */
   questionCount?: number | null;
-  /** 讓同頁多個實例的 radio name / id 不衝突 */
+  /** 讓同頁多個實例的 element id 不衝突 */
   idPrefix?: string;
 }
 
@@ -175,10 +187,13 @@ export function QuizScoringMethodField({
   return (
     <Card className="p-3 space-y-3" data-testid="quiz-scoring-field">
       <div className="space-y-1">
-        <div className="text-sm font-medium text-gray-800">
+        <Label
+          htmlFor={`${idPrefix}-method`}
+          className="text-sm font-medium text-gray-800"
+        >
           {t(`${QS}.title`)}{" "}
           <span className="text-red-600">{t(`${QS}.required`)}</span>
-        </div>
+        </Label>
         {perQ != null && (
           <p className="text-xs text-gray-600" data-testid="quiz-scoring-per-q">
             {t(`${QS}.perQuestion`, {
@@ -187,50 +202,48 @@ export function QuizScoringMethodField({
             })}
           </p>
         )}
-        {!value.method && (
-          <p className="text-xs text-amber-700">{t(`${QS}.chooseHint`)}</p>
-        )}
       </div>
 
-      <div
-        role="radiogroup"
-        aria-label={t(`${QS}.title`)}
-        className="space-y-1.5"
-      >
-        {QUIZ_SCORING_METHODS.map((method) => {
-          const id = `${idPrefix}-${method}`;
-          const checked = value.method === method;
-          return (
-            <label
-              key={method}
-              htmlFor={id}
-              className={cn(
-                "flex items-start gap-2 rounded border p-2 cursor-pointer transition-colors",
-                checked
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-200 hover:border-blue-300",
-              )}
-            >
-              <input
-                id={id}
-                type="radio"
-                name={`${idPrefix}-method`}
-                value={method}
-                checked={checked}
-                onChange={() => setMethod(method)}
-                className="mt-1"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm text-gray-800">
-                  {t(`${QS}.methods.${method}.label`)}
-                </span>
-                <span className="block text-xs text-gray-500">
-                  {t(`${QS}.methods.${method}.desc`)}
-                </span>
-              </span>
-            </label>
-          );
-        })}
+      {/* #1092：評分方式改下拉選單，選項只列名稱。未選（null）傳 ""：Radix Select 2.x 對 "" 與
+          undefined 都顯示 placeholder（不預選），但 "" 讓元件全程維持受控，不會在第一次選取時
+          觸發「uncontrolled → controlled」警告（同 shared/VisibilitySelect 的寫法） */}
+      <div className="space-y-1">
+        <Select
+          value={value.method ?? ""}
+          onValueChange={(next) => {
+            if ((QUIZ_SCORING_METHODS as string[]).includes(next)) {
+              setMethod(next as QuizScoringMethod);
+            }
+          }}
+        >
+          <SelectTrigger
+            id={`${idPrefix}-method`}
+            data-testid="quiz-scoring-method-trigger"
+            aria-required
+            className={cn(
+              "h-9",
+              !value.method && "border-amber-500 ring-1 ring-amber-200",
+            )}
+          >
+            <SelectValue placeholder={t(`${QS}.placeholder`)} />
+          </SelectTrigger>
+          <SelectContent>
+            {QUIZ_SCORING_METHODS.map((method) => (
+              <SelectItem key={method} value={method}>
+                {t(`${QS}.methods.${method}.label`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* #1092：只顯示目前選到那一種的說明 */}
+        {value.method && (
+          <p
+            className="text-xs text-gray-500"
+            data-testid="quiz-scoring-method-desc"
+          >
+            {t(`${QS}.methods.${value.method}.desc`)}
+          </p>
+        )}
       </div>
 
       {needsPoints && (
@@ -280,7 +293,8 @@ export function QuizScoringMethodField({
         </div>
       )}
 
-      <div className="flex items-start gap-2">
+      {/* #1092：開關與短說明同一行（窄寬度時說明自動換行），放在試算表上方 */}
+      <div className="flex items-center gap-2">
         <Switch
           id={`${idPrefix}-case`}
           checked={value.caseSensitive}
@@ -290,101 +304,94 @@ export function QuizScoringMethodField({
         />
         <Label
           htmlFor={`${idPrefix}-case`}
-          className="space-y-0.5 cursor-pointer"
+          className="min-w-0 cursor-pointer text-sm text-gray-800"
         >
-          <span className="block text-sm text-gray-800">
-            {t(`${QS}.caseSensitive`)}
-          </span>
-          <span className="block text-xs font-normal text-gray-500">
+          {t(`${QS}.caseSensitive`)}
+          <span className="ml-1.5 text-xs font-normal text-gray-500">
             {t(`${QS}.caseSensitiveDesc`)}
           </span>
         </Label>
       </div>
 
-      <div className="space-y-1.5" data-testid="quiz-scoring-preview">
-        {!value.method ? (
-          <p className="text-xs text-gray-500">
-            {t(`${QS}.preview.chooseFirst`)}
-          </p>
-        ) : (
-          <>
-            <div className="text-xs font-medium text-gray-700">
-              {t(`${QS}.preview.title`, { answer: sample })}
-              {usingBuiltin && (
-                <span className="ml-1 font-normal text-gray-500">
-                  {t(`${QS}.preview.builtinNote`)}
-                </span>
-              )}
-            </div>
-            {perQ == null && (
-              <p className="text-xs text-gray-500">
-                {t(`${QS}.preview.noCount`)}
-              </p>
+      {/* #1092：選好評分方式才渲染試算表 */}
+      {value.method && (
+        <div className="space-y-1.5" data-testid="quiz-scoring-preview">
+          <div className="text-xs font-medium text-gray-700">
+            {t(`${QS}.preview.title`, { answer: sample })}
+            {usingBuiltin && (
+              <span className="ml-1 font-normal text-gray-500">
+                {t(`${QS}.preview.builtinNote`)}
+              </span>
             )}
-            {singleWordHint && (
-              <p className="text-xs text-blue-700">
-                {t(`${QS}.preview.singleWordHint`)}
-              </p>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-gray-500 border-b">
-                    <th className="py-1 pr-2 font-normal">
-                      {t(`${QS}.preview.colAnswer`)}
-                    </th>
+          </div>
+          {perQ == null && (
+            <p className="text-xs text-gray-500">
+              {t(`${QS}.preview.noCount`)}
+            </p>
+          )}
+          {singleWordHint && (
+            <p className="text-xs text-blue-700">
+              {t(`${QS}.preview.singleWordHint`)}
+            </p>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="py-1 pr-2 font-normal">
+                    {t(`${QS}.preview.colAnswer`)}
+                  </th>
+                  {numbersPerQ != null && (
+                    <>
+                      <th className="py-1 pr-2 font-normal text-right">
+                        {t(`${QS}.preview.colDeduction`)}
+                      </th>
+                      <th className="py-1 pr-2 font-normal text-right">
+                        {t(`${QS}.preview.colScore`)}
+                      </th>
+                    </>
+                  )}
+                  <th className="py-1 font-normal">
+                    {t(`${QS}.preview.colReason`)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.key}
+                    className="border-b last:border-b-0"
+                    data-testid={`quiz-scoring-row-${row.key}`}
+                  >
+                    <td className="py-1 pr-2 text-gray-800 break-words">
+                      {row.answer ?? (
+                        <span className="text-gray-400">
+                          {t(`${QS}.preview.unansweredCell`)}
+                        </span>
+                      )}
+                    </td>
                     {numbersPerQ != null && (
                       <>
-                        <th className="py-1 pr-2 font-normal text-right">
-                          {t(`${QS}.preview.colDeduction`)}
-                        </th>
-                        <th className="py-1 pr-2 font-normal text-right">
-                          {t(`${QS}.preview.colScore`)}
-                        </th>
+                        <td className="py-1 pr-2 text-right tabular-nums text-rose-700">
+                          {row.deduction != null
+                            ? `−${roundHalfUp1(row.deduction)}`
+                            : ""}
+                        </td>
+                        <td className="py-1 pr-2 text-right tabular-nums">
+                          {row.score != null ? roundHalfUp1(row.score) : ""}
+                        </td>
                       </>
                     )}
-                    <th className="py-1 font-normal">
-                      {t(`${QS}.preview.colReason`)}
-                    </th>
+                    <td className="py-1 text-gray-600">
+                      {t(row.reason.key, row.reason.values)}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.key}
-                      className="border-b last:border-b-0"
-                      data-testid={`quiz-scoring-row-${row.key}`}
-                    >
-                      <td className="py-1 pr-2 text-gray-800 break-words">
-                        {row.answer ?? (
-                          <span className="text-gray-400">
-                            {t(`${QS}.preview.unansweredCell`)}
-                          </span>
-                        )}
-                      </td>
-                      {numbersPerQ != null && (
-                        <>
-                          <td className="py-1 pr-2 text-right tabular-nums text-rose-700">
-                            {row.deduction != null
-                              ? `−${roundHalfUp1(row.deduction)}`
-                              : ""}
-                          </td>
-                          <td className="py-1 pr-2 text-right tabular-nums">
-                            {row.score != null ? roundHalfUp1(row.score) : ""}
-                          </td>
-                        </>
-                      )}
-                      <td className="py-1 text-gray-600">
-                        {t(row.reason.key, row.reason.values)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

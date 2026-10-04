@@ -127,4 +127,5 @@
    與 `questionDeduction`（試算用，數字必須與後端一致）；`quizScoring.methods.<code>` 的 zh-TW / en
    文案；補 `frontend/src/lib/__tests__/quizScoring.test.ts`（與後端同一組案例）。
 
-派發／編輯 UI（`components/assignment/QuizScoringMethodField.tsx`）與批改頁會自動列出新方式。
+派發／編輯 UI（`components/assignment/QuizScoringMethodField.tsx`，下拉選單只列名稱、下方只顯示選到那一種的說明）
+與批改頁會自動列出新方式。

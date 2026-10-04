@@ -5256,7 +5256,7 @@
   "quizScoring": {
     "title": "Scoring method",
     "required": "(required)",
-    "chooseHint": "Choose a scoring method before assigning.",
+    "placeholder": "Choose a scoring method",
     "methods": {
       "whole_question": {
         "label": "Whole question",
@@ -5290,7 +5290,6 @@
     "preview": {
       "title": "Example: the answer \"{{answer}}\"",
       "builtinNote": "(sample answer)",
-      "chooseFirst": "Choose a scoring method to see how different answers would be scored.",
       "noCount": "The number of questions isn't known yet, so points can't be shown.",
       "singleWordHint": "Every answer here is a single word, so \"Whole question\" and \"By word\" give the same result.",
       "colAnswer": "Student answer",

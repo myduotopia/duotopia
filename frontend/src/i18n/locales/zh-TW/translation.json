@@ -5284,7 +5284,7 @@
   "quizScoring": {
     "title": "評分方式",
     "required": "（必選）",
-    "chooseHint": "請選一種評分方式，選好才能派發。",
+    "placeholder": "請選擇評分方式",
     "methods": {
       "whole_question": {
         "label": "整題計分",
@@ -5318,7 +5318,6 @@
     "preview": {
       "title": "扣分試算：以「{{answer}}」這題為例",
       "builtinNote": "（範例題目）",
-      "chooseFirst": "選好評分方式後，這裡會試算學生各種答法會扣幾分。",
       "noCount": "還不知道這份小考有幾題，暫時無法算出分數。",
       "singleWordHint": "這次的答案都只有一個單字，「整題計分」和「依單字比例」算出來會一樣。",
       "colAnswer": "學生的答案",
