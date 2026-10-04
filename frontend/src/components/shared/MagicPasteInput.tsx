@@ -44,6 +44,15 @@ export interface MagicPasteMcItem {
   /** 圖上有標答案才會有值；否則 [] */
   correct_indexes: number[];
   explanation: string;
+  /**
+   * 克漏字小題對應的空格編號（文章已被 AI 重編成 `{{n}}`）；非克漏字為 null（#1086）。
+   * 舊回應（後端未更新）可能沒有這些欄位，前端一律當 null／[] 處理。
+   */
+  blank?: number | null;
+  /** 題幹附圖座標（文氏圖、靜物圖…）；沒有為 null（#1084） */
+  stem_box_2d?: number[] | null;
+  /** 與 options 等長的選項圖座標；不是圖的位置為 null，整題沒圖片選項為 [] */
+  option_boxes?: (number[] | null)[];
 }
 
 /** reading_group 模式的擷取結果：整份檔 = 一個閱讀題組（與後端 _normalize_reading_group 對應） */
@@ -59,6 +68,17 @@ export interface MagicPasteGroupResult {
     box_2d: number[] | null;
     /** 多頁檔時座標所在頁（1 起算）；單張圖為 1 或 null */
     page: number | null;
+    /**
+     * kind=text 時：文章內插圖的座標與插入位置（#1084）。
+     * `after_paragraph` 為 `paragraphs` 的 0-based 索引，-1 = 第一段之前。
+     */
+    figures?: {
+      box_2d: number[];
+      after_paragraph: number;
+      caption: string;
+    }[];
+    /** AI 是否已把印刷空格（`__40__`…）改寫成 `{{n}}`（克漏字，#1086） */
+    blanks_renumbered?: boolean;
   };
   glossary: { word: string; zh: string }[];
   questions: MagicPasteMcItem[];
@@ -73,8 +93,15 @@ interface QuotaState {
 interface MagicPasteInputProps {
   /** vocabulary / sentence 模式：老師在預覽勾選後插入 */
   onInsert?: (items: MagicPasteItem[]) => void;
-  /** multiple_choice 模式：擷取完直接回呼，不經預覽 */
-  onInsertQuestions?: (items: MagicPasteMcItem[]) => void;
+  /**
+   * multiple_choice 模式：擷取完直接回呼，不經預覽。
+   * 連同原始檔一起交出去（呼叫端用 stem_box_2d／option_boxes 裁題幹圖與選項圖）；
+   * 回呼可以是 async（裁圖／上傳期間本元件維持 loading）
+   */
+  onInsertQuestions?: (
+    items: MagicPasteMcItem[],
+    file: File,
+  ) => void | Promise<void>;
   /**
    * reading_group 模式：擷取完直接回呼（不經預覽），連同原始檔一起交出去，
    * 呼叫端用 box_2d 裁圖上傳；回呼可以是 async（裁圖／上傳期間本元件維持 loading）
@@ -218,7 +245,7 @@ export default function MagicPasteInput({
         if (!questions.length) {
           toast.error(t("contentEditor.magicPaste.noQuestionExtracted"));
         } else {
-          onInsertQuestions?.(questions);
+          await onInsertQuestions?.(questions, picked);
           toast.success(
             t("contentEditor.magicPaste.insertedNQuestions", {
               count: questions.length,

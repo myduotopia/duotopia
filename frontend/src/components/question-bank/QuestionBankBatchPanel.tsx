@@ -65,8 +65,11 @@ export interface QuestionBankBatchPanelProps {
   onAiAnalyze?: () => void;
   /** AI 作答／分析進行中（spinner + 兩鍵 disabled） */
   aiBusy?: boolean;
-  /** 考卷擷取結果 → 右側題目卡 */
-  onInsertExtracted?: (items: MagicPasteMcItem[]) => void;
+  /** 考卷擷取結果 → 右側題目卡（連同原始檔，用來裁題幹圖／選項圖） */
+  onInsertExtracted?: (
+    items: MagicPasteMcItem[],
+    file: File,
+  ) => void | Promise<void>;
   /** 擷取模式：單題（預設）或整份檔 → 一個題組（#1084） */
   extractMode?: "multiple_choice" | "reading_group";
   /** 題組擷取結果 → 右側題組卡（reading_group 模式） */
