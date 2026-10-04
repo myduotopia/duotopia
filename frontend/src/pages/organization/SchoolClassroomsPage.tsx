@@ -14,6 +14,7 @@ import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
 import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { API_URL } from "@/config/api";
 import { logError } from "@/utils/errorLogger";
@@ -314,7 +315,10 @@ export default function SchoolClassroomsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    // 浮動操作列出現時預留底部空間，最後一列不被擋住（#1097）
+    <div
+      className={`space-y-6 ${selectedClassrooms.length > 0 ? "pb-24" : ""}`}
+    >
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
@@ -367,39 +371,11 @@ export default function SchoolClassroomsPage() {
         </CardHeader>
         <CardContent>
           {!loading && !error && classrooms.length > 0 && (
-            <div className="space-y-3 mb-4">
+            <div className="mb-4">
               <GradeFilterSelect
                 value={gradeFilter}
                 onChange={handleGradeFilterChange}
               />
-              {selectedClassrooms.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 bg-blue-50 rounded-md">
-                  <span className="text-sm font-medium text-blue-700">
-                    {t("classroomGrade.selection.selectedCount", {
-                      count: selectedClassrooms.length,
-                    })}
-                  </span>
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowAdjustGrade(true)}
-                      className="flex-1 sm:flex-none"
-                    >
-                      <GraduationCap className="h-4 w-4 mr-2" />
-                      {t("classroomGrade.adjust.button")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSelectedIds(new Set())}
-                      className="flex-1 sm:flex-none"
-                    >
-                      {t("classroomGrade.selection.clear")}
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
           {loading ? (
@@ -432,6 +408,13 @@ export default function SchoolClassroomsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 年級批次調整浮動操作列（#1097） */}
+      <GradeBulkBar
+        selectedCount={selectedClassrooms.length}
+        onAdjust={() => setShowAdjustGrade(true)}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
       {/* Create Classroom Dialog */}
       <CreateClassroomDialog

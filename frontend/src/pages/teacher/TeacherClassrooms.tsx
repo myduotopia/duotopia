@@ -54,6 +54,7 @@ import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
 import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
 
 interface ClassroomDetail {
   id: number;
@@ -768,38 +769,15 @@ export default function TeacherClassrooms() {
         </div>
       </div>
 
-      {/* Bulk Actions Bar — 年級批次調整（#1097） */}
-      {selectedClassrooms.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-            {t("classroomGrade.selection.selectedCount", {
-              count: selectedClassrooms.length,
-            })}
-          </span>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowAdjustGrade(true)}
-              className="flex-1 sm:flex-none"
-            >
-              <GraduationCap className="h-4 w-4 mr-2" />
-              {t("classroomGrade.adjust.button")}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSelectedIds(new Set())}
-              className="flex-1 sm:flex-none"
-            >
-              {t("classroomGrade.selection.clear")}
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Bulk Actions Bar — 年級批次調整（#1097），底部置中浮動膠囊 */}
+      <GradeBulkBar
+        selectedCount={selectedClassrooms.length}
+        onAdjust={() => setShowAdjustGrade(true)}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
-      {/* Classrooms Table */}
-      <>
+      {/* Classrooms Table — 浮動操作列出現時預留底部空間，最後一列不被擋住 */}
+      <div className={selectedClassrooms.length > 0 ? "pb-24" : undefined}>
         {/* Mobile Sort + Card View */}
         <div className="md:hidden">
           {/* Mobile sort control */}
@@ -1002,9 +980,6 @@ export default function TeacherClassrooms() {
                       />
                     </TableHead>
                   )}
-                  <TableHead className="w-[50px] text-left text-xs sm:text-sm">
-                    ID
-                  </TableHead>
                   <SortableHeader
                     field="name"
                     className="text-left text-xs sm:text-sm min-w-[200px]"
@@ -1054,9 +1029,6 @@ export default function TeacherClassrooms() {
                             )}
                           </TableCell>
                         )}
-                        <TableCell className="font-medium text-xs sm:text-sm">
-                          {classroom.id}
-                        </TableCell>
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             {isExpanded ? (
@@ -1166,7 +1138,7 @@ export default function TeacherClassrooms() {
                       {isExpanded && (
                         <TableRow className="bg-gray-50 dark:bg-gray-700/30">
                           <TableCell
-                            colSpan={canEditClassrooms ? 7 : 6}
+                            colSpan={canEditClassrooms ? 6 : 5}
                             className="py-3 px-6"
                           >
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -1220,7 +1192,7 @@ export default function TeacherClassrooms() {
             </Table>
           </div>
         </div>
-      </>
+      </div>
 
       {/* Empty State */}
       {processedClassrooms.length === 0 && (

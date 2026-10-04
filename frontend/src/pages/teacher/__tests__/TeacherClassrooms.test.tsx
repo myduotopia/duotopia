@@ -184,6 +184,11 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+// GradeBulkBar reads the sidebar width for its left offset
+vi.mock("@/contexts/SidebarContext", () => ({
+  useSidebar: () => ({ sidebarWidth: 0 }),
+}));
+
 // Mock toast (sonner) so toasts can be asserted
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
@@ -767,7 +772,9 @@ describe("TeacherClassrooms", () => {
       // Expanded detail row (with "Student Count") must not appear
       expect(screen.queryByText("Student Count")).not.toBeInTheDocument();
       // Bulk bar appears instead
-      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "1 classroom(s) selected" }),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /Adjust grade/ }),
       ).toBeInTheDocument();
@@ -824,7 +831,9 @@ describe("TeacherClassrooms", () => {
 
       await tickRow(user, "Alpha Class"); // grade 3
       await tickRow(user, "Charlie Class"); // unset
-      expect(screen.getByText("2 classroom(s) selected")).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "2 classroom(s) selected" }),
+      ).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /Adjust grade/ }));
       await waitFor(() => {
@@ -843,9 +852,7 @@ describe("TeacherClassrooms", () => {
       ]);
       // Selection is cleared after a successful adjust
       await waitFor(() => {
-        expect(
-          screen.queryByText(/classroom\(s\) selected/),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
       });
     });
 
@@ -896,7 +903,9 @@ describe("TeacherClassrooms", () => {
       });
 
       await tickRow(user, "Alpha Class");
-      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "1 classroom(s) selected" }),
+      ).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Set now" }));
       const rowSelect = await screen.findByLabelText("Grade for Charlie Class");
@@ -913,7 +922,9 @@ describe("TeacherClassrooms", () => {
           screen.queryByText("Set classroom grades"),
         ).not.toBeInTheDocument();
       });
-      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "1 classroom(s) selected" }),
+      ).toBeInTheDocument();
     });
 
     it("clears the selection when the grade filter changes", async () => {
@@ -925,13 +936,13 @@ describe("TeacherClassrooms", () => {
       });
 
       await tickRow(user, "Alpha Class");
-      expect(screen.getByText("1 classroom(s) selected")).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "1 classroom(s) selected" }),
+      ).toBeInTheDocument();
 
       await user.selectOptions(findGradeFilter()!, "3");
       await waitFor(() => {
-        expect(
-          screen.queryByText(/classroom\(s\) selected/),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
       });
     });
 
