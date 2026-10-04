@@ -7,6 +7,7 @@
 """
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -89,7 +90,7 @@ def _auth(teacher: Teacher) -> dict:
 
 
 def _make_classroom(
-    db: Session, name: str, teacher_id=None, grade=None, is_active=True
+    db: Session, name: str, teacher_id=None, grade=None, is_active=True, deleted=False
 ) -> Classroom:
     classroom = Classroom(
         name=name,
@@ -97,6 +98,7 @@ def _make_classroom(
         level=ProgramLevel.A1,
         grade=grade,
         is_active=is_active,
+        deleted_at=datetime.now(timezone.utc) if deleted else None,
     )
     db.add(classroom)
     db.commit()
@@ -329,9 +331,9 @@ class TestTeacherBatchGrade:
         assert mine.grade == "3"
         assert theirs.grade == "3"
 
-    def test_batch_inactive_classroom_is_404(self, client, test_db, teacher):
+    def test_batch_deleted_classroom_is_404(self, client, test_db, teacher):
         deleted = _make_classroom(
-            test_db, "Deleted", teacher_id=teacher.id, is_active=False
+            test_db, "Deleted", teacher_id=teacher.id, is_active=False, deleted=True
         )
         response = client.post(
             self.URL,
@@ -339,6 +341,21 @@ class TestTeacherBatchGrade:
             json={"items": [{"classroom_id": deleted.id, "grade": 4}]},
         )
         assert response.status_code == 404
+
+    def test_batch_inactive_classroom_is_updatable(self, client, test_db, teacher):
+        """停用（未刪除）的班級仍在老師列表上，可以批次調整年級（#1097）"""
+        inactive = _make_classroom(
+            test_db, "Inactive", teacher_id=teacher.id, grade="3", is_active=False
+        )
+        response = client.post(
+            self.URL,
+            headers=_auth(teacher),
+            json={"items": [{"classroom_id": inactive.id, "grade": 4}]},
+        )
+        assert response.status_code == 200
+        test_db.refresh(inactive)
+        assert inactive.grade == "4"
+        assert inactive.is_active is False
 
     def test_batch_school_classroom_is_403(self, client, test_db, teacher, school):
         personal = _make_classroom(

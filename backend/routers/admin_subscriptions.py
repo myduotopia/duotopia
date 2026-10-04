@@ -1176,7 +1176,11 @@ async def get_learning_analytics(
         # 統計班級數
         classrooms_count = (
             db.query(Classroom)
-            .filter(Classroom.teacher_id == teacher.id, Classroom.is_active.is_(True))
+            .filter(
+                Classroom.teacher_id == teacher.id,
+                Classroom.is_active.is_(True),
+                Classroom.deleted_at.is_(None),
+            )
             .count()
         )
 

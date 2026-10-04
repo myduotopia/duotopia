@@ -10,11 +10,12 @@ from typing import Dict, Any, Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload, contains_eager
-from sqlalchemy import text, case, func
+from sqlalchemy import and_, case, func, or_, text
 
 from database import get_db
 from models import (
     Assignment,
+    Classroom,
     StudentAssignment,
     StudentContentProgress,
     AssignmentContent,
@@ -173,6 +174,17 @@ def _serialize_student_assignments(
     return result
 
 
+def _visible_classroom_clause():
+    """作業所屬班級須「啟用且未刪除」；沒有班級的作業（classroom_id 為 NULL）照常顯示。
+
+    搭配 ``outerjoin(Classroom, Assignment.classroom_id == Classroom.id)`` 使用（#1097）。
+    """
+    return or_(
+        Assignment.classroom_id.is_(None),
+        and_(Classroom.is_active.is_(True), Classroom.deleted_at.is_(None)),
+    )
+
+
 def _compute_status_tab_stats(
     db: Session, student_id: int, practice_mode: Optional[str]
 ) -> Dict[str, int]:
@@ -184,9 +196,11 @@ def _compute_status_tab_stats(
     stats_query = (
         db.query(StudentAssignment.status, func.count(StudentAssignment.id))
         .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
+        .outerjoin(Classroom, Assignment.classroom_id == Classroom.id)
         .filter(
             StudentAssignment.student_id == student_id,
             Assignment.is_archived.is_(False),
+            _visible_classroom_clause(),
         )
     )
     if practice_mode:
@@ -246,14 +260,17 @@ async def get_student_assignments(
     """
     student_id = current_student.get("sub")
 
-    # Base query: always join Assignment to filter archived and eager-load
+    # Base query: always join Assignment to filter archived and eager-load.
+    # #1097：班級停用或已刪除 → 該班作業不出現在學生列表
     query = (
         db.query(StudentAssignment)
         .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
+        .outerjoin(Classroom, Assignment.classroom_id == Classroom.id)
         .options(contains_eager(StudentAssignment.assignment))
         .filter(
             StudentAssignment.student_id == int(student_id),
             Assignment.is_archived.is_(False),
+            _visible_classroom_clause(),
         )
     )
 

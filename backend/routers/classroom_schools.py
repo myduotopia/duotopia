@@ -423,7 +423,9 @@ async def list_school_classrooms(
         .outerjoin(student_counts, Classroom.id == student_counts.c.classroom_id)
         .outerjoin(assignment_counts, Classroom.id == assignment_counts.c.classroom_id)
         .outerjoin(program_counts, Classroom.id == program_counts.c.classroom_id)
-        .filter(Classroom.id.in_(classroom_ids), Classroom.is_active.is_(True))
+        # #1097：停用班級照常列出（is_active 讓前端顯示「停用」徽章、可重新啟用），
+        # 只排除已刪除
+        .filter(Classroom.id.in_(classroom_ids), Classroom.deleted_at.is_(None))
         .all()
     )
 
@@ -549,7 +551,8 @@ async def batch_set_school_classroom_grades(
             ClassroomSchool.school_id == school_id,
             ClassroomSchool.is_active.is_(True),
             Classroom.id.in_(classroom_ids),
-            Classroom.is_active.is_(True),
+            # 停用班級仍在機構列表上，可一起調整年級；已刪除排除（#1097）
+            Classroom.deleted_at.is_(None),
         )
         .all()
     )

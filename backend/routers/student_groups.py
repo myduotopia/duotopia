@@ -101,6 +101,7 @@ def _get_owned_classroom(db: Session, teacher_id: int, classroom_id: int) -> Cla
             Classroom.id == classroom_id,
             Classroom.teacher_id == teacher_id,
             Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
         .first()
     )
@@ -118,6 +119,7 @@ def _get_owned_group(db: Session, teacher_id: int, group_id: int) -> StudentGrou
             StudentGroup.id == group_id,
             Classroom.teacher_id == teacher_id,
             Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
         .options(selectinload(StudentGroup.members))
         .first()

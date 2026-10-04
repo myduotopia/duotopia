@@ -53,6 +53,7 @@ from routers.assignments.detail import (
     _get_canonical_items,
     _SPEAKING_SCORE_MODES,
 )
+from utils.classroom_grade import classroom_display_name
 from .dependencies import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,8 @@ def _verify_classroom_ownership(
         .filter(
             Classroom.id == classroom_id,
             Classroom.teacher_id == teacher_id,
-            Classroom.is_active.is_(True),
+            # 停用班級仍可匯出成績（例如學期末停用後再匯出）；已刪除排除（#1097）
+            Classroom.deleted_at.is_(None),
         )
         .first()
     )
@@ -123,6 +125,17 @@ def _verify_classroom_ownership(
             detail="Classroom not found or you don't have permission",
         )
     return classroom
+
+
+def _class_label(classroom: Classroom) -> str:
+    """組合班名（「8年12班」），名稱已含年／班或無年級時照原名。"""
+    return classroom_display_name(classroom.name, classroom.grade)
+
+
+def _class_label_with_suffix(classroom: Classroom) -> str:
+    """標題用：組合班名已以「班」結尾就不再補「 班」，否則維持舊格式「<名稱> 班」。"""
+    label = _class_label(classroom)
+    return label if label.endswith("班") else f"{label} 班"
 
 
 def _classroom_students(classroom_id: int, db: Session) -> List[Student]:
@@ -268,12 +281,12 @@ def _build_class_workbook(
 
     wb = Workbook()
     ws = wb.active
-    ws.title = _sanitize_sheet_title(f"{classroom.name}成績總覽")
+    ws.title = _sanitize_sheet_title(f"{_class_label(classroom)}成績總覽")
 
     total_cols = col - 1  # last assignment column
 
     # --- Row 1: title ---
-    ws.cell(row=1, column=1, value=f"{classroom.name} 班成績總覽")
+    ws.cell(row=1, column=1, value=f"{_class_label_with_suffix(classroom)}成績總覽")
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
     ws.cell(row=1, column=1).font = Font(bold=True, size=14)
     ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
@@ -440,7 +453,7 @@ async def class_grade_report(
 
     students = _classroom_students(classroom_id, db)
     wb = _build_class_workbook(classroom, assignments, students, db)
-    filename = f"{classroom.name}_成績總覽_{_today_yyyymmdd()}.xlsx"
+    filename = f"{_class_label(classroom)}_成績總覽_{_today_yyyymmdd()}.xlsx"
     return _xlsx_response(wb, filename)
 
 
@@ -478,7 +491,7 @@ def _build_single_student_workbook(
     wb = Workbook()
     ws = wb.active
     ws.title = _sanitize_sheet_title(
-        f"{classroom.name}_{student.student_number or ''}_{student.name or ''}"
+        f"{_class_label(classroom)}_{student.student_number or ''}_{student.name or ''}"
     )
 
     today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -492,7 +505,7 @@ def _build_single_student_workbook(
         row=1,
         column=1,
         value=(
-            f"學生成績單　{classroom.name} 班　"
+            f"學生成績單　{_class_label_with_suffix(classroom)}　"
             f"{student.student_number or ''} 號　{student.name or ''}"
         ),
     )
@@ -671,12 +684,12 @@ async def student_grade_report(
         buf = io.BytesIO()
         wb.save(buf)
         inner_name = (
-            f"{classroom.name}_{student.student_number or ''}_"
+            f"{_class_label(classroom)}_{student.student_number or ''}_"
             f"{student.name or ''}_{today}.xlsx"
         )
         files.append((inner_name, buf.getvalue()))
 
-    zip_filename = f"{classroom.name}_學生成績單_{today}.zip"
+    zip_filename = f"{_class_label(classroom)}_學生成績單_{today}.zip"
     return _zip_response(files, zip_filename)
 
 

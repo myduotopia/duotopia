@@ -260,6 +260,7 @@ def _build_student_response(db: Session, student: Student) -> dict:
         "student_number": student.student_number,
         "classroom_id": first_cr["id"] if first_cr else None,
         "classroom_name": first_cr["name"] if first_cr else None,
+        "classroom_grade": first_cr.get("grade") if first_cr else None,
         "school_id": first_cr.get("school_id") if first_cr else None,
         "school_name": first_cr.get("school_name") if first_cr else None,
         "organization_id": (first_cr.get("organization_id") if first_cr else None),

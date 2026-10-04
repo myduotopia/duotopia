@@ -224,8 +224,8 @@ def test_no_scope_returns_all_active_classrooms(setup_database):
     by_name = {item["name"]: item for item in resp.json()}
     assert by_name["ca1"]["studentCount"] == 2
     assert by_name["cp1"]["studentCount"] == 0
-    # Shape check.
-    assert set(by_name["ca1"].keys()) == {"id", "name", "studentCount"}
+    # Shape check（#1097 加 grade，學生登入選班組合班名用）.
+    assert set(by_name["ca1"].keys()) == {"id", "name", "grade", "studentCount"}
 
 
 def test_scope_personal_returns_only_unlinked(setup_database):
