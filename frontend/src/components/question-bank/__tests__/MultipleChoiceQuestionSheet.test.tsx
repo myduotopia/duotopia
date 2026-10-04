@@ -25,36 +25,58 @@ const listSources = vi.fn();
 const aiAnswerQuestions = vi.fn();
 
 // 題組擷取（#1084）：MagicPasteInput 換成 stub，按鈕直接觸發 onInsertGroup；裁圖／上傳 mock
-const { cropImageFileMock, uploadImageFileMock, GROUP_RESULT } = vi.hoisted(
-  () => ({
-    cropImageFileMock: vi.fn(),
-    uploadImageFileMock: vi.fn(),
-    GROUP_RESULT: {
-      title: "Lantern",
-      stimulus: {
-        kind: "image",
-        paragraphs: [],
-        text: "Happy Town Lantern Festival",
-        box_2d: [0, 0, 600, 1000],
-        page: 1,
-      },
-      glossary: [{ word: "lantern", zh: "燈籠" }],
-      questions: [
-        {
-          stem: "What is the purpose?",
-          options: ["a", "b", "c", "d"],
-          correct_indexes: [2],
-          explanation: "",
-        },
+const {
+  cropImageFileMock,
+  cropImageFileManyMock,
+  uploadImageFileMock,
+  GROUP_RESULT,
+  MC_ITEMS,
+} = vi.hoisted(() => ({
+  cropImageFileMock: vi.fn(),
+  cropImageFileManyMock: vi.fn(),
+  uploadImageFileMock: vi.fn(),
+  // 單題擷取（#1084）：題幹圖 + 四個「只有圖沒有字」的選項
+  MC_ITEMS: [
+    {
+      stem: "Which picture shows the answer?",
+      stem_box_2d: [0, 0, 100, 1000],
+      options: ["", "", "", ""],
+      option_boxes: [
+        [100, 0, 200, 250],
+        [100, 250, 200, 500],
+        [100, 500, 200, 750],
+        [100, 750, 200, 1000],
       ],
+      correct_indexes: [1],
+      explanation: "",
     },
-  }),
-);
+  ],
+  GROUP_RESULT: {
+    title: "Lantern",
+    stimulus: {
+      kind: "image",
+      paragraphs: [],
+      text: "Happy Town Lantern Festival",
+      box_2d: [0, 0, 600, 1000],
+      page: 1,
+    },
+    glossary: [{ word: "lantern", zh: "燈籠" }],
+    questions: [
+      {
+        stem: "What is the purpose?",
+        options: ["a", "b", "c", "d"],
+        correct_indexes: [2],
+        explanation: "",
+      },
+    ],
+  },
+}));
 vi.mock("@/components/shared/MagicPasteInput", () => ({
   __esModule: true,
   default: (props: {
     extractMode?: string;
     onInsertGroup?: (r: unknown, f: File) => void | Promise<void>;
+    onInsertQuestions?: (items: unknown[], f: File) => void | Promise<void>;
   }) => (
     <div data-testid="mp-stub" data-mode={props.extractMode ?? "vocabulary"}>
       <button
@@ -67,11 +89,22 @@ vi.mock("@/components/shared/MagicPasteInput", () => ({
           )
         }
       />
+      <button
+        type="button"
+        data-testid="mp-trigger-mc"
+        onClick={() =>
+          void props.onInsertQuestions?.(
+            MC_ITEMS,
+            new File(["x"], "paper.png", { type: "image/png" }),
+          )
+        }
+      />
     </div>
   ),
 }));
 vi.mock("../cropImage", () => ({
   cropImageFile: (...a: unknown[]) => cropImageFileMock(...a),
+  cropImageFileMany: (...a: unknown[]) => cropImageFileManyMock(...a),
 }));
 vi.mock("../uploadImageFile", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../uploadImageFile")>();
@@ -551,9 +584,14 @@ describe("MultipleChoiceQuestionSheet", () => {
   });
 
   it("題組模式擷取（#1084）：上傳走 reading_group、裁圖上傳、填進題組卡；再擷取一次要先確認覆蓋", async () => {
-    cropImageFileMock
+    cropImageFileMock.mockReset();
+    cropImageFileManyMock
       .mockReset()
-      .mockResolvedValue(new File(["c"], "crop.png", { type: "image/png" }));
+      .mockImplementation(async (_f: File, boxes: (number[] | null)[]) =>
+        boxes.map((b) =>
+          b ? new File(["c"], "crop.png", { type: "image/png" }) : null,
+        ),
+      );
     uploadImageFileMock.mockReset().mockResolvedValue("https://cdn/crop.png");
     const user = userEvent.setup();
     renderSheet({ createType: "reading" });
@@ -570,10 +608,11 @@ describe("MultipleChoiceQuestionSheet", () => {
 
     await user.click(screen.getByTestId("mp-trigger-group"));
     await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(1));
-    // 依 box_2d 裁圖，上傳的是裁好的檔
-    expect(cropImageFileMock).toHaveBeenCalledWith(
+    // 依 box_2d 裁圖（素材圖在第一個位置，後面是小題題幹／選項的空位），上傳的是裁好的檔
+    expect(cropImageFileManyMock).toHaveBeenCalledWith(
       expect.any(File),
-      [0, 0, 600, 1000],
+      [[0, 0, 600, 1000], null, null, null, null, null],
+      "crop",
     );
     expect((uploadImageFileMock.mock.calls[0][0] as File).name).toBe(
       "crop.png",
@@ -603,5 +642,47 @@ describe("MultipleChoiceQuestionSheet", () => {
     await user.click(screen.getByTestId("mp-trigger-group"));
     await user.click(await screen.findByTestId("qb-extract-overwrite-confirm"));
     await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("單題擷取（#1084）：帶原始檔裁題幹圖與選項圖，圖片選項沒有字也填進卡片", async () => {
+    cropImageFileManyMock
+      .mockReset()
+      .mockImplementation(async (_f: File, boxes: (number[] | null)[]) =>
+        boxes.map((b) =>
+          b ? new File(["c"], "crop.png", { type: "image/png" }) : null,
+        ),
+      );
+    uploadImageFileMock.mockReset().mockResolvedValue("https://cdn/crop.png");
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.click(screen.getByTestId("mp-trigger-mc"));
+
+    // 題幹圖 + 四個選項圖，一次解碼、五個 box 一起裁
+    await waitFor(() =>
+      expect(cropImageFileManyMock).toHaveBeenCalledWith(
+        expect.any(File),
+        [
+          [0, 0, 100, 1000],
+          [100, 0, 200, 250],
+          [100, 250, 200, 500],
+          [100, 500, 200, 750],
+          [100, 750, 200, 1000],
+        ],
+        "crop",
+      ),
+    );
+    expect(uploadImageFileMock).toHaveBeenCalledTimes(5);
+    expect(
+      ((await screen.findByTestId("qc-0-stem")) as HTMLTextAreaElement).value,
+    ).toBe("Which picture shows the answer?");
+    expect(screen.getByTestId("qc-0-stem-image-preview")).toBeTruthy();
+    // 圖片選項：輸入框是空的，圖已填好
+    expect(
+      (screen.getByTestId("qc-0-option-0") as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      document.querySelectorAll('img[src="https://cdn/crop.png"]').length,
+    ).toBeGreaterThanOrEqual(2);
   });
 });

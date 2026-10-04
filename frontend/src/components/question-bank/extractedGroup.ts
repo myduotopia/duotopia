@@ -230,7 +230,11 @@ export function groupDraftFromExtracted(
     passage_text_edited: fallbackText !== "",
     glossary,
     questions: isCloze
-      ? matchClozeBlanks(questions, result.questions, layoutBlankIndexes(layout))
+      ? matchClozeBlanks(
+          questions,
+          result.questions,
+          layoutBlankIndexes(layout),
+        )
       : questions,
     serverError: null,
   };

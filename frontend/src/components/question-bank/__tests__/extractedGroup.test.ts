@@ -175,7 +175,8 @@ describe("groupDraftFromExtracted", () => {
       "Vivaldi",
     );
     expect(
-      groupDraftFromExtracted(baseResult({ title: "  " }), base, noImages).title,
+      groupDraftFromExtracted(baseResult({ title: "  " }), base, noImages)
+        .title,
     ).toBe("老師打的");
     const img = baseResult({
       title: "",
