@@ -61,7 +61,10 @@ describe("cropImageFileMany", () => {
 
   it("jsdom 無法載入圖片時全部 null 而不是丟例外", async () => {
     await expect(
-      cropImageFileMany(png(), [[0, 0, 100, 100], [50, 50, 200, 200]]),
+      cropImageFileMany(png(), [
+        [0, 0, 100, 100],
+        [50, 50, 200, 200],
+      ]),
     ).resolves.toEqual([null, null]);
   });
 });
