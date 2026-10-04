@@ -57,6 +57,7 @@ import type {
 } from "@/types/questionBank";
 import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import QuestionUnitList from "./QuestionUnitList";
+import { uploadExtractedQuestionImages } from "./extractedImages";
 import { useExtractedGroup } from "./useExtractedGroup";
 import {
   MAX_QUESTIONS_PER_BATCH,
@@ -544,9 +545,16 @@ export default function QuestionSheet({
       (current, results) => applyAiAnalysis(current, results),
     );
 
-  /** 考卷擷取結果：第一個單元全空就取代，否則附加；超過上限截斷 */
-  const handleInsertExtracted = (items: MagicPasteMcItem[]) => {
+  /**
+   * 考卷擷取結果：第一個單元全空就取代，否則附加；超過上限截斷。
+   * 先把題幹圖與選項圖裁好上傳（PDF 不裁，由 helper 提示），再填進卡片。
+   */
+  const handleInsertExtracted = async (
+    items: MagicPasteMcItem[],
+    file: File,
+  ) => {
     if (items.length === 0) return;
+    const images = await uploadExtractedQuestionImages(items, file, t);
     dirtyRef.current = true;
     setUnits((prev) => {
       const base =
@@ -557,9 +565,12 @@ export default function QuestionSheet({
           ? []
           : prev;
       const room = Math.max(0, MAX_QUESTIONS_PER_BATCH - base.length);
-      const incoming = draftsFromExtracted(items.slice(0, room), batch).map(
-        (d) =>
-          single({ ...d, visibility: batchVisibility, sources: batchSources }),
+      const incoming = draftsFromExtracted(
+        items.slice(0, room),
+        batch,
+        images,
+      ).map((d) =>
+        single({ ...d, visibility: batchVisibility, sources: batchSources }),
       );
       if (items.length > room) {
         toast.info(

@@ -550,6 +550,29 @@ describe("AI 套用（#1065）：只填空的", () => {
     expect(b.extraOptionsShown).toBe(true);
     expect(b.allow_multiple).toBe(true);
     expect(b.options[4].is_correct).toBe(true);
+    // 沒傳圖：題幹與選項都沒有 image_url
+    expect(a.image_url).toBeNull();
+    expect(a.options.every((o) => o.image_url === null)).toBe(true);
+  });
+
+  it("draftsFromExtracted：帶題幹圖與選項圖（圖片選項 text 為空字串）", async () => {
+    const { draftsFromExtracted } = await import("../questionDraft");
+    const [d] = draftsFromExtracted(
+      [{ stem: "", options: ["", ""], correct_indexes: [0], explanation: "" }],
+      { exam_points: [], grade: [null, null], program_link: null },
+      {
+        stemUrls: ["https://cdn/stem.png"],
+        optionUrls: [["https://cdn/a.png", "https://cdn/b.png"]],
+      },
+    );
+    expect(d.image_url).toBe("https://cdn/stem.png");
+    expect(d.options.map((o) => o.image_url)).toEqual([
+      "https://cdn/a.png",
+      "https://cdn/b.png",
+      // 多出來的空槽不帶圖
+      null,
+      null,
+    ]);
   });
 
   it("toCreateGroupInput：有 layout 時 passage_text 由 layout 拼出（去標記）", () => {

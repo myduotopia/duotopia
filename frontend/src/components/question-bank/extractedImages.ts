@@ -9,8 +9,15 @@
  */
 
 import type { TFunction } from "i18next";
+import { toast } from "sonner";
+
+import type {
+  MagicPasteGroupResult,
+  MagicPasteMcItem,
+} from "@/components/shared/MagicPasteInput";
 
 import { cropImageFileMany } from "./cropImage";
+import type { ExtractedQuestionImages } from "./questionDraft";
 import { uploadImageFile } from "./uploadImageFile";
 
 /** 擷取結果裡能裁圖的檔案類型（PDF 不行） */
@@ -35,4 +42,123 @@ export async function uploadCroppedBoxes(
     urls.push(f ? await uploadImageFile(f, t) : null);
   }
   return urls;
+}
+
+/** 題組擷取的所有圖：整塊素材圖、文章插圖、每小題的題幹圖與選項圖 */
+export interface ExtractedGroupImages {
+  /** kind=image：整塊素材圖（裁不出來時退回整張原圖） */
+  stimulusUrl: string | null;
+  /** kind=text：文章插圖，與 `stimulus.figures` 等長 */
+  figureUrls: (string | null)[];
+  /** 小題的題幹圖與選項圖，與 `questions` 等長 */
+  questions: ExtractedQuestionImages;
+}
+
+/** 小題題幹圖 + 選項圖的座標攤平成一條（給 cropImageFileMany 一次解碼） */
+function questionBoxes(items: MagicPasteMcItem[]): (number[] | null)[] {
+  const boxes: (number[] | null)[] = [];
+  for (const it of items) {
+    boxes.push(it.stem_box_2d ?? null);
+    for (let i = 0; i < it.options.length; i += 1) {
+      boxes.push(it.option_boxes?.[i] ?? null);
+    }
+  }
+  return boxes;
+}
+
+/** 把攤平的 url 依 `questionBoxes` 的順序切回每小題 */
+function splitQuestionUrls(
+  items: MagicPasteMcItem[],
+  urls: (string | null)[],
+): ExtractedQuestionImages {
+  const stemUrls: (string | null)[] = [];
+  const optionUrls: (string | null)[][] = [];
+  let i = 0;
+  for (const it of items) {
+    stemUrls.push(urls[i] ?? null);
+    i += 1;
+    const own: (string | null)[] = [];
+    for (let o = 0; o < it.options.length; o += 1) {
+      own.push(urls[i] ?? null);
+      i += 1;
+    }
+    optionUrls.push(own);
+  }
+  return { stemUrls, optionUrls };
+}
+
+function emptyQuestionImages(
+  items: MagicPasteMcItem[],
+): ExtractedQuestionImages {
+  return {
+    stemUrls: items.map(() => null),
+    optionUrls: items.map((it) => it.options.map(() => null)),
+  };
+}
+
+/**
+ * 單題擷取（multiple_choice）的題幹圖與選項圖：一次解碼、循序上傳。
+ * PDF 不能在前端裁圖 → 全部 null 並提示老師手動補圖。
+ */
+export async function uploadExtractedQuestionImages(
+  items: MagicPasteMcItem[],
+  file: File,
+  t: TFunction,
+): Promise<ExtractedQuestionImages> {
+  const boxes = questionBoxes(items);
+  if (boxes.every((b) => !b)) return emptyQuestionImages(items);
+  if (!canCropFrom(file)) {
+    toast.info(t("contentEditor.magicPaste.groupImageNeedsUpload"));
+    return emptyQuestionImages(items);
+  }
+  return splitQuestionUrls(items, await uploadCroppedBoxes(file, boxes, t));
+}
+
+/**
+ * 題組擷取（reading_group，含克漏字）的所有圖：整塊素材圖、文章插圖、小題圖。
+ * 全部的 box 一起交給 `cropImageFileMany`，原圖只解碼一次。
+ */
+export async function uploadExtractedGroupImages(
+  result: MagicPasteGroupResult,
+  file: File,
+  t: TFunction,
+): Promise<ExtractedGroupImages> {
+  const figures = result.stimulus.figures ?? [];
+  const isImageStimulus = result.stimulus.kind === "image";
+  const qBoxes = questionBoxes(result.questions);
+  const boxes: (number[] | null)[] = [
+    isImageStimulus ? (result.stimulus.box_2d ?? null) : null,
+    ...figures.map((f) => f.box_2d),
+    ...qBoxes,
+  ];
+
+  const nothingToCrop = boxes.every((b) => !b) && !isImageStimulus;
+  if (nothingToCrop || !canCropFrom(file)) {
+    // PDF：文字與空格照常，圖片一律略過並提示（純文字題組不用提示）
+    if (!nothingToCrop) {
+      toast.info(t("contentEditor.magicPaste.groupImageNeedsUpload"));
+    }
+    return {
+      stimulusUrl: null,
+      figureUrls: figures.map(() => null),
+      questions: emptyQuestionImages(result.questions),
+    };
+  }
+
+  const urls = await uploadCroppedBoxes(file, boxes, t);
+  let stimulusUrl = urls[0] ?? null;
+  if (isImageStimulus && stimulusUrl === null) {
+    // 座標裁不出來：整張原圖當素材，老師可以自己換
+    toast.info(t("contentEditor.magicPaste.groupImageFallbackWhole"));
+    stimulusUrl = await uploadImageFile(file, t);
+  }
+  const figureUrls = urls.slice(1, 1 + figures.length);
+  return {
+    stimulusUrl,
+    figureUrls,
+    questions: splitQuestionUrls(
+      result.questions,
+      urls.slice(1 + figures.length),
+    ),
+  };
 }

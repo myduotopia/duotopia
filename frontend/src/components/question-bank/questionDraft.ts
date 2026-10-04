@@ -912,23 +912,36 @@ export function applyAiAnalysis(
   return { drafts: next, applied, skipped };
 }
 
-/** 考卷擷取結果 → 題目卡（帶左側批次值；圖上有標的答案直接勾） */
+/**
+ * 擷取結果裡已裁好並上傳的圖片 URL（#1084）。
+ * 外層索引對齊 `items`，`optionUrls` 內層對齊該題的 `options`；沒有圖的位置為 null。
+ */
+export interface ExtractedQuestionImages {
+  stemUrls?: (string | null)[];
+  optionUrls?: (string | null)[][];
+}
+
+/** 考卷擷取結果 → 題目卡（帶左側批次值；圖上有標的答案直接勾；題幹圖／選項圖已上傳好） */
 export function draftsFromExtracted(
   items: MagicPasteMcItem[],
   defaults: BatchDefaults,
+  images: ExtractedQuestionImages = {},
 ): QuestionDraft[] {
-  return items.map((it) => {
+  return items.map((it, qi) => {
     const d = emptyDraft(defaults);
     const count = Math.min(it.options.length, MAX_OPTION_SLOTS);
     const slots = Math.max(BASE_OPTION_SLOTS, count);
+    const optionUrls = images.optionUrls?.[qi] ?? [];
     const options: OptionDraft[] = Array.from({ length: slots }, (_, i) => ({
       text: it.options[i] ?? "",
       is_correct: it.correct_indexes.includes(i) && i < count,
-      image_url: null,
+      // 圖片選項：text 可能是空字串，靠圖認（後端允許「字或圖至少一個」）
+      image_url: i < count ? (optionUrls[i] ?? null) : null,
     }));
     return {
       ...d,
       stem: it.stem,
+      image_url: images.stemUrls?.[qi] ?? null,
       explanation: it.explanation ?? "",
       options,
       extraOptionsShown: slots > BASE_OPTION_SLOTS,

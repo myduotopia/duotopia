@@ -12,6 +12,10 @@ import {
 } from "../extractedGroup";
 import { emptyGroupDraft, toCreateGroupInput } from "../questionDraft";
 
+/** 沒有任何圖（PDF 或 AI 沒給座標） */
+const noImages = { stimulusUrl: null };
+const stimulusImage = { stimulusUrl: "https://cdn/x.png" };
+
 const baseResult = (
   over: Partial<MagicPasteGroupResult> = {},
 ): MagicPasteGroupResult => ({
@@ -102,7 +106,7 @@ describe("groupDraftFromExtracted", () => {
       sources: [{ id: 1, label: "會考" }],
       grade: [7, 9] as [number | null, number | null],
     };
-    const draft = groupDraftFromExtracted(baseResult(), base, null);
+    const draft = groupDraftFromExtracted(baseResult(), base, noImages);
     expect(draft.key).toBe(base.key);
     expect(draft.title).toBe("Vivaldi");
     expect(draft.layout?.rows).toHaveLength(1);
@@ -144,7 +148,7 @@ describe("groupDraftFromExtracted", () => {
     const withImage = groupDraftFromExtracted(
       result,
       emptyGroupDraft("reading"),
-      "https://cdn/x.png",
+      stimulusImage,
     );
     expect(withImage.layout?.rows).toHaveLength(1);
     expect(JSON.stringify(withImage.layout)).toContain("https://cdn/x.png");
@@ -158,7 +162,7 @@ describe("groupDraftFromExtracted", () => {
     const noImage = groupDraftFromExtracted(
       result,
       emptyGroupDraft("reading"),
-      null,
+      noImages,
     );
     expect(noImage.layout).toBeNull();
     expect(noImage.passage_text).toBe("Happy Town Lantern Festival 2026");
@@ -167,11 +171,11 @@ describe("groupDraftFromExtracted", () => {
 
   it("標題：AI 有給就用；沒給（空白）保留老師已打的標題", () => {
     const base = { ...emptyGroupDraft("reading"), title: "老師打的" };
-    expect(groupDraftFromExtracted(baseResult(), base, null).title).toBe(
+    expect(groupDraftFromExtracted(baseResult(), base, noImages).title).toBe(
       "Vivaldi",
     );
     expect(
-      groupDraftFromExtracted(baseResult({ title: "  " }), base, null).title,
+      groupDraftFromExtracted(baseResult({ title: "  " }), base, noImages).title,
     ).toBe("老師打的");
     const img = baseResult({
       title: "",
@@ -183,7 +187,7 @@ describe("groupDraftFromExtracted", () => {
         page: null,
       },
     });
-    expect(groupDraftFromExtracted(img, base, "https://cdn/x.png").title).toBe(
+    expect(groupDraftFromExtracted(img, base, stimulusImage).title).toBe(
       "老師打的",
     );
   });
@@ -201,10 +205,223 @@ describe("groupDraftFromExtracted", () => {
     const draft = groupDraftFromExtracted(
       result,
       emptyGroupDraft("reading"),
-      null,
+      noImages,
     );
     expect(draft.layout).toBeNull();
     expect(draft.passage_text).toBe("whole passage");
     expect(draft.passage_text_edited).toBe(true);
+  });
+});
+
+// ---- 插圖 / 選項圖 / 克漏字（#1084 / #1086）----
+
+type Blocks = { columns: { blocks: Record<string, unknown>[] }[] };
+const firstColumnBlocks = (draft: { layout: unknown }) =>
+  ((draft.layout as { rows: Blocks[] }).rows[0] as Blocks).columns[0].blocks;
+
+describe("paragraphsToLayout 文章插圖", () => {
+  it("插圖依 after_paragraph 排在該段之後，-1 排在最前面；有 caption 才帶", () => {
+    const layout = paragraphsToLayout(
+      ["one", "two"],
+      [
+        { after_paragraph: 0, caption: "聖誕老人", url: "https://cdn/a.png" },
+        { after_paragraph: -1, caption: "", url: "https://cdn/head.png" },
+        { after_paragraph: 1, caption: "", url: null },
+      ],
+    );
+    const blocks = (layout as unknown as { rows: Blocks[] }).rows[0].columns[0]
+      .blocks;
+    expect(blocks).toEqual([
+      { type: "image", url: "https://cdn/head.png", align: "center" },
+      { type: "paragraph", text: "one" },
+      {
+        type: "image",
+        url: "https://cdn/a.png",
+        align: "center",
+        caption: "聖誕老人",
+      },
+      { type: "paragraph", text: "two" },
+    ]);
+  });
+
+  it("只有插圖沒有段落也能出排版；全部沒 url 回 null", () => {
+    const onlyFigure = paragraphsToLayout(
+      [],
+      [{ after_paragraph: -1, caption: "", url: "https://cdn/a.png" }],
+    );
+    expect(onlyFigure).not.toBeNull();
+    expect(
+      paragraphsToLayout([], [{ after_paragraph: 0, caption: "", url: null }]),
+    ).toBeNull();
+  });
+});
+
+describe("groupDraftFromExtracted 小題圖與選項圖", () => {
+  it("題幹圖填 image_url；圖片選項 text 空字串但帶 image_url", () => {
+    const result = baseResult({
+      questions: [
+        {
+          stem: "Which picture shows the answer?",
+          stem_box_2d: [0, 0, 100, 100],
+          options: ["", "", "", ""],
+          option_boxes: [
+            [100, 0, 200, 250],
+            [100, 250, 200, 500],
+            [100, 500, 200, 750],
+            [100, 750, 200, 1000],
+          ],
+          correct_indexes: [1],
+          explanation: "",
+        },
+      ],
+    });
+    const draft = groupDraftFromExtracted(result, emptyGroupDraft("reading"), {
+      stimulusUrl: null,
+      questions: {
+        stemUrls: ["https://cdn/stem.png"],
+        optionUrls: [
+          [
+            "https://cdn/o1.png",
+            null,
+            "https://cdn/o3.png",
+            "https://cdn/o4.png",
+          ],
+        ],
+      },
+    });
+    const q = draft.questions[0];
+    expect(q.image_url).toBe("https://cdn/stem.png");
+    expect(q.options.map((o) => o.text)).toEqual(["", "", "", ""]);
+    expect(q.options.map((o) => o.image_url)).toEqual([
+      "https://cdn/o1.png",
+      null,
+      "https://cdn/o3.png",
+      "https://cdn/o4.png",
+    ]);
+    expect(q.options[1].is_correct).toBe(true);
+  });
+
+  it("插圖進排版（文章插圖＋段落同一欄直排）", () => {
+    const result = baseResult({
+      stimulus: {
+        kind: "text",
+        paragraphs: ["Santa is busy.", "He flies at night."],
+        text: "",
+        box_2d: null,
+        page: null,
+        figures: [
+          { box_2d: [0, 600, 300, 1000], after_paragraph: 0, caption: "" },
+        ],
+      },
+    });
+    const draft = groupDraftFromExtracted(result, emptyGroupDraft("reading"), {
+      stimulusUrl: null,
+      figureUrls: ["https://cdn/santa.png"],
+    });
+    expect(firstColumnBlocks(draft).map((b) => b.type)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+  });
+});
+
+describe("groupDraftFromExtracted 克漏字", () => {
+  const clozeResult = (over: Partial<MagicPasteGroupResult> = {}) =>
+    baseResult({
+      title: "Santa's Letter",
+      stimulus: {
+        kind: "text",
+        paragraphs: ["Dear Santa, I {{1}} a bike.", "I will {{2}} good."],
+        text: "",
+        box_2d: null,
+        page: null,
+        blanks_renumbered: true,
+      },
+      questions: [
+        {
+          stem: "",
+          blank: 1,
+          options: ["want", "wants", "wanted", "wanting"],
+          correct_indexes: [0],
+          explanation: "",
+        },
+        {
+          stem: "",
+          blank: 2,
+          options: ["be", "being", "been", "to be"],
+          correct_indexes: [0],
+          explanation: "",
+        },
+      ],
+      ...over,
+    });
+
+  it("保留 {{n}}、小題 blank_index 取 AI 的 blank、題幹可空", () => {
+    const draft = groupDraftFromExtracted(
+      clozeResult(),
+      emptyGroupDraft("cloze"),
+      noImages,
+    );
+    expect(JSON.stringify(draft.layout)).toContain("{{1}}");
+    expect(draft.questions.map((q) => q.blank_index)).toEqual([1, 2]);
+    expect(draft.questions.map((q) => q.stem)).toEqual(["", ""]);
+  });
+
+  it("AI 漏給 blank（或編號對不上文章）→ 依閱讀順序補配", () => {
+    const missing = clozeResult();
+    missing.questions = missing.questions.map((q, i) =>
+      i === 1 ? { ...q, blank: null } : q,
+    );
+    expect(
+      groupDraftFromExtracted(
+        missing,
+        emptyGroupDraft("cloze"),
+        noImages,
+      ).questions.map((q) => q.blank_index),
+    ).toEqual([1, 2]);
+
+    const wrong = clozeResult();
+    wrong.questions = wrong.questions.map((q) => ({ ...q, blank: 40 }));
+    expect(
+      groupDraftFromExtracted(
+        wrong,
+        emptyGroupDraft("cloze"),
+        noImages,
+      ).questions.map((q) => q.blank_index),
+    ).toEqual([1, 2]);
+  });
+
+  it("小題比空格多：多出來的 blank_index 留 null（交驗證提示）", () => {
+    const extra = clozeResult();
+    extra.questions = [
+      ...extra.questions,
+      {
+        stem: "",
+        blank: 3,
+        options: ["a", "b", "c", "d"],
+        correct_indexes: [],
+        explanation: "",
+      },
+    ];
+    expect(
+      groupDraftFromExtracted(
+        extra,
+        emptyGroupDraft("cloze"),
+        noImages,
+      ).questions.map((q) => q.blank_index),
+    ).toEqual([1, 2, null]);
+  });
+
+  it("閱讀題組誤帶 {{n}} → 轉回底線（避免後端 422）", () => {
+    const draft = groupDraftFromExtracted(
+      clozeResult(),
+      emptyGroupDraft("reading"),
+      noImages,
+    );
+    const text = JSON.stringify(draft.layout);
+    expect(text).not.toContain("{{1}}");
+    expect(text).toContain("____");
+    expect(draft.questions.every((q) => q.blank_index === null)).toBe(true);
   });
 });

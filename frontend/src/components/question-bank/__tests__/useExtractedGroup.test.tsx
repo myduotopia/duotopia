@@ -23,7 +23,12 @@ const toastMock = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: toastMock }));
-vi.mock("../cropImage", () => ({ cropImageFile: vi.fn() }));
+vi.mock("../cropImage", () => ({
+  cropImageFile: vi.fn(),
+  cropImageFileMany: vi.fn(async (_f: File, boxes: unknown[]) =>
+    boxes.map(() => null),
+  ),
+}));
 vi.mock("../uploadImageFile", () => ({ uploadImageFile: vi.fn() }));
 
 const t = ((k: string) => k) as unknown as Parameters<

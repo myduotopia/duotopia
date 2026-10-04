@@ -5,8 +5,9 @@
  * 1. 找到右側唯一的題組單元；已有內容就先開覆蓋確認（`pending`，只記 key，確認時以最新草稿
  *    為底，對話框開著時老師改的公開／來源／年段不會被舊快照蓋掉），空的直接套用；
  *    找不到題組單元時 toast 錯誤（不靜默丟掉）
- * 2. kind=image：圖片檔依 box_2d 裁圖（`cropImageFile`）→ 上傳；裁不出來就整張圖上傳並提示；
- *    PDF 無法裁圖 → 不放圖，提示老師在排版另外上傳素材圖
+ * 2. 圖片檔依座標一次裁好所有圖並上傳（`uploadExtractedGroupImages`）：整塊素材圖、
+ *    文章插圖、小題題幹圖與選項圖；素材圖裁不出來就整張圖上傳並提示；
+ *    PDF 無法裁圖 → 文字與空格照常，提示老師手動補圖
  * 3. `groupDraftFromExtracted` 填進題組草稿（保留 key／公開／來源／年段）
  *
  * `onInsertGroup` 回傳的 Promise 在套用或取消後才 resolve，MagicPasteInput 據此維持 loading。
@@ -18,14 +19,13 @@ import { toast } from "sonner";
 
 import type { MagicPasteGroupResult } from "@/components/shared/MagicPasteInput";
 
-import { cropImageFile } from "./cropImage";
 import { groupDraftFromExtracted } from "./extractedGroup";
+import { uploadExtractedGroupImages } from "./extractedImages";
 import {
   unitHasContent,
   type GroupDraft,
   type UnitDraft,
 } from "./questionDraft";
-import { uploadImageFile } from "./uploadImageFile";
 
 export interface PendingGroupExtract {
   result: MagicPasteGroupResult;
@@ -64,19 +64,8 @@ export function useExtractedGroup({ units, replaceGroup, t }: Options) {
     async (result: MagicPasteGroupResult, file: File, base: GroupDraft) => {
       setExtracting(true);
       try {
-        let imageUrl: string | null = null;
-        if (result.stimulus.kind === "image") {
-          if (file.type.startsWith("image/")) {
-            const cropped = await cropImageFile(file, result.stimulus.box_2d);
-            if (!cropped) {
-              toast.info(t("contentEditor.magicPaste.groupImageFallbackWhole"));
-            }
-            imageUrl = await uploadImageFile(cropped ?? file, t);
-          } else {
-            toast.info(t("contentEditor.magicPaste.groupImageNeedsUpload"));
-          }
-        }
-        const next = groupDraftFromExtracted(result, base, imageUrl);
+        const images = await uploadExtractedGroupImages(result, file, t);
+        const next = groupDraftFromExtracted(result, base, images);
         replaceGroup(base.key, next);
         toast.success(
           t("contentEditor.magicPaste.insertedGroup", {
