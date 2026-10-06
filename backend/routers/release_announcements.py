@@ -233,6 +233,9 @@ async def create_release_announcement(
         issue_numbers=body.issue_numbers,
         content=body.content.model_dump() if body.content else None,
     )
+    if created:
+        # 推給公告審核者（失敗只記 log，不影響草稿）
+        await ReleaseAnnouncementService.notify_draft_created(announcement)
     return ReleaseWebhookResponse(
         id=announcement.id, created=created, status=announcement.status
     )

@@ -37,7 +37,7 @@ def _line_settings(monkeypatch):
     from services import line_publish_service as mod
 
     monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", "TESTTOKEN")
-    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_TEST_USER_ID", "Utest123")
+    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_USER_ID", "Utest123")
 
 
 class TestBroadcast:

@@ -92,6 +92,8 @@ interface QuizWord {
   blanked_sentence?: string | null;
   // Issue #967: 例句題型 + 播放音檔時，改播例句音檔（非單字音檔）。
   example_sentence_audio_url?: string | null;
+  // Issue #1088: 開例句時顯示於挖空例句下方
+  example_sentence_translation?: string | null;
 }
 
 interface StartResponse {
@@ -187,9 +189,20 @@ export default function WordSelectionQuizActivity({
     translation: string;
     options: { text: string; image_url?: string | null }[];
     image_url?: string | null;
+    // Issue #1088: 複盤頁重現挖空例句＋例句翻譯
+    example_sentence?: string | null;
+    cloze_answer?: string | null;
+    blanked_sentence?: string | null;
+    example_sentence_translation?: string | null;
   }
-  const [reviewData, setReviewData] =
-    useState<QuizReviewPayload<SelectionReviewWord> | null>(null);
+  // Issue #1088: review 回應附 show_example_sentence（直接進複盤頁時 settings 仍是預設值）
+  type SelectionReviewPayload = QuizReviewPayload<SelectionReviewWord> & {
+    show_example_sentence?: boolean;
+    play_audio?: boolean;
+  };
+  const [reviewData, setReviewData] = useState<SelectionReviewPayload | null>(
+    null,
+  );
   const [reviewLoading, setReviewLoading] = useState(false);
   const [settings, setSettings] = useState({
     show_word: true,
@@ -391,6 +404,10 @@ export default function WordSelectionQuizActivity({
           translation: w.translation,
           options: w.options,
           image_url: w.image_url ?? null,
+          example_sentence: w.example_sentence,
+          cloze_answer: w.cloze_answer,
+          blanked_sentence: w.blanked_sentence,
+          example_sentence_translation: w.example_sentence_translation,
         };
       });
       const correctCount = reviewWords.filter((w) => w.is_correct).length;
@@ -511,7 +528,7 @@ export default function WordSelectionQuizActivity({
       try {
         const data = (await apiClient.get(
           `/api/students/assignments/${assignmentId}/vocabulary/selection_quiz/review`,
-        )) as QuizReviewPayload<SelectionReviewWord>;
+        )) as SelectionReviewPayload;
         if (!cancelled) setReviewData(data);
       } catch {
         if (!cancelled) {
@@ -560,45 +577,109 @@ export default function WordSelectionQuizActivity({
             <RestartDemoButton onRestart={onRestartDemo} />
           ) : undefined
         }
-        renderQuestion={(w) => (
-          <div className="space-y-2">
-            <div className="text-center">
-              {w.image_url && (
-                <img
-                  src={w.image_url}
-                  alt=""
-                  className="mx-auto max-h-24 object-contain"
-                />
-              )}
-              <h3 className="text-2xl font-bold text-gray-800 select-none">
-                {w.text}
-              </h3>
-              {w.translation && (
-                <span className="text-sm text-gray-500">{w.translation}</span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {w.options.map((opt, index) => {
-                const isCorrectOption =
-                  opt.text.trim().toLowerCase() ===
-                  w.correct_answer.trim().toLowerCase();
-                const isStudentPick =
-                  w.student_answer != null &&
-                  opt.text.trim().toLowerCase() ===
-                    w.student_answer.trim().toLowerCase();
-                return (
-                  <QuizOptionChip
-                    key={opt.text}
-                    text={opt.text}
-                    label={optionLabelAt(index)}
-                    isCorrect={isCorrectOption}
-                    isStudentPick={isStudentPick}
+        // Issue #1088：選項上已有 ✓／✗，隱藏「你的答案／正確答案」列
+        hideAnswerRow
+        renderQuestion={(w) => {
+          // Issue #1088: 開例句時複盤頁也顯示挖空例句＋翻譯（不顯示單字，否則洩題）
+          const showSentence =
+            reviewData.show_example_sentence ?? settings.show_example_sentence;
+          // Issue #1088 第 9 項：播放音檔模式下例句翻譯會洩答案 → 不顯示
+          const hideTranslation = reviewData.play_audio ?? settings.play_audio;
+          const reviewBlanked = showSentence
+            ? w.blanked_sentence ||
+              buildBlankedSentence(w.example_sentence, w.cloze_answer, w.text)
+            : "";
+          const showTranslation =
+            !hideTranslation && !!w.example_sentence_translation;
+          return (
+            <div className="space-y-2">
+              {/* Issue #1088 第 10 項：有圖時圖靠右跨兩列（例句第一列、翻譯第二列），
+                  手機寬度改圖在上、文字在下；無圖維持置中單欄 */}
+              <div
+                className={cn(
+                  w.image_url
+                    ? "flex flex-col items-center gap-2 sm:grid sm:grid-cols-[1fr_auto] sm:grid-rows-[auto_auto] sm:gap-x-4 sm:items-center"
+                    : "text-center",
+                )}
+              >
+                {w.image_url && (
+                  <img
+                    src={w.image_url}
+                    alt=""
+                    className="max-h-28 object-contain sm:col-start-2 sm:row-span-2 sm:row-start-1 order-first sm:order-none"
                   />
-                );
-              })}
+                )}
+                {reviewBlanked ? (
+                  <>
+                    <p
+                      className={cn(
+                        "quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none",
+                        w.image_url &&
+                          "sm:col-start-1 sm:row-start-1 text-center sm:text-left",
+                      )}
+                    >
+                      <ClozeBlankText text={reviewBlanked} />
+                    </p>
+                    {showTranslation && (
+                      <p
+                        className={cn(
+                          "quiz-translation-font text-gray-500 mt-1 select-none",
+                          w.image_url &&
+                            "sm:col-start-1 sm:row-start-2 text-center sm:text-left",
+                        )}
+                      >
+                        {w.example_sentence_translation}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h3
+                      className={cn(
+                        "text-2xl font-bold text-gray-800 select-none",
+                        w.image_url &&
+                          "sm:col-start-1 sm:row-start-1 text-center sm:text-left",
+                      )}
+                    >
+                      {w.text}
+                    </h3>
+                    {w.translation && (
+                      <span
+                        className={cn(
+                          "text-sm text-gray-500",
+                          w.image_url &&
+                            "sm:col-start-1 sm:row-start-2 text-center sm:text-left",
+                        )}
+                      >
+                        {w.translation}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {w.options.map((opt, index) => {
+                  const isCorrectOption =
+                    opt.text.trim().toLowerCase() ===
+                    w.correct_answer.trim().toLowerCase();
+                  const isStudentPick =
+                    w.student_answer != null &&
+                    opt.text.trim().toLowerCase() ===
+                      w.student_answer.trim().toLowerCase();
+                  return (
+                    <QuizOptionChip
+                      key={opt.text}
+                      text={opt.text}
+                      label={optionLabelAt(index)}
+                      isCorrect={isCorrectOption}
+                      isStudentPick={isStudentPick}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        }}
       />
     );
   }
@@ -649,7 +730,8 @@ export default function WordSelectionQuizActivity({
     !settings.show_example_sentence;
   // Issue #830 訂正模式 gating + 揭示
   const currentCorrect = correctByItem[currentWord.content_item_id];
-  const currentResolved = currentCorrect === true;
+  // Issue #1088: 只有訂正模式才鎖定已答對的題；正常考試提交前可任意改選
+  const currentResolved = isRevision && currentCorrect === true;
   const everyResolved = allCorrect(words, correctByItem);
   // 訂正模式下已作答（對或錯）→ 揭示選項正解（參考艾賓浩斯）
   // #1045 階段 4b：考後檢討預覽已判斷的題 → 同樣揭示正解綠／錯選紅，並鎖定
@@ -829,11 +911,30 @@ export default function WordSelectionQuizActivity({
               {/* Issue #860 / #967: 例句題型 —— 挖空例句「就是題目」，放題目位置、
                   不加外框底色（只有挖空單字有框，由 ClozeBlankText 提供）。挖不出空時
                   blankedText 為空 → 該卡不顯示，絕不顯示未挖空原句（會洩漏答案）。 */}
+              {/* Issue #1088: 預覽時挖不出空（例句與挖空字對不上）→ 顯示提示而非留白；
+                  學生端維持留白（派發守衛已擋下這種教材）。 */}
+              {!blankedText &&
+                settings.show_example_sentence &&
+                isLivePreview && (
+                  <div className="text-center py-4 sm:py-6">
+                    <p className="quiz-translation-font text-gray-500 select-none">
+                      {t("wordSelection.exampleSentenceUnblankable")}
+                    </p>
+                  </div>
+                )}
               {blankedText && (
                 <div className="text-center py-4 sm:py-6">
-                  <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
+                  {/* Issue #1088: 字體比照單字克漏字（quiz-question-font），例句下方附翻譯 */}
+                  <p className="quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none">
                     <ClozeBlankText text={blankedText} />
                   </p>
+                  {/* Issue #1088 第 9 項：播放音檔（聽音選字）時翻譯會洩答案 → 不顯示 */}
+                  {!settings.play_audio &&
+                    currentWord.example_sentence_translation && (
+                      <p className="quiz-translation-font text-gray-500 mt-2 select-none">
+                        {currentWord.example_sentence_translation}
+                      </p>
+                    )}
                 </div>
               )}
 

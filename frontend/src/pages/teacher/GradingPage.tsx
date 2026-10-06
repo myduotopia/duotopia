@@ -18,6 +18,7 @@
 
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { findNextUngradedStudent } from "@/lib/grading/nextStudent";
 import { useTranslation } from "react-i18next";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
@@ -331,16 +332,31 @@ export default function GradingPage() {
   }, [assignmentId]);
 
   // 載入學生提交內容
+  // Issue #1088: 依賴不再含 studentList —— 之前 handleCompleteGrading 的 setStudentList
+  // 會讓這個 effect 先重載「目前學生」，接著 setSearchParams 又載入下一位，造成畫面
+  // 閃動（#861 因此關掉小考自動跳下一位）。現在只跟著 assignmentId / studentId 走。
   useEffect(() => {
     if (assignmentId && studentId) {
+      // 換學生時先清掉上一位的 submission，否則下方「狀態同步」effect 會把 A 的
+      // status 蓋到 B 的列表項上（B 尚未載入）
+      setSubmission(null);
       loadSubmission();
-    } else if (assignmentId && studentList.length > 0 && !studentId) {
+    }
+  }, [assignmentId, studentId]);
+
+  // 沒帶 studentId 時挑清單第一位（只在清單載入後、且尚未指定學生時執行一次）
+  useEffect(() => {
+    if (assignmentId && !studentId && studentList.length > 0) {
       const firstStudent = studentList[0];
       if (firstStudent && firstStudent.student_id) {
-        setSearchParams({ studentId: firstStudent.student_id.toString() });
+        setSearchParams(
+          { studentId: firstStudent.student_id.toString() },
+          { replace: true },
+        );
       }
     }
-  }, [assignmentId, studentId, studentList]);
+    // studentList 本體會因狀態同步頻繁換 reference，只在長度變動（初次載入）時判斷
+  }, [assignmentId, studentId, studentList.length]);
 
   // 當提交資料載入後，同步更新學生列表狀態
   useEffect(() => {
@@ -896,19 +912,37 @@ export default function GradingPage() {
         ),
       );
 
-      // #861 c-2: 小考批改完成後停在原學生（與 Grade hub 的 grade 行為一致），
-      // 不自動跳下一位——否則 setSearchParams 會觸發重載別的學生，造成畫面多次
-      // 閃動且跳到 B 學生。其他模式維持原本的循序批改。
+      // Issue #1088: 小考「完成」後存檔並跳到下一位待批改學生（SUBMITTED／
+      // RESUBMITTED，從目前位置往後找、到底繞回頂端），沒有了就留在原地並提示。
+      // （#861 c-2 原本停在原學生是因為 studentList 進了載入 effect 的依賴造成閃動，
+      // 該依賴已移除。）其他模式維持原本的循序批改。
       const isQuiz = submission.practice_mode?.endsWith("_quiz");
-      const assignedStudents = studentList.filter(
-        (s) => s.status && s.status !== "NOT_ASSIGNED",
-      );
-      const currentAssignedIndex = assignedStudents.findIndex(
-        (s) => s.student_id === parseInt(studentId!),
-      );
-
-      if (!isQuiz && currentAssignedIndex < assignedStudents.length - 1) {
-        await handleNextStudent();
+      let jumped = false;
+      if (isQuiz) {
+        const next = findNextUngradedStudent(studentList, parseInt(studentId!));
+        if (next) {
+          setShowClassReport(false);
+          setActiveTab("content");
+          setSearchParams({ studentId: next.student_id.toString() });
+          jumped = true;
+        } else {
+          toast.success(t("gradingPage.messages.allGraded"));
+        }
+      } else {
+        const assignedStudents = studentList.filter(
+          (s) => s.status && s.status !== "NOT_ASSIGNED",
+        );
+        const currentAssignedIndex = assignedStudents.findIndex(
+          (s) => s.student_id === parseInt(studentId!),
+        );
+        if (currentAssignedIndex < assignedStudents.length - 1) {
+          await handleNextStudent();
+          jumped = true;
+        }
+      }
+      if (!jumped) {
+        // 留在原學生時重新抓一次 submission（以前靠 studentList 依賴順帶重載）
+        await loadSubmission();
       }
     } catch (error) {
       console.error("Failed to complete grading:", error);

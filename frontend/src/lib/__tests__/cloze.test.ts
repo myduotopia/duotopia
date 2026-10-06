@@ -7,7 +7,13 @@
  *      會整句連答案一起顯示（老師派發預覽實際發生過）
  */
 import { describe, it, expect } from "vitest";
-import { buildBlank, findClozeMatch, buildBlankedSentence } from "../cloze";
+import {
+  buildBlank,
+  findClozeMatch,
+  buildBlankedSentence,
+  clozeAnswerText,
+  reconcileClozeAnswer,
+} from "../cloze";
 
 describe("buildBlank — 一律單一格（不洩漏答案字數）", () => {
   it("單字 → 一格", () => {
@@ -97,5 +103,143 @@ describe("buildBlankedSentence", () => {
 
   it("空句子 → 空字串", () => {
     expect(buildBlankedSentence("", "apple")).toBe("");
+  });
+});
+
+describe("normalizeClozeCase / clozeAnswerText — 句首大寫還原（#1088）", () => {
+  it("句首 Told me → told me", () => {
+    expect(
+      clozeAnswerText({
+        text: "tell",
+        cloze_answer: "told me",
+        example_sentence: "Told me her name.",
+      }),
+    ).toBe("told me");
+    expect(
+      clozeAnswerText({
+        text: "tell",
+        cloze_answer: "told me",
+        example_sentence: "Yes. Told me twice.",
+      }),
+    ).toBe("told me");
+  });
+
+  it("句中 Paris 保留", () => {
+    expect(
+      clozeAnswerText({
+        text: "paris",
+        cloze_answer: "",
+        example_sentence: "I love Paris.",
+      }),
+    ).toBe("Paris");
+  });
+
+  it("Monday 只在句首才小寫；老師存大寫則保留", () => {
+    expect(
+      clozeAnswerText({
+        text: "monday",
+        cloze_answer: "",
+        example_sentence: "Monday is busy.",
+      }),
+    ).toBe("monday");
+    expect(
+      clozeAnswerText({
+        text: "monday",
+        cloze_answer: "",
+        example_sentence: "See you Monday.",
+      }),
+    ).toBe("Monday");
+    expect(
+      clozeAnswerText({
+        text: "monday",
+        cloze_answer: "Monday",
+        example_sentence: "Monday is busy.",
+      }),
+    ).toBe("Monday");
+  });
+
+  it("The cup → cup；找不到時退回 cloze_answer || text", () => {
+    expect(
+      clozeAnswerText({
+        text: "cup",
+        cloze_answer: "",
+        example_sentence: "The cup is red.",
+      }),
+    ).toBe("cup");
+    expect(
+      clozeAnswerText({
+        text: "cup",
+        cloze_answer: "cups",
+        example_sentence: "",
+      }),
+    ).toBe("cups");
+  });
+});
+
+describe("reconcileClozeAnswer — 改例句後同步挖空字（#1088）", () => {
+  it("原挖空字仍在句中 → 保留（採句中字形）", () => {
+    expect(
+      reconcileClozeAnswer(
+        { text: "play", cloze_answer: "play basketball" },
+        "I still play basketball on Sundays.",
+      ),
+    ).toBe("play basketball");
+  });
+
+  it("對不上 → 取消，改由單字本身自動帶入（含前綴變化）", () => {
+    expect(
+      reconcileClozeAnswer(
+        { text: "play", cloze_answer: "play basketball" },
+        "I like playing basketball with friends.",
+      ),
+    ).toBe("playing");
+  });
+
+  it("單字也找不到 → 留空由老師重選", () => {
+    expect(
+      reconcileClozeAnswer(
+        { text: "swim", cloze_answer: "swimming" },
+        "He swam across the river.",
+      ),
+    ).toBe("");
+  });
+
+  it("片語不做前綴猜測", () => {
+    expect(
+      reconcileClozeAnswer(
+        { text: "take pictures", cloze_answer: "take pictures" },
+        "She takes pictures every day.",
+      ),
+    ).toBe("");
+  });
+
+  it("空例句 → 空字串", () => {
+    expect(
+      reconcileClozeAnswer({ text: "cup", cloze_answer: "cups" }, ""),
+    ).toBe("");
+  });
+});
+
+describe("reconcileClozeAnswer — 句首大寫還原（#1088）", () => {
+  it("句首 Told → told（自動帶入）", () => {
+    expect(
+      reconcileClozeAnswer({ text: "told", cloze_answer: "" }, "Told you so."),
+    ).toBe("told");
+    // keep 分支同樣還原（老師原本存小寫）
+    expect(
+      reconcileClozeAnswer(
+        { text: "tell", cloze_answer: "told me" },
+        "Told me her name.",
+      ),
+    ).toBe("told me");
+  });
+
+  it("句中 Paris 保留", () => {
+    expect(
+      reconcileClozeAnswer(
+        { text: "paris", cloze_answer: "" },
+        "I love Paris.",
+      ),
+    ).toBe("Paris");
   });
 });

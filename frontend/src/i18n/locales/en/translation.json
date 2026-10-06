@@ -3139,6 +3139,7 @@
       "loadError": "Failed to load student assignment",
       "notFound": "Student assignment not found",
       "gradingSuccess": "Grading completed!",
+      "allGraded": "All students have been graded",
       "gradingFailed": "Grading failed, please try again later",
       "revisionRequested": "Revision requested",
       "revisionFailed": "Failed to request revision, please try again later",
@@ -5108,7 +5109,8 @@
       "usePhrase": "Add answer",
       "hint": "Double-click a word to set it; for a phrase, select it then click Add answer",
       "noSelection": "Please select some text in the sentence first",
-      "selectionNotInSentence": "The selected text must come from the example sentence"
+      "selectionNotInSentence": "The selected text must come from the example sentence",
+      "staleHint": "Not found in the example sentence — please reselect"
     }
   },
   "wordReading": {
@@ -5279,7 +5281,7 @@
       "correctAnswer": "Correct answer",
       "unanswered": "Not answered",
       "correct": "Correct",
-      "wrong": "Wrong",
+      "wrong": "Incorrect",
       "scoreSummary": "{{correct}} / {{total}} correct"
     },
     "revision": {
@@ -5316,6 +5318,7 @@
     }
   },
   "wordSelection": {
+    "exampleSentenceUnblankable": "This word's example sentence cannot be blanked — check the sentence and cloze answer in the material",
     "loading": "Loading vocabulary...",
     "noItems": "No vocabulary items found",
     "wordSelection": "Word Selection",
@@ -5544,6 +5547,8 @@
     "downloadButton": "Download PDF",
     "pdfType": "PDF Type",
     "twoColumn": "Two-column layout",
+    "showAnswers": "Show answers",
+    "answerKeyTitle": "Answer Key",
     "showSentenceTranslation": "Show sentence translation",
     "drawingArea": "Drawing area",
     "zoomLabel": "Zoom",

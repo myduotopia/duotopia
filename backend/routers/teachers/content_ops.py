@@ -620,14 +620,15 @@ def _build_item_fields(
     # Issue #632 / #861: 編輯儲存時重新檢查克漏字答案。
     # UPDATE 路徑可直接拿既有列的 cloze_answer 當 existing_answer（最準確）；
     # INSERT 路徑（新題或前端未送 id）沿用前端帶回的值。
+    # Issue #1088: 前端帶回的 cloze_answer 一律當 incoming（老師重選／改例句後前端已
+    # reconcile 過的值）；resolve 只在它仍存在句中時採用，否則退回既有值／自動抽取。
+    # 修掉舊 bug：老師重選挖空字時，只要 DB 舊值還在句子裡，新選的就被忽略。
     existing_cloze = existing_row.cloze_answer if existing_row is not None else None
     cloze_answer = resolve_cloze_answer_on_save(
         base_word=item_data.get("text", ""),
         example_sentence=example_sentence,
-        incoming_answer=None,
-        existing_answer=existing_cloze
-        if existing_cloze is not None
-        else item_data.get("cloze_answer"),
+        incoming_answer=item_data.get("cloze_answer"),
+        existing_answer=existing_cloze,
     )
 
     return {

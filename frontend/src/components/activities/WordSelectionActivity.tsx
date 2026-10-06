@@ -96,6 +96,8 @@ interface WordOption {
   blanked_sentence?: string | null;
   // Issue #967: 例句題型 + 播放音檔時，改播例句音檔（非單字音檔）。
   example_sentence_audio_url?: string | null;
+  // Issue #1088: 開例句時顯示於挖空例句下方
+  example_sentence_translation?: string | null;
 }
 
 interface ProficiencyStatus {
@@ -284,10 +286,15 @@ export default function WordSelectionActivity({
   // show_image 模式下正解為英文 (word.text)，否則為翻譯。優先信任後端傳的
   // correct_text；舊版後端未回傳時依 flag fallback。
   // Issue #967: 例句題型選項一律英文 → fallback 也用 word.text。
+  // Issue #1088: 例句題型正解是例句中的實際字形（cloze_answer），缺才退回 text。
   const getExpectedAnswer = useCallback(
     (word: WordOption) =>
       word.correct_text ??
-      (showImage || showExampleSentence ? word.text : word.translation),
+      (showExampleSentence
+        ? word.cloze_answer || word.text
+        : showImage
+          ? word.text
+          : word.translation),
     [showImage, showExampleSentence],
   );
 
@@ -1064,11 +1071,27 @@ export default function WordSelectionActivity({
           {/* Issue #860 / #967: 例句題型 —— 挖空例句「就是題目」，放題目位置、
               不加外框底色（只有挖空單字有框，由 ClozeBlankText 提供）。挖不出空時
               blankedText 為空 → 該卡不顯示，絕不顯示未挖空原句（會洩漏答案）。 */}
+          {/* Issue #1088: 預覽時挖不出空（例句與挖空字對不上）→ 顯示提示而非留白；
+              學生端維持留白（派發守衛已擋下這種教材）。 */}
+          {!blankedText && showExampleSentence && isLivePreview && (
+            <div className="text-center py-4 sm:py-6">
+              <p className="quiz-translation-font text-gray-500 select-none">
+                {t("wordSelection.exampleSentenceUnblankable")}
+              </p>
+            </div>
+          )}
           {blankedText && (
             <div className="text-center py-4 sm:py-6">
-              <p className="text-[clamp(18px,4.5vh,22px)] font-medium text-gray-700 leading-relaxed select-none">
+              {/* Issue #1088: 字體比照單字克漏字（quiz-question-font），例句下方附翻譯 */}
+              <p className="quiz-question-font font-semibold text-gray-800 tracking-wide leading-relaxed select-none">
                 <ClozeBlankText text={blankedText} />
               </p>
+              {/* Issue #1088 第 9 項：播放音檔（聽音選字）時翻譯會洩答案 → 不顯示 */}
+              {!playAudio && currentWord.example_sentence_translation && (
+                <p className="quiz-translation-font text-gray-500 mt-2 select-none">
+                  {currentWord.example_sentence_translation}
+                </p>
+              )}
             </div>
           )}
 

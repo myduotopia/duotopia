@@ -183,6 +183,41 @@ def pick_cloze_target_from_sentence(sentence: str) -> Optional[Tuple[str, str]]:
     return blanked, word
 
 
+def is_sentence_start(sentence: str, start: int) -> bool:
+    """``start`` 是否位於句首（開頭，或前面只有 [.!?] ＋ 空白）。"""
+    if start <= 0:
+        return True
+    before = sentence[:start].rstrip()
+    return not before or before[-1] in ".!?"
+
+
+def normalize_cloze_case(
+    matched: str,
+    base_word: str,
+    sentence: str = "",
+    start: int = 0,
+    persisted_answer: Optional[str] = None,
+) -> str:
+    """句首大寫還原（Issue #1088）。
+
+    例句 "Told me her name." 比對到 "Told me"，但作為選項應顯示 "told me"。
+    只在下列全部成立時把首字母小寫：
+      - 比對結果大寫開頭、單字原形 ``base_word`` 小寫開頭
+      - 老師存的 ``persisted_answer`` 不是大寫開頭（大寫＝專有名詞，照存）
+      - 比對位置在句首（index 0，或前面是 [.!?] ＋ 空白）
+    句中的大寫（"I love Paris."）一律保留。
+    """
+    if not matched or not base_word:
+        return matched
+    if not (base_word[0].islower() and matched[0].isupper()):
+        return matched
+    if persisted_answer and persisted_answer.strip()[:1].isupper():
+        return matched
+    if not is_sentence_start(sentence, start):
+        return matched
+    return matched[0].lower() + matched[1:]
+
+
 def extract_cloze_for_item(content_item) -> Optional[Tuple[str, str]]:
     """Extract ``(blanked_sentence, correct_answer)`` from a ContentItem.
 
@@ -232,9 +267,12 @@ def resolve_cloze_answer_on_save(
 ) -> Optional[str]:
     """Determine the ``cloze_answer`` value to persist on a save.
 
-    Rules (per Issue #632 Q2):
-    1. If client explicitly sends a non-empty ``incoming_answer``, honor it.
-       (Teacher override.)
+    Rules (per Issue #632 Q2, tightened in Issue #1088):
+    1. If client sends a non-empty ``incoming_answer`` that can still be found
+       in the current sentence (``find_cloze_match``), honor it. (Teacher
+       override.) A value that no longer appears in the sentence — e.g. the
+       teacher rewrote the sentence and the UI still carried the old answer —
+       falls through instead of being persisted blindly.
     2. If ``existing_answer`` is still present in the current sentence, keep
        it. (Teacher's manual override survives unrelated edits.)
     3. Otherwise, auto-extract from ``base_word`` + ``example_sentence``.
@@ -243,7 +281,9 @@ def resolve_cloze_answer_on_save(
     example = (example_sentence or "").strip()
 
     if incoming_answer is not None and incoming_answer.strip():
-        return incoming_answer.strip()
+        incoming = incoming_answer.strip()
+        if not example or find_cloze_match(incoming, example):
+            return incoming
 
     if existing_answer and existing_answer.strip() and example:
         if find_cloze_match(existing_answer.strip(), example):
