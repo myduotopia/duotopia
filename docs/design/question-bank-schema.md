@@ -2,6 +2,8 @@
 
 > 討論紀錄與定案。P1-P3（題庫 tab / 新增選擇題 / 查詢 filter）依此實作；
 > P4-P5（派發、考卷 PDF）另開 issue，但本設計已為混合題型試卷留位。
+>
+> **新增題型**（單題／題組骨架、三種題型對照表、加題型檢查清單）見 [`question-bank-question-types.md`](./question-bank-question-types.md)，或用 skill `/qb-add-type`。
 
 ## 定案摘要
 
@@ -106,6 +108,8 @@
 - `passage_text` 為 layout 內所有文字區塊拼出的純文字副本，供搜尋、重複偵測、AI 考點分析；以圖為準的題組由 AI 擷取填入、老師可在「文字版」分頁修改
 
 #### 克漏字題組（#1085）
+
+> 與單題選擇題、閱讀題組的差異點對照見 [`question-bank-question-types.md`](./question-bank-question-types.md)「三、現有三種題型對照表」。
 
 克漏字 = 閱讀題組的文字區塊裡有 `{{n}}` 空格，每個空格對一個小題。`question_groups.question_type` 由小題的 `question_type = 'cloze'` 推得，`questions.blank_index` 存空格編號。
 
