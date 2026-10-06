@@ -558,7 +558,12 @@ describe("MultipleChoiceQuestionSheet", () => {
   it("預覽（#1082）：無內容時 disabled；兩題依序編號、有選項、不顯示解析；題組模式不出現", async () => {
     const user = userEvent.setup();
     const { unmount } = render(
-      <MultipleChoiceQuestionSheet open onClose={vi.fn()} programs={[]} />,
+      <MultipleChoiceQuestionSheet
+        open
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        programs={[]}
+      />,
     );
     const previewBtn = () =>
       screen.getByTestId("qb-preview") as HTMLButtonElement;
