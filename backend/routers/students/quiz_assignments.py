@@ -433,7 +433,7 @@ def _attach_question_numbers(items: List[ContentItem], builder) -> List[Dict[str
 
 
 @router.get("/assignments/{assignment_id}/quiz/status")
-async def get_quiz_live_status(
+def get_quiz_live_status(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -543,7 +543,7 @@ def _build_selection_options(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/selection_quiz/start")
-async def start_word_selection_quiz(
+def start_word_selection_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -603,7 +603,7 @@ async def start_word_selection_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/selection_quiz/answer")
-async def submit_word_selection_quiz_answer(
+def submit_word_selection_quiz_answer(
     assignment_id: int,
     request: WordSelectionQuizAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -678,7 +678,7 @@ async def submit_word_selection_quiz_answer(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/spelling_quiz/start")
-async def start_word_spelling_quiz(
+def start_word_spelling_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -731,7 +731,7 @@ async def start_word_spelling_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/spelling_quiz/answer")
-async def submit_word_spelling_quiz_answer(
+def submit_word_spelling_quiz_answer(
     assignment_id: int,
     request: WordSpellingQuizAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -927,7 +927,7 @@ def build_cloze_quiz_payload(assignment: Assignment, db: Session) -> Dict[str, A
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/cloze_quiz/start")
-async def start_word_cloze_quiz(
+def start_word_cloze_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -982,7 +982,7 @@ async def start_word_cloze_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/cloze_quiz/answer")
-async def submit_word_cloze_quiz_answer(
+def submit_word_cloze_quiz_answer(
     assignment_id: int,
     request: WordClozeQuizAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1217,7 +1217,7 @@ class _QuizCompleteRequest(BaseModel):
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/selection_quiz/complete")
-async def complete_word_selection_quiz(
+def complete_word_selection_quiz(
     assignment_id: int,
     request: _QuizCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1236,7 +1236,7 @@ async def complete_word_selection_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/spelling_quiz/complete")
-async def complete_word_spelling_quiz(
+def complete_word_spelling_quiz(
     assignment_id: int,
     request: _QuizCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1255,7 +1255,7 @@ async def complete_word_spelling_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/cloze_quiz/complete")
-async def complete_word_cloze_quiz(
+def complete_word_cloze_quiz(
     assignment_id: int,
     request: _QuizCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1363,7 +1363,7 @@ def _build_review_response(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/selection_quiz/review")
-async def review_word_selection_quiz(
+def review_word_selection_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1469,7 +1469,7 @@ async def review_word_selection_quiz(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/spelling_quiz/review")
-async def review_word_spelling_quiz(
+def review_word_spelling_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1502,7 +1502,7 @@ async def review_word_spelling_quiz(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/cloze_quiz/review")
-async def review_word_cloze_quiz(
+def review_word_cloze_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
