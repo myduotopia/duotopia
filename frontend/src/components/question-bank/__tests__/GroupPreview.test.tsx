@@ -20,9 +20,7 @@ import type { LayoutDoc } from "@/types/questionBank";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) =>
-      key === "questionBank.group.questions.blankN"
-        ? `Blank ${opts?.n}`
-        : key,
+      key === "questionBank.group.questions.blankN" ? `Blank ${opts?.n}` : key,
     i18n: { language: "zh-TW" },
   }),
 }));
@@ -102,19 +100,23 @@ describe("GroupPreview", () => {
     expect(screen.getByTestId("group-preview-q-0-opt-2")).toHaveTextContent(
       "(C)",
     );
-    expect(
-      screen.getByTestId("group-preview-q-0-opt-2-image"),
-    ).toHaveAttribute("src", "https://x/opt-d.png");
+    expect(screen.getByTestId("group-preview-q-0-opt-2-image")).toHaveAttribute(
+      "src",
+      "https://x/opt-d.png",
+    );
     // 第二題：題幹插圖＋兩個圖片選項
-    expect(
-      screen.getByTestId("group-preview-q-1-stem-image"),
-    ).toHaveAttribute("src", "https://x/stem.png");
-    expect(
-      screen.getByTestId("group-preview-q-1-opt-0-image"),
-    ).toHaveAttribute("src", "https://x/a.png");
-    expect(
-      screen.getByTestId("group-preview-q-1-opt-1-image"),
-    ).toHaveAttribute("src", "https://x/b.png");
+    expect(screen.getByTestId("group-preview-q-1-stem-image")).toHaveAttribute(
+      "src",
+      "https://x/stem.png",
+    );
+    expect(screen.getByTestId("group-preview-q-1-opt-0-image")).toHaveAttribute(
+      "src",
+      "https://x/a.png",
+    );
+    expect(screen.getByTestId("group-preview-q-1-opt-1-image")).toHaveAttribute(
+      "src",
+      "https://x/b.png",
+    );
   });
 
   it("不顯示正確答案與解析", () => {
@@ -158,9 +160,7 @@ describe("GroupPreview", () => {
     expect(opts.className).toContain("md:grid-cols-2");
     unmount();
 
-    const { unmount: unmount2 } = render(
-      <GroupPreview draft={g} forceStack />,
-    );
+    const { unmount: unmount2 } = render(<GroupPreview draft={g} forceStack />);
     const stacked = screen.getByTestId("group-preview-q-0-options");
     expect(stacked).toHaveAttribute("data-layout", "stack");
     expect(stacked.className).toContain("flex-col");
