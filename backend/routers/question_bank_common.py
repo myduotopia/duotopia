@@ -1,7 +1,7 @@
 """
 題庫 API 的序列化、權限與查詢輔助（自 routers/question_bank.py 拆出，#1082）。
 
-- Serializers：_question_out／_group_out／_group_row_out／_source_out／_exam_point_out／
+- Serializers：_question_out／_group_out（含對話文稿 segments，#1083）／_group_row_out／_source_out／_exam_point_out／
   _program_link_out（教材關聯帶教材包／單元名稱）
 - 權限：_can_edit（建立者本人；機構／學校題庫別人的題只有擁有人／教材管理者）
 - 查詢：_load_options／_load_group_rows（selectinload，避免 N+1）、_scope_filter、
@@ -150,6 +150,15 @@ def _group_out(
         "is_owner": g.teacher_id == teacher.id,
         "can_edit": _can_edit(db, teacher, g, perm_cache),
         "questions": [_question_out(db, q, teacher, perm_cache) for q in questions],
+        # 對話文稿（#1083）：前端文字版分頁以唯讀對話樣式顯示
+        "segments": [
+            {
+                "order_index": seg.order_index,
+                "speaker_label": seg.speaker_label,
+                "transcript": seg.transcript,
+            }
+            for seg in g.segments
+        ],
         "created_at": g.created_at.isoformat() if g.created_at else None,
         "updated_at": g.updated_at.isoformat() if g.updated_at else None,
     }

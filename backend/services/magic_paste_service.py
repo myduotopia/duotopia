@@ -5,6 +5,8 @@
 一次 AI 呼叫同時完成「圖片擷取」與「資訊不足時 fallback 生成」。
 題庫用的 multiple_choice（單題選擇題）與 reading_group（一份檔 → 一個閱讀題組：
 文章素材／海報座標 + 單字註解 + 小題，issue #1084）也走同一條路徑。
+reading_group 的圖片素材若有人物對話（漫畫、對話情境圖），另回逐句對話
+``stimulus.dialogue``（說話者＋台詞，命名規則見 prompt；#1083，2026-10-06）。
 
 統一走 Vertex AI（Gemini vision），原生支援圖片與 PDF。
 
@@ -59,6 +61,11 @@ FIGURE_WIDTHS = (1 / 3, 1 / 2, 2 / 3)
 MAX_FIGURES = 30
 # 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
 GROUP_TITLE_MAX_CHARS = 200
+# 圖片對話逐句（#1083）：句數／說話者／台詞上限，對齊 routers/question_bank_schemas 的
+# MAX_SEGMENTS／SEGMENT_*_MAX_CHARS（說話者 = DB `question_group_segments.speaker_label` VARCHAR(50)）
+DIALOGUE_MAX_LINES = 100
+DIALOGUE_SPEAKER_MAX_CHARS = 50
+DIALOGUE_TEXT_MAX_CHARS = 2000
 # 文章插圖說明上限：對齊 `services.question_bank_layout.MAX_SHORT_TEXT_CHARS`
 # （排版驗證對 image 區塊的 caption 上限；此處先截掉，避免存檔時整份 layout 被打回）
 FIGURE_CAPTION_MAX_CHARS = 300
@@ -167,6 +174,7 @@ class MagicPasteService:
                 '"stimulus": {"kind": "text" | "image", "paragraphs": ["..."], '
                 '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1, '
                 '"blanks_renumbered": true, "framed": false, '
+                '"dialogue": [{"speaker": "...", "text": "..."}], '
                 '"figures": [{"box_2d": [ymin, xmin, ymax, xmax], '
                 '"placement": "beside" | "full", "after_paragraph": 0, '
                 '"side": "left" | "right", "width": 0.33, "caption": "..."}]}, '
@@ -233,8 +241,40 @@ class MagicPasteService:
                 "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page. "
                 "`page` = 1-based page number the box is on (1 for a single image). "
                 "`text` = all readable text inside that area, in reading order, as one "
-                "plain string (used for search, not shown to students). Set "
-                "`paragraphs` to [].\n"
+                "plain string (used for search, not shown to students); when "
+                "`dialogue` is not empty, `text` holds ONLY the words that are not "
+                'spoken lines (a title, narration, captions, signs), or "" if there '
+                "are none. Set `paragraphs` to [].\n"
+                # 說話者命名規則（#1083，2026-10-06 使用者定案）：
+                # 對話文稿之後是題組對話音檔（TTS 多說話者）的唯一來源，且老師不可修改，
+                # 所以說話者要一次標清楚。比照會考／英檢聽力稿 `Man:`、`Woman:` 的慣例：
+                # - 一律不加冠詞 the（與代號 Girl A 一致，也比較像聽力稿）
+                # - 看外觀用泛稱 Girl／Boy／Woman／Man，多人一起說用複數或 Boy and girl
+                # - 同性別兩人以上加代號 A／B，否則分不出誰說哪句
+                # - 圖中有明確職業／角色用職稱（Teacher、Doctor…），比外觀泛稱好懂
+                # - 素材印有人名且能確定對應時用人名：小題會用名字提問（如 Hank、David、
+                #   Mary）；對應不確定就退回上面的規則，避免標錯人
+                '- `stimulus.dialogue` (only when kind is "image"): when people in the '
+                "picture speak — speech bubbles in a comic strip, a conversation scene, "
+                "a chat — list EVERY spoken line in reading order (panel by panel; "
+                "top-to-bottom, left-to-right inside a panel), one entry per speech "
+                'bubble / utterance, as {"speaker": "...", "text": "..."}. `text` = the '
+                "words exactly as printed, on one line. Return [] when nobody speaks "
+                "(a poster, map, menu, timetable, notice ...).\n"
+                '  Name each `speaker` WITHOUT "the" or "a" (write "Girl", never '
+                '"The girl"), and use the same name for the same person every time:\n'
+                "  1. If a person's name printed in the material (in a bubble, a "
+                "caption or the questions, e.g. Hank, David, Mary) clearly belongs to "
+                "that speaker, use the name, because the questions refer to people by "
+                "name. If you are not sure who the name belongs to, use rules 2-4.\n"
+                "  2. Otherwise, if the picture clearly shows the person's job or role, "
+                'use it: "Teacher", "Doctor", "Clerk", "Coach", ...\n'
+                '  3. Otherwise, describe by appearance: "Girl", "Boy", "Woman", "Man"; '
+                'several people speaking together: "Girls", "Boys", "Women", "Men", or '
+                '"Boy and girl" / "Boys and girls" for a mixed group.\n'
+                "  4. When two or more speakers of the same kind appear, add a letter in "
+                'order of first appearance: "Girl A", "Girl B"; "Boy A", "Boy B"; '
+                '"Woman A", "Woman B"; "Man A", "Man B".\n'
                 "- `glossary`: word-meaning pairs printed as a footnote box for the "
                 'group (e.g. "timeline 時間軸"); `zh` must be Traditional Chinese. '
                 "[] if none.\n"
@@ -268,7 +308,7 @@ class MagicPasteService:
                 "- Do NOT put the passage or the picture text into any `stem`.\n"
                 "- If the file contains no reading group at all, return "
                 '{"title": "", "stimulus": {"kind": "text", "paragraphs": [], '
-                '"text": ""}, "glossary": [], "questions": []}.'
+                '"text": "", "dialogue": []}, "glossary": [], "questions": []}.'
             )
 
         if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE:
@@ -689,6 +729,39 @@ class MagicPasteService:
         )
         return min(FIGURE_WIDTHS, key=lambda w: abs(w - ratio))
 
+    @staticmethod
+    def _normalize_dialogue(raw: Any) -> List[Dict[str, str]]:
+        """圖片對話逐句整理（#1083）：回傳 ``[{"speaker", "text"}]``，順序照 AI 給的閱讀順序。
+
+        - speaker／text 去頭尾空白，內部換行與連續空白壓成一個空白（文字版一句一行）
+        - 兩者皆非空才保留；說話者截 DIALOGUE_SPEAKER_MAX_CHARS（DB 上限）、台詞截
+          DIALOGUE_TEXT_MAX_CHARS，最多 DIALOGUE_MAX_LINES 句
+        - 說話者開頭的冠詞 "the " 去掉並首字大寫：使用者定案說話者一律不加 the
+          （"the girl" → "Girl"），prompt 已要求，這裡再保險一次
+        """
+        if not isinstance(raw, list):
+            return []
+        lines: List[Dict[str, str]] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            speaker = " ".join(str(entry.get("speaker") or "").split())
+            text = " ".join(str(entry.get("text") or "").split())
+            if speaker[:4].lower() == "the ":
+                speaker = speaker[4:].strip()
+                speaker = speaker[:1].upper() + speaker[1:]
+            if not speaker or not text:
+                continue
+            lines.append(
+                {
+                    "speaker": speaker[:DIALOGUE_SPEAKER_MAX_CHARS].strip(),
+                    "text": text[:DIALOGUE_TEXT_MAX_CHARS].strip(),
+                }
+            )
+            if len(lines) >= DIALOGUE_MAX_LINES:
+                break
+        return lines
+
     @classmethod
     def _normalize_reading_group(cls, raw: Any) -> List[Dict[str, Any]]:
         """
@@ -700,6 +773,7 @@ class MagicPasteService:
         - blanks_renumbered：模型是否把印刷空格改寫成 `{{n}}`（克漏字用，#1086）
         - framed：原卷文章是否印在方框內（前端據此設 layout.frame）；只認布林 true 或字串
           "true"，其他一律 false；kind=image 時一律 false（整張圖本身已是素材）
+        - dialogue（#1083）：圖中人物逐句對話，見 ``_normalize_dialogue``；kind=text 時清空
         - title 截到 GROUP_TITLE_MAX_CHARS（DB 上限）；模型沒給時留空字串不視為錯誤
         - glossary 兩欄皆非空才留；questions 沿用 _normalize_mc_items 規則
         - 完全沒素材也沒小題 → []（不扣配額）
@@ -731,9 +805,12 @@ class MagicPasteService:
         framed = framed_raw is True or (
             isinstance(framed_raw, str) and framed_raw.strip().lower() == "true"
         )
+        dialogue = cls._normalize_dialogue(stim.get("dialogue"))
         if kind == "text":
             box = None
             page = None
+            # 逐句對話只給以圖為準的素材（漫畫／對話圖）；散文裡的對話本來就在段落中
+            dialogue = []
         else:
             paragraphs = []
             framed = False
@@ -753,7 +830,7 @@ class MagicPasteService:
 
         questions = cls._normalize_mc_items({"items": raw.get("questions") or []})
 
-        has_stimulus = bool(paragraphs or text or box)
+        has_stimulus = bool(paragraphs or text or box or dialogue)
         if not has_stimulus and not questions:
             return []
         return [
@@ -768,6 +845,7 @@ class MagicPasteService:
                     "figures": figures,
                     "blanks_renumbered": bool(stim.get("blanks_renumbered")),
                     "framed": framed,
+                    "dialogue": dialogue,
                 },
                 "glossary": glossary,
                 "questions": questions,

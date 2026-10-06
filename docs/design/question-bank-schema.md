@@ -157,6 +157,24 @@
 
 `UNIQUE (group_id, order_index)`
 
+#### 圖片題組的對話文稿（#1083，2026-10-06 開始使用）
+
+以圖為準的題組（漫畫、對話情境圖）擷取時，AI 另回逐句對話 `stimulus.dialogue = [{speaker, text}]`，存成這張表的一句一段（`order_index` 依閱讀順序、`speaker_label`、`transcript`；`audio_url`／`tts_voice`／`pause_after_ms` 留給之後的題組對話音檔）。不需要 migration。
+
+- **API**：`POST`／`PATCH /question-groups` 收 `segments: [{speaker_label, transcript}]`（兩者都不可空白；說話者 ≤50 字、台詞 ≤2000 字、最多 100 句）。建立時依序寫入；PATCH 有帶就整組替換（`[]` = 清掉），不帶不動。`GET` 與建立／更新回應都帶 `segments`。
+- **`passage_text` 由 segments 推導**：格式為「非對話文字（標題、旁白、標示；可無）＋空行＋逐句 `Speaker: line`」。後端只保留送來文字版**開頭**的非對話文字（結尾必須正好是這份對話，否則旁白也不留），對話部分一律由 segments 重組；PATCH 只改排版時沿用原本的旁白。沒有 segments 的題組（海報、地圖、散文、舊資料）規則不變。
+- **說話者命名**（使用者定案；一律不加冠詞 the，比照會考／英檢聽力稿 `Man:`、`Woman:`）：
+  1. 素材印有人名且能明確對應到說話者 → 用人名（小題會用名字提問，例如 Hank、David、Mary）；對應不確定就退回下面的規則
+  2. 圖中有明確職業或角色 → 職稱：Teacher、Doctor、Clerk、Coach…
+  3. 依外觀用英文泛稱：Girl／Boy／Woman／Man；多人一起說用 Girls／Boys／Women／Men，混合群體 Boy and girl、Boys and girls
+  4. 同類出現兩人以上加代號：Girl A、Girl B；Boy A、Boy B；Woman A、Woman B；Man A、Man B
+
+  擷取整理（`_normalize_dialogue`）另把說話者開頭的 `the ` 去掉並首字大寫，再保險一次。
+- **決策：對話文稿不可修改**。編輯畫面「文字版」分頁有 segments 時以唯讀對話樣式顯示（說話者粗體＋冒號＋台詞、逐句交錯底色，上方說明「對話文稿由 AI 從圖片整理，會用來產生音檔，無法修改」），沒有 segments 時維持可編輯文字框。原因：
+  - 對話文稿是題組對話音檔的唯一來源（一題組一個音檔，Gemini 2.5 Flash TTS 多說話者）；老師改了文稿而音檔沒重生，文字與聲音就會不一致
+  - 圖片上的文字本來就改不了，學生看到的是圖；以 AI 整理的逐句對話為準
+  - 原本的問題是「圖片擷取出的文字一整坨疊在一起、難以對照」。不做「點圖分段修改」，改用清楚的說話者標示解決
+
 ### `exam_points` — 考點（平台維護、有階層、多語）
 
 | 欄位 | 型別 | 說明 |

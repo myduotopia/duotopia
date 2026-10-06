@@ -3,6 +3,10 @@
 
 驗證規則（選項至少一個正確、題組主圖文至少一項、layout／glossary 深度驗證）都在這裡；
 router 只負責權限與流程。
+
+#1083（2026-10-06）：圖片題組的對話文稿存 ``question_group_segments``（``SegmentIn``，
+一句一段「說話者：台詞」）；有 segments 時 ``passage_text`` 由 segments 推導
+（``dialogue_passage_text``），不採用前端送來的對話內容。
 """
 
 from __future__ import annotations
@@ -41,6 +45,12 @@ BLANK_INDEX_MIN = 1
 BLANK_INDEX_MAX = 999
 MIN_OPTIONS = 2
 MAX_OPTIONS = 6
+# 對話文稿（#1083）：一題組最多幾句、說話者／台詞長度上限
+# 說話者上限對齊 DB `question_group_segments.speaker_label` VARCHAR(50)；
+# 台詞與句數上限與擷取端 services.magic_paste_service 的 DIALOGUE_* 常數一致
+MAX_SEGMENTS = 100
+SEGMENT_SPEAKER_MAX_CHARS = 50
+SEGMENT_TRANSCRIPT_MAX_CHARS = 2000
 
 
 # ============ Schemas ============
@@ -148,6 +158,21 @@ class GroupQuestionIn(QuestionBase):
         return self
 
 
+class SegmentIn(BaseModel):
+    """對話文稿的一句（#1083）：說話者＋台詞，兩者都不可空。順序 = 陣列順序（order_index）。"""
+
+    speaker_label: str = Field(..., max_length=SEGMENT_SPEAKER_MAX_CHARS)
+    transcript: str = Field(..., max_length=SEGMENT_TRANSCRIPT_MAX_CHARS)
+
+    @field_validator("speaker_label", "transcript")
+    @classmethod
+    def _strip_required(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("對話的說話者與台詞都不可空白")
+        return v
+
+
 class QuestionGroupCreate(BaseModel):
     """題組：主圖文 + 小題，一次建立。layout 深度驗證在閱讀題組編輯器那段再做。"""
 
@@ -166,6 +191,8 @@ class QuestionGroupCreate(BaseModel):
     questions: List[GroupQuestionIn] = Field(
         ..., min_length=1, max_length=MAX_GROUP_QUESTIONS
     )
+    # 圖片題組的對話文稿（#1083）；給了就寫進 question_group_segments，passage_text 由它推導
+    segments: Optional[List[SegmentIn]] = Field(None, max_length=MAX_SEGMENTS)
     organization_id: Optional[str] = None
     school_id: Optional[str] = None
 
@@ -188,7 +215,7 @@ class QuestionGroupCreate(BaseModel):
         if self.organization_id and self.school_id:
             raise ValueError("organization_id 與 school_id 只能擇一")
         _validate_layout_fields(self.layout, self.glossary)
-        if not (self.passage_text or self.image_url or self.layout):
+        if not (self.passage_text or self.image_url or self.layout or self.segments):
             raise ValueError("題組需要文章、圖片或排版內容")
         check_group_blanks(
             self.question_type, self.layout, [q.blank_index for q in self.questions]
@@ -230,6 +257,41 @@ def _effective_passage_text(passage_text: Optional[str], layout) -> Optional[str
     return derived or None
 
 
+def dialogue_lines(segments) -> str:
+    """對話文稿 → 純文字：一句一行 ``Speaker: line``（前端 dialogueTranscript.ts 同規則）。
+
+    ``segments`` 可以是 ``SegmentIn`` 或 ORM ``QuestionGroupSegment``（都有 speaker_label／transcript）。
+    """
+    return "\n".join(
+        f"{s.speaker_label}: {s.transcript}" if s.speaker_label else s.transcript
+        for s in segments
+    )
+
+
+def dialogue_narration(passage_text: Optional[str], lines: str) -> str:
+    """從文字版取出對話之前的非對話文字（標題、旁白、標示）。
+
+    文字版的格式是「非對話文字 + 空行 + 對話逐句」；結尾不是這份對話（舊資料、對話已換）
+    時無法分辨哪段是旁白，回空字串 —— 寧可丟掉旁白，也不讓舊的對話文字混在新文稿前面。
+    """
+    text = (passage_text or "").strip()
+    if not text or not lines or not text.endswith(lines):
+        return ""
+    return text[: -len(lines)].strip()
+
+
+def dialogue_passage_text(passage_text: Optional[str], segments) -> Optional[str]:
+    """有對話文稿時的文字版：沿用 ``passage_text`` 開頭的非對話文字，對話部分一律由 segments 重組。
+
+    決策（#1083，2026-10-06）：對話文稿的唯一來源是 segments（之後題組對話音檔也由它產生），
+    文字版只是它的純文字副本（搜尋／AI 考點分析用）。前端送來的對話文字不採用，
+    避免「文字版」與「segments／音檔」各說各話。
+    """
+    lines = dialogue_lines(segments)
+    narration = dialogue_narration(passage_text, lines)
+    return "\n\n".join(p for p in (narration, lines) if p) or None
+
+
 class GroupQuestionUpdateIn(GroupQuestionIn):
     """PATCH 題組時的小題：帶 id = 更新既有小題；沒 id = 新增；沒出現在清單的既有小題 = 軟刪除。"""
 
@@ -255,6 +317,8 @@ class QuestionGroupUpdate(BaseModel):
     questions: Optional[List[GroupQuestionUpdateIn]] = Field(
         None, min_length=1, max_length=MAX_GROUP_QUESTIONS
     )
+    # 給了就整組替換對話文稿（[] = 清掉，例如換成沒有對話的圖）；不給 = 不動（#1083）
+    segments: Optional[List[SegmentIn]] = Field(None, max_length=MAX_SEGMENTS)
 
     @field_validator("title", "passage_text")
     @classmethod

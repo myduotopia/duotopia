@@ -183,6 +183,7 @@ def get_visible_group(
     return (
         visible_groups_query(db, teacher)
         .options(
+            selectinload(QuestionGroup.segments),
             selectinload(QuestionGroup.questions).selectinload(Question.options),
             selectinload(QuestionGroup.questions)
             .selectinload(Question.exam_point_links)

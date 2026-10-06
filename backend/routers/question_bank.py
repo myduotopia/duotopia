@@ -31,6 +31,10 @@ AI 作答／考點分析輸入可帶 ``passage``（題組主圖文純文字）�
 
 #1082 第 3 段拆檔：Pydantic schemas 與可建立題型常數在 ``routers/question_bank_schemas.py``；
 序列化、``_can_edit`` 權限與列表查詢輔助（含 SQL 層合併分頁）在 ``routers/question_bank_common.py``。
+
+#1083（2026-10-06）：題組可帶 ``segments``（圖片對話逐句「說話者：台詞」）寫進
+``question_group_segments``；建立時依序寫入、PATCH 有帶就整組替換；有 segments 時
+``passage_text`` 一律由 segments 推導（對話文稿唯一來源是 segments，見 ``_sync_dialogue``）。
 """
 
 from __future__ import annotations
@@ -49,6 +53,7 @@ from models import (
     Question,
     QuestionExamPoint,
     QuestionGroup,
+    QuestionGroupSegment,
     QuestionSource,
     QuestionSourceLink,
     Teacher,
@@ -83,8 +88,10 @@ from routers.question_bank_schemas import (
     QuestionGroupUpdate,
     QuestionUpdate,
     SINGLE_CREATABLE_TYPES,
+    SegmentIn,
     SourceCreate,
     check_group_blanks,
+    dialogue_passage_text,
     _effective_passage_text,
     _validate_options,
 )
@@ -329,6 +336,41 @@ def _require_bank_membership(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此學校的成員")
 
 
+def _replace_segments(
+    db: Session, group: QuestionGroup, segments: List[SegmentIn]
+) -> None:
+    """整組替換對話文稿，order_index 依陣列順序 0..n-1（#1083）。
+
+    先刪舊的並 flush 再加新的：同一次 flush 內 SQLAlchemy 會先 INSERT 再 DELETE，
+    會撞到 ``uq_question_group_segments_order``（group_id, order_index）。
+    """
+    if group.segments:
+        group.segments.clear()
+        if group.id is not None:
+            db.flush()
+    for i, seg in enumerate(segments):
+        group.segments.append(
+            QuestionGroupSegment(
+                order_index=i,
+                speaker_label=seg.speaker_label,
+                transcript=seg.transcript,
+            )
+        )
+
+
+def _sync_dialogue(group: QuestionGroup) -> None:
+    """有對話文稿時，文字版由 segments 重組（只保留開頭的非對話文字：標題、旁白）。
+
+    決策（#1083，2026-10-06，使用者定案）：對話文稿的唯一來源是 segments ——
+    之後同一題組的對話音檔（Gemini 2.5 Flash TTS 多說話者）也由它產生。文字版
+    （``passage_text``）只是它的純文字副本，供搜尋與 AI 考點分析；若採用前端送來的
+    文字，文字版與 segments／音檔就可能各說各話，所以有 segments 時一律覆蓋。
+    沒有 segments 的題組（海報、地圖、散文、舊資料）不受影響，文字版維持老師可編輯。
+    """
+    if group.segments:
+        group.passage_text = dialogue_passage_text(group.passage_text, group.segments)
+
+
 @router.post("/question-groups", status_code=status.HTTP_201_CREATED)
 def create_question_group(
     payload: QuestionGroupCreate,
@@ -365,6 +407,9 @@ def create_question_group(
         school_id=school_uuid,
     )
     qbs.enforce_platform_rules(group, teacher)
+    if payload.segments:
+        _replace_segments(db, group, payload.segments)
+        _sync_dialogue(group)
     try:
         for i, qin in enumerate(payload.questions):
             question = Question(
@@ -483,6 +528,7 @@ def update_question_group(
     g = _require_editable_group(db, teacher, group_id)
     data = payload.model_dump(exclude_unset=True)
     now = datetime.now(timezone.utc)
+    previous_text = g.passage_text
     try:
         for field in (
             "stimulus_type",
@@ -502,6 +548,15 @@ def update_question_group(
         elif "layout" in data:
             # 只改排版：舊的純文字副本已過期，由新 layout 重拼
             g.passage_text = _effective_passage_text(None, g.layout)
+        if payload.segments is not None:
+            # 給了就整組替換（[] = 清掉對話，文字版回到上面的一般規則）
+            _replace_segments(db, g, payload.segments)
+        # 有對話文稿時文字版由 segments 重組（上面任何一條規則改過 passage_text 都要再覆蓋）；
+        # 但上面「只改排版」會把旁白連同對話一起洗掉 → 用 PATCH 前的文字版取回旁白
+        if g.segments:
+            if "passage_text" not in data:
+                g.passage_text = previous_text
+            _sync_dialogue(g)
         if (
             g.grade_min is not None
             and g.grade_max is not None
