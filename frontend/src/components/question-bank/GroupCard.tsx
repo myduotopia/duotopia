@@ -12,7 +12,7 @@
  * |單字註解（一個文字框，一行一筆「word 中文」）|
  * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
- * 素材類型不讓老師選：儲存時由內容判定（questionDraft.deriveStimulusType）。
+ * 素材類型不讓老師選：儲存時由內容判定（groupDraft.deriveStimulusType）。
  * 「文字版」（#1083）：不顯示給學生，供搜尋／AI 考點分析／重複偵測。預設由排版推導；
  * 老師改過（`passage_text_edited`）就以老師的為準，排版再變也不覆蓋，可按「重新產生」回推導。
  * 以圖為準的題組（海報／漫畫）排版只有一張圖，文字版就是老師貼上的圖中文字。

@@ -6,8 +6,8 @@
  * 「依閱讀順序重新編號」（`renumberMap` + `renumberLayoutBlanks`）。
  *
  * 這個檔刻意只依賴 `layoutInline` 與型別（不碰 `questionDraft`），方向單向：
- * `questionDraft` → `clozeDraft` → `layoutInline`，不會有循環 import。
- * GroupDraft 層的包裝（自動建卡／移除空白小題／驗證）在 `questionDraft.ts`。
+ * `groupDraft` → `clozeDraft` → `layoutInline`，不會有循環 import。
+ * GroupDraft 層的包裝（自動建卡／移除空白小題／驗證）在 `groupDraft.ts`（經 `questionDraft.ts` 轉出）。
  *
  * 打字中途的 `{{4`（未閉合）不算空格 —— 判定一律走 `layoutBlankIndexes`，
  * 只有完整 `{{n}}` 配對才會被算進來，所以邊打邊同步不會誤新增小題。
