@@ -3,7 +3,8 @@
 
 - Serializers：_question_out／_group_out（含對話文稿 segments，#1083）／_group_row_out／_source_out／_exam_point_out／
   _program_link_out（教材關聯帶教材包／單元名稱）
-- 權限：_can_edit（建立者本人；機構／學校題庫別人的題只有擁有人／教材管理者）
+- 權限：_can_edit（建立者本人；機構／學校題庫別人的題只有擁有人／教材管理者）、
+  _require_bank_membership（新增到機構／學校題庫需為成員；單題與題組端點共用）
 - 查詢：_load_options／_load_group_rows（selectinload，避免 N+1）、_scope_filter、
   _grade_filter、_merged_page_keys（單題／題組 SQL 層合併分頁）
 """
@@ -30,6 +31,7 @@ from models import (
 from services import question_bank_service as qbs
 from utils.permissions import (
     has_manage_materials_permission,
+    has_read_org_materials_permission,
     has_school_materials_permission,
 )
 
@@ -284,6 +286,20 @@ def _require_editable(db: Session, teacher: Teacher, question_id: int) -> Questi
     if not _can_edit(db, teacher, q):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有修改此題目的權限")
     return q
+
+
+def _require_bank_membership(
+    db: Session, teacher: Teacher, org_uuid, school_uuid
+) -> None:
+    """新增到機構／學校題庫：active 成員即可；編輯／刪除才需要管理權限（_can_edit）。"""
+    if org_uuid is not None and not has_read_org_materials_permission(
+        teacher.id, org_uuid, db
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此機構的成員")
+    if school_uuid is not None and school_uuid not in qbs.teacher_school_ids(
+        db, teacher.id
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不是此學校的成員")
 
 
 def _load_options(query):
