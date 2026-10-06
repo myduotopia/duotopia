@@ -17,7 +17,8 @@ import secrets
 from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -34,6 +35,12 @@ from models.release_announcement import (
     ReleaseAnnouncement,
 )
 from routers.admin import get_current_admin
+from utils.image_types import detect_image_type
+from services.announcement_images import (
+    HERO_MIME_TYPES,
+    MAX_IMAGE_BYTES,
+    store_announcement_image,
+)
 from services.line_publish_service import LinePublishService
 from services.release_announcement_service import ReleaseAnnouncementService
 
@@ -63,6 +70,15 @@ class AnnouncementContent(BaseModel):
     article_body_zh: Optional[str] = Field(None, max_length=50000)
     article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = Field(None, max_length=50000)
+    # #1100：選填主圖（LINE hero + 官網封面）；GitHub 貼圖網址會在建立草稿時轉存到 GCS
+    image_url: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("image_url")
+    @classmethod
+    def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
+        if value and value.strip() and not value.strip().startswith("https://"):
+            raise ValueError("主圖網址必須是 https://")
+        return value
 
 
 class ReleaseWebhookRequest(BaseModel):
@@ -242,6 +258,26 @@ async def create_release_announcement(
 
 
 # ============ Admin 端點 ============
+
+
+@router.post("/upload-image")
+async def upload_announcement_image(
+    file: UploadFile = File(...),
+    purpose: Literal["hero", "body"] = Query("body"),
+    admin: Teacher = Depends(get_current_admin),
+):
+    """上傳公告圖片（#1100）：主圖只收 JPEG / PNG（LINE 限制），內文圖片不限；上限 10 MB。"""
+    content = await file.read()
+    if len(content) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="圖片超過 10 MB")
+    detected = detect_image_type(content)
+    if not detected:
+        raise HTTPException(status_code=400, detail="不支援的圖片格式（JPEG / PNG / GIF / WebP）")
+    mime, ext = detected
+    if purpose == "hero" and mime not in HERO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="主圖只能是 JPEG 或 PNG（LINE 卡片限制）")
+    url = await run_in_threadpool(store_announcement_image, content, mime, ext)
+    return {"url": url}
 
 
 @router.get("", response_model=List[ReleaseAnnouncementItem])

@@ -1,5 +1,12 @@
-import { useMemo, useState } from "react";
-import { ExternalLink, Megaphone, Send, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import {
+  ExternalLink,
+  ImagePlus,
+  Megaphone,
+  Send,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +31,66 @@ interface ReleaseAnnouncementEditorProps {
   ) => void;
   onMerge: (sourceIds: number[]) => void;
   onDiscard: () => void;
+  /** 上傳圖片並回傳網址；失敗時回傳 null（錯誤訊息由頁面顯示）（#1100） */
+  onUploadImage: (
+    file: File,
+    purpose: "hero" | "body",
+  ) => Promise<string | null>;
+}
+
+type BodyField = "article_body_zh" | "article_body_en";
+
+/** 在游標位置插入 markdown 圖片，前後各空一行（#1100） */
+function insertImageMarkdown(value: string, position: number, url: string) {
+  const before = value.slice(0, position).replace(/\s+$/, "");
+  const after = value.slice(position).replace(/^\s+/, "");
+  return [before, `![圖片](${url})`, after].filter(Boolean).join("\n\n");
+}
+
+/** 隱藏的檔案選擇器 + 按鈕（#1100） */
+function ImagePickButton({
+  testId,
+  accept,
+  label,
+  icon,
+  disabled,
+  onPick,
+}: {
+  testId: string;
+  accept: string;
+  label: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+  onPick: (file: File) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        data-testid={testId}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // 清空讓同一個檔案可以再選一次
+          e.target.value = "";
+          if (file) onPick(file);
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() => inputRef.current?.click()}
+      >
+        {icon}
+        {label}
+      </Button>
+    </>
+  );
 }
 
 /** 表單欄位 ↔ API 欄位對照（值一律用字串，送出前再轉回 null-able） */
@@ -94,7 +161,13 @@ export default function ReleaseAnnouncementEditor({
   onPublish,
   onMerge,
   onDiscard,
+  onUploadImage,
 }: ReleaseAnnouncementEditorProps) {
+  const [uploading, setUploading] = useState(false);
+  const bodyRefs = useRef<Record<BodyField, HTMLTextAreaElement | null>>({
+    article_body_zh: null,
+    article_body_en: null,
+  });
   const [form, setForm] = useState<FormState>(() => toForm(announcement));
   const [channels, setChannels] = useState<Record<PublishChannel, boolean>>({
     line: announcement.line_status !== "published",
@@ -115,6 +188,34 @@ export default function ReleaseAnnouncementEditor({
 
   const setField = (field: (typeof FIELDS)[number], value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  const uploadHero = async (file: File) => {
+    setUploading(true);
+    try {
+      const url = await onUploadImage(file, "hero");
+      if (url) setField("image_url", url);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const insertBodyImage = async (field: BodyField, file: File) => {
+    // 先記下游標位置：上傳期間使用者可能點到別處
+    const position =
+      bodyRefs.current[field]?.selectionStart ?? form[field].length;
+    setUploading(true);
+    try {
+      const url = await onUploadImage(file, "body");
+      if (url) {
+        setForm((prev) => ({
+          ...prev,
+          [field]: insertImageMarkdown(prev[field], position, url),
+        }));
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const linePublished = announcement.line_status === "published";
   const websitePublished = announcement.website_status === "published";
@@ -187,12 +288,25 @@ export default function ReleaseAnnouncementEditor({
               >
                 公告圖片網址
               </label>
-              <Input
-                id="image_url"
-                value={form.image_url}
-                aria-invalid={!imageUrlValid}
-                onChange={(e) => setField("image_url", e.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="image_url"
+                  value={form.image_url}
+                  aria-invalid={!imageUrlValid}
+                  onChange={(e) => setField("image_url", e.target.value)}
+                />
+                <ImagePickButton
+                  testId="upload-hero-input"
+                  accept="image/png,image/jpeg"
+                  label="上傳主圖"
+                  icon={<Upload className="mr-1 h-4 w-4" />}
+                  disabled={busy || uploading}
+                  onPick={uploadHero}
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                LINE 卡片主圖與官網封面，JPEG / PNG，建議 1200×780（20:13）
+              </p>
               {!imageUrlValid && (
                 <p className="mt-1 text-xs text-red-600">
                   圖片網址必須是 https:// 開頭的完整網址
@@ -246,14 +360,27 @@ export default function ReleaseAnnouncementEditor({
               />
             </div>
             <div>
-              <label
-                htmlFor="article_body_zh"
-                className="mb-1 block text-sm font-medium"
-              >
-                文章內文（中文）
-              </label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label
+                  htmlFor="article_body_zh"
+                  className="block text-sm font-medium"
+                >
+                  文章內文（中文）
+                </label>
+                <ImagePickButton
+                  testId="insert-image-article_body_zh"
+                  accept="image/*"
+                  label="插入圖片"
+                  icon={<ImagePlus className="mr-1 h-4 w-4" />}
+                  disabled={busy || uploading}
+                  onPick={(file) => insertBodyImage("article_body_zh", file)}
+                />
+              </div>
               <Textarea
                 id="article_body_zh"
+                ref={(el) => {
+                  bodyRefs.current["article_body_zh"] = el;
+                }}
                 rows={8}
                 value={form.article_body_zh}
                 onChange={(e) => setField("article_body_zh", e.target.value)}
@@ -276,14 +403,27 @@ export default function ReleaseAnnouncementEditor({
               />
             </div>
             <div>
-              <label
-                htmlFor="article_body_en"
-                className="mb-1 block text-sm font-medium"
-              >
-                文章內文（英文）
-              </label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label
+                  htmlFor="article_body_en"
+                  className="block text-sm font-medium"
+                >
+                  文章內文（英文）
+                </label>
+                <ImagePickButton
+                  testId="insert-image-article_body_en"
+                  accept="image/*"
+                  label="插入圖片"
+                  icon={<ImagePlus className="mr-1 h-4 w-4" />}
+                  disabled={busy || uploading}
+                  onPick={(file) => insertBodyImage("article_body_en", file)}
+                />
+              </div>
               <Textarea
                 id="article_body_en"
+                ref={(el) => {
+                  bodyRefs.current["article_body_en"] = el;
+                }}
                 rows={8}
                 value={form.article_body_en}
                 onChange={(e) => setField("article_body_en", e.target.value)}

@@ -163,6 +163,44 @@ class TestCreateDraft:
         assert ann.issue_numbers == "860"
 
     @pytest.mark.asyncio
+    async def test_prewritten_hero_image_replaces_banner(self, test_db_session):
+        """#1100：/announce 帶來的主圖取代預設圖，GitHub 圖片會先轉存"""
+        hero = "https://storage.googleapis.com/duotopia-audio/announcements/i/h.png"
+        written = {
+            **AI_RESULT,
+            "image_url": "https://github.com/user-attachments/assets/x",
+        }
+        rehosted = {**AI_RESULT, "image_url": hero}
+        with patch(
+            "services.release_announcement_service.rehost_content_images",
+            new=AsyncMock(return_value=(rehosted, [])),
+        ) as rehost:
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=written,
+            )
+        assert rehost.await_count == 1
+        assert ann.image_url == hero
+
+    @pytest.mark.asyncio
+    async def test_prewritten_without_hero_keeps_banner(self, test_db_session):
+        with patch(
+            "services.release_announcement_service.rehost_content_images",
+            new=AsyncMock(return_value=(dict(AI_RESULT), [])),
+        ):
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="no-hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=dict(AI_RESULT),
+            )
+        assert ann.image_url == "https://cdn/banner.png"
+
+    @pytest.mark.asyncio
     async def test_incomplete_prewritten_content_falls_back_to_ai(
         self, test_db_session
     ):

@@ -128,7 +128,38 @@ push main（合併 staging → main PR）
 
 ---
 
-## 4. 端到端驗證清單
+## 4. 公告圖片（#1100）
+
+| 位置 | 怎麼加 | 顯示在 |
+|------|--------|--------|
+| **主圖**（1 張） | `/announce #N` 自動截圖上傳；或後台「上傳主圖」 | LINE 卡片最上方 + 官網文章封面 |
+| **內文圖片**（多張） | `/announce #N` 截圖後以 `![說明](網址)` 插入；或後台內文旁「插入圖片」 | 官網文章，放在哪一段就顯示在哪一段 |
+
+- 新功能 / 改版：`/announce #N` 用 Playwright 開 per-issue preview 環境，以「Demo 教師」
+  （`demo@duotopia.com`）快速登入後截取實際畫面；修正類改用 1200×780 圖卡
+- 圖片存在 `gs://duotopia-audio/announcements/`（所有環境共用、公開讀取），
+  staging 與 production 草稿可用同一個網址；`/announce release` 沿用各 issue 的圖，不重新截圖
+- 主圖只接受 **JPEG / PNG**（LINE 限制），建議 1200×780（20:13）；單張上限 10 MB
+- 在 GitHub 網頁直接拖曳貼圖（`github.com/user-attachments/...`）也可以：建立草稿時後端會
+  轉存到 GCS（只從 GitHub 圖片網域下載）；轉存失敗時主圖改用預設圖
+- CI 自動產生目前**不截圖**；需要圖片時本機重跑 `/announce #N`，或在後台上傳
+
+### 本機上傳圖片的權限
+
+`/announce` 用**執行者自己的 gcloud 帳號**上傳。沒有權限時會顯示：
+
+```
+沒有上傳公告圖片的權限（you@example.com）。
+請 GCP 管理員執行以下指令開通 gs://duotopia-audio 的寫入權限後再試：
+  gcloud storage buckets add-iam-policy-binding gs://duotopia-audio \
+    --member=user:you@example.com --role=roles/storage.objectCreator
+```
+
+開通前公告仍會寫入（只是不帶圖），之後可在後台補圖。
+
+---
+
+## 5. 端到端驗證清單
 
 調整公告流程（workflow、腳本、LINE 設定）之後，用一個測試 issue 照順序驗證（範例：#1102）。
 

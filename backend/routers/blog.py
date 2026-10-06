@@ -22,6 +22,7 @@ from models import Teacher
 from routers.teachers import get_current_teacher
 from services.blog_service import BlogService, MAX_POST_IMAGES
 from services.image_upload import get_image_upload_service
+from utils.image_types import detect_image_type as _detect_image_type
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/blog", tags=["blog-admin"])
@@ -350,26 +351,6 @@ def delete_category(
 
 
 # Magic-byte signatures for allowed image types
-_IMAGE_SIGNATURES = {
-    b"\xff\xd8\xff": ("image/jpeg", "jpg"),
-    b"\x89PNG\r\n\x1a\n": ("image/png", "png"),
-    b"GIF87a": ("image/gif", "gif"),
-    b"GIF89a": ("image/gif", "gif"),
-    b"RIFF": ("image/webp", "webp"),  # RIFF....WEBP (checked with extra logic)
-}
-
-
-def _detect_image_type(content: bytes) -> tuple[str, str] | None:
-    """Detect image type from magic bytes. Returns (mime_type, extension) or None."""
-    for sig, result in _IMAGE_SIGNATURES.items():
-        if content.startswith(sig):
-            # Extra check for WEBP: RIFF header must also contain WEBP
-            if sig == b"RIFF" and content[8:12] != b"WEBP":
-                continue
-            return result
-    return None
-
-
 @router.post("/upload-image", response_model=ImageUploadResponse)
 async def upload_image(
     file: UploadFile = File(...),
