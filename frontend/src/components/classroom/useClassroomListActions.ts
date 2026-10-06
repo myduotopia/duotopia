@@ -9,6 +9,8 @@
  * - startEdit：換列前若 dirty → window.confirm(classroomGrade.inline.unsavedConfirm)，取消則留在原列。
  * - guardEdit(fn)：包住搜尋／篩選／排序的變更處理；編輯中先走同一個確認，取消則不執行 fn。
  * - resetKey 改變（外部切換工作區）時直接結束編輯，無法確認。
+ * - 編輯中的班級從列表消失，或被背景重新載入／其他動作改了值（與開始編輯時的快照 baseline 不同）
+ *   → 直接結束編輯，避免舊草稿儲存時蓋掉新值。
  * - saveEdit：名稱、年級必填（沿用頁面的 alert）；PUT 成功 → toast、結束編輯；失敗 → toast，保留編輯。
  *
  * useClassroomStatusActions：
@@ -16,7 +18,7 @@
  * - runBatchUpdate：POST batch-update（等級／停用／啟用共用），超過 BATCH_GRADE_MAX_ITEMS 直接擋下。
  * - bulkSetActive：只送狀態會改變的班級。
  */
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiClient, type BatchClassroomUpdateItem } from "@/lib/api";
@@ -45,24 +47,35 @@ export function useClassroomInlineEdit<C extends ClassroomRowData>({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ClassroomDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  // 開始編輯時的班級值快照
+  const [baseline, setBaseline] = useState<ClassroomDraft | null>(null);
+
+  const exitEdit = useCallback(() => {
+    setEditingId(null);
+    setDraft(null);
+    setBaseline(null);
+  }, []);
 
   // render 階段重設（不用 effect），避免先以舊的編輯狀態畫一次
   const [lastResetKey, setLastResetKey] = useState(resetKey);
   if (resetKey !== lastResetKey) {
     setLastResetKey(resetKey);
-    setEditingId(null);
-    setDraft(null);
+    exitEdit();
   }
 
   const editing =
     editingId === null ? undefined : classrooms.find((c) => c.id === editingId);
+  // 編輯中的班級不見了，或值已被改動（與 baseline 不同）→ 結束編輯
+  if (
+    editingId !== null &&
+    !saving &&
+    (!editing ||
+      (baseline !== null && isClassroomDraftDirty(baseline, editing)))
+  ) {
+    exitEdit();
+  }
   const isDirty =
     !!editing && draft !== null && isClassroomDraftDirty(draft, editing);
-
-  const exitEdit = () => {
-    setEditingId(null);
-    setDraft(null);
-  };
 
   // 有未儲存的修改時先確認；確認（或沒有修改）就結束編輯並回傳 true
   const confirmLeaveEdit = (): boolean => {
@@ -85,6 +98,7 @@ export function useClassroomInlineEdit<C extends ClassroomRowData>({
     if (!confirmLeaveEdit()) return;
     setEditingId(classroom.id);
     setDraft(makeClassroomDraft(classroom));
+    setBaseline(makeClassroomDraft(classroom));
   };
 
   const saveEdit = async () => {

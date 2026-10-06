@@ -10,7 +10,7 @@
  *
  * 編輯模式（editing）：年級 GradeSelect、名稱與描述 Input、等級 LevelSelect，
  * 操作欄變成「儲存／取消」；Enter 儲存、Esc 取消（輸入法選字中的 Enter 不算）。
- * 編輯中點列不會展開。草稿由頁面持有（draft／onDraftChange），本元件不保存狀態；
+ * 編輯中點列不會展開，勾選框由頁面以 selectDisabled 停用。草稿由頁面持有（draft／onDraftChange），本元件不保存狀態；
  * 草稿工具 makeClassroomDraft／isClassroomDraftDirty 與手機版用的 ClassroomDraftForm 也在本檔。
  */
 import type { KeyboardEvent, ReactNode } from "react";
@@ -254,6 +254,8 @@ export interface ClassroomTableRowProps {
   /** 表格有勾選欄（可編輯的工作區）時為 true，即使本列不可勾選也要留空格 */
   showSelectColumn: boolean;
   selectable: boolean;
+  /** 勾選框停用（例如本列正在行內編輯） */
+  selectDisabled?: boolean;
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   expanded: boolean;
@@ -281,6 +283,7 @@ export function ClassroomTableRow({
   classroom,
   showSelectColumn,
   selectable,
+  selectDisabled,
   selected,
   onSelectedChange,
   expanded,
@@ -422,6 +425,7 @@ export function ClassroomTableRow({
         <TableCell onClick={stop}>
           {selectable && (
             <Checkbox
+              disabled={selectDisabled}
               checked={selected}
               onCheckedChange={(checked) => onSelectedChange(checked === true)}
               aria-label={t("classroomGrade.selection.selectRow", {

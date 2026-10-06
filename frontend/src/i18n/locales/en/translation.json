@@ -6169,7 +6169,8 @@
       "gradeAsc": "Grade low→high",
       "gradeDesc": "Grade high→low",
       "levelAsc": "Level low→high",
-      "levelDesc": "Level high→low"
+      "levelDesc": "Level high→low",
+      "studentCountAsc": "Fewest Students"
     }
   },
   "schoolClassrooms": {

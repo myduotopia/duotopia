@@ -95,6 +95,43 @@ describe("GradeBulkBar", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the full label as the accessible name of ghost actions and hides the text on small screens when an icon is given", () => {
+    render(
+      <GradeBulkBar
+        selectedCount={2}
+        actions={[
+          {
+            key: "deactivate",
+            label: "停用",
+            onClick: vi.fn(),
+            variant: "ghost",
+            icon: <svg data-testid="off-icon" aria-hidden="true" />,
+          },
+          {
+            key: "activate",
+            label: "重新啟用班級",
+            shortLabel: "啟用",
+            onClick: vi.fn(),
+            variant: "ghost",
+          },
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const deactivate = screen.getByRole("button", { name: "停用" });
+    expect(deactivate).toHaveAttribute("title", "停用");
+    expect(screen.getByTestId("off-icon")).toBeInTheDocument();
+    // Text label is hidden at ≤480px; the icon stays
+    expect(screen.getByText("停用")).toHaveClass("max-[480px]:hidden");
+
+    // Without an icon the short label replaces the full one at ≤480px
+    const activate = screen.getByRole("button", { name: "重新啟用班級" });
+    expect(screen.getByText("重新啟用班級")).toHaveClass("max-[480px]:hidden");
+    expect(screen.getByText("啟用")).toHaveClass("max-[480px]:inline");
+    expect(activate).toContainElement(screen.getByText("啟用"));
+  });
+
   it("disables a single action when it is marked disabled", () => {
     const onActivate = vi.fn();
     render(

@@ -6213,7 +6213,8 @@
       "gradeAsc": "年級 低→高",
       "gradeDesc": "年級 高→低",
       "levelAsc": "等級 低→高",
-      "levelDesc": "等級 高→低"
+      "levelDesc": "等級 高→低",
+      "studentCountAsc": "學生數 少→多"
     }
   },
   "schoolClassrooms": {

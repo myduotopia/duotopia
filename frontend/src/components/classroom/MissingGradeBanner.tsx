@@ -3,6 +3,7 @@
  *
  * 樣式比照 workspace/PermissionBanner。刻意不提供永久關閉：
  * 只要還有未設定年級的班級（count > 0）就顯示，補完即消失。
+ * hideAction：暫時隱藏「立即設定」（例如「我的班級」有列正在行內編輯時），提醒文字照常顯示。
  */
 import { useTranslation } from "react-i18next";
 import { AlertCircle } from "lucide-react";
@@ -14,12 +15,15 @@ export interface MissingGradeBannerProps {
   count: number;
   /** 點「立即設定」 */
   onAction: () => void;
+  /** 暫時隱藏「立即設定」按鈕 */
+  hideAction?: boolean;
   className?: string;
 }
 
 export function MissingGradeBanner({
   count,
   onAction,
+  hideAction = false,
   className,
 }: MissingGradeBannerProps) {
   const { t } = useTranslation();
@@ -37,14 +41,16 @@ export function MissingGradeBanner({
             {t("classroomGrade.banner.message", { count })}
           </AlertDescription>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onAction}
-          className="border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
-        >
-          {t("classroomGrade.banner.action")}
-        </Button>
+        {!hideAction && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onAction}
+            className="border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
+          >
+            {t("classroomGrade.banner.action")}
+          </Button>
+        )}
       </div>
     </Alert>
   );

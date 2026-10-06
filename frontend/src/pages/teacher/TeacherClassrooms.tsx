@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -30,11 +36,9 @@ import {
   Trash2,
   AlertTriangle,
   ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   ClipboardList,
   Search,
-  Layers,
+  Signal,
   Power,
   PowerOff,
 } from "lucide-react";
@@ -79,6 +83,7 @@ import {
   type ClassroomPatches,
 } from "@/components/classroom/useClassroomListActions";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
+import { SortableTableHead } from "@/components/classroom/SortableTableHead";
 
 interface ClassroomDetail {
   id: number;
@@ -119,6 +124,8 @@ export default function TeacherClassrooms() {
   // 停用／啟用批次確認（#1097）
   const [bulkStatusTarget, setBulkStatusTarget] = useState(false);
   const [showBulkStatus, setShowBulkStatus] = useState(false);
+  // 開啟確認時凍結「會變更的班級數」，關閉動畫期間不重算
+  const [bulkStatusCount, setBulkStatusCount] = useState(0);
   const [showAdjustLevel, setShowAdjustLevel] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -263,9 +270,12 @@ export default function TeacherClassrooms() {
   // silent：背景重新載入（批次設定年級後），不切換整頁 loading，
   // 讓提醒、篩選列、操作列與表格保持掛載只更新內容（#1097）。
   // 回傳是否載入成功，讓背景重新載入的呼叫端能提示失敗。
+  // 只採用最後一次請求的回應：較早送出、較晚回來的（例如背景重新載入）一律丟棄
+  const fetchSeqRef = useRef(0);
   const fetchClassrooms = useCallback(
     async (options?: { silent?: boolean }): Promise<boolean> => {
       const silent = options?.silent ?? false;
+      const seq = ++fetchSeqRef.current;
       try {
         if (!silent) setLoading(true);
 
@@ -290,11 +300,12 @@ export default function TeacherClassrooms() {
         const data = (await apiClient.getTeacherClassrooms(
           apiParams,
         )) as ClassroomDetail[];
-        setClassrooms(data);
+        if (seq === fetchSeqRef.current) setClassrooms(data);
         return true;
       } catch (err) {
         console.error("Fetch classrooms error:", err);
-        return false;
+        // 已被較新的請求取代時不算失敗
+        return seq !== fetchSeqRef.current;
       } finally {
         if (!silent) setLoading(false);
       }
@@ -302,7 +313,10 @@ export default function TeacherClassrooms() {
     [mode, selectedSchool, selectedOrganization],
   );
 
+  // 背景重新載入一律用目前工作區的 fetchClassrooms（避免舊 closure 帶到舊參數）
+  const fetchClassroomsRef = useRef(fetchClassrooms);
   useEffect(() => {
+    fetchClassroomsRef.current = fetchClassrooms;
     fetchClassrooms();
   }, [fetchClassrooms]);
 
@@ -321,16 +335,20 @@ export default function TeacherClassrooms() {
 
   // 儲存成功後背景重新載入；失敗只提示重新整理（已儲存的結果仍有效）
   const reloadInBackground = () => {
-    void fetchClassrooms({ silent: true }).then((reloaded) => {
+    void fetchClassroomsRef.current({ silent: true }).then((reloaded) => {
       if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
     });
   };
 
   // 行內編輯、停用／啟用與批次更新（#1097）：成功後就地更新再背景重新載入
+  // 改到編輯中的班級時結束編輯，舊草稿不會再蓋回去
   const handlePatched = (patches: ClassroomPatches) => {
     setClassrooms((prev) =>
       prev.map((c) => (patches.has(c.id) ? { ...c, ...patches.get(c.id) } : c)),
     );
+    if (inlineEdit.editingId !== null && patches.has(inlineEdit.editingId)) {
+      inlineEdit.exitEdit();
+    }
     reloadInBackground();
   };
   const inlineEdit = useClassroomInlineEdit({
@@ -341,6 +359,16 @@ export default function TeacherClassrooms() {
   });
   const { guardEdit } = inlineEdit;
   const statusActions = useClassroomStatusActions({ onPatched: handlePatched });
+
+  // 只計狀態會改變的班級（已停用的不算進「停用 N 個」）
+  const openBulkStatus = (active: boolean) => {
+    setBulkStatusTarget(active);
+    setBulkStatusCount(
+      selectedClassrooms.filter((c) => isClassroomInactive(c) === active)
+        .length,
+    );
+    setShowBulkStatus(true);
+  };
 
   const handleBulkStatus = async (active: boolean) => {
     if (await statusActions.bulkSetActive(selectedClassrooms, active)) {
@@ -486,39 +514,18 @@ export default function TeacherClassrooms() {
     });
   };
 
-  // Sortable header component
-  const SortableHeader = ({
-    field,
-    children,
-    className,
-  }: {
+  const SortableHeader = (props: {
     field: SortField;
     children: React.ReactNode;
     className?: string;
-  }) => {
-    const isActive = sortField === field;
-    const icon = isActive ? (
-      sortDirection === "asc" ? (
-        <ArrowUp className="h-3 w-3" />
-      ) : (
-        <ArrowDown className="h-3 w-3" />
-      )
-    ) : (
-      <ArrowUpDown className="h-3 w-3 opacity-50" />
-    );
-
-    return (
-      <TableHead className={className}>
-        <button
-          onClick={() => handleSort(field)}
-          className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-xs sm:text-sm"
-        >
-          {children}
-          {icon}
-        </button>
-      </TableHead>
-    );
-  };
+  }) => (
+    <SortableTableHead
+      {...props}
+      activeField={sortField}
+      direction={sortDirection}
+      onSort={handleSort}
+    />
+  );
 
   // Filter and sort classrooms
   const processedClassrooms = useMemo(() => {
@@ -613,7 +620,11 @@ export default function TeacherClassrooms() {
   // 年級勾選／補填只作用在個人班級（學校班級須在學校後台編輯）
   const isSelectable = (c: ClassroomDetail) =>
     canEditClassrooms && !c.school_id && !c.organization_id;
-  const selectableVisible = processedClassrooms.filter(isSelectable);
+  // 編輯中：該列不可勾選、不列入全選；操作列與補填入口隱藏（#1097）
+  const isEditingAny = inlineEdit.editingId !== null;
+  const canSelect = (c: ClassroomDetail) =>
+    isSelectable(c) && c.id !== inlineEdit.editingId;
+  const selectableVisible = processedClassrooms.filter(canSelect);
   // 只計目前清單上看得到的勾選，篩選掉的班級不會被批次調整
   const selectedClassrooms = selectableVisible.filter((c) =>
     selectedIds.has(c.id),
@@ -621,6 +632,16 @@ export default function TeacherClassrooms() {
   const allVisibleSelected =
     selectableVisible.length > 0 &&
     selectedClassrooms.length === selectableVisible.length;
+  // 編輯中的班級不在目前清單上（被刪除或重新載入後被篩掉）→ 直接結束編輯
+  const { editingId: currentEditingId, exitEdit } = inlineEdit;
+  useEffect(() => {
+    if (
+      currentEditingId !== null &&
+      !processedClassrooms.some((c) => c.id === currentEditingId)
+    ) {
+      exitEdit();
+    }
+  }, [currentEditingId, processedClassrooms, exitEdit]);
   const missingGradeClassrooms = classrooms.filter(
     (c) => isSelectable(c) && !isValidGrade(c.grade),
   );
@@ -752,7 +773,10 @@ export default function TeacherClassrooms() {
                 {t("teacherClassrooms.stats.activeClassrooms")}
               </p>
               <p className="text-xl sm:text-2xl font-bold dark:text-gray-100">
-                {processedClassrooms.length}
+                {
+                  processedClassrooms.filter((c) => !isClassroomInactive(c))
+                    .length
+                }
               </p>
             </div>
             <BookOpen className="h-6 w-6 sm:h-8 sm:w-8 text-purple-500 dark:text-purple-400" />
@@ -764,6 +788,7 @@ export default function TeacherClassrooms() {
       <MissingGradeBanner
         count={missingGradeClassrooms.length}
         onAction={() => setShowMissingGrade(true)}
+        hideAction={isEditingAny}
       />
 
       {/* Search & Filter Bar */}
@@ -814,7 +839,7 @@ export default function TeacherClassrooms() {
 
       {/* Bulk Actions Bar — 年級／等級／停用／啟用（#1097），底部置中浮動膠囊 */}
       <GradeBulkBar
-        selectedCount={selectedClassrooms.length}
+        selectedCount={isEditingAny ? 0 : selectedClassrooms.length}
         busy={statusActions.bulkBusy}
         actions={[
           {
@@ -826,7 +851,7 @@ export default function TeacherClassrooms() {
           {
             key: "adjust-level",
             label: t("classroomGrade.level.button"),
-            icon: <Layers className="h-4 w-4" aria-hidden="true" />,
+            icon: <Signal className="h-4 w-4" aria-hidden="true" />,
             onClick: () => setShowAdjustLevel(true),
           },
           {
@@ -835,10 +860,7 @@ export default function TeacherClassrooms() {
             icon: <PowerOff className="h-4 w-4" aria-hidden="true" />,
             variant: "ghost",
             disabled: selectedClassrooms.every(isClassroomInactive),
-            onClick: () => {
-              setBulkStatusTarget(false);
-              setShowBulkStatus(true);
-            },
+            onClick: () => openBulkStatus(false),
           },
           {
             key: "activate",
@@ -846,17 +868,18 @@ export default function TeacherClassrooms() {
             icon: <Power className="h-4 w-4" aria-hidden="true" />,
             variant: "ghost",
             disabled: !selectedClassrooms.some(isClassroomInactive),
-            onClick: () => {
-              setBulkStatusTarget(true);
-              setShowBulkStatus(true);
-            },
+            onClick: () => openBulkStatus(true),
           },
         ]}
         onClear={() => setSelectedIds(new Set())}
       />
 
       {/* Classrooms Table — 浮動操作列出現時預留底部空間，最後一列不被擋住 */}
-      <div className={selectedClassrooms.length > 0 ? "pb-24" : undefined}>
+      <div
+        className={
+          !isEditingAny && selectedClassrooms.length > 0 ? "pb-24" : undefined
+        }
+      >
         {/* Mobile Sort + Card View */}
         <div className="md:hidden">
           {/* Mobile sort control */}
@@ -887,6 +910,7 @@ export default function TeacherClassrooms() {
                   ["name_desc", "teacherClassrooms.sort.nameDesc"],
                   ["level_asc", "classroomGrade.sort.levelAsc"],
                   ["level_desc", "classroomGrade.sort.levelDesc"],
+                  ["student_count_asc", "classroomGrade.sort.studentCountAsc"],
                   [
                     "student_count_desc",
                     "teacherClassrooms.sort.studentCountDesc",
@@ -913,6 +937,7 @@ export default function TeacherClassrooms() {
                   <div className="flex items-center gap-3 flex-1">
                     {isSelectable(classroom) && (
                       <Checkbox
+                        disabled={inlineEdit.editingId === classroom.id}
                         checked={selectedIds.has(classroom.id)}
                         onCheckedChange={(checked) =>
                           toggleSelected(classroom.id, checked === true)
@@ -1037,7 +1062,10 @@ export default function TeacherClassrooms() {
                     size="sm"
                     onClick={() => setDeleteConfirmId(classroom.id)}
                     className="flex-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400"
-                    disabled={!canEditClassrooms}
+                    disabled={
+                      !canEditClassrooms ||
+                      inlineEdit.editingId === classroom.id
+                    }
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     {t("common.delete")}
@@ -1130,6 +1158,7 @@ export default function TeacherClassrooms() {
                         classroom={classroom}
                         showSelectColumn={canEditClassrooms}
                         selectable={isSelectable(classroom)}
+                        selectDisabled={isEditing}
                         selected={selectedIds.has(classroom.id)}
                         onSelectedChange={(checked) =>
                           toggleSelected(classroom.id, checked)
@@ -1451,7 +1480,7 @@ export default function TeacherClassrooms() {
           bulkStatusTarget
             ? "classroomGrade.bulk.activateTitle"
             : "classroomGrade.bulk.deactivateTitle",
-          { count: selectedClassrooms.length },
+          { count: bulkStatusCount },
         )}
         description={t(
           bulkStatusTarget

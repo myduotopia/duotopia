@@ -172,6 +172,7 @@ vi.mock("react-i18next", () => ({
         "classroomGrade.sort.gradeDesc": "Grade high to low",
         "classroomGrade.sort.levelAsc": "Level low to high",
         "classroomGrade.sort.levelDesc": "Level high to low",
+        "classroomGrade.sort.studentCountAsc": "Fewest Students",
       };
       if (key === "teacherClassrooms.messages.totalCount" && opts) {
         return `Total ${opts.count} classrooms`;
@@ -1292,6 +1293,152 @@ describe("TeacherClassrooms", () => {
           { classroom_id: 1, level: "B1" },
         ]);
       });
+    });
+
+    it("disables the editing row's checkbox and hides bulk actions and the fill-in action while editing", async () => {
+      const user = userEvent.setup();
+      renderComponent();
+      await waitForList();
+
+      await tickRow(user, "Beta Class");
+      expect(screen.getByTestId("grade-bulk-bar")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Set now" }),
+      ).toBeInTheDocument();
+
+      await user.click(within(row(1)).getByTitle("Edit"));
+
+      expect(
+        within(row(1)).getByRole("checkbox", { name: "Select Alpha Class" }),
+      ).toBeDisabled();
+      expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Set now" }),
+      ).not.toBeInTheDocument();
+      // The banner message itself stays
+      expect(
+        screen.getByText("1 classroom(s) have no grade set"),
+      ).toBeInTheDocument();
+
+      // Select-all skips the editing row
+      await user.click(
+        within(screen.getByRole("table")).getByRole("checkbox", {
+          name: "Select all listed classrooms",
+        }),
+      );
+      expect(
+        within(row(1)).getByRole("checkbox", { name: "Select Alpha Class" }),
+      ).not.toHaveAttribute("data-state", "checked");
+
+      // Leaving edit mode brings the bar back
+      await user.click(within(row(1)).getByRole("button", { name: "Cancel" }));
+      expect(screen.getByTestId("grade-bulk-bar")).toBeInTheDocument();
+    });
+
+    it("ignores a stale background reload that resolves after a newer one", async () => {
+      const user = userEvent.setup();
+      let resolveOlder: (v: unknown) => void = () => {};
+      let resolveNewer: (v: unknown) => void = () => {};
+      mockGetTeacherClassrooms
+        .mockResolvedValueOnce(mockClassrooms)
+        .mockImplementationOnce(
+          () => new Promise((resolve) => (resolveOlder = resolve)),
+        )
+        .mockImplementationOnce(
+          () => new Promise((resolve) => (resolveNewer = resolve)),
+        );
+      renderComponent();
+      await waitForList();
+
+      // Two single toggles → two silent reloads in flight
+      await user.click(
+        within(row(1)).getByRole("switch", { name: "Toggle Alpha Class" }),
+      );
+      await waitFor(() => {
+        expect(mockGetTeacherClassrooms).toHaveBeenCalledTimes(2);
+      });
+      await user.click(
+        within(row(3)).getByRole("switch", { name: "Toggle Charlie Class" }),
+      );
+      await waitFor(() => {
+        expect(mockGetTeacherClassrooms).toHaveBeenCalledTimes(3);
+      });
+
+      const renamed = (name: string) => [
+        { ...mockClassrooms[0], name },
+        mockClassrooms[1],
+        mockClassrooms[2],
+      ];
+      resolveNewer(renamed("Newest Alpha"));
+      await waitFor(() => {
+        expect(screen.getAllByText("Newest Alpha").length).toBeGreaterThan(0);
+      });
+      resolveOlder(renamed("Stale Alpha"));
+      // Give the stale response a chance to (wrongly) apply
+      await new Promise((r) => setTimeout(r, 0));
+      expect(screen.queryByText("Stale Alpha")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Newest Alpha").length).toBeGreaterThan(0);
+    });
+
+    it("counts only classrooms whose status will change in the confirm dialog", async () => {
+      const user = userEvent.setup();
+      withInactiveBeta();
+      renderComponent();
+      await waitForList();
+
+      await tickRow(user, "Alpha Class"); // active
+      await tickRow(user, "Beta Class"); // already inactive
+      const toolbar = screen.getByRole("toolbar", {
+        name: "2 classroom(s) selected",
+      });
+      await user.click(
+        within(toolbar).getByRole("button", { name: "Deactivate" }),
+      );
+
+      const dialog = await screen.findByRole("dialog");
+      expect(
+        within(dialog).getByText("Deactivate 1 classroom(s)?"),
+      ).toBeInTheDocument();
+    });
+
+    it("offers every sort field in both directions on mobile", async () => {
+      renderComponent();
+      await waitForList();
+
+      const mobileSort = screen
+        .getAllByRole("combobox")
+        .find((s) =>
+          Array.from(s.querySelectorAll("option")).some(
+            (o) => o.getAttribute("value") === "default",
+          ),
+        );
+      const values = Array.from(mobileSort!.querySelectorAll("option")).map(
+        (o) => o.getAttribute("value"),
+      );
+      for (const field of [
+        "grade",
+        "name",
+        "level",
+        "student_count",
+        "created_at",
+      ]) {
+        expect(values).toContain(`${field}_asc`);
+        expect(values).toContain(`${field}_desc`);
+      }
+      expect(
+        screen.getByRole("option", { name: "Fewest Students" }),
+      ).toHaveValue("student_count_asc");
+    });
+
+    it("counts only active classrooms in the active stat card", async () => {
+      withInactiveBeta();
+      renderComponent();
+      await waitForList();
+
+      const activeCard = screen.getByText("Active Classrooms").parentElement!;
+      expect(activeCard).toHaveTextContent("Active Classrooms2");
+      const totalCard = screen.getByText("Total Classrooms").parentElement!;
+      expect(totalCard).toHaveTextContent("Total Classrooms3");
     });
 
     it("renders no status switch in organization mode", async () => {
