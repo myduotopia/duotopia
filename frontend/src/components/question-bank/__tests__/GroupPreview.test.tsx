@@ -210,4 +210,48 @@ describe("GroupPreview", () => {
       "What is on the wall?",
     );
   });
+
+  it("題組標題（#1082）：有值才顯示、置中加粗、在主圖文之前；空白標題不顯示", () => {
+    const { unmount } = render(
+      <GroupPreview
+        draft={{ ...readingGroup(), title: "  A Trip to Tainan " }}
+      />,
+    );
+    const title = screen.getByTestId("group-preview-title");
+    expect(title).toHaveTextContent("A Trip to Tainan");
+    expect(title.className).toContain("text-center");
+    expect(title.className).toContain("font-bold");
+    const renderer = screen.getByTestId("layout-renderer");
+    expect(
+      title.compareDocumentPosition(renderer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    unmount();
+    render(<GroupPreview draft={{ ...readingGroup(), title: "   " }} />);
+    expect(screen.queryByTestId("group-preview-title")).toBeNull();
+  });
+
+  it("沒有排版的退回顯示也有標題；整篇外框時標題在框外", () => {
+    const g = {
+      ...emptyGroupDraft("reading"),
+      title: "Poster",
+      passage_text: "Hello",
+    };
+    const { unmount } = render(<GroupPreview draft={g} />);
+    expect(screen.getByTestId("group-preview-title")).toHaveTextContent(
+      "Poster",
+    );
+    unmount();
+    render(
+      <GroupPreview
+        draft={{
+          ...readingGroup(),
+          title: "Framed",
+          layout: { ...passageDoc, frame: true },
+        }}
+      />,
+    );
+    const frame = screen.getByTestId("layout-frame");
+    expect(within(frame).queryByTestId("group-preview-title")).toBeNull();
+  });
 });

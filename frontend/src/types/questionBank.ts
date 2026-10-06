@@ -117,6 +117,8 @@ export type LayoutNode = LayoutRow | LayoutSection;
 
 export interface LayoutDoc {
   version: 1;
+  /** 整篇主圖文（不含單字註解）外包一個框；會考題本的文章多半有框（#1082） */
+  frame?: boolean;
   rows: LayoutNode[];
 }
 

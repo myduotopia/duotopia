@@ -73,6 +73,21 @@ def test_rows_must_be_list():
     _assert_error({"version": 1, "rows": "x"}, "layout.rows")
 
 
+def test_root_frame_must_be_bool():
+    """整篇外框 layout.frame（#1082）：布林值合法、其他型別擋下並指出路徑。"""
+    para = {"type": "paragraph", "text": "x"}
+    for ok in (True, False):
+        doc = _minimal(para)
+        doc["frame"] = ok
+        validate_layout(doc)
+    for bad in ("yes", 1, None, []):
+        doc = _minimal(para)
+        doc["frame"] = bad
+        with pytest.raises(LayoutError) as exc:
+            validate_layout(doc)
+        assert exc.value.path == "layout.frame"
+
+
 def test_unknown_version_rejected():
     _assert_error({"version": 2, "rows": []}, "layout.version")
 

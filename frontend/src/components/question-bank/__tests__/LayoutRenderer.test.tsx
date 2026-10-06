@@ -77,6 +77,25 @@ describe("LayoutRenderer", () => {
     expect(box.querySelectorAll(":scope > span")).toHaveLength(1);
   });
 
+  it("layout.frame（整篇外框）：所有列包在框內、單字註解在框外；沒設就沒有框", () => {
+    const glossary = [{ word: "timeline", zh: "時間軸" }];
+    const { rerender } = render(
+      <LayoutRenderer layout={docWith("x")} glossary={glossary} />,
+    );
+    expect(screen.queryByTestId("layout-frame")).toBeNull();
+    rerender(
+      <LayoutRenderer
+        layout={{ ...docWith("body text"), frame: true }}
+        glossary={glossary}
+      />,
+    );
+    const frame = screen.getByTestId("layout-frame");
+    expect(frame.className).toContain("border");
+    expect(frame).toHaveTextContent("body text");
+    expect(within(frame).queryByTestId("layout-glossary")).toBeNull();
+    expect(screen.getByTestId("layout-glossary")).toBeTruthy();
+  });
+
   it("標題與對話文字也保留空格", () => {
     const layout: LayoutDoc = {
       version: 1,

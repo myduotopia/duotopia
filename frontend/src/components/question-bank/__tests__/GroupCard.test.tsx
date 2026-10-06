@@ -234,6 +234,22 @@ describe("GroupCard", () => {
     expect(draft.serverError).toBeNull();
   });
 
+  it("整篇加外框（#1082）：沒有排版時 disabled；有排版勾選 → layout.frame=true，再按取消", async () => {
+    const onDraft = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} onDraft={onDraft} />);
+    const box = () => screen.getByTestId("qg-0-layout-frame");
+    expect(box()).toBeDisabled();
+    await user.click(screen.getByTestId("qg-0-layout-stub"));
+    expect(box()).not.toBeDisabled();
+    await user.click(box());
+    expect(lastDraft(onDraft).layout?.frame).toBe(true);
+    expect(lastDraft(onDraft).layout?.rows).toHaveLength(1);
+    expect(box()).toHaveAttribute("data-state", "checked");
+    await user.click(box());
+    expect(lastDraft(onDraft).layout?.frame).toBe(false);
+  });
+
   it("文字版分頁（#1083）：預設顯示排版推導文字；打字後變老師版本並標記；重新產生回推導", async () => {
     const onDraft = vi.fn();
     const user = userEvent.setup();

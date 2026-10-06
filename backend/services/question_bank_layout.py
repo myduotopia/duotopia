@@ -5,7 +5,7 @@
 （前端型別在 frontend/src/types/questionBank.ts 的 LayoutDoc）。
 
 結構：
-    layout = {"version": 1, "rows": [node, ...]}
+    layout = {"version": 1, "frame"?: bool, "rows": [node, ...]}   # frame＝整篇主圖文加外框
     node   = {"type": "row"?, "columns": [column, ...]}
            | {"type": "section", "frame"?: bool, "rows": [row, ...]}   # section 內只能放 row
     column = {"span": int >= 1, "blocks": [block, ...]}
@@ -171,6 +171,8 @@ def validate_layout(layout: Any) -> None:
     version = doc.get("version", 1)
     if version != 1:
         raise LayoutError("layout.version", "只支援 version 1")
+    if "frame" in doc and not isinstance(doc["frame"], bool):
+        raise LayoutError("layout.frame", "需為布林值")
     rows = _require_list(doc.get("rows"), "layout.rows", MAX_ROWS, "列")
     counter = _Counter()
     for ri, node in enumerate(rows):

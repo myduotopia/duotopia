@@ -4,6 +4,7 @@
  * `LayoutDoc`（DB 格式）沒有 id，dnd-kit 需要穩定 id，所以編輯器內部用 `EditorDoc`：
  * 同一棵樹，每個節點／欄／區塊多一個 `id`。`toEditorDoc` 進來配 id，`toLayoutDoc` 出去剝掉。
  * 所有操作都是純函式回傳新物件，方便測試，也讓 React 狀態更新單純。
+ * 文件層欄位（整篇外框 `frame`）由每個操作以 `...doc` 原樣帶過，只有 GroupCard 的勾選會改它。
  *
  * 欄位比例只允許 README 定義的四種：1:1、1:2、2:1、1:1:1（單欄 = 1）。
  *
@@ -40,6 +41,8 @@ export interface EditorSection {
 }
 export type EditorNode = EditorRow | EditorSection;
 export interface EditorDoc {
+  /** 整篇主圖文加外框（`LayoutDoc.frame`）；所有操作以 `...doc` 保留 */
+  frame?: boolean;
   rows: EditorNode[];
 }
 
@@ -81,6 +84,7 @@ function toEditorRow(row: LayoutRow): EditorRow {
 export function toEditorDoc(layout: LayoutDoc | null | undefined): EditorDoc {
   if (!layout) return { rows: [] };
   return {
+    ...(layout.frame ? { frame: true } : {}),
     rows: layout.rows.map((n) =>
       n.type === "section"
         ? {
@@ -117,7 +121,7 @@ export function toLayoutDoc(doc: EditorDoc): LayoutDoc | null {
       ? { type: "section", frame: n.frame, rows: n.rows.map(toLayoutRow) }
       : toLayoutRow(n),
   );
-  return { version: 1, rows };
+  return { version: 1, ...(doc.frame ? { frame: true } : {}), rows };
 }
 
 // ---- 查找 ----
@@ -154,6 +158,7 @@ export function blockCount(doc: EditorDoc): number {
 
 function mapRows(doc: EditorDoc, fn: (row: EditorRow) => EditorRow): EditorDoc {
   return {
+    ...doc,
     rows: doc.rows.map((n) =>
       n.type === "section" ? { ...n, rows: n.rows.map(fn) } : fn(n),
     ),
@@ -205,8 +210,9 @@ export function addRow(
   sectionId?: string,
 ): EditorDoc {
   const row = emptyRow(ratio);
-  if (!sectionId) return { rows: [...doc.rows, row] };
+  if (!sectionId) return { ...doc, rows: [...doc.rows, row] };
   return {
+    ...doc,
     rows: doc.rows.map((n) =>
       n.type === "section" && n.id === sectionId
         ? { ...n, rows: [...n.rows, row] }
@@ -226,7 +232,7 @@ export function removeRow(doc: EditorDoc, rowId: string): EditorDoc {
     const inner = n.rows.filter((r) => r.id !== rowId);
     if (inner.length > 0) rows.push({ ...n, rows: inner });
   }
-  return { rows };
+  return { ...doc, rows };
 }
 
 /** 改欄位比例；多出的欄位刪除時其區塊併到最後一個保留的欄 */
@@ -260,6 +266,7 @@ export function setRowRatio(
 /** 把最外層的一列包成 section（框起來） */
 export function wrapRowInSection(doc: EditorDoc, rowId: string): EditorDoc {
   return {
+    ...doc,
     rows: doc.rows.map((n) =>
       n.type === "row" && n.id === rowId
         ? { id: newId("s"), type: "section", frame: true, rows: [n] }
@@ -271,6 +278,7 @@ export function wrapRowInSection(doc: EditorDoc, rowId: string): EditorDoc {
 /** 解開 section：裡面的列放回最外層原位 */
 export function unwrapSection(doc: EditorDoc, sectionId: string): EditorDoc {
   return {
+    ...doc,
     rows: doc.rows.flatMap((n) =>
       n.type === "section" && n.id === sectionId ? n.rows : [n],
     ),
@@ -283,6 +291,7 @@ export function setSectionFrame(
   frame: boolean,
 ): EditorDoc {
   return {
+    ...doc,
     rows: doc.rows.map((n) =>
       n.type === "section" && n.id === sectionId ? { ...n, frame } : n,
     ),
@@ -299,7 +308,7 @@ export function moveTopLevel(
   const rows = [...doc.rows];
   const [item] = rows.splice(from, 1);
   rows.splice(Math.min(to, rows.length), 0, item);
-  return { rows };
+  return { ...doc, rows };
 }
 
 /** section 內的列排序 */
@@ -310,6 +319,7 @@ export function moveRowInSection(
   to: number,
 ): EditorDoc {
   return {
+    ...doc,
     rows: doc.rows.map((n) => {
       if (n.type !== "section" || n.id !== sectionId || from === to) return n;
       const rows = [...n.rows];
@@ -481,7 +491,7 @@ function compact(doc: EditorDoc): EditorDoc {
     const inner = n.rows.map(cleanRow).filter((r): r is EditorRow => !!r);
     if (inner.length > 0) rows.push({ ...n, rows: inner });
   }
-  return { rows };
+  return { ...doc, rows };
 }
 
 /** 把區塊從文件拿出來（原欄空了就收掉、剩餘欄撐滿） */
@@ -517,15 +527,16 @@ export function insertBlockRow(
   anchor?: { rowId: string; position: "before" | "after" } | null,
 ): EditorDoc {
   const row = singleBlockRow(block);
-  if (!anchor) return { rows: [...doc.rows, row] };
+  if (!anchor) return { ...doc, rows: [...doc.rows, row] };
   const at = (idx: number) => (anchor.position === "before" ? idx : idx + 1);
   const topIdx = doc.rows.findIndex((n) => n.id === anchor.rowId);
   if (topIdx >= 0) {
     const rows = [...doc.rows];
     rows.splice(at(topIdx), 0, row);
-    return { rows };
+    return { ...doc, rows };
   }
   return {
+    ...doc,
     rows: doc.rows.map((n) => {
       if (n.type !== "section") return n;
       const idx = n.rows.findIndex((r) => r.id === anchor.rowId);

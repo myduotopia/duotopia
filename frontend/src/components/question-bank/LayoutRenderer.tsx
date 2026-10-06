@@ -7,6 +7,8 @@
  * - rows → columns：CSS grid 依 `span` 比例；手機寬度（< md）或 `forceStack`
  *   時欄位依序上下堆疊，不做橫向捲動
  * - section：`frame` 畫框線
+ * - 文件根層 `frame`（整篇外框）：所有列外包一個框（樣式同 section 框，`data-testid="layout-frame"`），
+ *   單字註解框留在框外
  * - 區塊：heading（h2/h3）、paragraph、image（可點擊放大）、dialogue（說話者＋文字）
  * - 文字經 `parseInline` 成節點樹渲染：粗體、底線、雙底線、`{{n}}` 畫成底線＋編號；
  *   不使用 dangerouslySetInnerHTML；文字元素 `whitespace-pre-wrap`，段落開頭與連續空格照原樣
@@ -332,6 +334,9 @@ export default function LayoutRenderer({
   zoomable = true,
 }: LayoutRendererProps) {
   if (!layout || layout.rows.length === 0) return null;
+  const nodes = layout.rows.map((n, i) => (
+    <Node key={i} node={n} forceStack={forceStack} zoomable={zoomable} />
+  ));
   return (
     <div
       className={cn(
@@ -341,9 +346,16 @@ export default function LayoutRenderer({
       data-testid="layout-renderer"
       data-stack={forceStack || undefined}
     >
-      {layout.rows.map((n, i) => (
-        <Node key={i} node={n} forceStack={forceStack} zoomable={zoomable} />
-      ))}
+      {layout.frame ? (
+        <div
+          className="space-y-4 rounded border border-gray-400 p-4"
+          data-testid="layout-frame"
+        >
+          {nodes}
+        </div>
+      ) : (
+        nodes
+      )}
       <GlossaryBox glossary={glossary} />
     </div>
   );

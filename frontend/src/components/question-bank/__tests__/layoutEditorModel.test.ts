@@ -114,6 +114,17 @@ describe("round trip", () => {
     expect(toLayoutDoc(toEditorDoc(sample))).toEqual(sample);
   });
 
+  it("keeps the whole-passage frame (layout.frame) through round trip and edits", () => {
+    const framed: LayoutDoc = { ...sample, frame: true };
+    expect(toLayoutDoc(toEditorDoc(framed))).toEqual(framed);
+    const doc = toEditorDoc(framed);
+    expect(doc.frame).toBe(true);
+    const edited = appendBlock(doc, defaultBlock("paragraph"));
+    expect(toLayoutDoc(edited)?.frame).toBe(true);
+    expect(toLayoutDoc(addRow(doc, "1:1"))?.frame).toBe(true);
+    expect(toLayoutDoc(toEditorDoc(sample))).not.toHaveProperty("frame");
+  });
+
   it("empty editor doc becomes null", () => {
     expect(toLayoutDoc(toEditorDoc(null))).toBeNull();
   });

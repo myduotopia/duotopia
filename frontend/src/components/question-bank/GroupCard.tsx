@@ -6,6 +6,7 @@
  * |年段|
  * |主圖文：分頁「排版」（LayoutEditor：文件式區塊編輯器；預覽在面板標題列
  *   `SheetPreviewButton`，看整個題組＝主圖文＋小題＋選項，不含答案）｜「文字版」|
+ *   標題列右側「整篇加外框」勾選切換 `layout.frame`（還沒有排版時灰掉）|
  * |單字註解（一個文字框，一行一筆「word 中文」）|
  * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
@@ -48,6 +49,7 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -485,6 +487,18 @@ export default function GroupCard({
             <Label className="text-xs text-gray-600">
               {t("questionBank.group.layout.title")}
             </Label>
+            <label className="ml-auto flex items-center gap-1 text-xs text-gray-600">
+              <Checkbox
+                checked={draft.layout?.frame === true}
+                onCheckedChange={(c) =>
+                  draft.layout &&
+                  setLayout({ ...draft.layout, frame: c === true })
+                }
+                disabled={locked || !draft.layout}
+                data-testid={`qg-${index}-layout-frame`}
+              />
+              {t("questionBank.group.layout.frameAll")}
+            </label>
             <TabsList className="h-7 p-0.5">
               <TabsTrigger
                 value="layout"

@@ -6104,6 +6104,7 @@
         "title": "Passage layout",
         "frame": "Border",
         "frameRow": "Add border",
+        "frameAll": "Frame whole passage",
         "unframe": "Remove border",
         "resizeColumns": "Drag to resize columns (1/3, 1/2, 2/3)",
         "addBlock": "Add block",

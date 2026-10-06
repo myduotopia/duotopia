@@ -4,6 +4,8 @@
  * 老師按「預覽」看到的就是學生拿到的整個題組；之後學生端作答畫面（P4）也以這個元件為基礎，
  * 所以它是純展示：不顯示正確答案、解析、考點，也不吃任何編輯狀態。
  *
+ * - 最上方：題組標題（`title` 有值才顯示），置中加粗，在主圖文（含整篇外框）之外；
+ *   克漏字、閱讀、沒有排版的退回顯示都適用
  * - 上：主圖文用共用 `LayoutRenderer`（含單字註解、圖片點擊放大）。沒有 layout 時退回顯示
  *   題組圖（`image_url`）、`passage_text` 與單字註解（共用 `GlossaryBox`）；只有單字註解
  *   （至少一筆單字與中文都有填）也算有主圖文，照樣畫出註解框
@@ -40,7 +42,8 @@ export type GroupPreviewData = Pick<
   | "image_url"
   | "passage_text"
   | "questions"
->;
+> &
+  Partial<Pick<GroupDraft, "title">>;
 
 function groupPreviewHasLayout(draft: GroupPreviewData): boolean {
   return Boolean(draft.layout && draft.layout.rows.length > 0);
@@ -90,6 +93,7 @@ export default function GroupPreview({
   // 文章裡已找不到的空格（老師刪掉了 {{n}}）；clozeOrphanBlanksOf 只讀 question_type／layout／questions
   const missingBlanks = cloze ? clozeOrphanBlanksOf(draft as GroupDraft) : [];
   const hasStimulus = groupPreviewHasStimulus(draft);
+  const title = (draft.title ?? "").trim();
 
   if (!groupPreviewHasContent(draft)) {
     return (
@@ -110,6 +114,14 @@ export default function GroupPreview({
       )}
       data-testid={testId}
     >
+      {title && (
+        <h2
+          className="text-center text-lg font-bold"
+          data-testid={`${testId}-title`}
+        >
+          {title}
+        </h2>
+      )}
       {hasLayout ? (
         <LayoutRenderer
           layout={draft.layout}
