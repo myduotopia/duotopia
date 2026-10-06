@@ -341,7 +341,8 @@ describe("GroupCard", () => {
     const user = userEvent.setup();
     const initial: GroupDraft = {
       ...emptyGroupDraft(),
-      passage_text: "Hank's Day\n\nMary: Where are you going?\nHank: To the park.",
+      passage_text:
+        "Hank's Day\n\nMary: Where are you going?\nHank: To the park.",
       segments: [
         { speaker_label: "Mary", transcript: "Where are you going?" },
         { speaker_label: "Hank", transcript: "To the park." },
@@ -350,7 +351,9 @@ describe("GroupCard", () => {
     render(<Harness initial={initial} />);
     await user.click(screen.getByTestId("qg-0-tab-text"));
     const view = await screen.findByTestId("qg-0-passage-text-dialogue");
-    expect(view).toHaveTextContent("questionBank.group.passage.dialogueReadonly");
+    expect(view).toHaveTextContent(
+      "questionBank.group.passage.dialogueReadonly",
+    );
     expect(screen.getByTestId("qg-0-passage-text-narration")).toHaveTextContent(
       "Hank's Day",
     );

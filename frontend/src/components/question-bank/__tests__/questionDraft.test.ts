@@ -719,9 +719,9 @@ describe("AI 套用（#1065）：只填空的", () => {
       groupPassageText({ ...withDialogue, passage_text: "tampered" }),
     ).toBe("Mary: Hi.\nHank: Hello.");
     // 舊資料沒有 segments 欄位 → 空陣列，PATCH 送 []（不影響）
-    expect(groupDraftFromGroup({ ...base, passage_text: null }).segments).toEqual(
-      [],
-    );
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: null }).segments,
+    ).toEqual([]);
   });
   it("toUpdateGroupInput：帶 existingId 的小題送 id，新小題不送；不含題型／歸屬", () => {
     const g = emptyGroupDraft("reading");
