@@ -42,11 +42,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type {
-  GlossaryEntry,
-  LayoutBlock,
-  LayoutDoc,
-} from "@/types/questionBank";
+import type { LayoutBlock, LayoutDoc } from "@/types/questionBank";
 import LayoutBlockChrome, {
   blockIdOf,
   type DropZone,
@@ -80,7 +76,6 @@ import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
 export interface LayoutEditorProps {
   layout: LayoutDoc | null;
   onChange: (layout: LayoutDoc | null) => void;
-  glossary?: GlossaryEntry[];
   disabled?: boolean;
   testId?: string;
   /** 克漏字題組：段落工具列多一顆「插入空格」（#1085） */
@@ -289,7 +284,6 @@ function RowView({
 export default function LayoutEditor({
   layout,
   onChange,
-  glossary,
   disabled = false,
   testId = "layout-editor",
   clozeMode,

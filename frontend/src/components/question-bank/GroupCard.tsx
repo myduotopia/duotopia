@@ -514,7 +514,6 @@ export default function GroupCard({
               key={draft.key}
               layout={draft.layout}
               onChange={setLayout}
-              glossary={draft.glossary}
               disabled={locked}
               testId={`qg-${index}-layout`}
               clozeMode={isCloze}
