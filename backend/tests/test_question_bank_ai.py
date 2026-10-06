@@ -364,16 +364,23 @@ def test_magic_paste_normalize_mc_items():
         ]
     }
     items = MagicPasteService._normalize_mc_items(raw)
+    # #1084 起 normalize 另帶 blank／stem_box_2d／option_boxes；純文字考卷這三欄皆為空
     assert items == [
         {
             "stem": "1. I ___ never been to Japan.",
+            "blank": None,
+            "stem_box_2d": None,
             "options": ["have", "has", "had"],
+            "option_boxes": [None, None, None],
             "correct_indexes": [0],
             "explanation": "have + p.p.",
         },
         {
             "stem": "no answer printed",
+            "blank": None,
+            "stem_box_2d": None,
             "options": ["a", "b"],
+            "option_boxes": [None, None],
             "correct_indexes": [],
             "explanation": "",
         },
