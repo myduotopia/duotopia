@@ -3,6 +3,13 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MissingGradeDialog } from "../MissingGradeDialog";
 import { BATCH_GRADE_MAX_ITEMS } from "../classroomGrade";
 
+// 真實上限 200 會讓每個測試渲染並逐列操作 200+ 個下拉，CI 上超過 20s 逾時；
+// 縮小上限只為加速，判斷邏輯（> 上限擋、= 上限放行）不變
+vi.mock("../classroomGrade", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../classroomGrade")>()),
+  BATCH_GRADE_MAX_ITEMS: 5,
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
