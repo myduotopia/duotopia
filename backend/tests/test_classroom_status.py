@@ -760,6 +760,23 @@ class TestStudentVisibility:
         assert response.status_code == 403
         assert response.json()["detail"] == "classroom_inactive"
 
+    @pytest.mark.parametrize("which", ["inactive", "deleted"])
+    def test_upload_recording_blocked_for_hidden_classroom(
+        self, client, test_db, teacher, student_setup, which
+    ):
+        """錄音上傳的作業 id 在 form 而非路徑，router 守門管不到，端點內自行檢查"""
+        student = student_setup["student"]
+        sa = _assign(test_db, teacher, student_setup[which], student, "Hidden")
+
+        response = client.post(
+            "/api/students/upload-recording",
+            data={"assignment_id": str(sa.id), "content_item_id": "999999"},
+            files={"audio_file": ("a.webm", b"\x00" * 2048, "audio/webm")},
+            headers=_student_auth(student),
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "classroom_inactive"
+
     def test_assignment_detail_guard_skips_other_students_assignment(
         self, client, test_db, teacher, student_setup
     ):

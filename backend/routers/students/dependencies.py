@@ -61,6 +61,17 @@ def require_visible_assignment_classroom(
     except (TypeError, ValueError):
         return  # 交給端點的參數驗證處理
 
+    ensure_assignment_classroom_visible(db, student_assignment_id, student_id)
+
+
+def ensure_assignment_classroom_visible(
+    db: Session, student_assignment_id: int, student_id: int
+) -> None:
+    """作業所屬班級停用或已刪除 → 403 ``classroom_inactive``（#1097）。
+
+    給作業 id 不在路徑上的端點（例如錄音上傳的 form 欄位）直接呼叫；
+    找不到該學生的這份作業、或作業沒有班級時放行。
+    """
     row = (
         db.query(Classroom.is_active, Classroom.deleted_at)
         .select_from(StudentAssignment)
