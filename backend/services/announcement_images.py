@@ -147,8 +147,14 @@ async def rehost_content_images(
                     f"每則公告最多轉存 {MAX_REHOST_IMAGES} 張圖片，其餘請在後台上傳"
                 )
             data, mime, ext = await fetch(url)
-            # GCS 上傳是同步 I/O，丟到 threadpool 避免卡住 event loop
-            stored_url = await run_in_threadpool(store, data, mime, ext)
+            # GCS 上傳是同步 I/O，丟到 threadpool 避免卡住 event loop；
+            # 儲存端的任何例外（google.api_core 等）都轉成 AnnouncementImageError，不擋草稿
+            try:
+                stored_url = await run_in_threadpool(store, data, mime, ext)
+            except AnnouncementImageError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise AnnouncementImageError(f"儲存失敗：{exc}") from exc
             cache[url] = (stored_url, mime, len(data))
         return cache[url]
 

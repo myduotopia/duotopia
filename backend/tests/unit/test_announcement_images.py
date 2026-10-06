@@ -247,6 +247,25 @@ class TestRehostContentImages:
         assert len(stored) == 2
 
     @pytest.mark.asyncio
+    async def test_storage_error_does_not_break_draft(self):
+        """GCS 上傳丟出非預期例外（例如 google.api_core 錯誤）也只記警告"""
+
+        async def fetch(url):
+            return PNG, "image/png", "png"
+
+        def store(content, content_type, extension):
+            raise RuntimeError("503 Service Unavailable")
+
+        result, warnings = await ai.rehost_content_images(
+            {"image_url": GH, "article_body_zh": f"![a]({GH})"},
+            fetch=fetch,
+            store=store,
+        )
+        assert "image_url" not in result
+        assert result["article_body_zh"] == f"![a]({GH})"
+        assert any("503" in w for w in warnings)
+
+    @pytest.mark.asyncio
     async def test_rehosts_at_most_10_images(self):
         """每則草稿最多轉存 10 張，避免 webhook 逾時；其餘保留原網址並警告"""
         fetch, store, stored = self._fakes()
