@@ -19,6 +19,8 @@
  * 圖中有人物對話時（#1083）文字版改為唯讀對話樣式（`DialogueTranscriptView`）：逐句
  * 「說話者: 台詞」由 AI 整理、是題組對話音檔的來源，老師不可修改（原因見 PassageTextTab）。
  * 小題的考點、來源、教材關聯仍在各自的 QuestionCard；公開設定與年段跟隨題組（左欄套用）。
+ * 驗證紅框／紅字（整組 `errorMessage`、小題錯誤）由 sheet 以 `showErrors` 控制：老師按過儲存
+ * 才顯示；克漏字「找不到空格」警告是結構提示，一律即時顯示。
  */
 
 import { useMemo, useRef, useState } from "react";
@@ -99,8 +101,13 @@ export interface GroupCardProps {
   onRemove?: () => void;
   ttsSettings: TTSSettingsState;
   programs: Program[];
-  /** 整組的驗證訊息（由外層算） */
+  /** 整組的驗證訊息（由外層算；sheet 在老師按過儲存前傳 null） */
   errorMessage: string | null;
+  /**
+   * 是否顯示小題的驗證紅框／紅字（預設 true）。sheet 在老師按過儲存前傳 false，
+   * 打開面板時不會一片紅；克漏字「找不到空格」是結構提示，不受此控制、維持即時顯示。
+   */
+  showErrors?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
 }
@@ -289,6 +296,7 @@ export default function GroupCard({
   ttsSettings,
   programs,
   errorMessage,
+  showErrors = true,
   readOnly = false,
   disabled = false,
 }: GroupCardProps) {
@@ -367,13 +375,15 @@ export default function GroupCard({
       new Map(
         draft.questions.map((q) => [
           q.key,
-          validateDraft(
-            { ...q, visibility: draft.visibility ?? q.visibility },
-            { stemOptional: isCloze },
-          ),
+          showErrors
+            ? validateDraft(
+                { ...q, visibility: draft.visibility ?? q.visibility },
+                { stemOptional: isCloze },
+              )
+            : null,
         ]),
       ),
-    [draft.questions, draft.visibility, isCloze],
+    [draft.questions, draft.visibility, isCloze, showErrors],
   );
 
   /**
@@ -662,6 +672,7 @@ export default function GroupCard({
                           )
                         : null
                     }
+                    showErrors={showErrors}
                     readOnly={readOnly}
                     disabled={disabled}
                     stemOptional
@@ -707,6 +718,7 @@ export default function GroupCard({
                               )
                             : null
                         }
+                        showErrors={showErrors}
                         readOnly={readOnly}
                         disabled={disabled}
                         testIdPrefix={`qg-${index}-q`}

@@ -6,6 +6,8 @@
  *
  * 同一個列表、同一個 sheet，不為題型另開路由或複製 sheet（與批改頁「同路由分 Panel」同原則）。
  * DOM id 一律 `question-card-<unitKey>`，讓 sheet 的捲動／定位對單題與題組一致。
+ * `showErrors` 為 false（老師還沒按過儲存）時不顯示驗證紅框／紅字：單題卡、題組卡、題組小題都隱藏；
+ * 後端回傳的 `serverError` 不受影響。
  */
 
 import { useTranslation } from "react-i18next";
@@ -26,6 +28,8 @@ export interface QuestionUnitListProps {
   units: UnitDraft[];
   /** 每個單元的驗證錯誤（i18n key 最後一段）；與 units 同序 */
   errorKeys: (string | null)[];
+  /** 是否顯示驗證錯誤（sheet 的 saveAttempted：按過儲存才顯示） */
+  showErrors: boolean;
   onChangeQuestion: (key: string, next: QuestionDraft) => void;
   onChangeGroup: (key: string, next: GroupDraft) => void;
   /** 可移除時傳入（單題編輯模式或只剩一個單元時不傳） */
@@ -39,6 +43,7 @@ export interface QuestionUnitListProps {
 export default function QuestionUnitList({
   units,
   errorKeys,
+  showErrors,
   onChangeQuestion,
   onChangeGroup,
   onRemove,
@@ -51,7 +56,7 @@ export default function QuestionUnitList({
   return (
     <>
       {units.map((u, i) => {
-        const key = errorKeys[i];
+        const key = showErrors ? errorKeys[i] : null;
         const parts = key ? errorKeyParts(key) : null;
         const errorMessage = parts
           ? t(`questionBank.form.errors.${parts.key}`, parts.params)
@@ -67,6 +72,7 @@ export default function QuestionUnitList({
             ttsSettings={ttsSettings}
             programs={programs}
             errorMessage={errorMessage}
+            showErrors={showErrors}
             readOnly={readOnly}
             disabled={disabled}
           />
@@ -80,6 +86,7 @@ export default function QuestionUnitList({
             ttsSettings={ttsSettings}
             programs={programs}
             errorMessage={errorMessage}
+            showErrors={showErrors}
             readOnly={readOnly}
             disabled={disabled}
           />

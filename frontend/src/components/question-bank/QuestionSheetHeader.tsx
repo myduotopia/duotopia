@@ -3,8 +3,9 @@
  *
  * - 左：標題＋（新增單題模式）批次提示「可一次新增 N／上限 題」
  * - 右：預覽（`SheetPreviewButton`；busy 時停用）、刪除（`canDelete` 時）、儲存（非只讀時；
- *   有驗證訊息／busy／沒有單元時停用）、關閉（busy 時停用）
- * - 標題列下方：儲存鈕停用的原因（`validationMessage`），醒目色、不用 hover 也看得到
+ *   只在 busy／沒有單元時停用；驗證失敗不停用，按下由 sheet 擋下並捲到出錯卡）、關閉（busy 時停用）
+ * - 標題列下方：驗證提示（`validationMessage`），醒目色、不用 hover 也看得到。
+ *   sheet 只在老師按過儲存（saveAttempted）後才傳入，打開面板時不顯示
  *
  * 純展示元件：何時可刪／可存、訊息內容都由 QuestionSheet 決定後傳入。testid 與拆檔前相同
  * （qb-delete／qb-save／qb-close／qb-validation）。
@@ -27,6 +28,7 @@ interface QuestionSheetHeaderProps {
   /** 只讀時不顯示儲存鈕 */
   readOnly: boolean;
   canDelete: boolean;
+  /** 驗證提示；老師按過儲存前 sheet 傳 null */
   validationMessage: string | null;
   onDelete: () => void;
   onSave: () => void;
@@ -80,8 +82,7 @@ export default function QuestionSheetHeader({
             <Button
               type="button"
               onClick={onSave}
-              disabled={!!validationMessage || busy || units.length === 0}
-              title={validationMessage ?? undefined}
+              disabled={busy || units.length === 0}
               data-testid="qb-save"
             >
               {saving
@@ -102,7 +103,7 @@ export default function QuestionSheetHeader({
           </Button>
         </div>
       </div>
-      {/* 儲存鈕 disabled 的原因：緊接在標題列下方、醒目色，老師不用 hover 也看得到 */}
+      {/* 驗證提示（按過儲存才有）：緊接在標題列下方、醒目色，老師不用 hover 也看得到 */}
       {validationMessage && (
         <p
           className="px-6 py-1.5 text-xs font-medium text-amber-800 bg-amber-50 border-b border-amber-100 shrink-0"

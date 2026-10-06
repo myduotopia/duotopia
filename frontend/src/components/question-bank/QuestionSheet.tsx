@@ -9,7 +9,11 @@
  *
  * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
  * - 標題列：預覽（`SheetPreviewButton`：單題列出所有題、題組看整個題組；busy 時停用）、
- *   儲存（擋住時下方一行寫原因）、刪除（單題編輯）、關閉
+ *   儲存（只在儲存中／沒有單元時停用）、刪除（單題編輯）、關閉
+ *
+ * 驗證訊息延後顯示：`saveAttempted`（開啟或換一批題目時重設為 false）。打開面板時不顯示
+ * 標題列下方的琥珀色提示，也不顯示卡片紅框／紅字；按儲存若有錯 → 設 true、不送出、捲到第一個
+ * 出錯的單元（不跳 toast），之後即時更新、修好就消失。克漏字「找不到空格」是結構提示，一律即時顯示。
  * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）
  * - 右欄：多個「單元」+「新增題目」
  *
@@ -173,6 +177,8 @@ export default function QuestionSheet({
   const [autoTTS, setAutoTTS] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  /** 老師按過儲存（且被驗證擋下）後才顯示驗證提示與卡片紅字；開啟／換一批題目時重設 */
+  const [saveAttempted, setSaveAttempted] = useState(false);
   const dirtyRef = useRef(false);
 
   /** 所有單題草稿（含題組小題）：驗證重複、語音、AI 都沿用單題邏輯 */
@@ -196,6 +202,7 @@ export default function QuestionSheet({
   useEffect(() => {
     if (!open) return;
     setLoadedGroup(null);
+    setSaveAttempted(false);
     if (mode === "editGroup" && groupId !== null) {
       // 題組編輯：先放空卡佔位，載入後換成整組
       setUnits([]);
@@ -468,7 +475,10 @@ export default function QuestionSheet({
   };
 
   const handleSave = async () => {
-    if (validationMessage || saving || effectiveReadOnly) {
+    if (saving || effectiveReadOnly) return;
+    if (validationMessage) {
+      // 驗證不過：從此顯示提示列與卡片紅字，不送出、捲到第一個出錯的單元（不另跳 toast）
+      setSaveAttempted(true);
       if (firstErrorIndex >= 0) scrollToCard(unitKey(units[firstErrorIndex]));
       return;
     }
@@ -645,7 +655,7 @@ export default function QuestionSheet({
           saving={saving}
           readOnly={effectiveReadOnly}
           canDelete={canDeleteNow}
-          validationMessage={validationMessage}
+          validationMessage={saveAttempted ? validationMessage : null}
           onDelete={handleDelete}
           onSave={handleSave}
           onClose={handleClose}
@@ -741,6 +751,7 @@ export default function QuestionSheet({
               <QuestionUnitList
                 units={units}
                 errorKeys={errorKeys}
+                showErrors={saveAttempted}
                 onChangeQuestion={updateQuestion}
                 onChangeGroup={updateGroup}
                 onRemove={

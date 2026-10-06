@@ -2,6 +2,8 @@
  * MultipleChoiceQuestionSheet 測試（Issue #1064）— 單字集同款左欄 + 右欄多題。
  *
  * 驗證：左欄順序與上傳／AI 為即將推出；進階設定預設收起；考點必填、公開必選擋送出；
+ * 驗證訊息延後顯示（打開時無提示列與卡片紅字、儲存鈕只在儲存中停用；按儲存有錯才出現並捲到
+ * 出錯卡、不送出不跳 toast；修正後即時消失）；
  * 左側批次覆寫所有卡且新增題帶批次值；編輯模式單卡預填走 updateQuestion（含 source_ids）；
  * 逐題送出與部分失敗；批次編輯中途失敗（#1077：停在失敗題、sheet 不關、該卡顯示後端訊息、
  * toast 部分成功）；readOnly；預覽（#1082：略過空白卡、儲存中停用；閱讀／克漏字題組也在標題列，
@@ -368,12 +370,81 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(screen.queryByTestId("qc-0-stem-image-preview")).toBeNull();
   });
 
-  it("驗證順序：題幹 → 選項 → 考點 → 公開設定", async () => {
+  it("打開面板時不顯示驗證提示與卡片紅字（含考點紅框）；儲存鈕可按", () => {
+    renderSheet();
+    expect(screen.queryByTestId("qb-validation")).toBeNull();
+    expect(screen.queryByTestId("qc-0-error")).toBeNull();
+    expect(
+      screen
+        .getByTestId("qc-0-exam-points-trigger")
+        .getAttribute("aria-invalid"),
+    ).toBeNull();
+    expect(saveBtn().disabled).toBe(false);
+    expect(saveBtn().title).toBe("");
+  });
+
+  it("題組打開時不顯示紅字；按儲存後才出現", async () => {
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+    expect(screen.queryByTestId("qb-validation")).toBeNull();
+    expect(screen.queryByTestId("qg-0-error")).toBeNull();
+    await user.click(saveBtn());
+    expect(screen.getByTestId("qb-validation")).toBeTruthy();
+    expect(screen.getByTestId("qg-0-error")).toBeTruthy();
+  });
+
+  it("按儲存有錯：出現提示列與該卡紅字、捲到第一個出錯的卡；不送出、不跳 toast；修正後提示消失", async () => {
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    vi.mocked(toast.error).mockClear();
+    const q1 = baseQuestion({ id: 5, stem: "First" });
+    const q2 = baseQuestion({ id: 6, stem: "" });
+    updateQuestion.mockResolvedValue(q1);
+    const user = userEvent.setup();
+    renderSheet({ questions: [q1, q2] });
+    expect(screen.queryByTestId("qb-validation")).toBeNull();
+    expect(screen.queryByTestId("qc-1-error")).toBeNull();
+
+    await user.click(saveBtn());
+    expect(screen.getByTestId("qb-validation").textContent).toBe(
+      "Q2: stem required",
+    );
+    expect(screen.getByTestId("qc-1-error").textContent).toBe("stem required");
+    expect(screen.queryByTestId("qc-0-error")).toBeNull();
+    expect(updateQuestion).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(
+      scrolled[scrolled.length - 1]?.contains(screen.getByTestId("qc-1-stem")),
+    ).toBe(true);
+
+    // 之後即時更新：修好就消失
+    await user.type(screen.getByTestId("qc-1-stem"), "Fixed");
+    await waitFor(() =>
+      expect(screen.queryByTestId("qb-validation")).toBeNull(),
+    );
+    expect(screen.queryByTestId("qc-1-error")).toBeNull();
+  });
+
+  it("儲存中：儲存鈕 disabled", async () => {
+    updateQuestion.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderSheet({ questions: [baseQuestion()] });
+    expect(saveBtn().disabled).toBe(false);
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(saveBtn().disabled).toBe(true);
+  });
+
+  it("驗證順序：題幹 → 選項 → 考點 → 公開設定（按過儲存後即時更新）", async () => {
     const user = userEvent.setup();
     renderSheet();
+    await user.click(saveBtn());
     expect(screen.getByTestId("qb-validation").textContent).toBe(
       "Q1: stem required",
     );
+    expect(createQuestion).not.toHaveBeenCalled();
     await fillCard(user, 0, "What?", [
       ["a", true],
       ["b", false],
@@ -390,7 +461,10 @@ describe("MultipleChoiceQuestionSheet", () => {
         "Q1: visibility required",
       ),
     );
-    expect(saveBtn().disabled).toBe(true);
+    // 驗證失敗不再停用儲存鈕；按下仍擋住不送出
+    expect(saveBtn().disabled).toBe(false);
+    await user.click(saveBtn());
+    expect(createQuestion).not.toHaveBeenCalled();
   });
 
   it("考點只在單題設定：右側卡片可挑考點；左側沒有考點批次卡", async () => {
@@ -427,6 +501,7 @@ describe("MultipleChoiceQuestionSheet", () => {
       ["a", true],
       ["b", false],
     ]);
+    await user.click(saveBtn());
     await waitFor(() =>
       expect(screen.getByTestId("qb-validation").textContent).toBe(
         "Q1: dup in batch",
@@ -449,6 +524,7 @@ describe("MultipleChoiceQuestionSheet", () => {
     renderSheet();
     await fillCard(user, 0, "Exists", [["a", true]]);
     expect(await screen.findByTestId("qc-0-duplicate")).toBeTruthy();
+    await user.click(saveBtn());
     await waitFor(() =>
       expect(screen.getByTestId("qb-validation").textContent).toBe(
         "Q1: duplicate",

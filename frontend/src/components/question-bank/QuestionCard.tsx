@@ -15,6 +15,8 @@
  * 重複偵測每卡各自 debounce 呼叫 similar API；結果存回 draft.similar。
  * 考點／年段／教材關聯用共用元件（ExamPointPicker / GradeRangeSlider / ProgramLessonPicker），
  * 與左側批次設定同一套。
+ * 驗證顯示：`errorMessage`（底部紅字＋紅框）由外層在老師按過儲存後才傳；考點空值的紅框
+ * 由 `showErrors` 控制（sheet 傳 saveAttempted），打開面板時不會一片紅。後端 `serverError` 一律顯示。
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -65,6 +67,8 @@ export interface QuestionCardProps {
   programs: Program[];
   /** 這張卡目前的驗證訊息（由外層算，含批內重複） */
   errorMessage: string | null;
+  /** 是否顯示必填欄位（考點）的空值紅框（預設 true；sheet 在老師按過儲存前傳 false） */
+  showErrors?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
   /** 克漏字小題：題幹可空（只顯示編號與選項）；閱讀／單題恆 false */
@@ -93,6 +97,7 @@ export default function QuestionCard({
   ttsSettings,
   programs,
   errorMessage,
+  showErrors = true,
   readOnly = false,
   disabled = false,
   stemOptional = false,
@@ -473,7 +478,7 @@ export default function QuestionCard({
           value={draft.exam_points}
           onChange={(exam_points) => patch({ exam_points })}
           disabled={locked}
-          required
+          required={showErrors}
           compact
           data-testid={tid("exam-points")}
         />
