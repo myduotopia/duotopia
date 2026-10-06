@@ -2,6 +2,9 @@
 
 Run from backend/ with DATABASE_URL pointing at the local loadtest Postgres.
 Writes tokens.json (student JWTs + SA ids) next to this file.
+
+``--tokens-only``：不重新 seed，只替已存在的學生重簽 token（bench.sh 每次都會跑，
+避免 token 過期造成整輪 401）。
 """
 import json
 import os
@@ -42,7 +45,37 @@ WORDS = [
     ("winter", "冬天"),
 ]
 
+TOKENS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tokens.json")
+
+
+def write_tokens(db):
+    rows = (
+        db.query(StudentAssignment.id, StudentAssignment.student_id)
+        .filter(StudentAssignment.title == "lt-quiz")
+        .order_by(StudentAssignment.id)
+        .all()
+    )
+    if not rows:
+        sys.exit("no seeded students found; run without --tokens-only first")
+    out = [
+        {
+            "sa_id": sa_id,
+            "token": create_access_token(
+                {"sub": str(student_id), "type": "student"},
+                expires_delta=timedelta(days=1),
+            ),
+        }
+        for sa_id, student_id in rows
+    ]
+    with open(TOKENS_PATH, "w") as f:
+        json.dump(out, f)
+    return len(out)
+
+
 db = SessionLocal()
+if "--tokens-only" in sys.argv:
+    print(f"refreshed {write_tokens(db)} tokens")
+    sys.exit(0)
 if db.query(Teacher).filter(Teacher.email == "lt-teacher@test.com").first():
     sys.exit("already seeded; drop the DB first")
 pw = get_password_hash("password123")
@@ -99,7 +132,6 @@ db.add(a)
 db.flush()
 db.add(AssignmentContent(assignment_id=a.id, content_id=ct.id, order_index=1))
 
-out = []
 for n in range(N):
     s = Student(
         name=f"s{n}",
@@ -123,11 +155,6 @@ for n in range(N):
         assigned_at=datetime.now(timezone.utc),
     )
     db.add(sa)
-    db.flush()
-    tok = create_access_token(
-        {"sub": str(s.id), "type": "student"}, expires_delta=timedelta(days=1)
-    )
-    out.append({"sa_id": sa.id, "token": tok})
 db.commit()
-json.dump(out, open(os.path.join(os.path.dirname(__file__), "tokens.json"), "w"))
+write_tokens(db)
 print(f"seeded {N} students, assignment {a.id}, items {[it.id for it in items]}")

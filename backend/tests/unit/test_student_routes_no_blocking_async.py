@@ -7,6 +7,10 @@ request。全班同時作答時，這會讓連無關的 ``/students/me`` 也跟�
 
 沒有 await 的 handler 一律宣告成 ``def``，讓 FastAPI 丟到 threadpool 執行。
 真的需要 await 的 handler（例如產音檔、上傳錄音）才保留 ``async def``。
+
+限制：只抓「完全沒有 await」的 async handler。若 handler 有 await、同時又在
+event loop 上做大量同步 DB 查詢，這裡抓不到 —— 那種情況要把同步段落包進
+``run_in_threadpool``，review 時請留意。
 """
 
 import ast
@@ -44,7 +48,9 @@ def _uses_await(node: ast.AsyncFunctionDef) -> bool:
 
 
 @pytest.mark.parametrize(
-    "path", sorted(STUDENT_ROUTERS.glob("*.py")), ids=lambda p: p.name
+    "path",
+    sorted(p for p in STUDENT_ROUTERS.glob("*.py") if p.name != "__init__.py"),
+    ids=lambda p: p.name,
 )
 def test_async_student_handlers_actually_await(path):
     offenders = [
