@@ -276,6 +276,16 @@ class TestUploadImage:
             self._file(tmp_path, gif, "b.gif"), issue=1, runner=FakeRunner()
         ).endswith(".gif")
 
+    def test_hero_over_1mb_rejected(self, tmp_path):
+        big = JPEG + b"0" * (1024 * 1024)
+        with pytest.raises(SystemExit, match="1 MB"):
+            ra.upload_image(
+                self._file(tmp_path, big, "h.jpg"),
+                issue=1,
+                hero=True,
+                runner=FakeRunner(),
+            )
+
     def test_rejects_over_10mb(self, tmp_path):
         big = PNG + b"0" * (10 * 1024 * 1024)
         with pytest.raises(SystemExit, match="10 MB"):

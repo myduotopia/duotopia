@@ -17,6 +17,7 @@ from typing import Awaitable, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import httpx
+from starlette.concurrency import run_in_threadpool
 
 from services.image_upload import get_image_upload_service
 from utils.image_types import detect_image_type
@@ -24,6 +25,8 @@ from utils.image_types import detect_image_type
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+# LINE Flex hero：JPEG / PNG；檔案大小保守限制 1 MB（新舊文件 1 MB / 10 MB 不一致，取嚴格者）
+HERO_MAX_BYTES = 1024 * 1024
 HERO_MIME_TYPES = ("image/jpeg", "image/png")
 _MAX_REDIRECTS = 3
 _FETCH_TIMEOUT = 15.0
@@ -129,12 +132,15 @@ async def rehost_content_images(
     store = store or store_announcement_image
     result = dict(content)
     warnings: List[str] = []
-    cache: Dict[str, Tuple[str, str]] = {}  # GitHub 網址 → (GCS 網址, mime)
+    # GitHub 網址 → (GCS 網址, mime, bytes)；同一張圖只下載、儲存一次
+    cache: Dict[str, Tuple[str, str, int]] = {}
 
-    async def rehost(url: str) -> Tuple[str, str]:
+    async def rehost(url: str) -> Tuple[str, str, int]:
         if url not in cache:
             data, mime, ext = await fetch(url)
-            cache[url] = (store(data, mime, ext), mime)
+            # GCS 上傳是同步 I/O，丟到 threadpool 避免卡住 event loop
+            stored_url = await run_in_threadpool(store, data, mime, ext)
+            cache[url] = (stored_url, mime, len(data))
         return cache[url]
 
     hero = (result.get("image_url") or "").strip()
@@ -144,11 +150,13 @@ async def rehost_content_images(
             result["image_url"] = hero
         elif is_github_image_url(hero):
             try:
-                stored_url, mime = await rehost(hero)
-                if mime in HERO_MIME_TYPES:
-                    result["image_url"] = stored_url
-                else:
+                stored_url, mime, size = await rehost(hero)
+                if mime not in HERO_MIME_TYPES:
                     warnings.append(f"主圖只能是 JPEG / PNG（目前 {mime}），改用預設圖")
+                elif size > HERO_MAX_BYTES:
+                    warnings.append("主圖超過 1 MB（LINE 限制），改用預設圖")
+                else:
+                    result["image_url"] = stored_url
             except AnnouncementImageError as exc:
                 warnings.append(f"主圖轉存失敗，改用預設圖：{exc}")
         else:
@@ -158,16 +166,26 @@ async def rehost_content_images(
         body = result.get(field)
         if not body:
             continue
+        urls = {
+            match.group(2)
+            for pattern in (_MD_IMAGE_RE, _HTML_IMG_RE)
+            for match in pattern.finditer(body)
+            if is_github_image_url(match.group(2))
+        }
+        mapping: Dict[str, str] = {}
+        for url in sorted(urls):
+            try:
+                mapping[url] = (await rehost(url))[0]
+            except AnnouncementImageError as exc:
+                warnings.append(f"內文圖片轉存失敗，保留原網址：{exc}")
+
+        def swap(match: "re.Match[str]") -> str:
+            # 只替換這個圖片語法裡的完整網址，不會影響以它為前綴的其他網址
+            url = match.group(2)
+            return match.group(1) + mapping.get(url, url) + match.group(3)
+
         for pattern in (_MD_IMAGE_RE, _HTML_IMG_RE):
-            for match in list(pattern.finditer(body)):
-                url = match.group(2)
-                if not is_github_image_url(url):
-                    continue
-                try:
-                    stored_url, _ = await rehost(url)
-                    body = body.replace(url, stored_url)
-                except AnnouncementImageError as exc:
-                    warnings.append(f"內文圖片轉存失敗，保留原網址：{exc}")
+            body = pattern.sub(swap, body)
         result[field] = body
 
     for warning in warnings:

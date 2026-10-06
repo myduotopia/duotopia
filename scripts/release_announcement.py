@@ -51,6 +51,10 @@ OPTIONAL_FIELDS = ("image_url",)
 IMAGE_BUCKET = "duotopia-audio"
 IMAGE_PREFIX = "announcements"
 IMAGE_MAX_BYTES = 10 * 1024 * 1024
+HERO_MAX_BYTES = (
+    1024 * 1024
+)  # LINE Flex hero 保守上限，與 backend/services/announcement_images.py 一致
+# 與 backend/utils/image_types.py 相同的 magic bytes（腳本不能 import backend，修改時兩邊一起改）
 _IMAGE_SIGNATURES = (
     (b"\xff\xd8\xff", "image/jpeg", "jpg"),
     (b"\x89PNG\r\n\x1a\n", "image/png", "png"),
@@ -560,6 +564,8 @@ def upload_image(
     mime, ext = detected
     if hero and mime not in HERO_MIME_TYPES:
         raise SystemExit(f"主圖只能是 JPEG 或 PNG（LINE 卡片限制），目前是 {mime}")
+    if hero and len(data) > HERO_MAX_BYTES:
+        raise SystemExit("主圖請小於 1 MB（LINE 卡片限制），可改用 --hero 截圖產生的 JPEG")
 
     stamp = stamp or datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     name = f"{stamp}-{uuid.uuid4().hex[:8]}.{ext}"

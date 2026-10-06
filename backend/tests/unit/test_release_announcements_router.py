@@ -199,6 +199,24 @@ class TestImageUpload:
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
+    async def test_hero_over_1mb_rejected_body_allowed(self):
+        big = self.PNG + b"0" * (1024 * 1024)
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(big), purpose="hero", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+        assert "1 MB" in exc.value.detail
+
+        with patch.object(
+            ra, "store_announcement_image", return_value="https://x/b.png"
+        ):
+            resp = await ra.upload_announcement_image(
+                file=self._file(big), purpose="body", admin=_Admin()
+            )
+        assert resp["url"] == "https://x/b.png"
+
+    @pytest.mark.asyncio
     async def test_hero_must_be_jpeg_or_png(self):
         with pytest.raises(HTTPException) as exc:
             await ra.upload_announcement_image(

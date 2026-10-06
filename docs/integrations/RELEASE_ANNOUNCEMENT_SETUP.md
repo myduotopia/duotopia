@@ -139,7 +139,7 @@ push main（合併 staging → main PR）
   （`demo@duotopia.com`）快速登入後截取實際畫面；修正類改用 1200×780 圖卡
 - 圖片存在 `gs://duotopia-audio/announcements/`（所有環境共用、公開讀取），
   staging 與 production 草稿可用同一個網址；`/announce release` 沿用各 issue 的圖，不重新截圖
-- 主圖只接受 **JPEG / PNG**（LINE 限制），建議 1200×780（20:13）；單張上限 10 MB
+- 主圖只接受 **JPEG / PNG、小於 1 MB**（LINE 限制），建議 1200×780（20:13）；內文圖片單張上限 10 MB
 - 在 GitHub 網頁直接拖曳貼圖（`github.com/user-attachments/...`）也可以：建立草稿時後端會
   轉存到 GCS（只從 GitHub 圖片網域下載）；轉存失敗時主圖改用預設圖
 - CI 自動產生目前**不截圖**；需要圖片時本機重跑 `/announce #N`，或在後台上傳

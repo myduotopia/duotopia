@@ -130,7 +130,7 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
   `/announce release` 沿用，不重新截圖
 - 後端 `services/announcement_images.py`：只信任 `storage.googleapis.com/<bucket>/`；
   GitHub user-attachments 在建立草稿時轉存（只允許 GitHub 圖片網域，redirect 逐跳檢查、10 MB 上限、
-  magic bytes 驗證）；主圖限 JPEG / PNG；失敗不擋草稿
+  magic bytes 驗證）；主圖限 JPEG / PNG、1 MB；失敗不擋草稿
 - 後台：`POST /api/admin/release-announcements/upload-image?purpose=hero|body`，
   編輯頁「上傳主圖」「插入圖片」（插在游標位置）
 - 預設主圖 `frontend/public/release-announcement-banner.png`（1200×780）

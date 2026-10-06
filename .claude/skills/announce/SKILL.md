@@ -146,7 +146,7 @@ issue **同時**有這兩個標籤才整理公告：
    node scripts/announce/screenshot.mjs --issue N --path /teacher/... --steps steps.json \
      [--selector "CSS"] --out /tmp/step1.png
    ```
-   - `--hero`：主圖，1200×780（20:13，LINE 卡片比例）JPEG
+   - `--hero`：主圖，1200×780（20:13，LINE 卡片比例）JPEG，約 100 KB（主圖上限 1 MB）
    - preview 不存在時工具會改用 staging 並提醒 —— 確認截到的是**新**畫面
    - **用 Read 看過每張截圖**，確認內容正確、沒有彈窗遮擋、沒有個資
 3. **圖卡**（修正類或統整版主圖）：寫一份 1200×780 的 HTML（品牌色 `#4b56ac` / `#7ad7f4`，

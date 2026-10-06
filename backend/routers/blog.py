@@ -350,7 +350,6 @@ def delete_category(
     return {"message": "Category deleted"}
 
 
-# Magic-byte signatures for allowed image types
 @router.post("/upload-image", response_model=ImageUploadResponse)
 async def upload_image(
     file: UploadFile = File(...),

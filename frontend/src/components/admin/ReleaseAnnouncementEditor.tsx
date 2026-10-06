@@ -305,7 +305,8 @@ export default function ReleaseAnnouncementEditor({
                 />
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                LINE 卡片主圖與官網封面，JPEG / PNG，建議 1200×780（20:13）
+                LINE 卡片主圖與官網封面：JPEG / PNG、小於 1 MB，建議
+                1200×780（20:13）
               </p>
               {!imageUrlValid && (
                 <p className="mt-1 text-xs text-red-600">

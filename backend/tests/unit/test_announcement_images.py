@@ -95,6 +95,53 @@ class TestFetchGithubImage:
                 await ai.fetch_github_image(GH, client=c)
 
 
+class TestStoreAnnouncementImage:
+    def test_local_mode_uses_shared_storage(self, monkeypatch):
+        class FakeService:
+            use_gcs = False
+
+            def store_image_bytes(self, content, content_type):
+                return f"/static/images/x.{content_type.split('/')[1]}"
+
+        monkeypatch.setattr(ai, "get_image_upload_service", lambda: FakeService())
+        assert ai.store_announcement_image(PNG, "image/png", "png") == (
+            "/static/images/x.png"
+        )
+
+    def test_gcs_mode_writes_announcements_prefix(self, monkeypatch):
+        uploaded = {}
+
+        class Blob:
+            def __init__(self, name):
+                self.name = name
+
+            def upload_from_string(self, content, content_type):
+                uploaded[self.name] = content_type
+
+        class Bucket:
+            def blob(self, name):
+                return Blob(name)
+
+        class Client:
+            def bucket(self, name):
+                assert name == "duotopia-audio"
+                return Bucket()
+
+        class FakeService:
+            use_gcs = True
+            bucket_name = "duotopia-audio"
+
+            def _get_storage_client(self):
+                return Client()
+
+        monkeypatch.setattr(ai, "get_image_upload_service", lambda: FakeService())
+        monkeypatch.setenv("ENVIRONMENT", "staging")
+        url = ai.store_announcement_image(PNG, "image/png", "png")
+        (name,) = uploaded
+        assert name.startswith("announcements/staging/") and name.endswith(".png")
+        assert url == f"https://storage.googleapis.com/duotopia-audio/{name}"
+
+
 class TestRehostContentImages:
     @staticmethod
     def _fakes(data=PNG, mime="image/png", ext="png", fail=False):
@@ -155,6 +202,43 @@ class TestRehostContentImages:
         )
         assert "image_url" not in result
         assert any("JPEG" in w for w in warnings)
+
+    @pytest.mark.asyncio
+    async def test_hero_over_1mb_is_dropped(self):
+        """LINE hero 圖片保守限制 1 MB；內文圖片仍可到 10 MB"""
+        big = PNG + b"0" * ai.HERO_MAX_BYTES
+        fetch, store, _ = self._fakes(data=big)
+        result, warnings = await ai.rehost_content_images(
+            {"image_url": GH, "article_body_zh": f"![a]({GH})"},
+            fetch=fetch,
+            store=store,
+        )
+        assert "image_url" not in result
+        assert any("1 MB" in w for w in warnings)
+        assert "storage.googleapis.com" in result["article_body_zh"]
+
+    @pytest.mark.asyncio
+    async def test_replacement_does_not_touch_longer_urls(self):
+        """只換整個網址，不會把以它為前綴的另一個網址改壞"""
+        longer = GH + "-v2"
+        stored = {}
+
+        async def fetch(url):
+            return PNG, "image/png", "png"
+
+        def store(content, content_type, extension):
+            url = f"https://storage.googleapis.com/duotopia-audio/announcements/{len(stored)}.png"
+            stored[url] = True
+            return url
+
+        body = f"![a]({GH})\n\n![b]({longer})"
+        result, _ = await ai.rehost_content_images(
+            {"article_body_zh": body}, fetch=fetch, store=store
+        )
+        new_body = result["article_body_zh"]
+        assert GH not in new_body
+        assert "-v2" not in new_body
+        assert len(stored) == 2
 
     @pytest.mark.asyncio
     async def test_failed_download_keeps_draft_going(self):

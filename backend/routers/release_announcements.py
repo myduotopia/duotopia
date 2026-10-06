@@ -37,6 +37,7 @@ from models.release_announcement import (
 from routers.admin import get_current_admin
 from utils.image_types import detect_image_type
 from services.announcement_images import (
+    HERO_MAX_BYTES,
     HERO_MIME_TYPES,
     MAX_IMAGE_BYTES,
     store_announcement_image,
@@ -267,7 +268,8 @@ async def upload_announcement_image(
     admin: Teacher = Depends(get_current_admin),
 ):
     """上傳公告圖片（#1100）：主圖只收 JPEG / PNG（LINE 限制），內文圖片不限；上限 10 MB。"""
-    content = await file.read()
+    # 最多讀到上限 + 1 byte 就停，避免把超大檔整個載入記憶體
+    content = await file.read(MAX_IMAGE_BYTES + 1)
     if len(content) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="圖片超過 10 MB")
     detected = detect_image_type(content)
@@ -276,6 +278,10 @@ async def upload_announcement_image(
     mime, ext = detected
     if purpose == "hero" and mime not in HERO_MIME_TYPES:
         raise HTTPException(status_code=400, detail="主圖只能是 JPEG 或 PNG（LINE 卡片限制）")
+    if purpose == "hero" and len(content) > HERO_MAX_BYTES:
+        raise HTTPException(
+            status_code=400, detail="主圖請小於 1 MB（LINE 卡片限制），可先壓縮或改用 JPEG"
+        )
     url = await run_in_threadpool(store_announcement_image, content, mime, ext)
     return {"url": url}
 
