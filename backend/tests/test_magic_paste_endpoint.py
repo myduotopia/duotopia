@@ -950,3 +950,41 @@ def test_non_admin_still_limited(shared_test_session, demo_teacher):
     status = mpq.get_quota_status(shared_test_session, demo_teacher)
     assert status["unlimited"] is False
     assert status["free_used"] == 1
+
+
+def test_endpoint_admin_unlimited_does_not_count_or_deduct(
+    test_client,
+    auth_headers_teacher,
+    demo_teacher,
+    shared_test_session,
+    mock_extract,
+    monkeypatch,
+):
+    """管理者呼叫端點：200、quota.unlimited=True、不建當月計數列、不扣點（#1084）。"""
+    from services.quota_service import QuotaService
+
+    demo_teacher.is_admin = True
+    shared_test_session.commit()
+
+    def fail_deduct(*args, **kwargs):
+        pytest.fail("管理者擷取不應呼叫 QuotaService.deduct_quota")
+
+    monkeypatch.setattr(QuotaService, "deduct_quota", staticmethod(fail_deduct))
+
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["items"]) == 1
+    assert body["charge"]["charged"] == "unlimited"
+    assert body["quota"]["unlimited"] is True
+    assert body["quota"]["can_use"] is True
+
+    shared_test_session.expire_all()
+    assert (
+        mpq._get_usage(shared_test_session, demo_teacher.id, mpq.current_year_month())
+        is None
+    )

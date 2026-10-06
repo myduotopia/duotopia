@@ -12,6 +12,7 @@
 計數以 magic_paste_usage 表記錄（每位老師每個 year_month 一列）。
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -20,6 +21,8 @@ from sqlalchemy.exc import IntegrityError
 
 from models import Teacher, MagicPasteUsage
 from services.quota_service import QuotaService
+
+logger = logging.getLogger(__name__)
 
 # 每位老師每月免費張數
 FREE_MONTHLY_LIMIT = 5
@@ -155,6 +158,15 @@ def consume(
     """
     ym = year_month or current_year_month()
     if is_unlimited(teacher):
+        # 不計數也不扣點，但保留 AI 成本可見性
+        detail = feature_detail or {}
+        logger.info(
+            "[magic-paste] admin unlimited extract teacher_id=%s extract_mode=%s "
+            "estimated_cost_usd=%s",
+            teacher.id,
+            detail.get("extract_mode"),
+            detail.get("estimated_cost_usd"),
+        )
         return {
             "charged": "unlimited",
             "points_used": 0,

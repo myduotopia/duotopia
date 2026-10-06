@@ -7,6 +7,8 @@
  * - 手機：由 MagicPasteDialog 包在 Dialog 裡
  *
  * 只負責「擷取 + 預覽 + 回傳」；插入後的翻譯/例句/語音補洞由呼叫端處理。
+ *
+ * 配額：管理者（`is_admin`）帳號顯示「不限張數」；擷取回應未帶 `unlimited` 時沿用前次判定。
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
