@@ -279,7 +279,8 @@ describe("GroupPreview", () => {
         ...emptyGroupDraft("reading"),
         title: "At the Park",
         layout: comicDoc,
-        passage_text: "Sunday\n\nMary: Where are you going?\nHank: To the park.",
+        passage_text:
+          "Sunday\n\nMary: Where are you going?\nHank: To the park.",
         segments: [
           { speaker_label: "Mary", transcript: "Where are you going?" },
           { speaker_label: "Hank", transcript: "To the park." },
