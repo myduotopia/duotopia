@@ -18,6 +18,13 @@ allowed-tools: Bash, Read, Write, Grep, Glob, AskUserQuestion
 
 **開始時宣告：**「我使用 announce skill 整理更新公告內容。」
 
+> **CI 會自動執行同樣的流程，本機版是保險 / 覆寫：**
+> - issue 同時有兩個標籤時，`announce-issue.yml` 會自動產生公告留言（Opus 5.5）並 LINE 通知
+> - 開 staging → main PR 時，`announce-release.yml` 會自動統整寫進 PR 描述並 LINE 通知
+> - 已經有公告留言 / 完整區塊時 CI 不覆蓋；本機重跑 `/announce` 會覆蓋 CI 版本
+>
+> 所以本機只在「CI 失敗（LINE 會通知）」或「想重寫內容」時才需要執行。
+
 這個 skill **只寫內容，不對外發布**。實際發 LINE / 官網一律由管理者在後台
 「更新公告」頁按「發布」。
 
@@ -106,6 +113,8 @@ issue **同時**有這兩個標籤才整理公告：
      `Release: staging → main（#N 短名、#M 短名）`（列出本次所有 issue，不只 eligible），
      描述包含「本次發版內容」表格（issue / 內容 / commit），比照過去的 release PR（例：#1072）。
      開 PR 前先讓使用者確認標題與描述。
+     **開 PR 時就把 `render --issues ...` 產生的公告區塊放進描述**（不要先開 PR 再補）：
+     PR 一開，`announce-release.yml` 就會檢查描述，已有完整區塊才會略過自動統整。
 6. `upsert-pr <PR> --content <json> --issues <eligible issue，逗號分隔>`，回報 PR 網址。
    - 腳本會再檢查一次 `--issues` 的標籤，列入不符合的 issue 會被拒絕。
    - 描述裡原本的內容會保留，只替換（或附加）公告區塊。
