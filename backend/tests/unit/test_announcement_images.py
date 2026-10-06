@@ -23,6 +23,10 @@ class TestUrlPolicy:
         assert not ai.is_trusted_image_url(
             "https://storage.googleapis.com/other-bucket/a.png"
         )
+        # 只信任公告圖片資料夾，不是整個 bucket（bucket 內還有學生錄音等）
+        assert not ai.is_trusted_image_url(
+            "https://storage.googleapis.com/duotopia-audio/recordings/x.webm"
+        )
 
     @pytest.mark.parametrize(
         "url, expected",
@@ -35,6 +39,8 @@ class TestUrlPolicy:
             ("https://github.com.evil.com/user-attachments/assets/x", False),
             ("https://169.254.169.254/latest/meta-data", False),
             ("https://evil.com/?u=github.com/user-attachments/", False),
+            # camo 是 GitHub 的圖片代理，會代抓任意外部網址 → 不能列入白名單
+            ("https://camo.githubusercontent.com/abc/68747470", False),
         ],
     )
     def test_github_image_url(self, url, expected):
@@ -239,6 +245,19 @@ class TestRehostContentImages:
         assert GH not in new_body
         assert "-v2" not in new_body
         assert len(stored) == 2
+
+    @pytest.mark.asyncio
+    async def test_rehosts_at_most_10_images(self):
+        """每則草稿最多轉存 10 張，避免 webhook 逾時；其餘保留原網址並警告"""
+        fetch, store, stored = self._fakes()
+        urls = [f"{GH}{i:02d}" for i in range(12)]
+        body = "\n\n".join(f"![{i}]({u})" for i, u in enumerate(urls))
+        result, warnings = await ai.rehost_content_images(
+            {"article_body_zh": body}, fetch=fetch, store=store
+        )
+        assert len(stored) == ai.MAX_REHOST_IMAGES == 10
+        assert result["article_body_zh"].count(GH) == 2
+        assert any("10" in w for w in warnings)
 
     @pytest.mark.asyncio
     async def test_failed_download_keeps_draft_going(self):

@@ -28,14 +28,16 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 # LINE Flex hero：JPEG / PNG；檔案大小保守限制 1 MB（新舊文件 1 MB / 10 MB 不一致，取嚴格者）
 HERO_MAX_BYTES = 1024 * 1024
 HERO_MIME_TYPES = ("image/jpeg", "image/png")
+# 每則草稿最多轉存幾張 GitHub 圖片（轉存在 webhook request 內進行，避免逾時）
+MAX_REHOST_IMAGES = 10
 _MAX_REDIRECTS = 3
 _FETCH_TIMEOUT = 15.0
 
+# 不含 camo.githubusercontent.com：camo 是會代抓任意外部網址的 proxy，等於放寬 SSRF 白名單
 _GITHUB_IMAGE_HOSTS = (
     "user-images.githubusercontent.com",
     "private-user-images.githubusercontent.com",
     "objects.githubusercontent.com",
-    "camo.githubusercontent.com",
 )
 _BODY_FIELDS = ("article_body_zh", "article_body_en")
 _MD_IMAGE_RE = re.compile(r"(!\[[^\]]*\]\(\s*<?)([^)\s>]+)(>?[^)]*\))")
@@ -54,7 +56,10 @@ def _bucket_name() -> str:
 
 
 def is_trusted_image_url(url: str) -> bool:
-    return (url or "").startswith(f"https://storage.googleapis.com/{_bucket_name()}/")
+    # 只信任公告圖片資料夾（bucket 內還有學生錄音等其他檔案）
+    return (url or "").startswith(
+        f"https://storage.googleapis.com/{_bucket_name()}/announcements/"
+    )
 
 
 def is_github_image_url(url: str) -> bool:
@@ -137,6 +142,10 @@ async def rehost_content_images(
 
     async def rehost(url: str) -> Tuple[str, str, int]:
         if url not in cache:
+            if len(cache) >= MAX_REHOST_IMAGES:
+                raise AnnouncementImageError(
+                    f"每則公告最多轉存 {MAX_REHOST_IMAGES} 張圖片，其餘請在後台上傳"
+                )
             data, mime, ext = await fetch(url)
             # GCS 上傳是同步 I/O，丟到 threadpool 避免卡住 event loop
             stored_url = await run_in_threadpool(store, data, mime, ext)
