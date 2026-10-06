@@ -55,6 +55,7 @@ import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
 import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
+import { LevelBadge } from "@/components/classroom/LevelBadge";
 
 interface ClassroomDetail {
   id: number;
@@ -62,6 +63,7 @@ interface ClassroomDetail {
   description?: string;
   level?: string;
   grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
+  is_active?: boolean; // false = 停用（列表帶 include_inactive 才會出現）（#1097）
   student_count: number;
   students: Array<{
     id: number;
@@ -253,7 +255,8 @@ export default function TeacherClassrooms() {
           mode?: string;
           school_id?: string;
           organization_id?: string;
-        } = {};
+          include_inactive?: boolean;
+        } = { include_inactive: true };
 
         if (mode === "personal") {
           apiParams.mode = "personal";
@@ -427,28 +430,6 @@ export default function TeacherClassrooms() {
       month: "2-digit",
       day: "2-digit",
     });
-  };
-
-  const getLevelBadge = (level?: string) => {
-    const levelColors: Record<string, string> = {
-      PREA: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-      A1: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-      A2: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-      B1: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-      B2: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-      C1: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-      C2: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-    };
-    const color =
-      levelColors[level?.toUpperCase() || "A1"] ||
-      "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}
-      >
-        {level || "A1"}
-      </span>
-    );
   };
 
   // Sort toggle handler
@@ -848,7 +829,7 @@ export default function TeacherClassrooms() {
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           ID: {classroom.id}
                         </span>
-                        {getLevelBadge(classroom.level)}
+                        <LevelBadge level={classroom.level} />
                       </div>
                       <Link
                         to={`/teacher/classroom/${classroom.id}`}
@@ -1066,7 +1047,9 @@ export default function TeacherClassrooms() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{getLevelBadge(classroom.level)}</TableCell>
+                        <TableCell>
+                          <LevelBadge level={classroom.level} />
+                        </TableCell>
                         <TableCell
                           className={`text-xs sm:text-sm ${
                             isValidGrade(classroom.grade)

@@ -4,6 +4,8 @@
  * 個人「我的班級」與機構後台班級管理共用：
  * - 年級選項與篩選值
  * - computeGradeAdjust：批次升／降一級時，算出「會變動」與「略過（含原因）」兩組
+ * - formatClassroomDisplayName：組合班名（年級 8＋名稱「12」→「8年12班」／「Grade 8 Class 12」），
+ *   學生端各處與老師端派作業、學生管理、班級詳情、作業管理共用；「我的班級」列表本身仍分兩欄
  *
  * 升降計算在前端完成，後端批次端點只負責驗證範圍與權限後寫入。
  * 班級 id 型別不同（個人端 number、機構端 string），所以函式對 id 泛型。
@@ -60,6 +62,30 @@ export function formatGradeLabel(
   return isValidGrade(grade)
     ? t("classroomGrade.gradeLabel", { grade })
     : t("classroomGrade.unset");
+}
+
+/** 名稱已自帶年級／班級字樣時不再組合（中文「年」「班」、英文 grade／class 不分大小寫） */
+const DISPLAY_NAME_SKIP_PATTERN = /[年班]|grade|class/i;
+
+/**
+ * 組合班名：有效年級（1–12）且名稱未自帶「年／班／Grade／Class」時，
+ * 回傳 t("classroomGrade.displayName")（「8年12班」／「Grade 8 Class 12」）；
+ * 否則回傳原始名稱。只在畫面渲染時呼叫，不要把結果存進 store（切換語言才會重算）。
+ */
+export function formatClassroomDisplayName(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  classroom: { name: string; grade?: number | null },
+): string {
+  const { name, grade } = classroom;
+  const trimmed = (name ?? "").trim();
+  if (
+    !isValidGrade(grade) ||
+    !trimmed ||
+    DISPLAY_NAME_SKIP_PATTERN.test(trimmed)
+  ) {
+    return name;
+  }
+  return t("classroomGrade.displayName", { grade, name: trimmed });
 }
 
 /** 年級是否符合篩選值 */

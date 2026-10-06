@@ -33,6 +33,7 @@ export interface ClassroomInfo {
   description?: string;
   level?: string;
   grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
+  is_active?: boolean; // false = 停用；老師列表帶 include_inactive=true 才會出現（#1097）
   student_count: number;
   students: Student[];
   program_count?: number;
@@ -46,6 +47,7 @@ export interface Classroom {
   name: string;
   description?: string;
   level?: string;
+  grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
   student_count: number;
   program_count?: number;
   created_at?: string;

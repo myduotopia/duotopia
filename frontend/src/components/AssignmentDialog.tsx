@@ -95,6 +95,7 @@ import { PracticeModeSettingsPanel } from "./assignment/PracticeModeSettingsPane
 import { ContentSelectCard } from "./assignment/ContentSelectCard";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
 // #854 B2-a: 派發預覽改吃單一 registry（消除手寫 ternary 鏈），各 *Preview 元件
 // 已移入 activityRegistry。
@@ -179,6 +180,7 @@ interface AssignmentDialogProps {
 interface SelectedClassroom {
   id: number;
   name: string;
+  grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   school_id: string;
   students: Student[];
   selectedStudentIds: number[];
@@ -212,6 +214,7 @@ function recalcClassroom(c: SelectedClassroom): SelectedClassroom {
 interface ClassroomOption {
   id: number;
   name: string;
+  grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   student_count: number;
   school_id?: string;
   school_name?: string;
@@ -674,6 +677,7 @@ export function AssignmentDialog({
             recalcClassroom({
               id: classroom.id,
               name: classroom.name,
+              grade: classroom.grade,
               school_id: classroom.school_id || effectiveSchoolId || "",
               students: students || [],
               selectedStudentIds: [],
@@ -686,7 +690,7 @@ export function AssignmentDialog({
       } catch {
         toast.error(
           t("dialogs.assignmentDialog.errors.loadStudentsFailed", {
-            name: classroom.name,
+            name: formatClassroomDisplayName(t, classroom),
           }),
         );
       }
@@ -1498,7 +1502,7 @@ export function AssignmentDialog({
             if (isExampleSentenceRequiredError(err)) {
               throw err;
             }
-            failedClassroomNames.push(classroom.name);
+            failedClassroomNames.push(formatClassroomDisplayName(t, classroom));
             console.error(
               `Failed to create assignment for ${classroom.name}:`,
               err,
@@ -2889,7 +2893,7 @@ export function AssignmentDialog({
                               />
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">
-                                  {classroom.name}
+                                  {formatClassroomDisplayName(t, classroom)}
                                 </p>
                                 <p className="text-xs text-gray-500">
                                   {t(
@@ -3216,7 +3220,7 @@ export function AssignmentDialog({
                           value={String(idx)}
                           className="text-xs"
                         >
-                          {classroom.name}
+                          {formatClassroomDisplayName(t, classroom)}
                           <Badge
                             variant="secondary"
                             className="ml-1 text-[10px] px-1"

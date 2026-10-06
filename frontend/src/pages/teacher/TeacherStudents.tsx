@@ -21,6 +21,7 @@ import {
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { Classroom } from "@/types";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 // Extended classroom interface for this page (if needed in future)
 // interface ClassroomWithStudents extends Classroom {
@@ -105,6 +106,7 @@ export default function TeacherStudents() {
         status?: "active" | "inactive" | "suspended";
         last_login?: string | null;
         classroom_name?: string;
+        classroom_grade?: number | null; // 年級 1–12（#1097）
         created_at?: string;
       }
 
@@ -125,6 +127,7 @@ export default function TeacherStudents() {
             classroom_id: student.classroom_id,
             classroom_name:
               student.classroom_name || t("teacherStudents.filters.unassigned"),
+            classroom_grade: student.classroom_grade ?? null,
             created_at: student.created_at,
           };
         },
@@ -259,7 +262,12 @@ export default function TeacherStudents() {
       student.email || "-",
       student.student_number || "-",
       student.birthdate || "-",
-      student.classroom_name || t("teacherStudents.filters.unassigned"),
+      student.classroom_name
+        ? formatClassroomDisplayName(t, {
+            name: student.classroom_name,
+            grade: student.classroom_grade,
+          })
+        : t("teacherStudents.filters.unassigned"),
       student.password_changed
         ? t("teacherStudents.csvHeaders.passwordChanged")
         : t("teacherStudents.csvHeaders.defaultPassword"),
@@ -420,7 +428,7 @@ export default function TeacherStudents() {
                   </option>
                   {classrooms.map((classroom) => (
                     <option key={classroom.id} value={classroom.id}>
-                      {classroom.name}
+                      {formatClassroomDisplayName(t, classroom)}
                     </option>
                   ))}
                 </select>

@@ -1067,7 +1067,8 @@
   "studentAssignmentList": {
     "loading": "載入中...",
     "errors": {
-      "loadFailed": "無法載入作業列表"
+      "loadFailed": "無法載入作業列表",
+      "classroomInactive": "此班級已停用"
     },
     "flowStatus": {
       "title": "作業進度流程",
@@ -6117,6 +6118,7 @@
   "classroomGrade": {
     "gradeLabel": "{{grade}} 年級",
     "unset": "未設定",
+    "displayName": "{{grade}}年{{name}}班",
     "selectPlaceholder": "請選擇年級",
     "required": "請選擇年級",
     "filter": {

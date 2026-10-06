@@ -922,7 +922,8 @@
   "studentAssignmentList": {
     "loading": "Loading...",
     "errors": {
-      "loadFailed": "Unable to load assignment list"
+      "loadFailed": "Unable to load assignment list",
+      "classroomInactive": "This class has been deactivated"
     },
     "flowStatus": {
       "title": "Assignment Progress Flow",
@@ -6073,6 +6074,7 @@
   "classroomGrade": {
     "gradeLabel": "Grade {{grade}}",
     "unset": "Not set",
+    "displayName": "Grade {{grade}} Class {{name}}",
     "selectPlaceholder": "Select a grade",
     "required": "Please select a grade",
     "filter": {

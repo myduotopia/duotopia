@@ -133,6 +133,24 @@ export interface BatchClassroomGradeResponse {
   count: number;
 }
 
+/** 批次更新個人班級（年級／等級／啟用狀態）的單筆內容（#1097）；每筆至少帶一個欄位 */
+export interface BatchClassroomUpdateItem {
+  classroom_id: number;
+  grade?: number;
+  level?: string;
+  is_active?: boolean;
+}
+
+export interface BatchClassroomUpdateResponse {
+  updated: {
+    id: number;
+    grade: number | null;
+    level: string | null;
+    is_active: boolean;
+  }[];
+  count: number;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -525,16 +543,23 @@ class ApiClient {
     });
   }
 
+  /**
+   * 老師班級列表。預設只回啟用中的班級；
+   * include_inactive=true 時連停用班級一起回（僅「我的班級」頁使用，#1097）。
+   */
   async getTeacherClassrooms(params?: {
     mode?: string;
     school_id?: string;
     organization_id?: string;
+    include_inactive?: boolean;
   }) {
     const queryParams = new URLSearchParams();
     if (params?.mode) queryParams.append("mode", params.mode);
     if (params?.school_id) queryParams.append("school_id", params.school_id);
     if (params?.organization_id)
       queryParams.append("organization_id", params.organization_id);
+    if (params?.include_inactive)
+      queryParams.append("include_inactive", "true");
 
     const query = queryParams.toString();
     const url = query
@@ -777,6 +802,7 @@ class ApiClient {
       description?: string;
       level?: string;
       grade?: number;
+      is_active?: boolean;
     },
   ) {
     return this.request(`/api/teachers/classrooms/${classroomId}`, {
@@ -808,6 +834,16 @@ class ApiClient {
     items: { classroom_id: number; grade: number }[],
   ): Promise<BatchClassroomGradeResponse> {
     return this.request("/api/teachers/classrooms/batch-grade", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次更新個人班級的年級／等級／啟用狀態（#1097）；全有或全無，最多 200 筆 */
+  async batchUpdateClassrooms(
+    items: BatchClassroomUpdateItem[],
+  ): Promise<BatchClassroomUpdateResponse> {
+    return this.request("/api/teachers/classrooms/batch-update", {
       method: "POST",
       body: JSON.stringify({ items }),
     });

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { StudentGroupBadges } from "@/components/classroom/StudentGroupBadges";
 import { buildStudentGroupIndex, type StudentGroup } from "@/lib/studentGroup";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 import {
   Edit,
   Users,
@@ -38,6 +39,7 @@ export interface Student {
   status?: string;
   classroom_id?: number;
   classroom_name?: string;
+  classroom_grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   phone?: string;
   enrollment_date?: string;
   school_id?: string;
@@ -252,7 +254,10 @@ export default function StudentTable({
                     </span>
                     {student.classroom_name ? (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                        {student.classroom_name}
+                        {formatClassroomDisplayName(t, {
+                          name: student.classroom_name,
+                          grade: student.classroom_grade,
+                        })}
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
@@ -467,7 +472,10 @@ export default function StudentTable({
                       <div className="flex items-center gap-2 mt-1">
                         {student.classroom_name ? (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                            {student.classroom_name}
+                            {formatClassroomDisplayName(t, {
+                              name: student.classroom_name,
+                              grade: student.classroom_grade,
+                            })}
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">

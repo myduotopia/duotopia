@@ -14,6 +14,7 @@ import {
   formatGradeLabel,
   isValidGrade,
 } from "@/components/classroom/classroomGrade";
+import { LevelBadge } from "@/components/classroom/LevelBadge";
 
 export interface Classroom {
   id: string;
@@ -72,27 +73,6 @@ export function ClassroomListTable({
         ? "indeterminate"
         : false;
 
-  const getLevelBadge = (level: string) => {
-    const levelColors: Record<string, string> = {
-      PREA: "bg-gray-100 text-gray-800",
-      A1: "bg-green-100 text-green-800",
-      A2: "bg-blue-100 text-blue-800",
-      B1: "bg-purple-100 text-purple-800",
-      B2: "bg-indigo-100 text-indigo-800",
-      C1: "bg-red-100 text-red-800",
-      C2: "bg-orange-100 text-orange-800",
-    };
-    const color =
-      levelColors[level?.toUpperCase()] || "bg-gray-100 text-gray-800";
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}
-      >
-        {level || "A1"}
-      </span>
-    );
-  };
-
   return (
     <Table>
       <TableHeader>
@@ -142,7 +122,9 @@ export function ClassroomListTable({
               </TableCell>
             )}
             <TableCell className="font-medium">{classroom.name}</TableCell>
-            <TableCell>{getLevelBadge(classroom.program_level)}</TableCell>
+            <TableCell>
+              <LevelBadge level={classroom.program_level} />
+            </TableCell>
             <TableCell
               className={
                 isValidGrade(classroom.grade) ? undefined : "text-gray-400"

@@ -162,7 +162,8 @@ export default function SchoolClassroomsPage() {
       }
 
       const response = await fetch(
-        `${API_URL}/api/schools/${schoolId}/classrooms`,
+        // include_inactive：停用班級也要列出（顯示「停用」徽章、可在編輯視窗重新啟用）（#1097）
+        `${API_URL}/api/schools/${schoolId}/classrooms?include_inactive=true`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },

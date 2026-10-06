@@ -2,6 +2,7 @@
  * 學生作業活動頁面 - 含重試機制 (#280)
  *
  * 從 API 載入資料，然後使用共用的 StudentActivityPageContent 元件顯示
+ * 作業所屬班級已停用（403 classroom_inactive）→ 提示「此班級已停用」並導回作業列表（#1097）
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -15,6 +16,10 @@ import {
   clearErrorLoggingContext,
 } from "@/contexts/ErrorLoggingContext";
 import { retryWithBackoff } from "@/utils/retryHelper";
+import {
+  studentAssignmentErrorKey,
+  throwIfClassroomInactive,
+} from "@/utils/classroomInactive";
 import StudentActivityPageContent from "./StudentActivityPageContent";
 
 // Activity type from API
@@ -156,6 +161,8 @@ export default function StudentActivityPage() {
       );
 
       if (!response.ok) {
+        // 班級已停用 → 403 classroom_inactive，改顯示「此班級已停用」（#1097）
+        await throwIfClassroomInactive(response);
         throw new Error(`Failed to load activities: ${response.status}`);
       }
 
@@ -172,7 +179,14 @@ export default function StudentActivityPage() {
       setTimeLimitPerQuestion(data.time_limit_per_question ?? 0);
     } catch (error) {
       console.error("Failed to load activities:", error);
-      toast.error(t("studentActivityPage.errors.loadFailed"));
+      toast.error(
+        t(
+          studentAssignmentErrorKey(
+            error,
+            "studentActivityPage.errors.loadFailed",
+          ),
+        ),
+      );
       navigate("/student/assignments");
     } finally {
       setLoading(false);

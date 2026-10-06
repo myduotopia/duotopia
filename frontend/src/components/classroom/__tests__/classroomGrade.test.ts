@@ -6,6 +6,7 @@ import {
   GRADE_OPTIONS,
   batchGradeErrorMessageKey,
   computeGradeAdjust,
+  formatClassroomDisplayName,
   isValidGrade,
   matchesGradeFilter,
 } from "../classroomGrade";
@@ -154,5 +155,89 @@ describe("batchGradeErrorMessageKey", () => {
         "classroomGrade.messages.saveFailed",
       );
     }
+  });
+});
+
+describe("formatClassroomDisplayName", () => {
+  const templates: Record<string, Record<string, string>> = {
+    zh: { "classroomGrade.displayName": "{{grade}}年{{name}}班" },
+    en: { "classroomGrade.displayName": "Grade {{grade}} Class {{name}}" },
+  };
+  const makeT =
+    (lang: "zh" | "en") =>
+    (key: string, options?: Record<string, unknown>): string => {
+      const template = templates[lang][key] ?? key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, k: string) =>
+        String(options?.[k] ?? ""),
+      );
+    };
+  const zhT = makeT("zh");
+  const enT = makeT("en");
+
+  it("combines grade and name (zh)", () => {
+    expect(formatClassroomDisplayName(zhT, { name: "12", grade: 8 })).toBe(
+      "8年12班",
+    );
+    expect(formatClassroomDisplayName(zhT, { name: "A", grade: 9 })).toBe(
+      "9年A班",
+    );
+  });
+
+  it("combines grade and name (en)", () => {
+    expect(formatClassroomDisplayName(enT, { name: "12", grade: 8 })).toBe(
+      "Grade 8 Class 12",
+    );
+  });
+
+  it("trims the name before combining", () => {
+    expect(formatClassroomDisplayName(zhT, { name: " 12 ", grade: 8 })).toBe(
+      "8年12班",
+    );
+  });
+
+  it("returns the raw name when grade is missing or invalid", () => {
+    expect(formatClassroomDisplayName(zhT, { name: "12" })).toBe("12");
+    expect(formatClassroomDisplayName(zhT, { name: "12", grade: null })).toBe(
+      "12",
+    );
+    expect(formatClassroomDisplayName(zhT, { name: "12", grade: 0 })).toBe(
+      "12",
+    );
+    expect(formatClassroomDisplayName(zhT, { name: "12", grade: 13 })).toBe(
+      "12",
+    );
+    expect(formatClassroomDisplayName(enT, { name: "12", grade: 2.5 })).toBe(
+      "12",
+    );
+  });
+
+  it("returns the raw name when it already contains 年 or 班", () => {
+    expect(
+      formatClassroomDisplayName(zhT, { name: "三年甲班", grade: 3 }),
+    ).toBe("三年甲班");
+    expect(formatClassroomDisplayName(zhT, { name: "8年級", grade: 8 })).toBe(
+      "8年級",
+    );
+    expect(formatClassroomDisplayName(enT, { name: "資優班", grade: 5 })).toBe(
+      "資優班",
+    );
+  });
+
+  it("returns the raw name when it already contains Grade or Class (case-insensitive)", () => {
+    expect(
+      formatClassroomDisplayName(enT, { name: "Grade 8 A", grade: 8 }),
+    ).toBe("Grade 8 A");
+    expect(formatClassroomDisplayName(zhT, { name: "class B", grade: 4 })).toBe(
+      "class B",
+    );
+    expect(
+      formatClassroomDisplayName(enT, { name: "ClassRoom 1", grade: 4 }),
+    ).toBe("ClassRoom 1");
+  });
+
+  it("returns the raw name when it is blank", () => {
+    expect(formatClassroomDisplayName(zhT, { name: "  ", grade: 8 })).toBe(
+      "  ",
+    );
   });
 });
