@@ -84,7 +84,9 @@ export default function QuestionSheetHeader({
               title={validationMessage ?? undefined}
               data-testid="qb-save"
             >
-              {saving ? t("common.saving", "儲存中...") : t("common.save", "儲存")}
+              {saving
+                ? t("common.saving", "儲存中...")
+                : t("common.save", "儲存")}
             </Button>
           )}
           <Button
