@@ -1,8 +1,9 @@
 /**
  * GroupPreview 測試（Issue #1082：預覽完整題組）。
  *
- * 鎖住：主圖文＋小題＋選項都畫出來、圖片選項顯示 img、克漏字顯示「空格 n」且不顯示題幹、
- * 無字無圖的選項不渲染、不出現正確答案／解析、forceStack 選項直排、沒有 layout 時退回題組圖與文字。
+ * 鎖住：主圖文＋小題＋選項都畫出來、克漏字顯示「空格 n」且不顯示題幹、文章已刪掉的空格顯示
+ * 「找不到空格」、不出現正確答案／解析、forceStack 傳到主圖文、沒有 layout 時退回題組圖、文字與單字註解。
+ * 選項顯示規則（無字無圖不渲染、2×2／直排、圖片選項）在 QuestionsPreview.test.tsx。
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -20,7 +21,11 @@ import type { LayoutDoc } from "@/types/questionBank";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) =>
-      key === "questionBank.group.questions.blankN" ? `Blank ${opts?.n}` : key,
+      key === "questionBank.group.questions.blankN"
+        ? `Blank ${opts?.n}`
+        : key === "questionBank.group.questions.blankMissing"
+          ? `Missing ${opts?.n}`
+          : key,
     i18n: { language: "zh-TW" },
   }),
 }));
@@ -32,7 +37,9 @@ const passageDoc: LayoutDoc = {
       columns: [
         {
           span: 1,
-          blocks: [{ type: "paragraph", text: "Tom has a {{1}} dog." }],
+          blocks: [
+            { type: "paragraph", text: "Tom has a {{1}} dog and a {{2}} cat." },
+          ],
         },
       ],
     },
@@ -93,32 +100,6 @@ describe("GroupPreview", () => {
     ).toBeTruthy();
   });
 
-  it("無字無圖的選項不渲染，字母依顯示順序重排；只有圖的選項顯示 img", () => {
-    render(<GroupPreview draft={readingGroup()} />);
-    const opts = within(screen.getByTestId("group-preview-q-0-options"));
-    expect(opts.getAllByRole("listitem")).toHaveLength(3);
-    expect(screen.getByTestId("group-preview-q-0-opt-2")).toHaveTextContent(
-      "(C)",
-    );
-    expect(screen.getByTestId("group-preview-q-0-opt-2-image")).toHaveAttribute(
-      "src",
-      "https://x/opt-d.png",
-    );
-    // 第二題：題幹插圖＋兩個圖片選項
-    expect(screen.getByTestId("group-preview-q-1-stem-image")).toHaveAttribute(
-      "src",
-      "https://x/stem.png",
-    );
-    expect(screen.getByTestId("group-preview-q-1-opt-0-image")).toHaveAttribute(
-      "src",
-      "https://x/a.png",
-    );
-    expect(screen.getByTestId("group-preview-q-1-opt-1-image")).toHaveAttribute(
-      "src",
-      "https://x/b.png",
-    );
-  });
-
   it("不顯示正確答案與解析", () => {
     const { container } = render(<GroupPreview draft={readingGroup()} />);
     expect(container).not.toHaveTextContent("EXPLAIN-SECRET");
@@ -152,33 +133,6 @@ describe("GroupPreview", () => {
     expect(screen.queryByTestId("group-preview-q-0-number")).toBeNull();
   });
 
-  it("選項排版：四個以內短文字 → 2×2；forceStack → 直排；長文字 → 直排", () => {
-    const g = readingGroup();
-    const { unmount } = render(<GroupPreview draft={g} />);
-    const opts = screen.getByTestId("group-preview-q-0-options");
-    expect(opts).toHaveAttribute("data-layout", "grid");
-    expect(opts.className).toContain("md:grid-cols-2");
-    unmount();
-
-    const { unmount: unmount2 } = render(<GroupPreview draft={g} forceStack />);
-    const stacked = screen.getByTestId("group-preview-q-0-options");
-    expect(stacked).toHaveAttribute("data-layout", "stack");
-    expect(stacked.className).toContain("flex-col");
-    expect(screen.getByTestId("layout-renderer")).toHaveAttribute(
-      "data-stack",
-      "true",
-    );
-    unmount2();
-
-    g.questions[0].options[0].text =
-      "A boy who lives next to the library and walks his dog every day";
-    render(<GroupPreview draft={g} />);
-    expect(screen.getByTestId("group-preview-q-0-options")).toHaveAttribute(
-      "data-layout",
-      "stack",
-    );
-  });
-
   it("沒有 layout：退回顯示題組圖與 passage_text；全空顯示空狀態", () => {
     const g = {
       ...emptyGroupDraft("reading"),
@@ -197,5 +151,44 @@ describe("GroupPreview", () => {
 
     render(<GroupPreview draft={emptyGroupDraft()} />);
     expect(screen.getByTestId("group-preview-empty")).toBeTruthy();
+  });
+  it("克漏字：小題指向的空格已不在文章裡 → 顯示「找不到空格」標記", () => {
+    const g = { ...emptyGroupDraft("cloze"), layout: passageDoc };
+    g.questions = [
+      question(g, { blank_index: 1 }),
+      question(g, { blank_index: 5 }),
+    ];
+    render(<GroupPreview draft={g} />);
+    expect(screen.getByTestId("group-preview-q-0-blank")).toHaveTextContent(
+      "Blank 1",
+    );
+    expect(
+      screen.getByTestId("group-preview-q-1-blank-missing"),
+    ).toHaveTextContent("Missing 5");
+  });
+
+  it("forceStack 傳到主圖文（欄位堆疊）", () => {
+    render(<GroupPreview draft={readingGroup()} forceStack />);
+    expect(screen.getByTestId("layout-renderer")).toHaveAttribute(
+      "data-stack",
+      "true",
+    );
+    expect(screen.getByTestId("group-preview-q-0-options")).toHaveAttribute(
+      "data-layout",
+      "stack",
+    );
+  });
+
+  it("沒有 layout 但有單字註解：退回顯示也畫註解框", () => {
+    const g = {
+      ...emptyGroupDraft("reading"),
+      passage_text: "Poster text",
+      glossary: [{ word: "poster", zh: "海報" }],
+    };
+    render(<GroupPreview draft={g} />);
+    const fallback = screen.getByTestId("group-preview-fallback");
+    expect(within(fallback).getByTestId("layout-glossary")).toHaveTextContent(
+      "poster 海報",
+    );
   });
 });

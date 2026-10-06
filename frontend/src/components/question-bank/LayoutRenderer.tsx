@@ -11,8 +11,8 @@
  * - 文字經 `parseInline` 成節點樹渲染：粗體、底線、雙底線、`{{n}}` 畫成底線＋編號；
  *   不使用 dangerouslySetInnerHTML；文字元素 `whitespace-pre-wrap`，段落開頭與連續空格照原樣
  * - glossary 有「word 與中文都非空」的項目時才渲染底部框；全空就不佔位
- * - `InlineText`、`ZoomableImage`（圖＋點擊放大 Dialog）另外匯出，題組預覽（GroupPreview）的
- *   小題題幹／選項共用，不另寫一套
+ * - `InlineText`、`ZoomableImage`（圖＋點擊放大 Dialog）、`GlossaryBox`（單字註解框）另外匯出，
+ *   題組預覽（GroupPreview）／小題預覽（QuestionsPreview）共用，不另寫一套
  */
 
 import { useState, type ReactNode } from "react";
@@ -296,6 +296,34 @@ function Node({
   return <Row row={node} forceStack={forceStack} zoomable={zoomable} />;
 }
 
+/**
+ * 底部單字註解框：只有 word 與中文都非空的項目才算；全空（含編輯中留下的空列）不畫框、不佔位。
+ * 題組預覽沒有 layout 的退回顯示也用這一個，不另寫一套。
+ */
+export function GlossaryBox({
+  glossary,
+}: {
+  glossary: GlossaryEntry[] | null | undefined;
+}) {
+  const { t } = useTranslation();
+  const entries = (glossary ?? []).filter((g) => g.word.trim() && g.zh.trim());
+  if (entries.length === 0) return null;
+  return (
+    <div
+      className="flex flex-wrap gap-x-4 gap-y-1 rounded border border-gray-300 px-3 py-2 text-sm"
+      data-testid="layout-glossary"
+      aria-label={t("questionBank.group.glossary.title")}
+    >
+      {entries.map((g, i) => (
+        <span key={i}>
+          <span className="font-medium">{g.word}</span>{" "}
+          <span className="text-gray-600">{g.zh}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function LayoutRenderer({
   layout,
   glossary,
@@ -303,12 +331,7 @@ export default function LayoutRenderer({
   className,
   zoomable = true,
 }: LayoutRendererProps) {
-  const { t } = useTranslation();
   if (!layout || layout.rows.length === 0) return null;
-  // 只有 word 與中文都非空的項目才算註解；全空（含編輯中留下的空列）就不畫框、不佔位
-  const glossaryEntries = (glossary ?? []).filter(
-    (g) => g.word.trim() && g.zh.trim(),
-  );
   return (
     <div
       className={cn(
@@ -321,20 +344,7 @@ export default function LayoutRenderer({
       {layout.rows.map((n, i) => (
         <Node key={i} node={n} forceStack={forceStack} zoomable={zoomable} />
       ))}
-      {glossaryEntries.length > 0 && (
-        <div
-          className="flex flex-wrap gap-x-4 gap-y-1 rounded border border-gray-300 px-3 py-2 text-sm"
-          data-testid="layout-glossary"
-          aria-label={t("questionBank.group.glossary.title")}
-        >
-          {glossaryEntries.map((g, i) => (
-            <span key={i}>
-              <span className="font-medium">{g.word}</span>{" "}
-              <span className="text-gray-600">{g.zh}</span>
-            </span>
-          ))}
-        </div>
-      )}
+      <GlossaryBox glossary={glossary} />
     </div>
   );
 }
