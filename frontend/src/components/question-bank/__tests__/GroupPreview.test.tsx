@@ -2,7 +2,8 @@
  * GroupPreview 測試（Issue #1082：預覽完整題組）。
  *
  * 鎖住：主圖文＋小題＋選項都畫出來、克漏字顯示「空格 n」且不顯示題幹、文章已刪掉的空格顯示
- * 「找不到空格」、不出現正確答案／解析、forceStack 傳到主圖文、沒有 layout 時退回題組圖、文字與單字註解（只有註解也畫）。
+ * 「找不到空格」、不出現正確答案／解析、forceStack 傳到主圖文、沒有 layout 時退回題組圖、文字與單字註解（只有註解也畫）、
+ * `stimulusView="text"` 文字版預覽（逐句對話／純文字、提示條、不畫圖）。
  * 選項顯示規則（無字無圖不渲染、2×2／直排、圖片選項）在 QuestionsPreview.test.tsx。
  */
 
@@ -253,5 +254,108 @@ describe("GroupPreview", () => {
     );
     const frame = screen.getByTestId("layout-frame");
     expect(within(frame).queryByTestId("group-preview-title")).toBeNull();
+  });
+
+  describe("文字版預覽（#1083：預覽跟著主圖文分頁走）", () => {
+    const comicDoc: LayoutDoc = {
+      version: 1,
+      frame: true,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [
+                { type: "image", url: "https://x/comic.png", alt: "comic" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    function comicGroup(): GroupDraft {
+      const g: GroupDraft = {
+        ...emptyGroupDraft("reading"),
+        title: "At the Park",
+        layout: comicDoc,
+        passage_text: "Sunday\n\nMary: Where are you going?\nHank: To the park.",
+        segments: [
+          { speaker_label: "Mary", transcript: "Where are you going?" },
+          { speaker_label: "Hank", transcript: "To the park." },
+        ],
+        glossary: [{ word: "park", zh: "公園" }],
+      };
+      g.questions = [question(g, { stem: "Where is Hank going?" })];
+      return g;
+    }
+
+    it("有對話文稿：逐句對話＋提示條，不畫圖、不顯示鎖頭說明；標題、外框、註解、小題照常", () => {
+      render(<GroupPreview draft={comicGroup()} stimulusView="text" />);
+      expect(screen.getByTestId("group-preview-text-notice")).toHaveTextContent(
+        "questionBank.group.preview.textViewNotice",
+      );
+      expect(screen.queryByTestId("layout-renderer")).toBeNull();
+      expect(document.querySelector("img")).toBeNull();
+      expect(screen.getByTestId("group-preview-text-line-0")).toHaveTextContent(
+        "Mary: Where are you going?",
+      );
+      expect(screen.getByTestId("group-preview-text-line-1")).toHaveTextContent(
+        "Hank: To the park.",
+      );
+      expect(
+        screen.getByTestId("group-preview-text-narration"),
+      ).toHaveTextContent("Sunday");
+      expect(
+        screen.queryByText("questionBank.group.passage.dialogueReadonly"),
+      ).toBeNull();
+      expect(screen.getByTestId("group-preview-title")).toHaveTextContent(
+        "At the Park",
+      );
+      expect(screen.getByTestId("group-preview-text-body")).toHaveAttribute(
+        "data-framed",
+        "true",
+      );
+      expect(screen.getByTestId("layout-glossary")).toHaveTextContent(
+        "park 公園",
+      );
+      expect(screen.getByTestId("group-preview-q-0")).toHaveTextContent(
+        "Where is Hank going?",
+      );
+    });
+
+    it("沒有對話文稿：顯示文字版純文字（保留換行）", () => {
+      const g = {
+        ...readingGroup(),
+        passage_text: "SALE 50% OFF\nToday only",
+        passage_text_edited: true,
+      };
+      render(<GroupPreview draft={g} stimulusView="text" />);
+      const text = screen.getByTestId("group-preview-text-passage");
+      expect(text.textContent).toBe("SALE 50% OFF\nToday only");
+      expect(text.className).toContain("whitespace-pre-wrap");
+      expect(screen.queryByTestId("layout-renderer")).toBeNull();
+      expect(screen.queryByTestId("group-preview-text-dialogue")).toBeNull();
+    });
+
+    it("沒改過的文字版由排版推導；文字版是空的顯示空狀態", () => {
+      const { unmount } = render(
+        <GroupPreview draft={readingGroup()} stimulusView="text" />,
+      );
+      expect(
+        screen.getByTestId("group-preview-text-passage"),
+      ).toHaveTextContent("Tom has a");
+      unmount();
+      const g = { ...comicGroup(), segments: [], passage_text: "" };
+      render(<GroupPreview draft={g} stimulusView="text" />);
+      expect(screen.getByTestId("group-preview-text-empty")).toBeTruthy();
+    });
+
+    it("排版模式（預設）不變：畫圖、沒有文字版提示", () => {
+      render(<GroupPreview draft={comicGroup()} />);
+      expect(screen.getByTestId("layout-renderer")).toBeTruthy();
+      expect(screen.queryByTestId("group-preview-text-notice")).toBeNull();
+      expect(screen.queryByTestId("group-preview-text-dialogue")).toBeNull();
+    });
   });
 });

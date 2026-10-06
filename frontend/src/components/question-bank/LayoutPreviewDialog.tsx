@@ -5,7 +5,8 @@
  * 開近全螢幕 Dialog，上方切「電腦／手機」；
  * 手機模式以 390px 置中並強制欄位上下堆疊、選項直排。內容是 `GroupPreview`
  * （主圖文＋小題＋選項，不含答案／解析／考點），老師看到的就是學生看到的。
- * 傳入整個題組草稿（`draft`），不再只吃 layout／glossary。
+ * 傳入整個題組草稿（`draft`），不再只吃 layout／glossary；`stimulusView` 轉給 `GroupPreview`
+ * 決定主圖文畫排版或文字版（跟著題組卡目前分頁）。
  *
  * 選擇題面板的「預覽」也用這個 Dialog（同一套電腦／手機切換）：改傳 `questions`，
  * 內容換成 `QuestionsPreview`（所有單題依序 1..n，不含答案／解析／考點）。
@@ -31,6 +32,8 @@ export type LayoutPreviewDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId?: string;
+  /** 題組模式：主圖文畫排版或文字版（`GroupPreview` 的 `stimulusView`） */
+  stimulusView?: "layout" | "text";
 } & (
   | {
       /** 題組草稿（`GroupDraft` 可直接傳） */
@@ -50,6 +53,7 @@ export default function LayoutPreviewDialog({
   draft,
   questions,
   testId = "layout-preview",
+  stimulusView = "layout",
 }: LayoutPreviewDialogProps) {
   const { t } = useTranslation();
   const [mobile, setMobile] = useState(false);
@@ -117,6 +121,7 @@ export default function LayoutPreviewDialog({
               <GroupPreview
                 draft={draft}
                 forceStack={mobile}
+                stimulusView={stimulusView}
                 testId={`${testId}-group`}
               />
             ) : (

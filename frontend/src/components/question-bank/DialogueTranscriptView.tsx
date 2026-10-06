@@ -8,6 +8,7 @@
  * |**Hank:** To the park.|
  *
  * 為什麼唯讀見 GroupCard `PassageTextTab` 的註解；這裡只負責畫。
+ * 題組預覽（`GroupPreview` 文字版）也重用它，傳 `hideReadonlyNote` 不顯示鎖頭說明那行。
  */
 
 import { useTranslation } from "react-i18next";
@@ -19,19 +20,24 @@ export function DialogueTranscriptView({
   narration,
   segments,
   testId,
+  hideReadonlyNote = false,
 }: {
   /** 對話之前的非對話文字（可為空字串） */
   narration: string;
   segments: GroupSegmentInput[];
   testId: string;
+  /** 預覽用：不顯示「無法修改」那行說明 */
+  hideReadonlyNote?: boolean;
 }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-1.5" data-testid={`${testId}-dialogue`}>
-      <p className="flex items-center gap-1 text-xs text-gray-400">
-        <Lock size={12} className="shrink-0" />
-        {t("questionBank.group.passage.dialogueReadonly")}
-      </p>
+      {!hideReadonlyNote && (
+        <p className="flex items-center gap-1 text-xs text-gray-400">
+          <Lock size={12} className="shrink-0" />
+          {t("questionBank.group.passage.dialogueReadonly")}
+        </p>
+      )}
       <div className="rounded-md border border-gray-200 text-sm leading-relaxed">
         {narration && (
           <p

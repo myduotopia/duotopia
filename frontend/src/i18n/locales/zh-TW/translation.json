@@ -6194,7 +6194,8 @@
         "uploadWholeImage": "上傳圖片"
       },
       "preview": {
-        "questionsTitle": "小題"
+        "questionsTitle": "小題",
+        "textViewNotice": "文字版（學生作答時不會看到）"
       },
       "glossary": {
         "title": "單字註解",

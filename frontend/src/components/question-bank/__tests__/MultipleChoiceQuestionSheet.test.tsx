@@ -629,6 +629,28 @@ describe("MultipleChoiceQuestionSheet", () => {
     );
   });
 
+  it("預覽（#1083）跟著主圖文分頁走：文字版分頁按預覽 → 主圖文以文字版呈現", async () => {
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+    await user.click(screen.getByTestId("qg-0-layout-add"));
+    await user.click(await screen.findByTestId("qg-0-layout-add-paragraph"));
+    await user.type(
+      screen.getByTestId("qg-0-layout-block-0-text"),
+      "Text tab body",
+    );
+
+    await user.click(screen.getByTestId("qg-0-tab-text"));
+    await user.click(screen.getByTestId("qb-preview"));
+    const group = await screen.findByTestId("qb-preview-panel-group");
+    expect(
+      within(group).getByTestId("qb-preview-panel-group-text-notice"),
+    ).toBeTruthy();
+    expect(
+      within(group).getByTestId("qb-preview-panel-group-text-passage"),
+    ).toHaveTextContent("Text tab body");
+    expect(within(group).queryByTestId("layout-renderer")).toBeNull();
+  });
+
   it("預覽（#1082）克漏字題組：擷取前 disabled；擷取後標題列預覽看到文章與空格小題", async () => {
     cropImageFileManyMock.mockReset().mockResolvedValue([]);
     uploadImageFileMock.mockReset();

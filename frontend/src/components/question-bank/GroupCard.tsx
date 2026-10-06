@@ -6,7 +6,9 @@
  * |年段|
  * |主圖文：分頁「排版」（LayoutEditor：文件式區塊編輯器；預覽在面板標題列
  *   `SheetPreviewButton`，看整個題組＝主圖文＋小題＋選項，不含答案）｜「文字版」|
- *   標題列右側「整篇加外框」勾選切換 `layout.frame`（還沒有排版時灰掉）|
+ *   標題列右側「整篇加外框」勾選切換 `layout.frame`（還沒有排版時灰掉）。
+ *   分頁是受控的：目前分頁存在草稿 `passage_view`（純 UI 狀態，不送後端），標題列「預覽」
+ *   跟著它走——在文字版分頁按預覽就以文字版呈現主圖文（給老師檢查用，學生仍看排版）|
  * |單字註解（一個文字框，一行一筆「word 中文」）|
  * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
@@ -502,7 +504,13 @@ export default function GroupCard({
         </div>
 
         {/* 主圖文：排版｜文字版 */}
-        <Tabs defaultValue="layout" className="space-y-1">
+        <Tabs
+          value={draft.passage_view}
+          onValueChange={(v) =>
+            patch({ passage_view: v === "text" ? "text" : "layout" })
+          }
+          className="space-y-1"
+        >
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs text-gray-600">
               {t("questionBank.group.layout.title")}

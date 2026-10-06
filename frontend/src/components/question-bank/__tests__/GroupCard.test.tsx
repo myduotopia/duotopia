@@ -277,6 +277,11 @@ describe("GroupCard", () => {
 
     await user.click(screen.getByTestId("qg-0-tab-text"));
     const box = await screen.findByTestId("qg-0-passage-text");
+    // 分頁是受控的：目前分頁寫回草稿（標題列預覽跟著它走），但不送後端
+    expect(lastDraft(onDraft).passage_view).toBe("text");
+    expect(toCreateGroupInput(lastDraft(onDraft))).not.toHaveProperty(
+      "passage_view",
+    );
     // 推導文字（去標記），還沒改過 → 沒有「重新產生」
     expect(box).toHaveValue("Poster intro.");
     expect(screen.queryByTestId("qg-0-passage-text-regen")).toBeNull();

@@ -14,6 +14,7 @@
  *
  * 圖片題組的對話文稿（#1083）：`GroupDraft.segments` 由 AI 擷取、老師不可修改，
  * 有值時文字版由它組成（dialogueTranscript.ts），建立／更新都會帶給後端。
+ * `GroupDraft.passage_view` 是純 UI 狀態（主圖文分頁），toCreate／toUpdateGroupInput 不送。
  */
 
 import type { GradeRange } from "@/components/shared/GradeRangeSlider";
@@ -340,6 +341,8 @@ export interface GroupDraft {
    * 有值時文字版 = 開頭的非對話文字＋逐句對話（dialogueTranscript.ts），不看 edited。
    */
   segments: GroupSegmentInput[];
+  /** 純 UI 狀態（不送後端）：主圖文目前分頁；標題列「預覽」跟著它畫排版或文字版 */
+  passage_view: "layout" | "text";
   /** 小題（groupKey 都指向本題組） */
   questions: QuestionDraft[];
   grade: GradeRange;
@@ -370,6 +373,7 @@ export function emptyGroupDraft(
     passage_text: "",
     passage_text_edited: false,
     segments: [],
+    passage_view: "layout",
     questions: [],
     grade: [...defaults.grade] as GradeRange,
     program_link: defaults.program_link ? { ...defaults.program_link } : null,
@@ -416,6 +420,7 @@ export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
       (g.passage_text ?? "").trim() !== "" &&
       (g.passage_text ?? "").trim() !== layoutToPlainText(g.layout).trim(),
     segments,
+    passage_view: "layout",
     questions: [],
     grade: [g.grade_min, g.grade_max],
     // 題組層沒有教材關聯／來源欄位：以第一個小題的值當左欄預填（各小題仍各自帶）

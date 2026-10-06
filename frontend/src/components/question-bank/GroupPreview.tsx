@@ -9,6 +9,10 @@
  * - 上：主圖文用共用 `LayoutRenderer`（含單字註解、圖片點擊放大）。沒有 layout 時退回顯示
  *   題組圖（`image_url`）、`passage_text` 與單字註解（共用 `GlossaryBox`）；只有單字註解
  *   （至少一筆單字與中文都有填）也算有主圖文，照樣畫出註解框
+ * - `stimulusView="text"`（老師在「文字版」分頁按預覽，#1083）：主圖文區改畫文字版，上方提示條
+ *   「文字版（學生作答時不會看到）」；有對話文稿（`segments`）→ 唯讀逐句 `DialogueTranscriptView`
+ *   （不顯示鎖頭說明），否則 `groupPassageText` 的純文字（保留換行），都空則顯示「還沒有內容」。
+ *   整篇外框（`layout.frame`）照樣套在文字版外；標題、單字註解、小題照常
  * - 下：小題列表交給共用 `QuestionsPreview`（選擇題面板的預覽也用它）
  *   - 閱讀題組依陣列順序 1..n；克漏字依 `blank_index` 排序、顯示徽章「空格 n」且不顯示題幹；
  *     小題指向的空格已不在文章裡時顯示「找不到空格」標記、沒有編號時顯示「未指定空格」
@@ -27,8 +31,11 @@ import LayoutRenderer, {
   ZoomableImage,
 } from "./LayoutRenderer";
 import QuestionsPreview from "./QuestionsPreview";
+import { DialogueTranscriptView } from "./DialogueTranscriptView";
+import { dialogueNarration } from "./dialogueTranscript";
 import {
   clozeOrphanBlanksOf,
+  groupPassageText,
   sortClozeQuestions,
   type GroupDraft,
 } from "./questionDraft";
@@ -43,7 +50,18 @@ export type GroupPreviewData = Pick<
   | "passage_text"
   | "questions"
 > &
-  Partial<Pick<GroupDraft, "title">>;
+  Partial<Pick<GroupDraft, "title" | "segments" | "passage_text_edited">>;
+
+/** 文字版預覽的純文字：與送後端的文字版同規則（`groupPassageText`），沒有則 "" */
+function previewPassageText(draft: GroupPreviewData): string {
+  return (
+    groupPassageText({
+      ...draft,
+      segments: draft.segments ?? [],
+      passage_text_edited: draft.passage_text_edited ?? false,
+    } as GroupDraft) ?? ""
+  );
+}
 
 function groupPreviewHasLayout(draft: GroupPreviewData): boolean {
   return Boolean(draft.layout && draft.layout.rows.length > 0);
@@ -73,6 +91,8 @@ export interface GroupPreviewProps {
   draft: GroupPreviewData;
   /** 手機預覽：主圖文欄位堆疊、選項一律直排 */
   forceStack?: boolean;
+  /** 主圖文要畫排版還是文字版（跟著題組卡目前的分頁 `passage_view`）；預設排版 */
+  stimulusView?: "layout" | "text";
   className?: string;
   testId?: string;
 }
@@ -80,6 +100,7 @@ export interface GroupPreviewProps {
 export default function GroupPreview({
   draft,
   forceStack = false,
+  stimulusView = "layout",
   className,
   testId = "group-preview",
 }: GroupPreviewProps) {
@@ -92,8 +113,12 @@ export default function GroupPreview({
   const passage = draft.passage_text.trim();
   // 文章裡已找不到的空格（老師刪掉了 {{n}}）；clozeOrphanBlanksOf 只讀 question_type／layout／questions
   const missingBlanks = cloze ? clozeOrphanBlanksOf(draft as GroupDraft) : [];
-  const hasStimulus = groupPreviewHasStimulus(draft);
+  const textView = stimulusView === "text";
+  // 文字版一定畫出提示條，小題區照樣用分隔線隔開
+  const hasStimulus = textView || groupPreviewHasStimulus(draft);
   const title = (draft.title ?? "").trim();
+  const segments = draft.segments ?? [];
+  const textVersion = textView ? previewPassageText(draft) : "";
 
   if (!groupPreviewHasContent(draft)) {
     return (
@@ -122,7 +147,47 @@ export default function GroupPreview({
           {title}
         </h2>
       )}
-      {hasLayout ? (
+      {textView ? (
+        <div className="space-y-3" data-testid={`${testId}-text-view`}>
+          <p
+            className="rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700"
+            data-testid={`${testId}-text-notice`}
+          >
+            {t("questionBank.group.preview.textViewNotice")}
+          </p>
+          <div
+            className={cn(
+              draft.layout?.frame && "rounded border border-gray-400 p-4",
+            )}
+            data-testid={`${testId}-text-body`}
+            data-framed={draft.layout?.frame ? "true" : undefined}
+          >
+            {segments.length > 0 ? (
+              <DialogueTranscriptView
+                narration={dialogueNarration(draft.passage_text, segments)}
+                segments={segments}
+                testId={`${testId}-text`}
+                hideReadonlyNote
+              />
+            ) : textVersion ? (
+              <p
+                className="whitespace-pre-wrap break-words leading-relaxed"
+                data-testid={`${testId}-text-passage`}
+              >
+                {textVersion}
+              </p>
+            ) : (
+              <p
+                className="py-4 text-center text-sm text-gray-400"
+                data-testid={`${testId}-text-empty`}
+              >
+                {t("questionBank.group.layout.empty")}
+              </p>
+            )}
+          </div>
+          <GlossaryBox glossary={draft.glossary} />
+        </div>
+      ) : hasLayout ? (
         <LayoutRenderer
           layout={draft.layout}
           glossary={draft.glossary}

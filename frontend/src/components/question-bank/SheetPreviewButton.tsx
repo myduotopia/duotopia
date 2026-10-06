@@ -11,7 +11,9 @@
  *   選項（`draftHasContent` 或 `optionFilled`）
  * - 題組模式（`units` 有 group 單元，一個面板只有一個題組）：`LayoutPreviewDialog` 的 `draft`
  *   模式 → `GroupPreview`（主圖文＋小題＋選項，不含答案）。讀的是 sheet 的題組草稿；排版編輯器
- *   每次編輯都即時 `onChange` 回草稿，所以內容就是編輯器當下的樣子
+ *   每次編輯都即時 `onChange` 回草稿，所以內容就是編輯器當下的樣子。預覽跟著題組卡目前的
+ *   主圖文分頁走（草稿 `passage_view` → `stimulusView`）：在「文字版」分頁按預覽，主圖文就以
+ *   文字版呈現（給老師檢查用；學生仍看排版）
  * - 電腦／手機切換沿用 Dialog 既有機制
  * - disabled：`disabled`（sheet 傳 `busy`：儲存／語音／AI 進行中），或沒有可預覽的內容——
  *   單題模式一題都沒有內容；題組模式 `groupPreviewHasContent` 為否（無排版、無題組圖、無文字版、
@@ -85,6 +87,7 @@ export default function SheetPreviewButton({
           open={open}
           onOpenChange={setOpen}
           draft={group}
+          stimulusView={group.passage_view}
           testId="qb-preview-panel"
         />
       ) : (

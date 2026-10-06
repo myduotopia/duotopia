@@ -746,6 +746,13 @@ describe("AI 套用（#1065）：只填空的", () => {
       [undefined, 1],
     ]);
   });
+  it("passage_view（主圖文分頁）是純 UI 狀態：預設 layout，建立／更新都不送", () => {
+    const g = emptyGroupDraft("reading");
+    expect(g.passage_view).toBe("layout");
+    g.passage_view = "text";
+    expect(toCreateGroupInput(g)).not.toHaveProperty("passage_view");
+    expect(toUpdateGroupInput(g)).not.toHaveProperty("passage_view");
+  });
   it("AI 輸入：題組小題附主圖文純文字，單題沒有", () => {
     const g = emptyGroupDraft("reading");
     g.passage_text = "The passage.";
