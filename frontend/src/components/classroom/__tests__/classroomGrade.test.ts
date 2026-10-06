@@ -223,16 +223,32 @@ describe("formatClassroomDisplayName", () => {
     );
   });
 
-  it("returns the raw name when it already contains Grade or Class (case-insensitive)", () => {
+  it("returns the raw name when it contains the whole word Grade or Class (case-insensitive)", () => {
     expect(
       formatClassroomDisplayName(enT, { name: "Grade 8 A", grade: 8 }),
     ).toBe("Grade 8 A");
     expect(formatClassroomDisplayName(zhT, { name: "class B", grade: 4 })).toBe(
       "class B",
     );
+    expect(formatClassroomDisplayName(enT, { name: "Class A", grade: 4 })).toBe(
+      "Class A",
+    );
+    // 中文後接 Class 仍算整字（與後端 re.ASCII 一致）
+    expect(formatClassroomDisplayName(zhT, { name: "甲Class", grade: 4 })).toBe(
+      "甲Class",
+    );
+  });
+
+  it("still combines when grade/class is only part of a longer word", () => {
+    expect(
+      formatClassroomDisplayName(zhT, { name: "Masterclass", grade: 4 }),
+    ).toBe("4年Masterclass班");
+    expect(
+      formatClassroomDisplayName(enT, { name: "Upgrade 3", grade: 4 }),
+    ).toBe("Grade 4 Class Upgrade 3");
     expect(
       formatClassroomDisplayName(enT, { name: "ClassRoom 1", grade: 4 }),
-    ).toBe("ClassRoom 1");
+    ).toBe("Grade 4 Class ClassRoom 1");
   });
 
   it("returns the raw name when it is blank", () => {

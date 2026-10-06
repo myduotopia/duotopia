@@ -2,7 +2,7 @@
  * 學生作業活動頁面 - 含重試機制 (#280)
  *
  * 從 API 載入資料，然後使用共用的 StudentActivityPageContent 元件顯示
- * 作業所屬班級已停用（403 classroom_inactive）→ 提示「此班級已停用」並導回作業列表（#1097）
+ * 作業所屬班級已停用（403 classroom_inactive）→ 導回作業列表，由列表顯示「此班級已停用」（#1097）
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -179,15 +179,16 @@ export default function StudentActivityPage() {
       setTimeLimitPerQuestion(data.time_limit_per_question ?? 0);
     } catch (error) {
       console.error("Failed to load activities:", error);
-      toast.error(
-        t(
-          studentAssignmentErrorKey(
+      // 本頁卸載時會 toast.dismiss() 清掉所有 toast，所以提示交給作業列表在掛載後顯示（#1097）
+      navigate("/student/assignments", {
+        replace: true,
+        state: {
+          noticeKey: studentAssignmentErrorKey(
             error,
             "studentActivityPage.errors.loadFailed",
           ),
-        ),
-      );
-      navigate("/student/assignments");
+        },
+      });
     } finally {
       setLoading(false);
     }

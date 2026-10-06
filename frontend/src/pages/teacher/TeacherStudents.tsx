@@ -610,7 +610,7 @@ export default function TeacherStudents() {
               }
               const classroom = classrooms.find((c) => c.id === classroomId);
               toast.success(
-                `${t("teacherStudents.messages.bulkAssignSuccess", { count: selectedStudentIds.length, classroom: classroom?.name })}`,
+                `${t("teacherStudents.messages.bulkAssignSuccess", { count: selectedStudentIds.length, classroom: classroom ? formatClassroomDisplayName(t, classroom) : undefined })}`,
               );
               setSelectedStudentIds([]);
               setShowAssignDialog(false);

@@ -222,6 +222,11 @@ class TestClassroomDisplayName:
             ("三年甲班", "3", "三年甲班"),  # 已含「年」「班」
             ("忠班", "5", "忠班"),  # 已含「班」
             ("三年級", "3", "三年級"),  # 已含「年」
+            ("Class A", "4", "Class A"),  # 整字 class
+            ("grade 3 A", "3", "grade 3 A"),  # 整字 grade（不分大小寫）
+            ("甲Class", "4", "甲Class"),  # 中文後接 Class 仍算整字（與前端一致）
+            ("Masterclass", "4", "4年Masterclass班"),  # 非整字 → 組合
+            ("Upgrade 3", "4", "4年Upgrade 3班"),  # 非整字 → 組合
             ("12", None, "12"),  # 沒有年級
             ("12", "Grade 5", "12"),  # 歷史雜值視為未設定
             ("12", "13", "12"),  # 超出範圍

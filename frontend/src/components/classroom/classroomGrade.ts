@@ -64,8 +64,12 @@ export function formatGradeLabel(
     : t("classroomGrade.unset");
 }
 
-/** 名稱已自帶年級／班級字樣時不再組合（中文「年」「班」、英文 grade／class 不分大小寫） */
-const DISPLAY_NAME_SKIP_PATTERN = /[年班]|grade|class/i;
+/**
+ * 名稱已自帶年級／班級字樣時不再組合：含「年」「班」，或整字 grade／class（不分大小寫）。
+ * 「Class A」「Grade 3」照原名；「Masterclass」「Upgrade」仍組合。
+ * 後端 backend/utils/classroom_grade.py 的 classroom_display_name 規則相同（\b 皆為 ASCII 邊界）。
+ */
+const DISPLAY_NAME_SKIP_PATTERN = /[年班]|\b(grade|class)\b/i;
 
 /**
  * 組合班名：有效年級（1–12）且名稱未自帶「年／班／Grade／Class」時，
