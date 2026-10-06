@@ -15,14 +15,25 @@ from pathlib import Path
 import pytest
 
 STUDENT_ROUTERS = Path(__file__).resolve().parents[2] / "routers" / "students"
+ROUTE_METHODS = {"get", "post", "put", "patch", "delete", "api_route"}
+
+
+def _is_route_decorator(dec: ast.expr) -> bool:
+    """``@<任何名字>.get(...)`` / ``.post(...)`` 等 —— 不限 router 變數名稱。"""
+    return (
+        isinstance(dec, ast.Call)
+        and isinstance(dec.func, ast.Attribute)
+        and dec.func.attr in ROUTE_METHODS
+    )
 
 
 def _route_handlers(path: Path):
+    # ast.walk：連巢狀在其他函式裡註冊的 handler 也一併檢查
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    for node in tree.body:
+    for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        if any("router." in ast.unparse(d) for d in node.decorator_list):
+        if any(_is_route_decorator(d) for d in node.decorator_list):
             yield node
 
 
