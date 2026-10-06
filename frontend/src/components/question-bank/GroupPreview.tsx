@@ -12,7 +12,8 @@
  *     小題指向的空格已不在文章裡時顯示「找不到空格」標記、沒有編號時顯示「未指定空格」
  *   - 題幹／選項的規則（無字無圖不顯示、2×2／直排、圖片可放大）見 `QuestionsPreview`
  * - 根元素 `break-words`，長單字／網址不撐破版面
- * - 全空（無主圖文、無小題）顯示「還沒有內容」
+ * - 全空（無主圖文、無小題）顯示「還沒有內容」；判斷式匯出為 `groupPreviewHasContent`，面板標題列
+ *   「預覽」按鈕（`SheetPreviewButton`）據此決定 disabled
  */
 
 import { useTranslation } from "react-i18next";
@@ -41,6 +42,30 @@ export type GroupPreviewData = Pick<
   | "questions"
 >;
 
+function groupPreviewHasLayout(draft: GroupPreviewData): boolean {
+  return Boolean(draft.layout && draft.layout.rows.length > 0);
+}
+
+/** 有主圖文：排版、題組圖、文字版或有效註解（與 GlossaryBox 一致：單字與中文都非空才畫） */
+function groupPreviewHasStimulus(draft: GroupPreviewData): boolean {
+  return (
+    groupPreviewHasLayout(draft) ||
+    Boolean(draft.image_url) ||
+    draft.passage_text.trim() !== "" ||
+    (draft.glossary ?? []).some(
+      (g) => g.word.trim() !== "" && g.zh.trim() !== "",
+    )
+  );
+}
+
+/**
+ * 預覽有沒有東西可看（主圖文或任何小題）；否則 `GroupPreview` 只畫「還沒有內容」。
+ * 面板標題列的「預覽」按鈕用同一個判斷決定 disabled。
+ */
+export function groupPreviewHasContent(draft: GroupPreviewData): boolean {
+  return groupPreviewHasStimulus(draft) || draft.questions.length > 0;
+}
+
 export interface GroupPreviewProps {
   draft: GroupPreviewData;
   /** 手機預覽：主圖文欄位堆疊、選項一律直排 */
@@ -60,18 +85,13 @@ export default function GroupPreview({
   const questions = cloze
     ? sortClozeQuestions(draft.questions)
     : draft.questions;
-  const hasLayout = Boolean(draft.layout && draft.layout.rows.length > 0);
+  const hasLayout = groupPreviewHasLayout(draft);
   const passage = draft.passage_text.trim();
   // 文章裡已找不到的空格（老師刪掉了 {{n}}）；clozeOrphanBlanksOf 只讀 question_type／layout／questions
   const missingBlanks = cloze ? clozeOrphanBlanksOf(draft as GroupDraft) : [];
-  // 判斷與 GlossaryBox 一致：單字與中文都非空才會畫出來
-  const hasGlossary = (draft.glossary ?? []).some(
-    (g) => g.word.trim() !== "" && g.zh.trim() !== "",
-  );
-  const hasStimulus =
-    hasLayout || Boolean(draft.image_url) || passage !== "" || hasGlossary;
+  const hasStimulus = groupPreviewHasStimulus(draft);
 
-  if (!hasStimulus && questions.length === 0) {
+  if (!groupPreviewHasContent(draft)) {
     return (
       <p
         className="py-8 text-center text-sm text-gray-400"

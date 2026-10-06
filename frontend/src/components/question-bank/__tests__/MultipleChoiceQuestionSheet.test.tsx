@@ -4,13 +4,14 @@
  * 驗證：左欄順序與上傳／AI 為即將推出；進階設定預設收起；考點必填、公開必選擋送出；
  * 左側批次覆寫所有卡且新增題帶批次值；編輯模式單卡預填走 updateQuestion（含 source_ids）；
  * 逐題送出與部分失敗；批次編輯中途失敗（#1077：停在失敗題、sheet 不關、該卡顯示後端訊息、
- * toast 部分成功）；readOnly；預覽（#1082：略過空白卡、儲存中停用）。
+ * toast 部分成功）；readOnly；預覽（#1082：略過空白卡、儲存中停用；閱讀／克漏字題組也在標題列，
+ * 排版打字後立即預覽即含新內容）。
  *
  * Radix Select 在 jsdom 難以操作，需要「已選公開設定」的送出流程用編輯模式（值已預填）。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 
@@ -555,9 +556,9 @@ describe("MultipleChoiceQuestionSheet", () => {
     ).toBe(true);
   });
 
-  it("預覽（#1082）：無內容時 disabled；兩題依序編號、有選項、不顯示解析；題組模式不出現", async () => {
+  it("預覽（#1082）：無內容時 disabled；兩題依序編號、有選項、不顯示解析", async () => {
     const user = userEvent.setup();
-    const { unmount } = render(
+    render(
       <MultipleChoiceQuestionSheet
         open
         onClose={vi.fn()}
@@ -592,10 +593,59 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(screen.getByTestId("qb-preview-panel-dialog")).not.toHaveTextContent(
       "SECRET-WHY",
     );
-    unmount();
+  });
 
+  it("預覽（#1082）閱讀題組：標題列同一顆按鈕；空題組 disabled；排版打字後立即預覽就看得到；排版工具列沒有預覽鈕", async () => {
+    const user = userEvent.setup();
     renderSheet({ createType: "reading" });
-    expect(screen.queryByTestId("qb-preview")).toBeNull();
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(true);
+    expect(screen.queryByTestId("qg-0-layout-preview-open")).toBeNull();
+
+    await user.click(screen.getByTestId("qg-0-layout-add"));
+    await user.click(await screen.findByTestId("qg-0-layout-add-paragraph"));
+    await user.type(
+      screen.getByTestId("qg-0-layout-block-0-text"),
+      "Freshly typed",
+    );
+    expect(previewBtn().disabled).toBe(false);
+
+    // 編輯器即時 onChange 回草稿：不用離開編輯器，標題列預覽就是當下內容
+    await user.click(previewBtn());
+    const group = await screen.findByTestId("qb-preview-panel-group");
+    expect(group).toHaveTextContent("Freshly typed");
+    expect(screen.getByTestId("qb-preview-panel")).toHaveAttribute(
+      "data-mode",
+      "desktop",
+    );
+    await user.click(screen.getByTestId("qb-preview-panel-mobile"));
+    const panel = screen.getByTestId("qb-preview-panel");
+    expect(panel).toHaveAttribute("data-mode", "mobile");
+    expect(panel.className).toContain("w-[390px]");
+    expect(within(panel).getByTestId("layout-renderer")).toHaveAttribute(
+      "data-stack",
+      "true",
+    );
+  });
+
+  it("預覽（#1082）克漏字題組：擷取前 disabled；擷取後標題列預覽看到文章與空格小題", async () => {
+    cropImageFileManyMock.mockReset().mockResolvedValue([]);
+    uploadImageFileMock.mockReset();
+    const user = userEvent.setup();
+    renderSheet({ createType: "cloze" });
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(true);
+
+    await user.click(screen.getByTestId("mp-trigger-cloze"));
+    await screen.findByTestId("qg-0-q-0-blank-badge");
+    await waitFor(() => expect(previewBtn().disabled).toBe(false));
+
+    await user.click(previewBtn());
+    const group = await screen.findByTestId("qb-preview-panel-group");
+    expect(group).toHaveTextContent("Dear Santa");
+    expect(screen.getByTestId("qb-preview-panel-group-q-0-blank")).toBeTruthy();
   });
 
   it("預覽（#1082）：完全空白的卡片略過，編號依過濾後順序 1、2", async () => {

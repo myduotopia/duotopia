@@ -4,8 +4,8 @@
  * 修訂後的樣子：淡外框＋標題列（一個面板多個題組時分得開），內容像一份文件
  * |題組標題|
  * |年段|
- * |主圖文：分頁「排版」（LayoutEditor：文件式區塊編輯器，預覽另開 Dialog，
- *   預覽整個題組＝主圖文＋小題＋選項，不含答案）｜「文字版」|
+ * |主圖文：分頁「排版」（LayoutEditor：文件式區塊編輯器；預覽在面板標題列
+ *   `SheetPreviewButton`，看整個題組＝主圖文＋小題＋選項，不含答案）｜「文字版」|
  * |單字註解（一個文字框，一行一筆「word 中文」）|
  * |小題列表：QuestionCard compact（編號＋淡分隔線），可拖曳排序（group_order）、新增／刪除|
  *
@@ -519,7 +519,6 @@ export default function GroupCard({
               testId={`qg-${index}-layout`}
               clozeMode={isCloze}
               nextBlankIndex={nextBlank ?? undefined}
-              previewDraft={draft}
             />
           </TabsContent>
           <TabsContent value="text" className="mt-0">
