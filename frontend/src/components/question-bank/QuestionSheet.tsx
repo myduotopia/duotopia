@@ -6,7 +6,8 @@
  * 卡片本身不知道 sheet。舊名 `MultipleChoiceQuestionSheet` 仍可 import（re-export）。
  *
  * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
- * - 標題列：儲存（擋住時下方一行寫原因）、刪除（單題編輯）、關閉
+ * - 標題列：預覽（單題模式；`SheetPreviewButton`，題組模式用 LayoutEditor 內的入口）、
+ *   儲存（擋住時下方一行寫原因）、刪除（單題編輯）、關閉
  * - 左欄：QuestionBankBatchPanel（單字集同一個 BatchWorkPanel 殼 + 批次設定卡）
  * - 右欄：多個「單元」+「新增題目」
  *
@@ -57,6 +58,7 @@ import type {
 } from "@/types/questionBank";
 import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import QuestionUnitList from "./QuestionUnitList";
+import SheetPreviewButton from "./SheetPreviewButton";
 import { uploadExtractedQuestionImages } from "./extractedImages";
 import { useExtractedGroup } from "./useExtractedGroup";
 import {
@@ -791,6 +793,8 @@ export default function QuestionSheet({
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* 題組模式沿用 LayoutEditor 內的預覽入口，這裡不重複 */}
+            {!groupMode && <SheetPreviewButton units={units} />}
             {canDeleteNow && (
               <Button
                 type="button"

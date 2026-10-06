@@ -5,6 +5,9 @@
  * 手機模式以 390px 置中並強制欄位上下堆疊、選項直排。內容是 `GroupPreview`
  * （主圖文＋小題＋選項，不含答案／解析／考點），老師看到的就是學生看到的。
  * 傳入整個題組草稿（`draft`），不再只吃 layout／glossary。
+ *
+ * 選擇題面板的「預覽」也用這個 Dialog（同一套電腦／手機切換）：改傳 `questions`，
+ * 內容換成 `QuestionsPreview`（所有單題依序 1..n，不含答案／解析／考點）。
  */
 
 import { useState } from "react";
@@ -20,19 +23,31 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import GroupPreview, { type GroupPreviewData } from "./GroupPreview";
+import QuestionsPreview from "./QuestionsPreview";
+import type { QuestionDraft } from "./questionDraft";
 
-export interface LayoutPreviewDialogProps {
+export type LayoutPreviewDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 題組草稿（`GroupDraft` 可直接傳） */
-  draft: GroupPreviewData;
   testId?: string;
-}
+} & (
+  | {
+      /** 題組草稿（`GroupDraft` 可直接傳） */
+      draft: GroupPreviewData;
+      questions?: never;
+    }
+  | {
+      /** 選擇題面板：右側所有單題（依序編號） */
+      questions: QuestionDraft[];
+      draft?: never;
+    }
+);
 
 export default function LayoutPreviewDialog({
   open,
   onOpenChange,
   draft,
+  questions,
   testId = "layout-preview",
 }: LayoutPreviewDialogProps) {
   const { t } = useTranslation();
@@ -97,11 +112,20 @@ export default function LayoutPreviewDialog({
             data-testid={testId}
             data-mode={mobile ? "mobile" : "desktop"}
           >
-            <GroupPreview
-              draft={draft}
-              forceStack={mobile}
-              testId={`${testId}-group`}
-            />
+            {draft ? (
+              <GroupPreview
+                draft={draft}
+                forceStack={mobile}
+                testId={`${testId}-group`}
+              />
+            ) : (
+              <QuestionsPreview
+                questions={questions ?? []}
+                forceStack={mobile}
+                className="text-[15px] text-gray-900"
+                testId={`${testId}-questions`}
+              />
+            )}
           </div>
         </div>
       </DialogContent>

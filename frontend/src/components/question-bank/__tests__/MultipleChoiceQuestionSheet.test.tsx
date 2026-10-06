@@ -555,6 +555,44 @@ describe("MultipleChoiceQuestionSheet", () => {
     ).toBe(true);
   });
 
+  it("預覽（#1082）：無內容時 disabled；兩題依序編號、有選項、不顯示解析；題組模式不出現", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <MultipleChoiceQuestionSheet open onClose={vi.fn()} programs={[]} />,
+    );
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(true);
+
+    await fillCard(user, 0, "First stem", [
+      ["apple", true],
+      ["banana", false],
+    ]);
+    await user.click(screen.getByTestId("qb-add-question"));
+    await fillCard(user, 1, "Second stem", [["cat", false]]);
+    await user.type(screen.getByTestId("qc-0-explanation"), "SECRET-WHY");
+    expect(previewBtn().disabled).toBe(false);
+
+    await user.click(previewBtn());
+    const q0 = await screen.findByTestId("qb-preview-panel-questions-q-0");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-0-number"),
+    ).toHaveTextContent("1.");
+    expect(q0).toHaveTextContent("First stem");
+    expect(q0).toHaveTextContent("(A)apple");
+    expect(q0).toHaveTextContent("(B)banana");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-1"),
+    ).toHaveTextContent("Second stem");
+    expect(screen.getByTestId("qb-preview-panel-dialog")).not.toHaveTextContent(
+      "SECRET-WHY",
+    );
+    unmount();
+
+    renderSheet({ createType: "reading" });
+    expect(screen.queryByTestId("qb-preview")).toBeNull();
+  });
+
   it("批次編輯：N 張卡各自帶值、左欄完整但批次值空白；左欄改公開 → 全部卡；儲存逐題 PATCH", async () => {
     const q1 = baseQuestion({ id: 5, stem: "First", visibility: "private" });
     const q2 = baseQuestion({
