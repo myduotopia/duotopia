@@ -166,7 +166,7 @@ class MagicPasteService:
                 '{"title": "...", '
                 '"stimulus": {"kind": "text" | "image", "paragraphs": ["..."], '
                 '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1, '
-                '"blanks_renumbered": true, '
+                '"blanks_renumbered": true, "framed": false, '
                 '"figures": [{"box_2d": [ymin, xmin, ymax, xmax], '
                 '"placement": "beside" | "full", "after_paragraph": 0, '
                 '"side": "left" | "right", "width": 0.33, "caption": "..."}]}, '
@@ -203,6 +203,10 @@ class MagicPasteService:
                 "unchanged, and do not leave any printed underscores or printed blank "
                 "numbers behind. Set `blanks_renumbered` to true when you did this, "
                 "false otherwise.\n"
+                "- `stimulus.framed`: true when the passage / stimulus area is printed "
+                "inside one box on the paper (a black or rounded border drawn around "
+                "the whole passage, as test booklets often do); false when it is not, "
+                "or when you cannot tell.\n"
                 "- `stimulus.figures`: pictures that are printed INSIDE a prose passage "
                 '(only when kind is "text"); [] when there are none. For each picture:\n'
                 "  - `box_2d` = its bounding box as [ymin, xmin, ymax, xmax] on a 0-1000 "
@@ -694,6 +698,8 @@ class MagicPasteService:
         - box_2d 不合法就丟掉（前端改用整張圖）；page 只留正整數
         - figures（文章內插圖）只在 kind=text 保留；座標不合法整項丟掉
         - blanks_renumbered：模型是否把印刷空格改寫成 `{{n}}`（克漏字用，#1086）
+        - framed：原卷文章是否印在方框內（前端據此設 layout.frame）；只認布林 true 或字串
+          "true"，其他一律 false；kind=image 時一律 false（整張圖本身已是素材）
         - title 截到 GROUP_TITLE_MAX_CHARS（DB 上限）；模型沒給時留空字串不視為錯誤
         - glossary 兩欄皆非空才留；questions 沿用 _normalize_mc_items 規則
         - 完全沒素材也沒小題 → []（不扣配額）
@@ -721,11 +727,16 @@ class MagicPasteService:
         if kind not in STIMULUS_KINDS:
             kind = "text" if paragraphs else "image"
         figures = cls._normalize_figures(stim.get("figures"), len(paragraphs))
+        framed_raw = stim.get("framed")
+        framed = framed_raw is True or (
+            isinstance(framed_raw, str) and framed_raw.strip().lower() == "true"
+        )
         if kind == "text":
             box = None
             page = None
         else:
             paragraphs = []
+            framed = False
             # 整塊當圖時沒有「第幾段之後」可以掛，插圖一律併進那張圖裡
             figures = []
 
@@ -756,6 +767,7 @@ class MagicPasteService:
                     "page": page,
                     "figures": figures,
                     "blanks_renumbered": bool(stim.get("blanks_renumbered")),
+                    "framed": framed,
                 },
                 "glossary": glossary,
                 "questions": questions,

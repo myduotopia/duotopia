@@ -87,6 +87,8 @@ export interface MagicPasteGroupResult {
     }[];
     /** AI 是否已把印刷空格（`__40__`…）改寫成 `{{n}}`（克漏字，#1086） */
     blanks_renumbered?: boolean;
+    /** 原卷文章是否印在方框內（kind=image 時後端一律 false）→ layout.frame（#1084） */
+    framed?: boolean;
   };
   glossary: { word: string; zh: string }[];
   questions: MagicPasteMcItem[];

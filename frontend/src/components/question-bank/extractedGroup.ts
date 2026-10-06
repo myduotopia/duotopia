@@ -10,7 +10,8 @@
  * - `groupDraftFromExtracted`：以既有（通常是空的）GroupDraft 為底，填入標題／排版／文字版／
  *   註解／小題；保留 key、公開設定、來源、年段等左欄已定的值；AI 沒給標題時保留既有標題
  *
- * kind=text：排版 = 段落區塊（＋插圖），文字版由排版推導（edited=false）
+ * kind=text：排版 = 段落區塊（＋插圖），文字版由排版推導（edited=false）；
+ *   AI 判斷原卷文章印在方框內（`stimulus.framed`）時排版根層 `frame: true`（整篇外框）
  * kind=image：排版 = 一張裁好的圖（沒圖就 null），文字版 = 圖內文字（edited=true，老師可修）
  *
  * 克漏字（base.question_type === "cloze"）：段落直接採用 AI 重編後的 `{{n}}`，
@@ -308,7 +309,9 @@ export function groupDraftFromExtracted(
     width: f.width,
     url: images.figureUrls?.[i] ?? null,
   }));
-  const layout = paragraphsToLayout(paragraphs, figures);
+  const built = paragraphsToLayout(paragraphs, figures);
+  const layout =
+    built && result.stimulus.framed ? { ...built, frame: true } : built;
   // AI 沒切段落但有給整段文字：當老師版文字版，排版留空讓老師自己排
   const fallbackText = layout
     ? ""

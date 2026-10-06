@@ -134,6 +134,42 @@ describe("groupDraftFromExtracted", () => {
     expect(payload.stimulus_type).toBe("passage");
   });
 
+  it("text 且 stimulus.framed → 排版根層 frame: true；沒給或 false 不加", () => {
+    const framed = groupDraftFromExtracted(
+      baseResult({
+        stimulus: { ...baseResult().stimulus, framed: true },
+      }),
+      emptyGroupDraft("reading"),
+      noImages,
+    );
+    expect(framed.layout?.frame).toBe(true);
+    expect(framed.layout?.rows).toHaveLength(2);
+    const plain = groupDraftFromExtracted(
+      baseResult(),
+      emptyGroupDraft("reading"),
+      noImages,
+    );
+    expect(plain.layout).not.toHaveProperty("frame");
+  });
+
+  it("image：framed 不影響（整張圖本身已是素材），排版沒有 frame", () => {
+    const draft = groupDraftFromExtracted(
+      baseResult({
+        stimulus: {
+          kind: "image",
+          paragraphs: [],
+          text: "poster",
+          box_2d: [0, 0, 500, 1000],
+          page: 1,
+          framed: true,
+        },
+      }),
+      emptyGroupDraft("reading"),
+      stimulusImage,
+    );
+    expect(draft.layout).not.toHaveProperty("frame");
+  });
+
   it("image：裁好的圖進排版、圖內文字當老師版文字版；沒圖時排版 null 但文字保留", () => {
     const result = baseResult({
       title: "",
