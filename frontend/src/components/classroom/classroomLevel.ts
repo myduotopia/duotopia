@@ -6,6 +6,7 @@
  * - normalizeLevel：把 "PREA"／"pre-a"／"a1" 等寫法轉成標準 value；無法辨識回 null
  *   （規則同後端 normalize_program_level）
  * - getLevelLabel／getLevelBadgeClass：徽章文字與顏色（含深色模式）；元件見 LevelBadge.tsx
+ * - computeLevelAdjust：批次調整等級的預覽（哪些班會變、哪些已是目標等級而略過；AdjustLevelDialog 用）
  *
  * 「我的班級」（TeacherClassrooms）與機構後台班級列表（ClassroomListTable）共用。
  */
@@ -82,4 +83,51 @@ export function getLevelBadgeClass(raw: string | null | undefined): string {
   }
   const level = normalizeLevel(raw);
   return level ? LEVEL_BADGE_CLASS[level] : NEUTRAL_BADGE_CLASS;
+}
+
+export interface LevelAdjustClassroom<Id> {
+  id: Id;
+  name: string;
+  level?: string | null;
+}
+
+export interface LevelChange<Id> {
+  id: Id;
+  name: string;
+  /** 目前等級的顯示文字（getLevelLabel） */
+  fromLabel: string;
+  to: ClassroomLevel;
+}
+
+export interface LevelAdjustResult<Id> {
+  changes: LevelChange<Id>[];
+  /** 已是目標等級的班級 */
+  skipped: { id: Id; name: string }[];
+}
+
+/**
+ * 批次把班級設成同一個目標等級：已是該等級（正規化後相同）者略過，其餘列為變更。
+ * 未設定等級的班級視為預設 A1（與徽章顯示一致）。target 為 null 時沒有任何變更。
+ */
+export function computeLevelAdjust<Id>(
+  classrooms: readonly LevelAdjustClassroom<Id>[],
+  target: ClassroomLevel | null,
+): LevelAdjustResult<Id> {
+  const result: LevelAdjustResult<Id> = { changes: [], skipped: [] };
+  if (!target) return result;
+  for (const c of classrooms) {
+    const blank = c.level == null || !String(c.level).trim();
+    const current = blank ? DEFAULT_LEVEL : normalizeLevel(c.level);
+    if (current === target) {
+      result.skipped.push({ id: c.id, name: c.name });
+    } else {
+      result.changes.push({
+        id: c.id,
+        name: c.name,
+        fromLabel: getLevelLabel(c.level),
+        to: target,
+      });
+    }
+  }
+  return result;
 }

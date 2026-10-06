@@ -6168,6 +6168,52 @@
     "limitExceeded": "一次最多調整 {{max}} 個班級，請用年級篩選分批處理",
     "missing": {
       "limitExceeded": "一次最多儲存 {{max}} 個班級，請先儲存一部分再繼續"
+    },
+    "status": {
+      "column": "狀態",
+      "active": "啟用",
+      "inactive": "停用",
+      "toggle": "切換「{{name}}」的啟用狀態",
+      "filterLabel": "狀態篩選",
+      "filterAll": "所有狀態",
+      "activated": "已啟用「{{name}}」",
+      "deactivated": "已停用「{{name}}」",
+      "updateFailed": "更新班級狀態失敗，請稍後再試",
+      "dispatchDisabled": "班級已停用，無法派發作業"
+    },
+    "inline": {
+      "unsavedConfirm": "尚未儲存的修改將會遺失，確定要離開？",
+      "saveSuccess": "已更新班級「{{name}}」"
+    },
+    "level": {
+      "button": "調整等級",
+      "title": "調整等級",
+      "description": "選擇目標等級，確認每班調整前後的等級後套用。班級名稱不會變更。",
+      "targetLabel": "目標等級",
+      "targetPlaceholder": "請選擇等級",
+      "changesTitle": "將調整 {{count}} 個班級",
+      "skippedTitle": "略過 {{count}} 個班級",
+      "alreadyAtTarget": "已是 {{level}}",
+      "nothingToChange": "所選班級都已是此等級",
+      "confirm": "套用（{{count}}）",
+      "saveSuccess": "已更新 {{count}} 個班級的等級",
+      "saveFailed": "更新等級失敗，請稍後再試"
+    },
+    "bulk": {
+      "deactivate": "停用",
+      "activate": "啟用",
+      "deactivateTitle": "停用 {{count}} 個班級？",
+      "deactivateDescription": "停用後，學生將看不到這些班級，也無法再對這些班級派發作業。班級資料會保留，可隨時重新啟用。",
+      "activateTitle": "啟用 {{count}} 個班級？",
+      "activateDescription": "啟用後，學生可以再次看到這些班級，也可以對這些班級派發作業。",
+      "deactivated": "已停用 {{count}} 個班級",
+      "activated": "已啟用 {{count}} 個班級"
+    },
+    "sort": {
+      "gradeAsc": "年級 低→高",
+      "gradeDesc": "年級 高→低",
+      "levelAsc": "等級 低→高",
+      "levelDesc": "等級 高→低"
     }
   },
   "schoolClassrooms": {

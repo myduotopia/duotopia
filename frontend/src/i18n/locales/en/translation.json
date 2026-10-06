@@ -6124,6 +6124,52 @@
     "limitExceeded": "You can adjust up to {{max}} classrooms at a time. Use the grade filter to work in batches.",
     "missing": {
       "limitExceeded": "You can save at most {{max}} classes at a time. Save some first, then continue."
+    },
+    "status": {
+      "column": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "toggle": "Toggle whether {{name}} is active",
+      "filterLabel": "Filter by status",
+      "filterAll": "All statuses",
+      "activated": "Activated {{name}}",
+      "deactivated": "Deactivated {{name}}",
+      "updateFailed": "Failed to update the classroom status. Please try again later.",
+      "dispatchDisabled": "This classroom is inactive, so assignments can't be dispatched"
+    },
+    "inline": {
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "saveSuccess": "Updated {{name}}"
+    },
+    "level": {
+      "button": "Adjust level",
+      "title": "Adjust level",
+      "description": "Choose a target level, review each classroom's change, then apply. Classroom names are not changed.",
+      "targetLabel": "Target level",
+      "targetPlaceholder": "Select a level",
+      "changesTitle": "{{count}} classroom(s) will change",
+      "skippedTitle": "{{count}} classroom(s) skipped",
+      "alreadyAtTarget": "Already {{level}}",
+      "nothingToChange": "All selected classrooms are already at this level",
+      "confirm": "Apply ({{count}})",
+      "saveSuccess": "Updated the level of {{count}} classroom(s)",
+      "saveFailed": "Failed to update levels. Please try again later."
+    },
+    "bulk": {
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "deactivateTitle": "Deactivate {{count}} classroom(s)?",
+      "deactivateDescription": "Students will no longer see these classrooms, and you won't be able to dispatch assignments to them. Classroom data is kept and you can reactivate them at any time.",
+      "activateTitle": "Activate {{count}} classroom(s)?",
+      "activateDescription": "Students will see these classrooms again, and you can dispatch assignments to them.",
+      "deactivated": "Deactivated {{count}} classroom(s)",
+      "activated": "Activated {{count}} classroom(s)"
+    },
+    "sort": {
+      "gradeAsc": "Grade low→high",
+      "gradeDesc": "Grade high→low",
+      "levelAsc": "Level low→high",
+      "levelDesc": "Level high→low"
     }
   },
   "schoolClassrooms": {

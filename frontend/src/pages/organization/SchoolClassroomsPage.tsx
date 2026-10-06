@@ -413,7 +413,14 @@ export default function SchoolClassroomsPage() {
       {/* 年級批次調整浮動操作列（#1097） */}
       <GradeBulkBar
         selectedCount={selectedClassrooms.length}
-        onAdjust={() => setShowAdjustGrade(true)}
+        actions={[
+          {
+            key: "adjust-grade",
+            label: t("classroomGrade.adjust.button"),
+            icon: <GraduationCap className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowAdjustGrade(true),
+          },
+        ]}
         onClear={() => setSelectedIds(new Set())}
       />
 

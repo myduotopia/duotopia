@@ -29,13 +29,14 @@ import {
   GraduationCap,
   Trash2,
   AlertTriangle,
-  ChevronDown,
-  ChevronRight,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
   ClipboardList,
   Search,
+  Layers,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { apiClient, ApiError } from "@/lib/api";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
@@ -49,13 +50,35 @@ import {
   matchesGradeFilter,
   type GradeUpdateItem,
 } from "@/components/classroom/classroomGrade";
+import {
+  CEFR_LEVELS,
+  getLevelSortValue,
+  normalizeLevel,
+} from "@/components/classroom/classroomLevel";
 import { GradeSelect } from "@/components/classroom/GradeSelect";
+import { LevelSelect } from "@/components/classroom/LevelSelect";
 import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
 import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import {
+  AdjustLevelDialog,
+  type LevelUpdateItem,
+} from "@/components/classroom/AdjustLevelDialog";
 import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
 import { LevelBadge } from "@/components/classroom/LevelBadge";
+import {
+  ClassroomDraftForm,
+  ClassroomStatusBadge,
+  ClassroomTableRow,
+  isClassroomInactive,
+} from "@/components/classroom/ClassroomTableRow";
+import {
+  useClassroomInlineEdit,
+  useClassroomStatusActions,
+  type ClassroomPatches,
+} from "@/components/classroom/useClassroomListActions";
+import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
 
 interface ClassroomDetail {
   id: number;
@@ -80,8 +103,12 @@ interface ClassroomDetail {
   last_synced_at?: string | null;
 }
 
-type SortField = "name" | "student_count" | "created_at";
+type SortField = "grade" | "name" | "level" | "student_count" | "created_at";
 type SortDirection = "asc" | "desc";
+type StatusFilter = "all" | "active" | "inactive";
+
+const SELECT_CLASS =
+  "px-3 py-2 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm";
 
 export default function TeacherClassrooms() {
   const { t } = useTranslation();
@@ -89,19 +116,10 @@ export default function TeacherClassrooms() {
     useWorkspace();
   const [classrooms, setClassrooms] = useState<ClassroomDetail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingClassroom, setEditingClassroom] =
-    useState<ClassroomDetail | null>(null);
-  const [editFormData, setEditFormData] = useState<{
-    name: string;
-    description: string;
-    level: string;
-    grade: number | null;
-  }>({
-    name: "",
-    description: "",
-    level: "",
-    grade: null,
-  });
+  // 停用／啟用批次確認（#1097）
+  const [bulkStatusTarget, setBulkStatusTarget] = useState(false);
+  const [showBulkStatus, setShowBulkStatus] = useState(false);
+  const [showAdjustLevel, setShowAdjustLevel] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createFormData, setCreateFormData] = useState<{
@@ -120,6 +138,7 @@ export default function TeacherClassrooms() {
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [gradeFilter, setGradeFilter] = useState<string>(GRADE_FILTER_ALL);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   // 年級批次調整／補填（#1097）— 只有個人班級可勾選
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -294,45 +313,55 @@ export default function TeacherClassrooms() {
     searchQuery,
     levelFilter,
     gradeFilter,
+    statusFilter,
     mode,
     selectedSchool,
     selectedOrganization,
   ]);
 
-  const handleEdit = (classroom: ClassroomDetail) => {
-    setEditingClassroom(classroom);
-    setEditFormData({
-      name: classroom.name,
-      description: classroom.description || "",
-      level: classroom.level || "A1",
-      grade: isValidGrade(classroom.grade) ? classroom.grade : null,
+  // 儲存成功後背景重新載入；失敗只提示重新整理（已儲存的結果仍有效）
+  const reloadInBackground = () => {
+    void fetchClassrooms({ silent: true }).then((reloaded) => {
+      if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
     });
   };
 
-  const handleSaveEdit = async () => {
-    if (!editingClassroom) return;
+  // 行內編輯、停用／啟用與批次更新（#1097）：成功後就地更新再背景重新載入
+  const handlePatched = (patches: ClassroomPatches) => {
+    setClassrooms((prev) =>
+      prev.map((c) => (patches.has(c.id) ? { ...c, ...patches.get(c.id) } : c)),
+    );
+    reloadInBackground();
+  };
+  const inlineEdit = useClassroomInlineEdit({
+    classrooms,
+    onPatched: handlePatched,
+    // 工作區由外部切換、無法攔下確認，切換後直接結束行內編輯
+    resetKey: `${mode}|${selectedSchool?.id ?? ""}|${selectedOrganization?.id ?? ""}`,
+  });
+  const { guardEdit } = inlineEdit;
+  const statusActions = useClassroomStatusActions({ onPatched: handlePatched });
 
-    // 年級必填（#1097）：尚未設定年級的班級編輯時也要補選
-    const { grade } = editFormData;
-    if (grade === null) {
-      alert(t("classroomGrade.required"));
-      return;
+  const handleBulkStatus = async (active: boolean) => {
+    if (await statusActions.bulkSetActive(selectedClassrooms, active)) {
+      setSelectedIds(new Set());
     }
+  };
 
-    try {
-      // API call to update classroom
-      await apiClient.updateClassroom(editingClassroom.id, {
-        ...editFormData,
-        grade,
-      });
-
-      // Refresh classrooms list
-      await fetchClassrooms();
-      setEditingClassroom(null);
-    } catch (err) {
-      console.error("Failed to update classroom:", err);
-      alert(t("teacherClassrooms.messages.updateFailed"));
+  // 批次調整等級成功：先關對話框再清勾選（同 handleAdjustGrades）
+  const handleAdjustLevels = async (
+    items: LevelUpdateItem<number>[],
+  ): Promise<boolean> => {
+    const ok = await statusActions.runBatchUpdate(
+      items.map(({ id, level }) => ({ classroom_id: id, level })),
+      "classroomGrade.level.saveSuccess",
+      "classroomGrade.level.saveFailed",
+    );
+    if (ok) {
+      setShowAdjustLevel(false);
+      setSelectedIds(new Set());
     }
+    return ok;
   };
 
   const handleDelete = async () => {
@@ -398,10 +427,7 @@ export default function TeacherClassrooms() {
       toast.success(
         t("classroomGrade.messages.saveSuccess", { count: res.count }),
       );
-      // 背景重新載入；失敗時已儲存的結果仍有效，只提示重新整理
-      void fetchClassrooms({ silent: true }).then((reloaded) => {
-        if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
-      });
+      reloadInBackground();
       return true;
     } catch (err) {
       console.error("Failed to set classroom grades:", err);
@@ -433,7 +459,7 @@ export default function TeacherClassrooms() {
   };
 
   // Sort toggle handler
-  const handleSort = (field: SortField) => {
+  const handleSort = guardEdit((field: SortField) => {
     if (sortField === field) {
       if (sortDirection === "asc") {
         setSortDirection("desc");
@@ -445,7 +471,7 @@ export default function TeacherClassrooms() {
       setSortField(field);
       setSortDirection("asc");
     }
-  };
+  });
 
   // Expandable row toggle
   const toggleRowExpanded = (classroomId: number) => {
@@ -519,18 +545,38 @@ export default function TeacherClassrooms() {
     // Level filter
     if (levelFilter !== "all") {
       result = result.filter(
-        (c) => (c.level || "A1").toUpperCase() === levelFilter.toUpperCase(),
+        (c) => (normalizeLevel(c.level) ?? "A1") === levelFilter,
       );
     }
 
     // Grade filter (#1097)
     result = result.filter((c) => matchesGradeFilter(c.grade, gradeFilter));
 
+    // Status filter (#1097)
+    if (statusFilter !== "all") {
+      const wantInactive = statusFilter === "inactive";
+      result = result.filter((c) => isClassroomInactive(c) === wantInactive);
+    }
+
     // Sorting
     if (sortField) {
+      // 年級未設定一律排最後（不受升降冪影響）
+      const unsetGradeLast = (a: ClassroomDetail, b: ClassroomDetail) =>
+        Number(!isValidGrade(a.grade)) - Number(!isValidGrade(b.grade));
       result = [...result].sort((a, b) => {
         let comparison = 0;
         switch (sortField) {
+          case "grade": {
+            const unset = unsetGradeLast(a, b);
+            if (unset !== 0) return unset;
+            comparison = (a.grade ?? 0) - (b.grade ?? 0);
+            break;
+          }
+          case "level":
+            comparison =
+              getLevelSortValue(a.level || "A1") -
+              getLevelSortValue(b.level || "A1");
+            break;
           case "name":
             comparison = a.name.localeCompare(b.name, "zh-TW");
             break;
@@ -559,6 +605,7 @@ export default function TeacherClassrooms() {
     searchQuery,
     levelFilter,
     gradeFilter,
+    statusFilter,
     sortField,
     sortDirection,
   ]);
@@ -723,37 +770,88 @@ export default function TeacherClassrooms() {
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <select
           value={levelFilter}
-          onChange={(e) => setLevelFilter(e.target.value)}
-          className="px-3 py-2 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm"
+          onChange={guardEdit((e) => setLevelFilter(e.target.value))}
+          className={SELECT_CLASS}
         >
           <option value="all">
             {t("teacherClassrooms.filters.allLevels")}
           </option>
-          <option value="preA">Pre-A</option>
-          <option value="A1">A1</option>
-          <option value="A2">A2</option>
-          <option value="B1">B1</option>
-          <option value="B2">B2</option>
-          <option value="C1">C1</option>
-          <option value="C2">C2</option>
+          {CEFR_LEVELS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
         </select>
-        <GradeFilterSelect value={gradeFilter} onChange={setGradeFilter} />
+        <GradeFilterSelect
+          value={gradeFilter}
+          onChange={guardEdit(setGradeFilter)}
+        />
+        <select
+          aria-label={t("classroomGrade.status.filterLabel")}
+          value={statusFilter}
+          onChange={guardEdit((e) =>
+            setStatusFilter(e.target.value as StatusFilter),
+          )}
+          className={SELECT_CLASS}
+        >
+          <option value="all">{t("classroomGrade.status.filterAll")}</option>
+          <option value="active">{t("classroomGrade.status.active")}</option>
+          <option value="inactive">
+            {t("classroomGrade.status.inactive")}
+          </option>
+        </select>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
             placeholder={t("teacherClassrooms.placeholders.searchName")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={guardEdit((e) => setSearchQuery(e.target.value))}
             className="w-full pl-9 pr-3 py-2 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm"
           />
         </div>
       </div>
 
-      {/* Bulk Actions Bar — 年級批次調整（#1097），底部置中浮動膠囊 */}
+      {/* Bulk Actions Bar — 年級／等級／停用／啟用（#1097），底部置中浮動膠囊 */}
       <GradeBulkBar
         selectedCount={selectedClassrooms.length}
-        onAdjust={() => setShowAdjustGrade(true)}
+        busy={statusActions.bulkBusy}
+        actions={[
+          {
+            key: "adjust-grade",
+            label: t("classroomGrade.adjust.button"),
+            icon: <GraduationCap className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowAdjustGrade(true),
+          },
+          {
+            key: "adjust-level",
+            label: t("classroomGrade.level.button"),
+            icon: <Layers className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowAdjustLevel(true),
+          },
+          {
+            key: "deactivate",
+            label: t("classroomGrade.bulk.deactivate"),
+            icon: <PowerOff className="h-4 w-4" aria-hidden="true" />,
+            variant: "ghost",
+            disabled: selectedClassrooms.every(isClassroomInactive),
+            onClick: () => {
+              setBulkStatusTarget(false);
+              setShowBulkStatus(true);
+            },
+          },
+          {
+            key: "activate",
+            label: t("classroomGrade.bulk.activate"),
+            icon: <Power className="h-4 w-4" aria-hidden="true" />,
+            variant: "ghost",
+            disabled: !selectedClassrooms.some(isClassroomInactive),
+            onClick: () => {
+              setBulkStatusTarget(true);
+              setShowBulkStatus(true);
+            },
+          },
+        ]}
         onClear={() => setSelectedIds(new Set())}
       />
 
@@ -766,7 +864,7 @@ export default function TeacherClassrooms() {
             <ArrowUpDown className="h-4 w-4 text-gray-500" />
             <select
               value={sortField ? `${sortField}_${sortDirection}` : "default"}
-              onChange={(e) => {
+              onChange={guardEdit((e) => {
                 if (e.target.value === "default") {
                   setSortField(null);
                   setSortDirection("asc");
@@ -777,27 +875,30 @@ export default function TeacherClassrooms() {
                   setSortField(field);
                   setSortDirection(dir);
                 }
-              }}
+              })}
               className="px-2 py-1 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm"
             >
-              <option value="default">
-                {t("teacherClassrooms.sort.default")}
-              </option>
-              <option value="name_asc">
-                {t("teacherClassrooms.sort.nameAsc")}
-              </option>
-              <option value="name_desc">
-                {t("teacherClassrooms.sort.nameDesc")}
-              </option>
-              <option value="student_count_desc">
-                {t("teacherClassrooms.sort.studentCountDesc")}
-              </option>
-              <option value="created_at_desc">
-                {t("teacherClassrooms.sort.createdAtDesc")}
-              </option>
-              <option value="created_at_asc">
-                {t("teacherClassrooms.sort.createdAtAsc")}
-              </option>
+              {(
+                [
+                  ["default", "teacherClassrooms.sort.default"],
+                  ["grade_asc", "classroomGrade.sort.gradeAsc"],
+                  ["grade_desc", "classroomGrade.sort.gradeDesc"],
+                  ["name_asc", "teacherClassrooms.sort.nameAsc"],
+                  ["name_desc", "teacherClassrooms.sort.nameDesc"],
+                  ["level_asc", "classroomGrade.sort.levelAsc"],
+                  ["level_desc", "classroomGrade.sort.levelDesc"],
+                  [
+                    "student_count_desc",
+                    "teacherClassrooms.sort.studentCountDesc",
+                  ],
+                  ["created_at_desc", "teacherClassrooms.sort.createdAtDesc"],
+                  ["created_at_asc", "teacherClassrooms.sort.createdAtAsc"],
+                ] as const
+              ).map(([value, key]) => (
+                <option key={value} value={value}>
+                  {t(key)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -824,25 +925,38 @@ export default function TeacherClassrooms() {
                     <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
                       <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          ID: {classroom.id}
-                        </span>
-                        <LevelBadge level={classroom.level} />
+                    {inlineEdit.editingId === classroom.id &&
+                    inlineEdit.draft ? (
+                      <div className="flex-1">
+                        <ClassroomDraftForm
+                          draft={inlineEdit.draft}
+                          onDraftChange={inlineEdit.setDraft}
+                          onSave={inlineEdit.saveEdit}
+                          onCancel={inlineEdit.exitEdit}
+                          saving={inlineEdit.saving}
+                        />
                       </div>
-                      <Link
-                        to={`/teacher/classroom/${classroom.id}`}
-                        className="font-medium text-lg text-blue-600 dark:text-blue-400 hover:underline block mt-1"
-                      >
-                        {classroom.name}
-                      </Link>
-                      {classroom.description && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          {classroom.description}
-                        </p>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <LevelBadge level={classroom.level} />
+                          <ClassroomStatusBadge
+                            active={!isClassroomInactive(classroom)}
+                          />
+                        </div>
+                        <Link
+                          to={`/teacher/classroom/${classroom.id}`}
+                          className="font-medium text-lg text-blue-600 dark:text-blue-400 hover:underline block mt-1"
+                        >
+                          {classroom.name}
+                        </Link>
+                        {classroom.description && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {classroom.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -892,7 +1006,15 @@ export default function TeacherClassrooms() {
                     size="sm"
                     onClick={() => setAssignmentClassroom(classroom)}
                     className="flex-1"
-                    disabled={classroom.student_count === 0}
+                    disabled={
+                      classroom.student_count === 0 ||
+                      isClassroomInactive(classroom)
+                    }
+                    title={
+                      isClassroomInactive(classroom)
+                        ? t("classroomGrade.status.dispatchDisabled")
+                        : undefined
+                    }
                   >
                     <ClipboardList className="h-4 w-4 mr-2" />
                     {t("teacherClassrooms.buttons.dispatchAssignment")}
@@ -900,10 +1022,11 @@ export default function TeacherClassrooms() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleEdit(classroom)}
+                    onClick={() => inlineEdit.startEdit(classroom)}
                     className="flex-1"
                     disabled={
-                      mode === "organization" || selectedSchool !== null
+                      !canEditClassrooms ||
+                      inlineEdit.editingId === classroom.id
                     }
                   >
                     <Edit className="h-4 w-4 mr-2" />
@@ -914,9 +1037,7 @@ export default function TeacherClassrooms() {
                     size="sm"
                     onClick={() => setDeleteConfirmId(classroom.id)}
                     className="flex-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400"
-                    disabled={
-                      mode === "organization" || selectedSchool !== null
-                    }
+                    disabled={!canEditClassrooms}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     {t("common.delete")}
@@ -962,23 +1083,38 @@ export default function TeacherClassrooms() {
                     </TableHead>
                   )}
                   <SortableHeader
+                    field="grade"
+                    className="text-left text-xs sm:text-sm min-w-[90px]"
+                  >
+                    {t("teacherClassrooms.labels.grade")}
+                  </SortableHeader>
+                  <SortableHeader
                     field="name"
                     className="text-left text-xs sm:text-sm min-w-[200px]"
                   >
                     {t("teacherClassrooms.labels.classroomName")}
                   </SortableHeader>
-                  <TableHead className="text-left text-xs sm:text-sm min-w-[60px]">
+                  <SortableHeader
+                    field="level"
+                    className="text-left text-xs sm:text-sm min-w-[80px]"
+                  >
                     {t("teacherClassrooms.labels.level")}
-                  </TableHead>
-                  <TableHead className="text-left text-xs sm:text-sm min-w-[70px]">
-                    {t("teacherClassrooms.labels.grade")}
-                  </TableHead>
+                  </SortableHeader>
+                  <SortableHeader
+                    field="student_count"
+                    className="text-left text-xs sm:text-sm min-w-[70px]"
+                  >
+                    {t("teacherClassrooms.labels.studentCount")}
+                  </SortableHeader>
                   <SortableHeader
                     field="created_at"
                     className="text-left text-xs sm:text-sm min-w-[100px]"
                   >
                     {t("teacherClassrooms.labels.createdAt")}
                   </SortableHeader>
+                  <TableHead className="text-left text-xs sm:text-sm min-w-[110px]">
+                    {t("classroomGrade.status.column")}
+                  </TableHead>
                   <TableHead className="text-left text-xs sm:text-sm min-w-[120px]">
                     {t("teacherClassrooms.labels.actions")}
                   </TableHead>
@@ -987,141 +1123,42 @@ export default function TeacherClassrooms() {
               <TableBody>
                 {processedClassrooms.map((classroom) => {
                   const isExpanded = expandedRows.has(classroom.id);
+                  const isEditing = inlineEdit.editingId === classroom.id;
                   return (
                     <React.Fragment key={classroom.id}>
-                      {/* Main Row */}
-                      <TableRow
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                        onClick={() => toggleRowExpanded(classroom.id)}
-                      >
-                        {canEditClassrooms && (
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            {isSelectable(classroom) && (
-                              <Checkbox
-                                checked={selectedIds.has(classroom.id)}
-                                onCheckedChange={(checked) =>
-                                  toggleSelected(classroom.id, checked === true)
-                                }
-                                aria-label={t(
-                                  "classroomGrade.selection.selectRow",
-                                  { name: classroom.name },
-                                )}
-                              />
-                            )}
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                            )}
-                            <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
-                              <GraduationCap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <Link
-                                to={`/teacher/classroom/${classroom.id}`}
-                                className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-sm"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {classroom.name}
-                              </Link>
-                              {/* Sub-info */}
-                              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                <span className="flex items-center gap-1">
-                                  <Users className="h-3 w-3" />
-                                  {classroom.student_count}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <BookOpen className="h-3 w-3" />
-                                  {classroom.program_count || 0}
-                                </span>
-                                {classroom.description && (
-                                  <span className="truncate max-w-[200px]">
-                                    {classroom.description}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <LevelBadge level={classroom.level} />
-                        </TableCell>
-                        <TableCell
-                          className={`text-xs sm:text-sm ${
-                            isValidGrade(classroom.grade)
-                              ? "dark:text-gray-200"
-                              : "text-gray-400 dark:text-gray-500"
-                          }`}
-                        >
-                          {formatGradeLabel(t, classroom.grade)}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm dark:text-gray-200">
-                          {formatDate(classroom.created_at)}
-                        </TableCell>
-                        <TableCell>
-                          <div
-                            className="flex items-center space-x-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {/* Dispatch Assignment */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title={t(
-                                "teacherClassrooms.buttons.dispatchAssignment",
-                              )}
-                              onClick={() => setAssignmentClassroom(classroom)}
-                              className="p-1 sm:p-2"
-                              disabled={classroom.student_count === 0}
-                            >
-                              <ClipboardList className="h-3 w-3 sm:h-4 sm:w-4" />
-                              <span className="hidden sm:inline ml-1 text-xs">
-                                {t(
-                                  "teacherClassrooms.buttons.dispatchAssignment",
-                                )}
-                              </span>
-                            </Button>
-                            {/* Edit */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title={t("common.edit")}
-                              onClick={() => handleEdit(classroom)}
-                              className="p-1 sm:p-2"
-                              disabled={
-                                mode === "organization" ||
-                                selectedSchool !== null
-                              }
-                            >
-                              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                            {/* Delete */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title={t("common.delete")}
-                              onClick={() => setDeleteConfirmId(classroom.id)}
-                              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 p-1 sm:p-2"
-                              disabled={
-                                mode === "organization" ||
-                                selectedSchool !== null
-                              }
-                            >
-                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <ClassroomTableRow
+                        classroom={classroom}
+                        showSelectColumn={canEditClassrooms}
+                        selectable={isSelectable(classroom)}
+                        selected={selectedIds.has(classroom.id)}
+                        onSelectedChange={(checked) =>
+                          toggleSelected(classroom.id, checked)
+                        }
+                        expanded={isExpanded}
+                        onToggleExpanded={() => toggleRowExpanded(classroom.id)}
+                        createdAtText={formatDate(classroom.created_at)}
+                        readOnly={!canEditClassrooms}
+                        onDispatch={() => setAssignmentClassroom(classroom)}
+                        onEdit={() => inlineEdit.startEdit(classroom)}
+                        onDelete={() => setDeleteConfirmId(classroom.id)}
+                        canToggleStatus={isSelectable(classroom)}
+                        statusBusy={statusActions.statusBusyId !== null}
+                        onToggleActive={(active) =>
+                          statusActions.toggleActive(classroom, active)
+                        }
+                        editing={isEditing}
+                        draft={isEditing ? inlineEdit.draft : null}
+                        onDraftChange={inlineEdit.setDraft}
+                        onSave={inlineEdit.saveEdit}
+                        onCancel={inlineEdit.exitEdit}
+                        saving={inlineEdit.saving}
+                      />
 
                       {/* Expanded Detail Row */}
                       {isExpanded && (
                         <TableRow className="bg-gray-50 dark:bg-gray-700/30">
                           <TableCell
-                            colSpan={canEditClassrooms ? 6 : 5}
+                            colSpan={canEditClassrooms ? 8 : 7}
                             className="py-3 px-6"
                           >
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -1197,116 +1234,6 @@ export default function TeacherClassrooms() {
           </Button>
         </div>
       )}
-
-      {/* Edit Dialog */}
-      <Dialog
-        open={!!editingClassroom}
-        onOpenChange={(open) => !open && setEditingClassroom(null)}
-      >
-        <DialogContent
-          className="bg-white"
-          style={{ backgroundColor: "white" }}
-        >
-          <DialogHeader>
-            <DialogTitle>
-              {t("teacherClassrooms.dialogs.editTitle")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("teacherClassrooms.dialogs.editDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-              <label
-                htmlFor="name"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.classroomName")}
-              </label>
-              <input
-                id="name"
-                value={editFormData.name}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, name: e.target.value })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start gap-2 sm:gap-4">
-              <label
-                htmlFor="description"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.description")}
-              </label>
-              <textarea
-                id="description"
-                value={editFormData.description}
-                onChange={(e) =>
-                  setEditFormData({
-                    ...editFormData,
-                    description: e.target.value,
-                  })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-                rows={3}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-              <label
-                htmlFor="level"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.level")}
-              </label>
-              <select
-                id="level"
-                value={editFormData.level}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, level: e.target.value })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-              >
-                <option value="preA">Pre-A</option>
-                <option value="A1">A1</option>
-                <option value="A2">A2</option>
-                <option value="B1">B1</option>
-                <option value="B2">B2</option>
-                <option value="C1">C1</option>
-                <option value="C2">C2</option>
-              </select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-              <label
-                htmlFor="edit-grade"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.grade")}
-              </label>
-              <GradeSelect
-                id="edit-grade"
-                value={editFormData.grade}
-                onChange={(grade) =>
-                  setEditFormData({ ...editFormData, grade })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setEditingClassroom(null)}
-              className="w-full sm:w-auto"
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={handleSaveEdit} className="w-full sm:w-auto">
-              {t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       {/* 1Campus Sync Confirmation Dialog (#761) */}
@@ -1401,29 +1328,74 @@ export default function TeacherClassrooms() {
               {t("teacherClassrooms.dialogs.createDescription")}
             </DialogDescription>
           </DialogHeader>
+          {/* 老師習慣先定年級再定班級（#1097）：年級＋名稱並排，其次等級、描述 */}
           <div className="space-y-4">
+            <div className="grid grid-cols-[auto_1fr] gap-3">
+              <div>
+                <label
+                  htmlFor="create-grade"
+                  className="text-sm font-medium block mb-1"
+                >
+                  {t("teacherClassrooms.labels.grade")}
+                </label>
+                <GradeSelect
+                  id="create-grade"
+                  value={createFormData.grade}
+                  onChange={(grade) =>
+                    setCreateFormData({ ...createFormData, grade })
+                  }
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="create-name"
+                  className="text-sm font-medium block mb-1"
+                >
+                  {t("teacherClassrooms.labels.classroomName")}
+                </label>
+                <input
+                  id="create-name"
+                  type="text"
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                  value={createFormData.name}
+                  onChange={(e) =>
+                    setCreateFormData({
+                      ...createFormData,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder={t(
+                    "teacherClassrooms.placeholders.classroomName",
+                  )}
+                />
+              </div>
+            </div>
             <div>
-              <label className="text-sm font-medium block mb-1">
-                {t("teacherClassrooms.labels.classroomName")}
+              <label
+                htmlFor="create-level"
+                className="text-sm font-medium block mb-1"
+              >
+                {t("teacherClassrooms.labels.level")}
               </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                value={createFormData.name}
-                onChange={(e) =>
-                  setCreateFormData({
-                    ...createFormData,
-                    name: e.target.value,
-                  })
+              <LevelSelect
+                id="create-level"
+                value={createFormData.level}
+                onChange={(level) =>
+                  setCreateFormData({ ...createFormData, level })
                 }
-                placeholder={t("teacherClassrooms.placeholders.classroomName")}
+                className="w-full px-3 py-2 border rounded-md text-sm"
               />
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1">
+              <label
+                htmlFor="create-description"
+                className="text-sm font-medium block mb-1"
+              >
                 {t("teacherClassrooms.labels.description")}
               </label>
               <textarea
+                id="create-description"
                 className="w-full px-3 py-2 border rounded-md text-sm"
                 value={createFormData.description}
                 onChange={(e) =>
@@ -1435,56 +1407,6 @@ export default function TeacherClassrooms() {
                 placeholder={t("teacherClassrooms.placeholders.description")}
                 rows={3}
               />
-            </div>
-            <div>
-              <label
-                htmlFor="create-grade"
-                className="text-sm font-medium block mb-1"
-              >
-                {t("teacherClassrooms.labels.grade")}
-              </label>
-              <GradeSelect
-                id="create-grade"
-                value={createFormData.grade}
-                onChange={(grade) =>
-                  setCreateFormData({ ...createFormData, grade })
-                }
-                className="w-full px-3 py-2 border rounded-md text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1">
-                {t("teacherClassrooms.labels.level")}
-              </label>
-              <select
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                value={createFormData.level}
-                onChange={(e) =>
-                  setCreateFormData({
-                    ...createFormData,
-                    level: e.target.value,
-                  })
-                }
-              >
-                <option value="A1">
-                  {t("dialogs.createProgramDialog.custom.levels.A1")}
-                </option>
-                <option value="A2">
-                  {t("dialogs.createProgramDialog.custom.levels.A2")}
-                </option>
-                <option value="B1">
-                  {t("dialogs.createProgramDialog.custom.levels.B1")}
-                </option>
-                <option value="B2">
-                  {t("dialogs.createProgramDialog.custom.levels.B2")}
-                </option>
-                <option value="C1">
-                  {t("dialogs.createProgramDialog.custom.levels.C1")}
-                </option>
-                <option value="C2">
-                  {t("dialogs.createProgramDialog.custom.levels.C2")}
-                </option>
-              </select>
             </div>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
@@ -1514,6 +1436,36 @@ export default function TeacherClassrooms() {
         onOpenChange={setShowAdjustGrade}
         classrooms={selectedClassrooms}
         onConfirm={handleAdjustGrades}
+      />
+      <AdjustLevelDialog
+        open={showAdjustLevel}
+        onOpenChange={setShowAdjustLevel}
+        classrooms={selectedClassrooms}
+        onConfirm={handleAdjustLevels}
+      />
+      {/* 批次停用／啟用確認（#1097） */}
+      <ConfirmDialog
+        open={showBulkStatus}
+        onOpenChange={setShowBulkStatus}
+        title={t(
+          bulkStatusTarget
+            ? "classroomGrade.bulk.activateTitle"
+            : "classroomGrade.bulk.deactivateTitle",
+          { count: selectedClassrooms.length },
+        )}
+        description={t(
+          bulkStatusTarget
+            ? "classroomGrade.bulk.activateDescription"
+            : "classroomGrade.bulk.deactivateDescription",
+        )}
+        confirmText={t(
+          bulkStatusTarget
+            ? "classroomGrade.bulk.activate"
+            : "classroomGrade.bulk.deactivate",
+        )}
+        cancelText={t("common.cancel")}
+        variant={bulkStatusTarget ? "default" : "destructive"}
+        onConfirm={() => void handleBulkStatus(bulkStatusTarget)}
       />
 
       {/* Assignment Dialog */}

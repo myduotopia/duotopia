@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CEFR_LEVELS,
   LEVEL_ORDER,
+  computeLevelAdjust,
   getLevelBadgeClass,
   getLevelLabel,
   getLevelSortValue,
@@ -92,5 +93,36 @@ describe("getLevelBadgeClass", () => {
     expect(getLevelBadgeClass(undefined)).toBe(getLevelBadgeClass("A1"));
     expect(getLevelBadgeClass("zzz")).toContain("bg-gray-100");
     expect(getLevelBadgeClass("PREA")).toContain("bg-gray-100");
+  });
+});
+
+describe("computeLevelAdjust", () => {
+  const classrooms = [
+    { id: 1, name: "A", level: "A1" },
+    { id: 2, name: "B", level: "b1" },
+    { id: 3, name: "C", level: null },
+    { id: 4, name: "D", level: "PREA" },
+  ];
+
+  it("returns nothing until a target is chosen", () => {
+    expect(computeLevelAdjust(classrooms, null)).toEqual({
+      changes: [],
+      skipped: [],
+    });
+  });
+
+  it("skips classrooms already at the target (normalised) and lists the rest", () => {
+    const { changes, skipped } = computeLevelAdjust(classrooms, "B1");
+    expect(skipped).toEqual([{ id: 2, name: "B" }]);
+    expect(changes).toEqual([
+      { id: 1, name: "A", fromLabel: "A1", to: "B1" },
+      { id: 3, name: "C", fromLabel: "A1", to: "B1" },
+      { id: 4, name: "D", fromLabel: "Pre-A", to: "B1" },
+    ]);
+  });
+
+  it("treats an unset level as the default A1", () => {
+    const { skipped } = computeLevelAdjust(classrooms, "A1");
+    expect(skipped.map((s) => s.id)).toEqual([1, 3]);
   });
 });
