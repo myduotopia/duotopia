@@ -7,7 +7,8 @@
  * - 並排靠拖曳：拖到另一區塊的左／右半邊 → 並排（一行最多三個；圖＋文預設圖 1/3、文 2/3，
  *   其餘等分）；拖到上／下半邊 → 插在前／後、獨占一行。拖曳中目標對應的那一邊會高亮
  * - 並排比例靠拖曳欄間的分隔線微調（1/3、1/2、2/3），見 LayoutColumnDivider
- * - 預覽改成獨立 Dialog（LayoutPreviewDialog），可切電腦／手機
+ * - 預覽改成獨立 Dialog（LayoutPreviewDialog），可切電腦／手機；給了 `previewDraft`
+ *   就預覽完整題組（主圖文＋小題＋選項，不含答案），主圖文以編輯器當下內容為準
  * - 空狀態除了「新增區塊」還有「上傳圖片」（#1083 以圖為準：海報／漫畫／地圖整張當素材，
  *   layout 只有一張原始尺寸的圖；素材類型由內容自動判定為 image）
  *
@@ -53,6 +54,7 @@ import LayoutBlockChrome, {
 import LayoutBlockEditor from "./LayoutBlockEditor";
 import LayoutColumnDivider from "./LayoutColumnDivider";
 import LayoutPreviewDialog from "./LayoutPreviewDialog";
+import type { GroupPreviewData } from "./GroupPreview";
 import {
   appendBlock,
   canPlaceBeside,
@@ -87,7 +89,21 @@ export interface LayoutEditorProps {
   clozeMode?: boolean;
   /** 下一個要插入的空格編號 */
   nextBlankIndex?: number;
+  /**
+   * 預覽用的整個題組草稿（小題、選項、題組圖等）；主圖文與註解以編輯器當下內容覆蓋。
+   * 沒給（單獨使用編輯器）時預覽只有主圖文。
+   */
+  previewDraft?: GroupPreviewData;
 }
+
+const EMPTY_PREVIEW: GroupPreviewData = {
+  question_type: "reading",
+  layout: null,
+  glossary: [],
+  image_url: null,
+  passage_text: "",
+  questions: [],
+};
 
 const BLOCK_TYPES: LayoutBlock["type"][] = [
   "paragraph",
@@ -294,6 +310,7 @@ export default function LayoutEditor({
   testId = "layout-editor",
   clozeMode,
   nextBlankIndex,
+  previewDraft,
 }: LayoutEditorProps) {
   const { t } = useTranslation();
   const [doc, setDocState] = useState<EditorDoc>(() => toEditorDoc(layout));
@@ -410,6 +427,14 @@ export default function LayoutEditor({
     [activeBlockId, doc],
   );
   const preview = useMemo(() => toLayoutDoc(doc), [doc]);
+  const previewData = useMemo<GroupPreviewData>(
+    () => ({
+      ...(previewDraft ?? EMPTY_PREVIEW),
+      layout: preview,
+      glossary: glossary ?? [],
+    }),
+    [previewDraft, preview, glossary],
+  );
 
   /** 一列＋列後的「＋」；「＋」的 testid 用該列最後一個區塊的序號 */
   const renderRow = (
@@ -591,8 +616,7 @@ export default function LayoutEditor({
       <LayoutPreviewDialog
         open={previewOpen}
         onOpenChange={setPreviewOpen}
-        layout={preview}
-        glossary={glossary}
+        draft={previewData}
         testId={`${testId}-preview`}
       />
     </div>

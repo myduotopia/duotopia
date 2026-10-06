@@ -6143,6 +6143,9 @@
         "empty": "Nothing yet — “Add block” to start writing, or upload a whole image (poster / comic / map)",
         "uploadWholeImage": "Upload image"
       },
+      "preview": {
+        "questionsTitle": "Questions"
+      },
       "glossary": {
         "title": "Glossary",
         "placeholder": "timeline 時間軸\ncompose 作曲"

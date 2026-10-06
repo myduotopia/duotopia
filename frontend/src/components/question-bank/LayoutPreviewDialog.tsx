@@ -1,9 +1,10 @@
 /**
- * 主圖文預覽（Issue #1082 第 2 段修訂）。
+ * 題組預覽 Dialog（Issue #1082 第 2 段修訂；完整題組版）。
  *
  * 編輯器旁不再常駐預覽：按「預覽」開近全螢幕 Dialog，上方切「電腦／手機」；
- * 手機模式以 390px 置中並強制欄位上下堆疊。內容用共用 `LayoutRenderer`，
- * 老師看到的就是學生看到的。
+ * 手機模式以 390px 置中並強制欄位上下堆疊、選項直排。內容是 `GroupPreview`
+ * （主圖文＋小題＋選項，不含答案／解析／考點），老師看到的就是學生看到的。
+ * 傳入整個題組草稿（`draft`），不再只吃 layout／glossary。
  */
 
 import { useState } from "react";
@@ -18,22 +19,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { GlossaryEntry, LayoutDoc } from "@/types/questionBank";
-import LayoutRenderer from "./LayoutRenderer";
+import GroupPreview, { type GroupPreviewData } from "./GroupPreview";
 
 export interface LayoutPreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  layout: LayoutDoc | null;
-  glossary?: GlossaryEntry[];
+  /** 題組草稿（`GroupDraft` 可直接傳） */
+  draft: GroupPreviewData;
   testId?: string;
 }
 
 export default function LayoutPreviewDialog({
   open,
   onOpenChange,
-  layout,
-  glossary,
+  draft,
   testId = "layout-preview",
 }: LayoutPreviewDialogProps) {
   const { t } = useTranslation();
@@ -98,17 +97,11 @@ export default function LayoutPreviewDialog({
             data-testid={testId}
             data-mode={mobile ? "mobile" : "desktop"}
           >
-            {layout ? (
-              <LayoutRenderer
-                layout={layout}
-                glossary={glossary}
-                forceStack={mobile}
-              />
-            ) : (
-              <p className="py-8 text-center text-sm text-gray-400">
-                {t("questionBank.group.layout.empty")}
-              </p>
-            )}
+            <GroupPreview
+              draft={draft}
+              forceStack={mobile}
+              testId={`${testId}-group`}
+            />
           </div>
         </div>
       </DialogContent>

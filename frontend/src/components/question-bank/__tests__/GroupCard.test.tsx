@@ -47,15 +47,18 @@ vi.mock("../LayoutEditor", () => ({
     layout,
     onChange,
     testId,
+    previewDraft,
   }: {
     layout: LayoutDoc | null;
     onChange: (l: LayoutDoc | null) => void;
     testId: string;
+    previewDraft?: GroupDraft;
   }) => (
     <button
       type="button"
       data-testid={`${testId}-stub`}
       data-rows={layout?.rows.length ?? 0}
+      data-preview-questions={previewDraft?.questions.length ?? "none"}
       onClick={() =>
         onChange({
           version: 1,
@@ -232,6 +235,15 @@ describe("GroupCard", () => {
     const draft = lastDraft(onDraft);
     expect(draft.layout?.rows).toHaveLength(1);
     expect(draft.serverError).toBeNull();
+  });
+
+  it("預覽拿到整個題組草稿：新增小題後 LayoutEditor 的 previewDraft 帶小題", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={emptyGroupDraft()} />);
+    const stub = () => screen.getByTestId("qg-0-layout-stub");
+    expect(stub()).toHaveAttribute("data-preview-questions", "0");
+    await user.click(screen.getByTestId("qg-0-add-question"));
+    expect(stub()).toHaveAttribute("data-preview-questions", "1");
   });
 
   it("文字版分頁（#1083）：預設顯示排版推導文字；打字後變老師版本並標記；重新產生回推導", async () => {

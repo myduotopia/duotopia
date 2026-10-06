@@ -11,6 +11,8 @@
  * - 文字經 `parseInline` 成節點樹渲染：粗體、底線、雙底線、`{{n}}` 畫成底線＋編號；
  *   不使用 dangerouslySetInnerHTML；文字元素 `whitespace-pre-wrap`，段落開頭與連續空格照原樣
  * - glossary 有「word 與中文都非空」的項目時才渲染底部框；全空就不佔位
+ * - `InlineText`、`ZoomableImage`（圖＋點擊放大 Dialog）另外匯出，題組預覽（GroupPreview）的
+ *   小題題幹／選項共用，不另寫一套
  */
 
 import { useState, type ReactNode } from "react";
@@ -91,6 +93,61 @@ export function InlineText({
   return <span className={className}>{renderInline(parseInline(text))}</span>;
 }
 
+/**
+ * 圖片＋點擊放大 Dialog；主圖文的圖片區塊與題組預覽的題幹／選項圖共用。
+ * `zoomable=false`（考卷輸出）只畫 `<img>`。
+ */
+export function ZoomableImage({
+  src,
+  alt = "",
+  className,
+  style,
+  zoomable = true,
+  testId,
+}: {
+  src: string;
+  alt?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  zoomable?: boolean;
+  testId?: string;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const img = (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      style={style}
+      data-testid={testId}
+    />
+  );
+  if (!zoomable) return img;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="cursor-zoom-in"
+        aria-label={t("questionBank.group.render.zoomImage")}
+      >
+        {img}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[95vw] md:max-w-4xl p-2">
+          <DialogTitle className="sr-only">
+            {alt || t("questionBank.group.render.zoomImage")}
+          </DialogTitle>
+          <div className="max-h-[85vh] overflow-auto">
+            <img src={src} alt={alt} className="w-full h-auto" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function ImageBlock({
   block,
   zoomable,
@@ -98,8 +155,6 @@ function ImageBlock({
   block: Extract<LayoutBlock, { type: "image" }>;
   zoomable: boolean;
 }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const align = block.align ?? "center";
   const justify =
     align === "left"
@@ -107,51 +162,22 @@ function ImageBlock({
       : align === "right"
         ? "items-end"
         : "items-center";
-  const img = (
-    <img
-      src={block.url}
-      alt={block.alt ?? ""}
-      className={cn(
-        "max-w-full h-auto",
-        block.frame && "rounded border border-gray-300 p-1 bg-white",
-      )}
-      style={block.maxWidth ? { maxWidth: block.maxWidth } : undefined}
-    />
-  );
   return (
     <figure className={cn("flex flex-col gap-1", justify)}>
-      {zoomable ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="cursor-zoom-in"
-          aria-label={t("questionBank.group.render.zoomImage")}
-        >
-          {img}
-        </button>
-      ) : (
-        img
-      )}
+      <ZoomableImage
+        src={block.url}
+        alt={block.alt ?? ""}
+        className={cn(
+          "max-w-full h-auto",
+          block.frame && "rounded border border-gray-300 p-1 bg-white",
+        )}
+        style={block.maxWidth ? { maxWidth: block.maxWidth } : undefined}
+        zoomable={zoomable}
+      />
       {block.caption && (
         <figcaption className="text-sm text-gray-700">
           <InlineText text={block.caption} />
         </figcaption>
-      )}
-      {zoomable && (
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-[95vw] md:max-w-4xl p-2">
-            <DialogTitle className="sr-only">
-              {block.alt || t("questionBank.group.render.zoomImage")}
-            </DialogTitle>
-            <div className="max-h-[85vh] overflow-auto">
-              <img
-                src={block.url}
-                alt={block.alt ?? ""}
-                className="w-full h-auto"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
       )}
     </figure>
   );

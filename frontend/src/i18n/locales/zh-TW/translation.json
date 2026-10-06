@@ -6187,6 +6187,9 @@
         "empty": "還沒有內容：「新增區塊」開始寫，或上傳整張圖片（海報／漫畫／地圖）",
         "uploadWholeImage": "上傳圖片"
       },
+      "preview": {
+        "questionsTitle": "小題"
+      },
       "glossary": {
         "title": "單字註解",
         "placeholder": "timeline 時間軸\ncompose 作曲"

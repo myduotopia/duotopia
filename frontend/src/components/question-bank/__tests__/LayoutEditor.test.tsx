@@ -3,7 +3,7 @@
  *
  * jsdom 不測拖拉（dnd-kit 需要真實座標），只測：
  * 空狀態「新增區塊」、區塊之間的「＋」插入、輸入段落、欄寬分隔線（雙欄才有；鍵盤與指標吸附）、
- * 加／移除外框、刪除區塊（收掉空欄）、預覽 Dialog 與手機切換、沒有「新增列／比例」、disabled。
+ * 加／移除外框、刪除區塊（收掉空欄）、預覽 Dialog（含小題與選項）與手機切換、沒有「新增列／比例」、disabled。
  * 每步都檢查 onChange 收到的 LayoutDoc。
  */
 
@@ -18,6 +18,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import LayoutEditor from "../LayoutEditor";
+import { emptyGroupDraft, emptyGroupQuestion } from "../questionDraft";
 import type { LayoutDoc, LayoutRow } from "@/types/questionBank";
 
 const uploadMock = vi.fn<(file: File) => Promise<string | null>>();
@@ -262,11 +263,25 @@ describe("LayoutEditor", () => {
     );
   });
 
-  it("預覽：編輯區沒有常駐預覽；按「預覽」開 Dialog，預設電腦、切手機；預覽不回寫", async () => {
+  it("預覽：編輯區沒有常駐預覽；按「預覽」開 Dialog（主圖文＋小題＋選項），預設電腦、切手機；預覽不回寫", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
+    const group = emptyGroupDraft();
+    const q = emptyGroupQuestion(group);
+    q.stem = "What is on the left?";
+    q.explanation = "EXPLAIN-SECRET";
+    q.options = [
+      { text: "Apple", is_correct: true, image_url: null },
+      { text: "Banana", is_correct: false, image_url: null },
+    ];
     render(
-      <LayoutEditor layout={twoColumnDoc()} onChange={onChange} testId="le" />,
+      <LayoutEditor
+        layout={twoColumnDoc()}
+        onChange={onChange}
+        testId="le"
+        // 草稿裡的 layout 是舊的；預覽以編輯器當下內容為準
+        previewDraft={{ ...group, layout: null, questions: [q] }}
+      />,
     );
     expect(screen.queryByTestId("le-preview")).toBeNull();
 
@@ -274,6 +289,14 @@ describe("LayoutEditor", () => {
     const preview = await screen.findByTestId("le-preview");
     expect(preview).toHaveTextContent("left");
     expect(preview).toHaveTextContent("right");
+    expect(preview).toHaveTextContent("What is on the left?");
+    expect(preview).toHaveTextContent("Apple");
+    expect(preview).toHaveTextContent("Banana");
+    expect(preview).not.toHaveTextContent("EXPLAIN-SECRET");
+    expect(screen.getByTestId("le-preview-group-q-0-options")).toHaveAttribute(
+      "data-layout",
+      "grid",
+    );
     expect(preview).toHaveAttribute("data-mode", "desktop");
     expect(screen.getByTestId("le-preview-desktop")).toHaveAttribute(
       "aria-pressed",
@@ -290,6 +313,11 @@ describe("LayoutEditor", () => {
     expect(
       within(screen.getByTestId("le-preview")).getByTestId("layout-renderer"),
     ).toHaveAttribute("data-stack", "true");
+    // 手機模式選項一律直排
+    expect(screen.getByTestId("le-preview-group-q-0-options")).toHaveAttribute(
+      "data-layout",
+      "stack",
+    );
     expect(onChange).not.toHaveBeenCalled();
   });
 
