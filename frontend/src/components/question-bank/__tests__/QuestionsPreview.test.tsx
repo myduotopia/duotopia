@@ -2,7 +2,7 @@
  * QuestionsPreview 測試（Issue #1082：小題／單題預覽共用列表）。
  *
  * 鎖住：依序編號、無字無圖的選項不渲染且字母重排、圖片選項與題幹插圖顯示 img、
- * 不出現正確答案／解析、選項 2×2／直排規則、克漏字「空格 n」與「找不到空格」標記。
+ * 不出現正確答案／解析、選項 2×2／直排規則、克漏字「空格 n」、「找不到空格」與「未指定空格」標記。
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -18,7 +18,9 @@ vi.mock("react-i18next", () => ({
         ? `Blank ${opts?.n}`
         : key === "questionBank.group.questions.blankMissing"
           ? `Missing ${opts?.n}`
-          : key,
+          : key === "questionBank.group.questions.blankUnassigned"
+            ? "Unassigned"
+            : key,
     i18n: { language: "zh-TW" },
   }),
 }));
@@ -114,7 +116,7 @@ describe("QuestionsPreview", () => {
     );
   });
 
-  it("克漏字：「空格 n」徽章、不顯示題幹；缺編號或列在 missingBlanks → 找不到空格標記", () => {
+  it("克漏字：「空格 n」徽章、不顯示題幹；列在 missingBlanks → 找不到空格；缺編號 → 未指定空格", () => {
     render(
       <QuestionsPreview
         numbering="blank"
@@ -132,9 +134,10 @@ describe("QuestionsPreview", () => {
       "Missing 3",
     );
     expect(screen.queryByTestId("qp-q-1-blank")).toBeNull();
-    expect(screen.getByTestId("qp-q-2-blank-missing")).toHaveTextContent(
-      "Missing ?",
-    );
+    const unassigned = screen.getByTestId("qp-q-2-blank-missing");
+    expect(unassigned).toHaveTextContent("Unassigned");
+    expect(unassigned).not.toHaveTextContent("?");
+    expect(unassigned.className).toContain("text-amber-700");
     expect(screen.queryByText(/Fill in blank/)).toBeNull();
     expect(screen.queryByTestId("qp-q-0-number")).toBeNull();
   });

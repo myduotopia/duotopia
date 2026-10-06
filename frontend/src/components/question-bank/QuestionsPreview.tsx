@@ -7,8 +7,9 @@
  * - 編號 `numbering`：
  *   - `"sequential"`：依陣列順序 1..n（閱讀題組小題、選擇題面板的所有單題）
  *   - `"blank"`：克漏字。顯示徽章「空格 n」、不顯示題幹（題幹是 AI 填的「Fill in blank (n).」之類，
- *     學生看的是文章裡的空格）。`blank_index` 為 null 或列在 `missingBlanks`（文章裡已沒有這個空格）
- *     時改顯示琥珀色「找不到空格」標記。排序由呼叫端負責（`sortClozeQuestions`）
+ *     學生看的是文章裡的空格）。`blank_index` 列在 `missingBlanks`（文章裡已沒有這個空格）時改顯示
+ *     琥珀色「找不到空格 n」標記；`blank_index` 為 null（小題還沒指定空格）顯示同樣琥珀色的
+ *     「未指定空格」。排序由呼叫端負責（`sortClozeQuestions`）
  * - 題幹用 `InlineText`（`**` 粗體、`__` 底線、`==` 雙底線）；題幹插圖在題幹下方，可點擊放大
  * - 選項 A–F：無字無圖的選項（`optionFilled` 為 false）不顯示，字母依顯示順序重排；
  *   圖片選項最大寬 160px、可點擊放大
@@ -87,9 +88,11 @@ function PreviewQuestion({
         className="shrink-0 rounded bg-amber-50 px-2 py-0.5 text-sm font-medium text-amber-700"
         data-testid={`${testId}-blank-missing`}
       >
-        {t("questionBank.group.questions.blankMissing", {
-          n: q.blank_index ?? "?",
-        })}
+        {q.blank_index === null
+          ? t("questionBank.group.questions.blankUnassigned")
+          : t("questionBank.group.questions.blankMissing", {
+              n: q.blank_index,
+            })}
       </span>
     );
   } else {

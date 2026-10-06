@@ -2,7 +2,7 @@
  * GroupPreview 測試（Issue #1082：預覽完整題組）。
  *
  * 鎖住：主圖文＋小題＋選項都畫出來、克漏字顯示「空格 n」且不顯示題幹、文章已刪掉的空格顯示
- * 「找不到空格」、不出現正確答案／解析、forceStack 傳到主圖文、沒有 layout 時退回題組圖、文字與單字註解。
+ * 「找不到空格」、不出現正確答案／解析、forceStack 傳到主圖文、沒有 layout 時退回題組圖、文字與單字註解（只有註解也畫）。
  * 選項顯示規則（無字無圖不渲染、2×2／直排、圖片選項）在 QuestionsPreview.test.tsx。
  */
 
@@ -189,6 +189,25 @@ describe("GroupPreview", () => {
     const fallback = screen.getByTestId("group-preview-fallback");
     expect(within(fallback).getByTestId("layout-glossary")).toHaveTextContent(
       "poster 海報",
+    );
+  });
+
+  it("沒有 layout、圖、文章，只有單字註解＋小題：註解框照樣出現", () => {
+    const g = {
+      ...emptyGroupDraft("reading"),
+      glossary: [
+        { word: "poster", zh: "海報" },
+        { word: "half", zh: "" },
+      ],
+    };
+    g.questions = [question(g, { stem: "What is on the wall?" })];
+    render(<GroupPreview draft={g} />);
+    const fallback = screen.getByTestId("group-preview-fallback");
+    expect(within(fallback).getByTestId("layout-glossary")).toHaveTextContent(
+      "poster 海報",
+    );
+    expect(screen.getByTestId("group-preview-q-0")).toHaveTextContent(
+      "What is on the wall?",
     );
   });
 });

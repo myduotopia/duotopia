@@ -5,9 +5,11 @@
  *
  * - 只看 `single` 單元（題組模式由 sheet 隱藏本按鈕，沿用 `LayoutEditor` 內的題組預覽入口，
  *   避免兩個入口）
- * - 內容：`LayoutPreviewDialog` 的 `questions` 模式 → `QuestionsPreview`，右側所有單題依卡片順序
- *   編號 1..n（題幹、插圖、選項；不含答案、解析、考點）；電腦／手機切換沿用 Dialog 既有機制
- * - 右側一題都沒有內容（無題幹、無題幹插圖、無任何有字或有圖的選項）時 disabled
+ * - 內容：`LayoutPreviewDialog` 的 `questions` 模式 → `QuestionsPreview`，右側「有內容」的單題依
+ *   卡片順序編號 1..n（題幹、插圖、選項；不含答案、解析、考點）；完全空白的卡片略過、不佔編號；
+ *   電腦／手機切換沿用 Dialog 既有機制
+ * - 「有內容」＝有題幹、題幹插圖或任何有字或有圖的選項（`draftHasContent` 或 `optionFilled`）
+ * - 一題都沒有內容，或 `disabled`（sheet 傳 `busy`：儲存／語音／AI 進行中）時按鈕 disabled
  */
 
 import { useMemo, useState } from "react";
@@ -34,16 +36,18 @@ export default function SheetPreviewButton({
 }: SheetPreviewButtonProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  // 只送「有內容」的單題；完全空白的卡片不出現、不佔編號
   const questions = useMemo(
     () =>
       units.flatMap((u): QuestionDraft[] =>
-        u.kind === "single" ? [u.draft] : [],
+        u.kind === "single" &&
+        (draftHasContent(u.draft) || u.draft.options.some(optionFilled))
+          ? [u.draft]
+          : [],
       ),
     [units],
   );
-  const hasContent = questions.some(
-    (q) => draftHasContent(q) || q.options.some(optionFilled),
-  );
+  const hasContent = questions.length > 0;
 
   return (
     <>

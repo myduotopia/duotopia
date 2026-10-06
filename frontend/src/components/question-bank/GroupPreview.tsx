@@ -5,10 +5,11 @@
  * 所以它是純展示：不顯示正確答案、解析、考點，也不吃任何編輯狀態。
  *
  * - 上：主圖文用共用 `LayoutRenderer`（含單字註解、圖片點擊放大）。沒有 layout 時退回顯示
- *   題組圖（`image_url`）、`passage_text` 與單字註解（共用 `GlossaryBox`）
+ *   題組圖（`image_url`）、`passage_text` 與單字註解（共用 `GlossaryBox`）；只有單字註解
+ *   （至少一筆單字與中文都有填）也算有主圖文，照樣畫出註解框
  * - 下：小題列表交給共用 `QuestionsPreview`（選擇題面板的預覽也用它）
  *   - 閱讀題組依陣列順序 1..n；克漏字依 `blank_index` 排序、顯示徽章「空格 n」且不顯示題幹；
- *     小題指向的空格已不在文章裡（或沒有編號）時顯示「找不到空格」標記
+ *     小題指向的空格已不在文章裡時顯示「找不到空格」標記、沒有編號時顯示「未指定空格」
  *   - 題幹／選項的規則（無字無圖不顯示、2×2／直排、圖片可放大）見 `QuestionsPreview`
  * - 根元素 `break-words`，長單字／網址不撐破版面
  * - 全空（無主圖文、無小題）顯示「還沒有內容」
@@ -63,7 +64,12 @@ export default function GroupPreview({
   const passage = draft.passage_text.trim();
   // 文章裡已找不到的空格（老師刪掉了 {{n}}）；clozeOrphanBlanksOf 只讀 question_type／layout／questions
   const missingBlanks = cloze ? clozeOrphanBlanksOf(draft as GroupDraft) : [];
-  const hasStimulus = hasLayout || Boolean(draft.image_url) || passage !== "";
+  // 判斷與 GlossaryBox 一致：單字與中文都非空才會畫出來
+  const hasGlossary = (draft.glossary ?? []).some(
+    (g) => g.word.trim() !== "" && g.zh.trim() !== "",
+  );
+  const hasStimulus =
+    hasLayout || Boolean(draft.image_url) || passage !== "" || hasGlossary;
 
   if (!hasStimulus && questions.length === 0) {
     return (

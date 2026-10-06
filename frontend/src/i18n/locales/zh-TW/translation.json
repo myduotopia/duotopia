@@ -6215,6 +6215,7 @@
         "drag": "拖曳排序",
         "blankN": "空格 {{n}}",
         "blankMissing": "找不到空格 {{n}}",
+        "blankUnassigned": "未指定空格",
         "reinsertBlank": "重新插入到文末",
         "removeBlank": "刪除小題",
         "appendBlank": "在文末插入空格",

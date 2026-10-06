@@ -4,7 +4,7 @@
  * 驗證：左欄順序與上傳／AI 為即將推出；進階設定預設收起；考點必填、公開必選擋送出；
  * 左側批次覆寫所有卡且新增題帶批次值；編輯模式單卡預填走 updateQuestion（含 source_ids）；
  * 逐題送出與部分失敗；批次編輯中途失敗（#1077：停在失敗題、sheet 不關、該卡顯示後端訊息、
- * toast 部分成功）；readOnly。
+ * toast 部分成功）；readOnly；預覽（#1082：略過空白卡、儲存中停用）。
  *
  * Radix Select 在 jsdom 難以操作，需要「已選公開設定」的送出流程用編輯模式（值已預填）。
  */
@@ -596,6 +596,43 @@ describe("MultipleChoiceQuestionSheet", () => {
 
     renderSheet({ createType: "reading" });
     expect(screen.queryByTestId("qb-preview")).toBeNull();
+  });
+
+  it("預覽（#1082）：完全空白的卡片略過，編號依過濾後順序 1、2", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await fillCard(user, 0, "First stem", [["apple", true]]);
+    await user.click(screen.getByTestId("qb-add-question"));
+    await user.click(screen.getByTestId("qb-add-question"));
+    await fillCard(user, 2, "Third stem", [["cat", false]]);
+
+    await user.click(screen.getByTestId("qb-preview"));
+    const list = await screen.findByTestId("qb-preview-panel-questions-list");
+    expect(list.children).toHaveLength(2);
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-0"),
+    ).toHaveTextContent("First stem");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-1-number"),
+    ).toHaveTextContent("2.");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-1"),
+    ).toHaveTextContent("Third stem");
+    expect(screen.queryByTestId("qb-preview-panel-questions-q-2")).toBeNull();
+  });
+
+  it("預覽（#1082）：儲存中按鈕 disabled", async () => {
+    const existing = baseQuestion();
+    updateQuestion.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderSheet({ questions: [existing] });
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(false);
+
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(previewBtn().disabled).toBe(true);
   });
 
   it("批次編輯：N 張卡各自帶值、左欄完整但批次值空白；左欄改公開 → 全部卡；儲存逐題 PATCH", async () => {

@@ -6171,6 +6171,7 @@
         "drag": "Drag to reorder",
         "blankN": "Blank {{n}}",
         "blankMissing": "Blank {{n}} is not in the passage",
+        "blankUnassigned": "No blank assigned",
         "reinsertBlank": "Re-insert at the end",
         "removeBlank": "Delete sub-question",
         "appendBlank": "Insert a blank at the end",
