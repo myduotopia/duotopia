@@ -11,8 +11,9 @@
  *     琥珀色「找不到空格 n」標記；`blank_index` 為 null（小題還沒指定空格）顯示同樣琥珀色的
  *     「未指定空格」。排序由呼叫端負責（`sortClozeQuestions`）
  * - 題幹用 `InlineText`（`**` 粗體、`__` 底線、`==` 雙底線）；題幹插圖在題幹下方，可點擊放大
+ *   （最高 240px、等比縮放不裁切）
  * - 選項 A–F：無字無圖的選項（`optionFilled` 為 false）不顯示，字母依顯示順序重排；
- *   圖片選項最大寬 160px、可點擊放大
+ *   圖片選項限制在 160×160px 內等比縮放（object-contain，永遠看得到整張圖）、可點擊放大
  * - 選項排版：四個以內且每個文字都短（≤ 30 字）→ 桌機 2×2（手機寬度自動單欄）；
  *   否則直排；`forceStack`（手機預覽）一律直排
  * - 長單字／網址以 `break-words` 換行，不撐破版面
@@ -121,7 +122,7 @@ function PreviewQuestion({
         <div className="pl-6">
           <ZoomableImage
             src={q.image_url}
-            className="h-auto max-h-60 max-w-full rounded border border-gray-200"
+            className="h-auto max-h-60 w-auto max-w-full rounded border border-gray-200 object-contain"
             testId={`${testId}-stem-image`}
           />
         </div>
@@ -150,7 +151,7 @@ function PreviewQuestion({
                 {o.image_url && (
                   <ZoomableImage
                     src={o.image_url}
-                    className="h-auto max-w-[160px] rounded border border-gray-200"
+                    className="h-auto max-h-[160px] w-auto max-w-[160px] rounded border border-gray-200 object-contain"
                     testId={`${testId}-opt-${j}-image`}
                   />
                 )}

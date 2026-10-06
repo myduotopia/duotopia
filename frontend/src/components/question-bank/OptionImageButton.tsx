@@ -3,6 +3,8 @@
  *
  * 上傳邏輯在 `uploadImageFile`（2MB 上限、型別白名單、`apiClient.uploadImage`），
  * 與題組排版的圖片區塊共用。無圖＝圖片 icon；有圖＝縮圖，hover 顯示移除。
+ * 縮圖是 56px 白底方框，圖片等比縮小置中（object-contain），很寬或很高的圖也看得到整張、不裁切。
+ * 題幹插圖（#1083）用同一顆按鈕，一併適用。
  */
 
 import { useRef, useState } from "react";
@@ -57,8 +59,15 @@ export default function OptionImageButton({
         data-testid={`${testId}-input`}
       />
       {imageUrl ? (
-        <div className="group relative h-9 w-9 rounded border border-gray-200 overflow-hidden">
-          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+        <div
+          className="group relative flex h-14 w-14 items-center justify-center overflow-hidden rounded border border-gray-200 bg-white"
+          data-testid={`${testId}-thumb`}
+        >
+          <img
+            src={imageUrl}
+            alt=""
+            className="max-h-full max-w-full object-contain"
+          />
           {!disabled && (
             <button
               type="button"

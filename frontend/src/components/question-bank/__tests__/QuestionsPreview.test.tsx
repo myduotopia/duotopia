@@ -81,6 +81,25 @@ describe("QuestionsPreview", () => {
     );
   });
 
+  it("圖片等比縮放不裁切：選項圖限 160px 方框、題幹圖限高且寬度自動（#1082）", () => {
+    render(<QuestionsPreview questions={twoQuestions()} testId="qp" />);
+    const opt = screen.getByTestId("qp-q-1-opt-1-image");
+    for (const c of [
+      "object-contain",
+      "max-w-[160px]",
+      "max-h-[160px]",
+      "w-auto",
+      "h-auto",
+    ]) {
+      expect(opt).toHaveClass(c);
+    }
+    const stem = screen.getByTestId("qp-q-1-stem-image");
+    for (const c of ["object-contain", "max-h-60", "max-w-full", "w-auto"]) {
+      expect(stem).toHaveClass(c);
+    }
+    expect(stem).not.toHaveClass("object-cover");
+  });
+
   it("不顯示正確答案與解析", () => {
     const { container } = render(
       <QuestionsPreview questions={twoQuestions()} />,
