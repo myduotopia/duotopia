@@ -89,6 +89,11 @@ export interface MagicPasteGroupResult {
     blanks_renumbered?: boolean;
     /** 原卷文章是否印在方框內（kind=image 時後端一律 false）→ layout.frame（#1084） */
     framed?: boolean;
+    /**
+     * kind=image 且圖中人物有說話（漫畫、對話圖）時的逐句對話，閱讀順序；沒有對話為 []。
+     * 說話者不加 the：Girl／Boy A／Teacher／人名…（#1083）。有對話時 `text` 只剩非對話文字。
+     */
+    dialogue?: { speaker: string; text: string }[];
   };
   glossary: { word: string; zh: string }[];
   questions: MagicPasteMcItem[];

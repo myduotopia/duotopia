@@ -6207,7 +6207,8 @@
         "placeholder": "海報、漫畫等圖片題組：把圖中的文字貼在這裡",
         "regenerate": "重新產生",
         "edited": "已手動修改",
-        "emptyReverts": "留空儲存後會回到由排版自動產生的文字"
+        "emptyReverts": "留空儲存後會回到由排版自動產生的文字",
+        "dialogueReadonly": "對話文稿由 AI 從圖片整理，會用來產生音檔，無法修改"
       },
       "extract": {
         "overwriteTitle": "覆蓋目前的題組內容？",

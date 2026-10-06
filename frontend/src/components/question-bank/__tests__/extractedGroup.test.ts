@@ -694,3 +694,73 @@ describe("閱讀題組的文字版也要去掉 {{n}}", () => {
     ).toBe("he {{1}} happy");
   });
 });
+
+describe("圖片對話 → 對話文稿（#1083）", () => {
+  const comic = (
+    dialogue: { speaker: string; text: string }[],
+    text = "Hank's Day",
+  ) =>
+    baseResult({
+      title: "Hank's Day",
+      stimulus: {
+        kind: "image",
+        paragraphs: [],
+        text,
+        box_2d: [0, 0, 500, 1000],
+        page: 1,
+        dialogue,
+      },
+    });
+
+  it("kind=image 有對話：填 segments，文字版 = 非對話文字＋逐句對話，不標記改過", () => {
+    const draft = groupDraftFromExtracted(
+      comic([
+        { speaker: "Mary", text: "Where are you going?" },
+        { speaker: " ", text: "dropped" },
+        { speaker: "Hank", text: " To the park. " },
+      ]),
+      emptyGroupDraft("reading"),
+      stimulusImage,
+    );
+    expect(draft.segments).toEqual([
+      { speaker_label: "Mary", transcript: "Where are you going?" },
+      { speaker_label: "Hank", transcript: "To the park." },
+    ]);
+    expect(draft.passage_text).toBe(
+      "Hank's Day\n\nMary: Where are you going?\nHank: To the park.",
+    );
+    expect(draft.passage_text_edited).toBe(false);
+    const input = toCreateGroupInput(draft);
+    expect(input.segments).toEqual(draft.segments);
+    expect(input.passage_text).toBe(draft.passage_text);
+  });
+
+  it("沒有非對話文字時文字版只有逐句對話", () => {
+    const draft = groupDraftFromExtracted(
+      comic([{ speaker: "Girl A", text: "Look!" }], ""),
+      emptyGroupDraft("reading"),
+      stimulusImage,
+    );
+    expect(draft.passage_text).toBe("Girl A: Look!");
+  });
+
+  it("沒有對話（海報）：segments 為空、文字版照舊可編輯；重新擷取會清掉上一張的對話", () => {
+    const prev = groupDraftFromExtracted(
+      comic([{ speaker: "Boy", text: "Hi." }]),
+      emptyGroupDraft("reading"),
+      stimulusImage,
+    );
+    const poster = groupDraftFromExtracted(
+      comic([], "SALE 50% OFF"),
+      prev,
+      stimulusImage,
+    );
+    expect(poster.segments).toEqual([]);
+    expect(poster.passage_text).toBe("SALE 50% OFF");
+    expect(poster.passage_text_edited).toBe(true);
+    expect(toCreateGroupInput(poster).segments).toBeNull();
+
+    const prose = groupDraftFromExtracted(baseResult(), prev, noImages);
+    expect(prose.segments).toEqual([]);
+  });
+});

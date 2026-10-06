@@ -12,7 +12,9 @@
  *
  * kind=text：排版 = 段落區塊（＋插圖），文字版由排版推導（edited=false）；
  *   AI 判斷原卷文章印在方框內（`stimulus.framed`）時排版根層 `frame: true`（整篇外框）
- * kind=image：排版 = 一張裁好的圖（沒圖就 null），文字版 = 圖內文字（edited=true，老師可修）
+ * kind=image：排版 = 一張裁好的圖（沒圖就 null），文字版 = 圖內文字（edited=true，老師可修）；
+ *   圖中有人物對話（`stimulus.dialogue`，#1083）時改填 `segments`（逐句「說話者: 台詞」，
+ *   老師不可修改），文字版 = 非對話文字＋逐句對話（dialogueTranscript.ts，edited=false）
  *
  * 克漏字（base.question_type === "cloze"）：段落直接採用 AI 重編後的 `{{n}}`，
  * 小題 `blank_index` 取 `question.blank`；AI 漏給或對不上時改依閱讀順序補配
@@ -25,12 +27,14 @@ import type {
   MagicPasteMcItem,
 } from "@/components/shared/MagicPasteInput";
 import type {
+  GroupSegmentInput,
   LayoutBlock,
   LayoutDoc,
   LayoutImageBlock,
   LayoutRow,
 } from "@/types/questionBank";
 
+import { dialoguePassageText } from "./dialogueTranscript";
 import { layoutBlankIndexes } from "./layoutInline";
 import { singleImageDoc, toLayoutDoc } from "./layoutEditorModel";
 import {
@@ -260,6 +264,18 @@ export interface GroupExtractImages {
   questions?: ExtractedQuestionImages;
 }
 
+/** AI 逐句對話 → 對話文稿；說話者與台詞皆非空才留（後端已整理，這裡再保險） */
+export function extractedSegments(
+  dialogue: { speaker: string; text: string }[] | undefined,
+): GroupSegmentInput[] {
+  return (dialogue ?? [])
+    .map((d) => ({
+      speaker_label: (d.speaker ?? "").trim(),
+      transcript: (d.text ?? "").trim(),
+    }))
+    .filter((s) => s.speaker_label !== "" && s.transcript !== "");
+}
+
 /** 擷取結果填進題組草稿。 */
 export function groupDraftFromExtracted(
   result: MagicPasteGroupResult,
@@ -282,6 +298,9 @@ export function groupDraftFromExtracted(
   if (result.stimulus.kind === "image") {
     // 閱讀題組的文字版同樣不能帶 `{{n}}`（後端對 reading 會 422）；克漏字保留
     const text = normalizeStimulusText(result.stimulus.text, isCloze);
+    // 圖中人物對話 → 逐句對話文稿（#1083）：文字版 = 非對話文字＋逐句對話，老師不可改
+    const segments = extractedSegments(result.stimulus.dialogue);
+    const hasDialogue = segments.length > 0;
     return {
       ...base,
       title,
@@ -289,8 +308,9 @@ export function groupDraftFromExtracted(
         ? toLayoutDoc(singleImageDoc(imageUrl, title || "stimulus"))
         : null,
       image_url: null,
-      passage_text: text,
-      passage_text_edited: text !== "",
+      passage_text: hasDialogue ? dialoguePassageText(text, segments) : text,
+      passage_text_edited: !hasDialogue && text !== "",
+      segments,
       glossary,
       questions,
       serverError: null,
@@ -323,6 +343,8 @@ export function groupDraftFromExtracted(
     image_url: null,
     passage_text: fallbackText,
     passage_text_edited: fallbackText !== "",
+    // 散文裡的對話留在段落中，不拆對話文稿；重新擷取時也清掉上一張圖的對話
+    segments: [],
     glossary,
     questions: isCloze
       ? matchClozeBlanks(

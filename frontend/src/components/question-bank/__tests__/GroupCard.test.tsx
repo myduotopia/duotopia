@@ -337,6 +337,53 @@ describe("GroupCard", () => {
     expect(screen.queryByTestId("qg-0-passage-empty-hint")).toBeNull();
   });
 
+  it("文字版有對話文稿（#1083）：唯讀對話樣式（說話者＋台詞、旁白在上），沒有編輯框與重新產生", async () => {
+    const user = userEvent.setup();
+    const initial: GroupDraft = {
+      ...emptyGroupDraft(),
+      passage_text: "Hank's Day\n\nMary: Where are you going?\nHank: To the park.",
+      segments: [
+        { speaker_label: "Mary", transcript: "Where are you going?" },
+        { speaker_label: "Hank", transcript: "To the park." },
+      ],
+    };
+    render(<Harness initial={initial} />);
+    await user.click(screen.getByTestId("qg-0-tab-text"));
+    const view = await screen.findByTestId("qg-0-passage-text-dialogue");
+    expect(view).toHaveTextContent("questionBank.group.passage.dialogueReadonly");
+    expect(screen.getByTestId("qg-0-passage-text-narration")).toHaveTextContent(
+      "Hank's Day",
+    );
+    const first = screen.getByTestId("qg-0-passage-text-line-0");
+    expect(first).toHaveTextContent("Mary: Where are you going?");
+    expect(first.querySelector(".font-semibold")).toHaveTextContent("Mary:");
+    expect(screen.getByTestId("qg-0-passage-text-line-1")).toHaveTextContent(
+      "Hank: To the park.",
+    );
+    // 不可修改：沒有文字框、沒有「重新產生」、沒有「已手動修改」
+    expect(screen.queryByTestId("qg-0-passage-text")).toBeNull();
+    expect(screen.queryByTestId("qg-0-passage-text-regen")).toBeNull();
+    expect(screen.queryByTestId("qg-0-passage-edited")).toBeNull();
+  });
+
+  it("文字版沒有對話文稿時維持可編輯文字框（海報）", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{
+          ...emptyGroupDraft(),
+          passage_text: "SALE 50% OFF",
+          passage_text_edited: true,
+        }}
+      />,
+    );
+    await user.click(screen.getByTestId("qg-0-tab-text"));
+    expect(await screen.findByTestId("qg-0-passage-text")).toHaveValue(
+      "SALE 50% OFF",
+    );
+    expect(screen.queryByTestId("qg-0-passage-text-dialogue")).toBeNull();
+  });
+
   it("errorMessage 顯示在卡片底部；readOnly 隱藏新增小題／新增註解", () => {
     const { rerender } = render(
       <GroupCard

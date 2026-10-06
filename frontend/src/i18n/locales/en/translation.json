@@ -6163,7 +6163,8 @@
         "placeholder": "Poster / comic groups: paste the text from the image here",
         "regenerate": "Regenerate",
         "edited": "Edited manually",
-        "emptyReverts": "Leaving this empty restores the text generated from the layout"
+        "emptyReverts": "Leaving this empty restores the text generated from the layout",
+        "dialogueReadonly": "Dialogue transcript extracted by AI from the picture; used to generate audio and can't be edited."
       },
       "extract": {
         "overwriteTitle": "Replace the current group content?",

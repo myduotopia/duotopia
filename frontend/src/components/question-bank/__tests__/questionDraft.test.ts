@@ -693,6 +693,35 @@ describe("AI 套用（#1065）：只填空的", () => {
       groupDraftFromGroup({ ...base, passage_text: "Intro\n\nPoster text" })
         .passage_text_edited,
     ).toBe(true);
+
+    // 對話文稿（#1083）：segments 往返；文字版由 segments 組成、不標記改過
+    const withDialogue = groupDraftFromGroup({
+      ...base,
+      passage_text: "Hank's Day\n\nMary: Hi.\nHank: Hello.",
+      segments: [
+        { order_index: 0, speaker_label: "Mary", transcript: "Hi." },
+        { order_index: 1, speaker_label: "Hank", transcript: "Hello." },
+      ],
+    });
+    expect(withDialogue.segments).toEqual([
+      { speaker_label: "Mary", transcript: "Hi." },
+      { speaker_label: "Hank", transcript: "Hello." },
+    ]);
+    expect(withDialogue.passage_text_edited).toBe(false);
+    expect(groupPassageText(withDialogue)).toBe(
+      "Hank's Day\n\nMary: Hi.\nHank: Hello.",
+    );
+    const patch = toUpdateGroupInput(withDialogue);
+    expect(patch.segments).toEqual(withDialogue.segments);
+    expect(patch.passage_text).toBe("Hank's Day\n\nMary: Hi.\nHank: Hello.");
+    // 文字版被改壞（結尾不是這份對話）→ 只留對話，不留旁白
+    expect(
+      groupPassageText({ ...withDialogue, passage_text: "tampered" }),
+    ).toBe("Mary: Hi.\nHank: Hello.");
+    // 舊資料沒有 segments 欄位 → 空陣列，PATCH 送 []（不影響）
+    expect(groupDraftFromGroup({ ...base, passage_text: null }).segments).toEqual(
+      [],
+    );
   });
   it("toUpdateGroupInput：帶 existingId 的小題送 id，新小題不送；不含題型／歸屬", () => {
     const g = emptyGroupDraft("reading");

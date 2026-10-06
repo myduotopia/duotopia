@@ -11,6 +11,9 @@
  *   createQuestion／updateQuestion，題組走 createQuestionGroup（整組一個交易）。
  *
  * 左側批次設定只是「覆寫所有單元」的捷徑，儲存時仍是逐單元送出各自的值。
+ *
+ * 圖片題組的對話文稿（#1083）：`GroupDraft.segments` 由 AI 擷取、老師不可修改，
+ * 有值時文字版由它組成（dialogueTranscript.ts），建立／更新都會帶給後端。
  */
 
 import type { GradeRange } from "@/components/shared/GradeRangeSlider";
@@ -23,6 +26,7 @@ import type {
   AiQuestionInput,
   ExamPoint,
   GlossaryEntry,
+  GroupSegmentInput,
   LayoutDoc,
   Question,
   QuestionCreateInput,
@@ -51,6 +55,7 @@ import {
   renumberLayoutBlanks,
   renumberMap,
 } from "./clozeDraft";
+import { dialogueNarration, dialoguePassageText } from "./dialogueTranscript";
 import { sourceToItem } from "./sourcesCombobox";
 
 /** 預設顯示 A–D 四格；按「新增選項」才展開到 6 格 */
@@ -330,6 +335,11 @@ export interface GroupDraft {
    */
   passage_text: string;
   passage_text_edited: boolean;
+  /**
+   * 對話文稿（#1083）：圖片有人物對話時 AI 整理的逐句「說話者: 台詞」，老師不可修改。
+   * 有值時文字版 = 開頭的非對話文字＋逐句對話（dialogueTranscript.ts），不看 edited。
+   */
+  segments: GroupSegmentInput[];
   /** 小題（groupKey 都指向本題組） */
   questions: QuestionDraft[];
   grade: GradeRange;
@@ -359,6 +369,7 @@ export function emptyGroupDraft(
     image_url: null,
     passage_text: "",
     passage_text_edited: false,
+    segments: [],
     questions: [],
     grade: [...defaults.grade] as GradeRange,
     program_link: defaults.program_link ? { ...defaults.program_link } : null,
@@ -385,6 +396,10 @@ export function emptyGroupQuestion(g: GroupDraft): QuestionDraft {
 
 export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
   const first = g.questions[0];
+  const segments = (g.segments ?? []).map((s) => ({
+    speaker_label: s.speaker_label,
+    transcript: s.transcript,
+  }));
   const draft: GroupDraft = {
     key: nextKey(),
     question_type: g.question_type,
@@ -394,10 +409,13 @@ export function groupDraftFromGroup(g: QuestionGroup): GroupDraft {
     glossary: g.glossary ?? [],
     image_url: g.image_url,
     passage_text: g.passage_text ?? "",
-    // 存的文字跟排版推導出來的不一樣 = 老師改過（純圖題組沒有推導文字，有存就是改過）
+    // 存的文字跟排版推導出來的不一樣 = 老師改過（純圖題組沒有推導文字，有存就是改過）；
+    // 有對話文稿時文字版由 segments 推導、不可改，edited 無意義
     passage_text_edited:
+      segments.length === 0 &&
       (g.passage_text ?? "").trim() !== "" &&
       (g.passage_text ?? "").trim() !== layoutToPlainText(g.layout).trim(),
+    segments,
     questions: [],
     grade: [g.grade_min, g.grade_max],
     // 題組層沒有教材關聯／來源欄位：以第一個小題的值當左欄預填（各小題仍各自帶）
@@ -564,12 +582,13 @@ export function clozeAiStem(d: QuestionDraft): string {
     : `Fill in blank (${d.blank_index}).`;
 }
 
-/** 題組有內容 = 有排版、有文字版或有圖 */
+/** 題組有內容 = 有排版、有文字版、有圖或有對話文稿 */
 export function groupHasStimulus(g: GroupDraft): boolean {
   return (
     (g.layout !== null && g.layout.rows.length > 0) ||
     g.passage_text.trim() !== "" ||
-    g.image_url !== null
+    g.image_url !== null ||
+    g.segments.length > 0
   );
 }
 
@@ -688,8 +707,13 @@ export function groupDerivedText(g: GroupDraft): string {
 /**
  * 送後端的文字版：老師改過就用老師的；否則用排版推導，推導不出（純圖／沒排版）才用
  * 老師手打的；都空 → null。後端規則是「有送 passage_text 就存它」，所以這裡決定的就是最終值。
+ * 有對話文稿時：開頭的非對話文字＋逐句對話（後端同規則重組，#1083）。
  */
 export function groupPassageText(g: GroupDraft): string | null {
+  if (g.segments.length > 0) {
+    const narration = dialogueNarration(g.passage_text, g.segments);
+    return dialoguePassageText(narration, g.segments) || null;
+  }
   const own = g.passage_text.trim();
   const text = g.passage_text_edited ? own : groupDerivedText(g) || own;
   return text || null;
@@ -719,6 +743,7 @@ export function toCreateGroupInput(
     grade_max: g.grade[1],
     visibility: g.visibility ?? "private",
     questions: g.questions.map(groupQuestionInput),
+    segments: g.segments.length > 0 ? g.segments : null,
     organization_id: organizationId ?? null,
   };
 }
@@ -739,6 +764,8 @@ export function toUpdateGroupInput(g: GroupDraft): QuestionGroupUpdateInput {
       ...groupQuestionInput(q, i),
       ...(q.existingId !== null ? { id: q.existingId } : {}),
     })),
+    // 一律送：重新擷取成沒有對話的圖時 [] 會清掉舊的對話文稿
+    segments: g.segments,
   };
 }
 

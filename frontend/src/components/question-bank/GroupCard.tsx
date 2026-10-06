@@ -14,6 +14,8 @@
  * 「文字版」（#1083）：不顯示給學生，供搜尋／AI 考點分析／重複偵測。預設由排版推導；
  * 老師改過（`passage_text_edited`）就以老師的為準，排版再變也不覆蓋，可按「重新產生」回推導。
  * 以圖為準的題組（海報／漫畫）排版只有一張圖，文字版就是老師貼上的圖中文字。
+ * 圖中有人物對話時（#1083）文字版改為唯讀對話樣式（`DialogueTranscriptView`）：逐句
+ * 「說話者: 台詞」由 AI 整理、是題組對話音檔的來源，老師不可修改（原因見 PassageTextTab）。
  * 小題的考點、來源、教材關聯仍在各自的 QuestionCard；公開設定與年段跟隨題組（左欄套用）。
  */
 
@@ -58,6 +60,8 @@ import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import type { Program } from "@/types";
 import type { GlossaryEntry, LayoutDoc } from "@/types/questionBank";
+import { DialogueTranscriptView } from "./DialogueTranscriptView";
+import { dialogueNarration } from "./dialogueTranscript";
 import LayoutEditor from "./LayoutEditor";
 import QuestionCard from "./QuestionCard";
 import { DOC_TEXTAREA_CLASS, useAutoGrow } from "./useAutoGrow";
@@ -202,6 +206,22 @@ function PassageTextTab({
   const derived = groupDerivedText(draft);
   const value = draft.passage_text_edited ? draft.passage_text : derived;
   useAutoGrow(ref, value);
+  if (draft.segments.length > 0) {
+    // 決策（#1083，2026-10-06，使用者定案）：有對話文稿時文字版「唯讀」。
+    // - 對話文稿是題組對話音檔的唯一來源（一題組一個音檔，Gemini 2.5 Flash TTS
+    //   多說話者）；老師改了文稿而音檔不重生，文字與聲音就會不一致。
+    // - 圖片上的文字本來就改不了（學生看的是圖），所以以 AI 整理的逐句對話為準。
+    // - 原本的痛點是圖片擷取出的文字一整坨疊在一起、難以對照；不做「點圖分段修改」，
+    //   改用清楚的說話者標示（每句一行、說話者粗體）解決。
+    // 因此這裡不顯示編輯框與「重新產生」；沒有對話的題組（海報、地圖、散文）維持可編輯。
+    return (
+      <DialogueTranscriptView
+        narration={dialogueNarration(draft.passage_text, draft.segments)}
+        segments={draft.segments}
+        testId={testId}
+      />
+    );
+  }
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">

@@ -128,6 +128,19 @@ export interface GlossaryEntry {
   zh: string;
 }
 
+/**
+ * 題組對話文稿的一句（`question_group_segments`，#1083）：AI 從圖片整理、老師不可修改，
+ * 之後的題組對話音檔由它產生。
+ */
+export interface GroupSegmentInput {
+  speaker_label: string;
+  transcript: string;
+}
+
+export interface GroupSegment extends GroupSegmentInput {
+  order_index: number;
+}
+
 export interface QuestionGroup {
   id: number;
   question_type: QuestionType;
@@ -148,6 +161,8 @@ export interface QuestionGroup {
   is_owner: boolean;
   can_edit: boolean;
   questions: Question[];
+  /** 對話文稿（圖片題組有人物對話時才有；後端一律回陣列，舊快取可能缺） */
+  segments?: GroupSegment[];
   created_at: string | null;
   updated_at: string | null;
 }
@@ -325,6 +340,8 @@ export interface QuestionGroupCreateInput {
   grade_max?: number | null;
   visibility?: QuestionVisibility;
   questions: QuestionGroupQuestionInput[];
+  /** 對話文稿；有給時後端以它重組 passage_text（PATCH：給了就整組替換，[] = 清掉） */
+  segments?: GroupSegmentInput[] | null;
   organization_id?: string | null;
   school_id?: string | null;
 }
