@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { GradeBulkBar, type GradeBulkAction } from "../GradeBulkBar";
+import {
+  GradeBulkBar,
+  type GradeBulkAction,
+  type GradeBulkButtonAction,
+  type GradeBulkSwitchAction,
+} from "../GradeBulkBar";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -25,7 +30,7 @@ vi.mock("@/contexts/SidebarContext", () => ({
 
 const adjustAction = (
   onClick = vi.fn(),
-  extra: Partial<GradeBulkAction> = {},
+  extra: Partial<GradeBulkButtonAction> = {},
 ): GradeBulkAction => ({
   key: "adjust-grade",
   label: "調整年級",
@@ -177,5 +182,83 @@ describe("GradeBulkBar", () => {
     fireEvent.click(clear);
     expect(onAdjust).not.toHaveBeenCalled();
     expect(onClear).not.toHaveBeenCalled();
+  });
+
+  const statusSwitch = (
+    extra: Partial<GradeBulkSwitchAction> = {},
+  ): GradeBulkSwitchAction => ({
+    key: "status",
+    kind: "switch",
+    checked: true,
+    label: "停用",
+    ariaLabel: "停用選取的班級",
+    onToggle: vi.fn(),
+    ...extra,
+  });
+
+  it("renders a switch action with its label inside the track and toggles to the opposite state", () => {
+    const onToggle = vi.fn();
+    render(
+      <GradeBulkBar
+        selectedCount={2}
+        actions={[adjustAction(), statusSwitch({ onToggle })]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "停用選取的班級" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(toggle).toHaveTextContent("停用");
+    // onDark tone: checked = white track with blue text
+    expect(toggle).toHaveClass("bg-white", "text-blue-700");
+    // Button actions keep rendering next to the switch
+    expect(
+      screen.getByRole("button", { name: "調整年級" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("renders an unchecked switch action on a translucent track", () => {
+    const onToggle = vi.fn();
+    render(
+      <GradeBulkBar
+        selectedCount={2}
+        actions={[
+          statusSwitch({
+            checked: false,
+            label: "啟用",
+            ariaLabel: "啟用選取的班級",
+            onToggle,
+          }),
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "啟用選取的班級" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle).toHaveTextContent("啟用");
+    expect(toggle).toHaveClass("bg-white/30", "text-white");
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it("disables the switch action while busy", () => {
+    const onToggle = vi.fn();
+    render(
+      <GradeBulkBar
+        selectedCount={2}
+        actions={[statusSwitch({ onToggle })]}
+        onClear={vi.fn()}
+        busy
+      />,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "停用選取的班級" });
+    expect(toggle).toBeDisabled();
+    fireEvent.click(toggle);
+    expect(onToggle).not.toHaveBeenCalled();
   });
 });

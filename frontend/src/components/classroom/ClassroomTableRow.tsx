@@ -3,8 +3,10 @@
  *
  * 欄序：[勾選] 年級 → 班級名稱 → 等級 → 學生數 → 建立時間 → 狀態 → 操作。
  *
- * 顯示模式：班級名稱為連結，下方小字顯示課程數與描述；狀態欄顯示啟用／停用徽章，
- * canToggleStatus 時另有 Switch 單獨切換；操作欄為派作業、編輯、刪除。
+ * 顯示模式：班級名稱為連結，下方小字顯示課程數與描述；狀態欄在 canToggleStatus 時
+ * 顯示文字在軌道內的 LabeledSwitch（tone="brand"，軌道寫「撥下去會變成的狀態」：
+ * 啟用中 → 開、寫「停用」；停用中 → 關、寫「啟用」），單筆切換不需確認；
+ * 不可切換的列（機構／學校班）只顯示啟用／停用徽章。操作欄為派作業、編輯、刪除。
  * 停用（is_active === false）的班級派作業按鈕停用並提示原因，其餘操作照常。
  * 點列切換展開（勾選框、連結、狀態、操作欄的點擊不會觸發）。
  *
@@ -31,7 +33,7 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { LabeledSwitch } from "@/components/shared/LabeledSwitch";
 import { formatGradeLabel, isValidGrade } from "./classroomGrade";
 import {
   DEFAULT_LEVEL,
@@ -446,16 +448,25 @@ export function ClassroomTableRow({
       </TableCell>
       <TableCell onClick={stop}>
         <div className="flex items-center gap-2">
-          <ClassroomStatusBadge active={!inactive} />
-          {canToggleStatus && (
-            <Switch
+          {canToggleStatus ? (
+            <LabeledSwitch
+              tone="brand"
               checked={!inactive}
               disabled={statusBusy || isEditing}
               onCheckedChange={onToggleActive}
-              aria-label={t("classroomGrade.status.toggle", {
-                name: classroom.name,
-              })}
+              label={
+                inactive
+                  ? t("classroomGrade.status.switchEnable")
+                  : t("classroomGrade.status.switchDisable")
+              }
+              ariaLabel={
+                inactive
+                  ? t("classroomGrade.status.switchEnableAria")
+                  : t("classroomGrade.status.switchDisableAria")
+              }
             />
+          ) : (
+            <ClassroomStatusBadge active={!inactive} />
           )}
         </div>
       </TableCell>

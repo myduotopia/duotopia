@@ -6173,7 +6173,10 @@
       "column": "狀態",
       "active": "啟用",
       "inactive": "停用",
-      "toggle": "切換「{{name}}」的啟用狀態",
+      "switchDisable": "停用",
+      "switchEnable": "啟用",
+      "switchDisableAria": "停用此班級",
+      "switchEnableAria": "啟用此班級",
       "filterLabel": "狀態篩選",
       "filterAll": "所有狀態",
       "activated": "已啟用「{{name}}」",
@@ -6207,7 +6210,9 @@
       "activateTitle": "啟用 {{count}} 個班級？",
       "activateDescription": "啟用後，學生可以再次看到這些班級，也可以對這些班級派發作業。",
       "deactivated": "已停用 {{count}} 個班級",
-      "activated": "已啟用 {{count}} 個班級"
+      "activated": "已啟用 {{count}} 個班級",
+      "switchDisableAria": "停用選取的班級",
+      "switchEnableAria": "啟用選取的班級"
     },
     "sort": {
       "gradeAsc": "年級 低→高",

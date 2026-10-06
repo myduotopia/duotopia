@@ -6,12 +6,14 @@
  * - 外層 fixed 滿版 flex 容器從 sidebar 右緣（left: sidebarWidth）開始、justify-center，
  *   只有膠囊本身接收滑鼠事件，不擋住下方內容。
  * - 「已選 N 個班級」＋呼叫端傳入的動作按鈕（actions）＋「✕ 取消選取」。
- *   「我的班級」傳調整年級／調整等級／停用／啟用；機構後台只傳調整年級。
- *   variant "primary"（預設）＝白色膠囊主按鈕；"ghost"＝透明底白框次要按鈕。
+ *   「我的班級」傳調整年級／調整等級＋停用／啟用開關；機構後台只傳調整年級。
+ *   按鈕動作：variant "primary"（預設）＝白色膠囊主按鈕；"ghost"＝透明底白框次要按鈕。
+ *   開關動作（kind: "switch"）：以 LabeledSwitch tone="onDark" 呈現，文字在軌道內，
+ *   小螢幕也保留文字（開關本身很短）；撥動呼叫 onToggle(新狀態)。
  * - ≤480px 縮小間距並隱藏「取消選取」文字（保留 ✕ 與 aria-label）；ghost 按鈕只顯示圖示
  *   （aria-label／title 保留完整文字），沒有圖示時改顯示 shortLabel（未提供則截斷原文字）。
  *   動作太多仍放不下時，膠囊可橫向捲動。
- * selectedCount 為 0 時不渲染。busy 時所有按鈕（含取消選取）停用。
+ * selectedCount 為 0 時不渲染。busy 時所有按鈕與開關（含取消選取）停用。
  * 頁面需在列表底部預留空間（約 pb-24），最後一列才不會被擋住。
  *
  * sidebarWidth 來自 SidebarContext：TeacherLayout 與 OrganizationLayout 都有提供 SidebarProvider。
@@ -20,9 +22,11 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { LabeledSwitch } from "@/components/shared/LabeledSwitch";
 
-export interface GradeBulkAction {
+export interface GradeBulkButtonAction {
   key: string;
+  kind?: "button";
   label: string;
   onClick: () => void;
   disabled?: boolean;
@@ -31,6 +35,21 @@ export interface GradeBulkAction {
   /** ≤480px 且沒有圖示時改顯示的短文字（僅 ghost） */
   shortLabel?: string;
 }
+
+/** 文字在軌道內的開關（例：停用／啟用選取的班級） */
+export interface GradeBulkSwitchAction {
+  key: string;
+  kind: "switch";
+  checked: boolean;
+  /** 軌道內文字（撥下去會變成的狀態） */
+  label: string;
+  /** 給螢幕閱讀器的完整句子 */
+  ariaLabel: string;
+  onToggle: (checked: boolean) => void;
+  disabled?: boolean;
+}
+
+export type GradeBulkAction = GradeBulkButtonAction | GradeBulkSwitchAction;
 
 export interface GradeBulkBarProps {
   selectedCount: number;
@@ -48,7 +67,7 @@ const PRIMARY_BUTTON =
 const GHOST_BUTTON =
   "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-white ring-1 ring-inset ring-white/40 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 max-[480px]:px-2";
 
-function renderLabel(action: GradeBulkAction): ReactNode {
+function renderLabel(action: GradeBulkButtonAction): ReactNode {
   if (action.variant !== "ghost") return action.label;
   // 小螢幕：有圖示 → 只留圖示；沒有圖示 → 短文字（或截斷）
   if (action.icon) {
@@ -115,6 +134,19 @@ export function GradeBulkBar({
           {after}
         </span>
         {actions.map((action) => {
+          if (action.kind === "switch") {
+            return (
+              <LabeledSwitch
+                key={action.key}
+                tone="onDark"
+                checked={action.checked}
+                label={action.label}
+                ariaLabel={action.ariaLabel}
+                disabled={busy || action.disabled}
+                onCheckedChange={action.onToggle}
+              />
+            );
+          }
           const ghost = action.variant === "ghost";
           return (
             <button

@@ -39,8 +39,6 @@ import {
   ClipboardList,
   Search,
   Signal,
-  Power,
-  PowerOff,
 } from "lucide-react";
 import { apiClient, ApiError } from "@/lib/api";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
@@ -632,6 +630,10 @@ export default function TeacherClassrooms() {
   const allVisibleSelected =
     selectableVisible.length > 0 &&
     selectedClassrooms.length === selectableVisible.length;
+  // 操作列開關狀態：勾選的班全部啟用才是「開」（混合或全停用 → 關）
+  const allSelectedActive =
+    selectedClassrooms.length > 0 &&
+    selectedClassrooms.every((c) => !isClassroomInactive(c));
   // 編輯中的班級不在目前清單上（被刪除或重新載入後被篩掉）→ 直接結束編輯
   const { editingId: currentEditingId, exitEdit } = inlineEdit;
   useEffect(() => {
@@ -837,7 +839,7 @@ export default function TeacherClassrooms() {
         </div>
       </div>
 
-      {/* Bulk Actions Bar — 年級／等級／停用／啟用（#1097），底部置中浮動膠囊 */}
+      {/* Bulk Actions Bar — 年級／等級＋停用／啟用開關（#1097），底部置中浮動膠囊 */}
       <GradeBulkBar
         selectedCount={isEditingAny ? 0 : selectedClassrooms.length}
         busy={statusActions.bulkBusy}
@@ -854,21 +856,19 @@ export default function TeacherClassrooms() {
             icon: <Signal className="h-4 w-4" aria-hidden="true" />,
             onClick: () => setShowAdjustLevel(true),
           },
+          // 停用／啟用開關：勾選的班全部啟用才是「開」（軌道寫停用，撥 → 全部停用）；
+          // 有任一停用就是「關」（寫啟用，撥 → 全部啟用）。撥動走既有確認流程。
           {
-            key: "deactivate",
-            label: t("classroomGrade.bulk.deactivate"),
-            icon: <PowerOff className="h-4 w-4" aria-hidden="true" />,
-            variant: "ghost",
-            disabled: selectedClassrooms.every(isClassroomInactive),
-            onClick: () => openBulkStatus(false),
-          },
-          {
-            key: "activate",
-            label: t("classroomGrade.bulk.activate"),
-            icon: <Power className="h-4 w-4" aria-hidden="true" />,
-            variant: "ghost",
-            disabled: !selectedClassrooms.some(isClassroomInactive),
-            onClick: () => openBulkStatus(true),
+            key: "status",
+            kind: "switch",
+            checked: allSelectedActive,
+            label: allSelectedActive
+              ? t("classroomGrade.status.switchDisable")
+              : t("classroomGrade.status.switchEnable"),
+            ariaLabel: allSelectedActive
+              ? t("classroomGrade.bulk.switchDisableAria")
+              : t("classroomGrade.bulk.switchEnableAria"),
+            onToggle: (next) => openBulkStatus(next),
           },
         ]}
         onClear={() => setSelectedIds(new Set())}

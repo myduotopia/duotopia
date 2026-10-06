@@ -6129,7 +6129,10 @@
       "column": "Status",
       "active": "Active",
       "inactive": "Inactive",
-      "toggle": "Toggle whether {{name}} is active",
+      "switchDisable": "Disable",
+      "switchEnable": "Enable",
+      "switchDisableAria": "Disable this classroom",
+      "switchEnableAria": "Enable this classroom",
       "filterLabel": "Filter by status",
       "filterAll": "All statuses",
       "activated": "Activated {{name}}",
@@ -6163,7 +6166,9 @@
       "activateTitle": "Activate {{count}} classroom(s)?",
       "activateDescription": "Students will see these classrooms again, and you can dispatch assignments to them.",
       "deactivated": "Deactivated {{count}} classroom(s)",
-      "activated": "Activated {{count}} classroom(s)"
+      "activated": "Activated {{count}} classroom(s)",
+      "switchDisableAria": "Disable selected classrooms",
+      "switchEnableAria": "Enable selected classrooms"
     },
     "sort": {
       "gradeAsc": "Grade low→high",

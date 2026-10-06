@@ -18,7 +18,10 @@ vi.mock("react-i18next", () => ({
         "classroomGrade.selectPlaceholder": "Select a grade",
         "classroomGrade.status.active": "Active",
         "classroomGrade.status.inactive": "Inactive",
-        "classroomGrade.status.toggle": "Toggle {{name}}",
+        "classroomGrade.status.switchDisable": "Disable",
+        "classroomGrade.status.switchEnable": "Enable",
+        "classroomGrade.status.switchDisableAria": "Disable this classroom",
+        "classroomGrade.status.switchEnableAria": "Enable this classroom",
         "classroomGrade.status.dispatchDisabled": "Classroom inactive",
         "classroomGrade.selection.selectRow": "Select {{name}}",
         "teacherClassrooms.buttons.dispatchAssignment": "Assign Homework",
@@ -97,7 +100,42 @@ describe("ClassroomTableRow", () => {
     expect(cells[3]).toBe("A1");
     expect(cells[4]).toBe("4");
     expect(cells[5]).toBe("2026/01/15");
-    expect(cells[6]).toContain("Active");
+    // Toggleable row: the status cell is a switch whose track shows the target state
+    expect(cells[6]).toBe("Disable");
+  });
+
+  it("shows an active classroom as a checked brand switch labelled with the target state", () => {
+    renderRow();
+    const toggle = screen.getByRole("switch", {
+      name: "Disable this classroom",
+    });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(toggle).toHaveTextContent("Disable");
+    expect(toggle).toHaveClass("bg-blue-600");
+    // The separate Active/Inactive badge is gone for toggleable rows
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+  });
+
+  it("shows an inactive classroom as an unchecked grey switch and enables it without confirmation", () => {
+    const props = renderRow({ classroom: { ...classroom, is_active: false } });
+    const toggle = screen.getByRole("switch", {
+      name: "Enable this classroom",
+    });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle).toHaveTextContent("Enable");
+    expect(toggle).toHaveClass("bg-gray-300");
+    fireEvent.click(toggle);
+    expect(props.onToggleActive).toHaveBeenCalledWith(true);
+  });
+
+  it("disables the switch while a status update is in flight", () => {
+    const props = renderRow({ statusBusy: true });
+    const toggle = screen.getByRole("switch", {
+      name: "Disable this classroom",
+    });
+    expect(toggle).toBeDisabled();
+    fireEvent.click(toggle);
+    expect(props.onToggleActive).not.toHaveBeenCalled();
   });
 
   it("toggles expansion when the row is clicked, but not from the switch", () => {
@@ -105,21 +143,27 @@ describe("ClassroomTableRow", () => {
     fireEvent.click(screen.getByText("Grade 3"));
     expect(props.onToggleExpanded).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle Alpha" }));
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Disable this classroom" }),
+    );
     expect(props.onToggleActive).toHaveBeenCalledWith(false);
     expect(props.onToggleExpanded).toHaveBeenCalledTimes(1);
   });
 
   it("disables dispatch for an inactive classroom", () => {
-    renderRow({ classroom: { ...classroom, is_active: false } });
+    renderRow({
+      classroom: { ...classroom, is_active: false },
+      canToggleStatus: false,
+    });
     expect(screen.getByText("Inactive")).toBeInTheDocument();
     expect(screen.getByTitle("Classroom inactive")).toBeDisabled();
     expect(screen.getByTitle("Edit")).not.toBeDisabled();
   });
 
-  it("hides the switch when the status cannot be toggled and disables edit when read-only", () => {
+  it("shows only the status badge when the status cannot be toggled and disables edit when read-only", () => {
     renderRow({ canToggleStatus: false, readOnly: true });
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByTitle("Edit")).toBeDisabled();
     expect(screen.getByTitle("Delete")).toBeDisabled();
   });

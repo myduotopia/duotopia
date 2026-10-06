@@ -142,7 +142,10 @@ vi.mock("react-i18next", () => ({
         "classroomGrade.status.column": "Status",
         "classroomGrade.status.active": "Active",
         "classroomGrade.status.inactive": "Inactive",
-        "classroomGrade.status.toggle": "Toggle {{name}}",
+        "classroomGrade.status.switchDisable": "Disable",
+        "classroomGrade.status.switchEnable": "Enable",
+        "classroomGrade.status.switchDisableAria": "Disable this classroom",
+        "classroomGrade.status.switchEnableAria": "Enable this classroom",
         "classroomGrade.status.filterLabel": "Filter by status",
         "classroomGrade.status.filterAll": "All statuses",
         "classroomGrade.status.activated": "Activated {{name}}",
@@ -168,6 +171,12 @@ vi.mock("react-i18next", () => ({
         "classroomGrade.bulk.deactivateDescription":
           "Students will no longer see these classrooms",
         "classroomGrade.bulk.deactivated": "Deactivated {{count}}",
+        "classroomGrade.bulk.activateTitle": "Activate {{count}} classroom(s)?",
+        "classroomGrade.bulk.activateDescription":
+          "Students will see these classrooms again",
+        "classroomGrade.bulk.activated": "Activated {{count}}",
+        "classroomGrade.bulk.switchDisableAria": "Disable selected classrooms",
+        "classroomGrade.bulk.switchEnableAria": "Enable selected classrooms",
         "classroomGrade.sort.gradeAsc": "Grade low to high",
         "classroomGrade.sort.gradeDesc": "Grade high to low",
         "classroomGrade.sort.levelAsc": "Level low to high",
@@ -1106,7 +1115,11 @@ describe("TeacherClassrooms", () => {
       await waitForList();
 
       const betaRow = row(2);
-      expect(within(betaRow).getByText("Inactive")).toBeInTheDocument();
+      const betaSwitch = within(betaRow).getByRole("switch", {
+        name: "Enable this classroom",
+      });
+      expect(betaSwitch).toHaveAttribute("aria-checked", "false");
+      expect(betaSwitch).toHaveTextContent("Enable");
       expect(within(betaRow).getByTitle("Classroom inactive")).toBeDisabled();
       expect(within(betaRow).getByTitle("Edit")).not.toBeDisabled();
       expect(within(row(1)).getByTitle("Assign Homework")).not.toBeDisabled();
@@ -1118,9 +1131,10 @@ describe("TeacherClassrooms", () => {
       await waitForList();
 
       const toggle = within(row(1)).getByRole("switch", {
-        name: "Toggle Alpha Class",
+        name: "Disable this classroom",
       });
-      expect(toggle).toHaveAttribute("data-state", "checked");
+      expect(toggle).toHaveAttribute("aria-checked", "true");
+      expect(toggle).toHaveTextContent("Disable");
       await user.click(toggle);
 
       await waitFor(() => {
@@ -1241,9 +1255,20 @@ describe("TeacherClassrooms", () => {
       const toolbar = screen.getByRole("toolbar", {
         name: "1 classroom(s) selected",
       });
-      await user.click(
-        within(toolbar).getByRole("button", { name: "Deactivate" }),
-      );
+      // All selected classrooms are active → switch is on and offers "Disable"
+      const bulkSwitch = within(toolbar).getByRole("switch", {
+        name: "Disable selected classrooms",
+      });
+      expect(bulkSwitch).toHaveAttribute("aria-checked", "true");
+      expect(bulkSwitch).toHaveTextContent("Disable");
+      // The old Deactivate / Activate buttons are gone
+      expect(
+        within(toolbar).queryByRole("button", { name: "Deactivate" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(toolbar).queryByRole("button", { name: "Activate" }),
+      ).not.toBeInTheDocument();
+      await user.click(bulkSwitch);
 
       const dialog = await screen.findByRole("dialog");
       expect(
@@ -1352,13 +1377,13 @@ describe("TeacherClassrooms", () => {
 
       // Two single toggles → two silent reloads in flight
       await user.click(
-        within(row(1)).getByRole("switch", { name: "Toggle Alpha Class" }),
+        within(row(1)).getByRole("switch", { name: "Disable this classroom" }),
       );
       await waitFor(() => {
         expect(mockGetTeacherClassrooms).toHaveBeenCalledTimes(2);
       });
       await user.click(
-        within(row(3)).getByRole("switch", { name: "Toggle Charlie Class" }),
+        within(row(3)).getByRole("switch", { name: "Disable this classroom" }),
       );
       await waitFor(() => {
         expect(mockGetTeacherClassrooms).toHaveBeenCalledTimes(3);
@@ -1391,14 +1416,51 @@ describe("TeacherClassrooms", () => {
       const toolbar = screen.getByRole("toolbar", {
         name: "2 classroom(s) selected",
       });
-      await user.click(
-        within(toolbar).getByRole("button", { name: "Deactivate" }),
-      );
+      // Mixed selection → switch is off and offers "Enable"; only Beta changes
+      const bulkSwitch = within(toolbar).getByRole("switch", {
+        name: "Enable selected classrooms",
+      });
+      expect(bulkSwitch).toHaveAttribute("aria-checked", "false");
+      expect(bulkSwitch).toHaveTextContent("Enable");
+      await user.click(bulkSwitch);
 
       const dialog = await screen.findByRole("dialog");
       expect(
-        within(dialog).getByText("Deactivate 1 classroom(s)?"),
+        within(dialog).getByText("Activate 1 classroom(s)?"),
       ).toBeInTheDocument();
+    });
+
+    it("bulk-enables only the inactive classrooms of a mixed selection", async () => {
+      const user = userEvent.setup();
+      withInactiveBeta();
+      mockBatchUpdateClassrooms.mockResolvedValue({
+        updated: [{ id: 2, grade: 5, level: "B1", is_active: true }],
+        count: 1,
+      });
+      renderComponent();
+      await waitForList();
+
+      await tickRow(user, "Alpha Class"); // active
+      await tickRow(user, "Beta Class"); // inactive
+      const toolbar = screen.getByRole("toolbar", {
+        name: "2 classroom(s) selected",
+      });
+      await user.click(
+        within(toolbar).getByRole("switch", {
+          name: "Enable selected classrooms",
+        }),
+      );
+
+      const dialog = await screen.findByRole("dialog");
+      await user.click(
+        within(dialog).getByRole("button", { name: "Activate" }),
+      );
+
+      await waitFor(() => {
+        expect(mockBatchUpdateClassrooms).toHaveBeenCalledWith([
+          { classroom_id: 2, is_active: true },
+        ]);
+      });
     });
 
     it("offers every sort field in both directions on mobile", async () => {
