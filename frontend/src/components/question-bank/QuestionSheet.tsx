@@ -1,9 +1,11 @@
 /**
  * 題庫新增／編輯側邊面板（Issue #1061 / #1064 / #1082）。
  *
- * 三層：本檔是外殼（標題列、左欄批次、送出流程、AI／語音工具、mode 判定）；
+ * 三層：本檔是外殼（左欄批次、送出流程、mode 判定）；
  * 右欄交給 `QuestionUnitList` 依單元 kind 分流（單題 → `QuestionCard`；題組 → GroupCard）；
  * 卡片本身不知道 sheet。舊名 `MultipleChoiceQuestionSheet` 仍可 import（re-export）。
+ * 拆檔（#1082）：標題列（標題、批次提示、預覽／刪除／儲存／關閉、驗證訊息）在
+ * `QuestionSheetHeader.tsx`；AI 作答／考點分析／語音設定與批次語音在 hook `useSheetAiTools.ts`。
  *
  * 與「新增教材內容」同構：從 sidebar 右緣滑出的全高面板，
  * - 標題列：預覽（`SheetPreviewButton`：單題列出所有題、題組看整個題組；busy 時停用）、
@@ -31,7 +33,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
@@ -45,10 +47,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSidebar } from "@/contexts/SidebarContext";
-import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import type { ComboboxItem } from "@/components/shared/CreatableCombobox";
 import type { MagicPasteMcItem } from "@/components/shared/MagicPasteInput";
-import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import type { Program } from "@/types";
 import type {
   Question,
@@ -58,16 +58,18 @@ import type {
 } from "@/types/questionBank";
 import QuestionBankBatchPanel from "./QuestionBankBatchPanel";
 import QuestionUnitList from "./QuestionUnitList";
-import SheetPreviewButton from "./SheetPreviewButton";
+import QuestionSheetHeader from "./QuestionSheetHeader";
 import { uploadExtractedQuestionImages } from "./extractedImages";
 import { useExtractedGroup } from "./useExtractedGroup";
 import {
+  extractApiMessage,
+  loadTtsSettings,
+  useSheetAiTools,
+} from "./useSheetAiTools";
+import {
   MAX_QUESTIONS_PER_BATCH,
-  applyAiAnalysis,
-  applyAiAnswers,
   batchDefaultsFromQuestion,
   draftFromQuestion,
-  draftsEligibleForAi,
   draftsFromExtracted,
   emptyBatchDefaults,
   emptyDraft,
@@ -76,7 +78,6 @@ import {
   findBatchDuplicateKeys,
   groupDraftFromGroup,
   mapUnitQuestions,
-  toAiInputs,
   toCreateGroupInput,
   toCreateInput,
   toUpdateGroupInput,
@@ -87,7 +88,6 @@ import {
   unitQuestions,
   validateDraft,
   validateGroupDraft,
-  type ApplyResult,
   type BatchDefaults,
   type GroupDraft,
   type QuestionDraft,
@@ -96,13 +96,6 @@ import {
 
 /** 走題組端點的題型（與後端 GROUP_CREATABLE_TYPES 對齊） */
 const GROUP_TYPES: QuestionType[] = ["reading", "cloze"];
-
-const TTS_STORAGE_KEY = "duotopia_batch_tts_settings";
-const DEFAULT_TTS: TTSSettingsState = {
-  accent: "Random",
-  gender: "Random",
-  speed: "Normal x1",
-};
 
 export interface QuestionSheetProps {
   open: boolean;
@@ -123,38 +116,6 @@ export interface QuestionSheetProps {
   canDelete?: boolean;
   onSaved: (question: Question) => void;
   onDeleted?: (questionId: number) => void;
-}
-
-function loadTtsSettings(): TTSSettingsState {
-  try {
-    const raw = localStorage.getItem(TTS_STORAGE_KEY);
-    if (!raw) return DEFAULT_TTS;
-    const parsed = JSON.parse(raw);
-    return {
-      accent: parsed.accent ?? DEFAULT_TTS.accent,
-      gender: parsed.gender ?? DEFAULT_TTS.gender,
-      speed: parsed.speed ?? DEFAULT_TTS.speed,
-    };
-  } catch {
-    return DEFAULT_TTS;
-  }
-}
-
-function absoluteAudioUrl(url: string): string {
-  return url.startsWith("http") ? url : `${import.meta.env.VITE_API_URL}${url}`;
-}
-
-/** 後端 HTTPException 的 detail 可能是字串或 {message, duplicate} */
-function extractApiMessage(err: unknown): string | null {
-  if (!err || typeof err !== "object") return null;
-  const anyErr = err as { message?: unknown; detail?: unknown };
-  const detail = anyErr.detail;
-  if (typeof detail === "string") return detail;
-  if (detail && typeof detail === "object") {
-    const m = (detail as { message?: unknown }).message;
-    if (typeof m === "string") return m;
-  }
-  return typeof anyErr.message === "string" ? anyErr.message : null;
 }
 
 const single = (draft: QuestionDraft): UnitDraft => ({ kind: "single", draft });
@@ -209,16 +170,27 @@ export default function QuestionSheet({
   const [batchSources, setBatchSources] = useState<ComboboxItem[]>([]);
   const [batchVisibility, setBatchVisibility] =
     useState<QuestionVisibility | null>(null);
-  const [ttsSettings, setTtsSettings] = useState<TTSSettingsState>(DEFAULT_TTS);
   const [autoTTS, setAutoTTS] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [generatingAudio, setGeneratingAudio] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false);
   const dirtyRef = useRef(false);
 
   /** 所有單題草稿（含題組小題）：驗證重複、語音、AI 都沿用單題邏輯 */
   const drafts = useMemo(() => unitQuestions(units), [units]);
+  /** 題組小題 → 主圖文純文字（AI 上下文） */
+  const passageByKey = useMemo(() => unitPassageByKey(units), [units]);
+  const {
+    ttsSettings,
+    setTtsSettings,
+    handleTtsSettingsChange,
+    pendingAudio,
+    fillMissingAudio,
+    generateAllAudio,
+    generatingAudio,
+    aiBusy,
+    handleAiAnswer,
+    handleAiAnalyze,
+  } = useSheetAiTools({ units, setUnits, drafts, passageByKey, dirtyRef, t });
 
   // 開啟時依模式初始化
   useEffect(() => {
@@ -378,15 +350,6 @@ export default function QuestionSheet({
     );
   };
 
-  const handleTtsSettingsChange = (s: TTSSettingsState) => {
-    setTtsSettings(s);
-    try {
-      localStorage.setItem(TTS_STORAGE_KEY, JSON.stringify(s));
-    } catch {
-      /* localStorage 不可用時忽略 */
-    }
-  };
-
   // ---- 驗證（逐單元）----
   const batchDupKeys = useMemo(() => findBatchDuplicateKeys(drafts), [drafts]);
   const errorKeys = useMemo(
@@ -400,8 +363,6 @@ export default function QuestionSheet({
       ),
     [units, batchDupKeys],
   );
-  /** 題組小題 → 主圖文純文字（AI 上下文） */
-  const passageByKey = useMemo(() => unitPassageByKey(units), [units]);
   const firstErrorIndex = errorKeys.findIndex((k) => k !== null);
   const validationMessage: string | null = effectiveReadOnly
     ? null
@@ -443,109 +404,6 @@ export default function QuestionSheet({
     dirtyRef.current = true;
     setUnits((prev) => prev.filter((u) => unitKey(u) !== key));
   };
-
-  // ---- 批次語音（只對題幹）----
-  const pendingAudio = drafts.filter((d) => d.stem.trim() && !d.stem_audio_url);
-
-  /** 對缺語音的題幹批次生成；回傳補上語音後的單元（儲存流程也用） */
-  const fillMissingAudio = async (
-    current: UnitDraft[],
-  ): Promise<UnitDraft[]> => {
-    const pending = unitQuestions(current).filter(
-      (d) => d.stem.trim() && !d.stem_audio_url,
-    );
-    if (pending.length === 0) return current;
-    const { voice, rate } = getVoiceAndRate(
-      ttsSettings.accent,
-      ttsSettings.gender,
-      ttsSettings.speed,
-    );
-    const res = (await apiClient.batchGenerateTTS(
-      pending.map((d) => d.stem.trim()),
-      voice,
-      rate,
-      "+0%",
-    )) as { audio_urls?: (string | null)[] };
-    const urls = res?.audio_urls ?? [];
-    const byKey = new Map<string, string>();
-    pending.forEach((d, i) => {
-      const u = urls[i];
-      if (u) byKey.set(d.key, absoluteAudioUrl(u));
-    });
-    return mapUnitQuestions(current, (d) =>
-      byKey.has(d.key) ? { ...d, stem_audio_url: byKey.get(d.key)! } : d,
-    );
-  };
-
-  const generateAllAudio = async () => {
-    if (pendingAudio.length === 0 || generatingAudio) return;
-    setGeneratingAudio(true);
-    try {
-      const before = pendingAudio.length;
-      const next = await fillMissingAudio(units);
-      const after = unitQuestions(next).filter(
-        (d) => d.stem.trim() && !d.stem_audio_url,
-      ).length;
-      dirtyRef.current = true;
-      setUnits(next);
-      toast.success(
-        t("questionBank.form.tools.generated", { count: before - after }),
-      );
-    } catch (err) {
-      console.error("Batch TTS failed:", err);
-      toast.error(t("questionBank.form.ttsFailed"));
-    } finally {
-      setGeneratingAudio(false);
-    }
-  };
-
-  // ---- AI 工具（#1065）：只填空的 ----
-  const runAi = async (
-    call: (inputs: ReturnType<typeof toAiInputs>) => Promise<{
-      results:
-        | Parameters<typeof applyAiAnswers>[1]
-        | Parameters<typeof applyAiAnalysis>[1];
-      skipped: string[];
-    }>,
-    apply: (current: QuestionDraft[], results: never) => ApplyResult,
-  ) => {
-    const eligible = draftsEligibleForAi(drafts, passageByKey);
-    if (eligible.length === 0 || aiBusy) {
-      toast.info(t("questionBank.form.tools.aiNothingToSend"));
-      return;
-    }
-    setAiBusy(true);
-    try {
-      const res = await call(toAiInputs(eligible, passageByKey));
-      const outcome = apply(drafts, res.results as never);
-      dirtyRef.current = dirtyRef.current || outcome.applied > 0;
-      const byKey = new Map(outcome.drafts.map((d) => [d.key, d]));
-      setUnits((prev) => mapUnitQuestions(prev, (d) => byKey.get(d.key) ?? d));
-      const undecided = res.skipped.length;
-      toast.success(
-        t("questionBank.form.tools.aiApplied", {
-          applied: outcome.applied,
-          skipped: outcome.skipped + undecided,
-        }),
-      );
-    } catch (err) {
-      toast.error(
-        extractApiMessage(err) ?? t("questionBank.form.tools.aiFailed"),
-      );
-    } finally {
-      setAiBusy(false);
-    }
-  };
-  const handleAiAnswer = () =>
-    runAi(
-      (inputs) => apiClient.aiAnswerQuestions(inputs),
-      (current, results) => applyAiAnswers(current, results),
-    );
-  const handleAiAnalyze = () =>
-    runAi(
-      (inputs) => apiClient.aiAnalyzeQuestions(inputs),
-      (current, results) => applyAiAnalysis(current, results),
-    );
 
   /**
    * 考卷擷取結果：第一個單元全空就取代，否則附加；超過上限截斷。
@@ -779,70 +637,19 @@ export default function QuestionSheet({
         data-testid="qb-sheet"
         data-mode={mode}
       >
-        {/* 標題列 */}
-        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-            {mode === "create" && !groupMode && !effectiveReadOnly && (
-              <p className="text-xs text-gray-500">
-                {t("questionBank.form.batchHint", {
-                  count: units.length,
-                  max: MAX_QUESTIONS_PER_BATCH,
-                })}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <SheetPreviewButton units={units} disabled={busy} />
-            {canDeleteNow && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-red-600 hover:text-red-700 gap-1"
-                onClick={handleDelete}
-                disabled={busy}
-                data-testid="qb-delete"
-              >
-                <Trash2 size={16} />
-                {t("common.delete", "刪除")}
-              </Button>
-            )}
-            {!effectiveReadOnly && (
-              <Button
-                type="button"
-                onClick={handleSave}
-                disabled={!!validationMessage || busy || units.length === 0}
-                title={validationMessage ?? undefined}
-                data-testid="qb-save"
-              >
-                {saving
-                  ? t("common.saving", "儲存中...")
-                  : t("common.save", "儲存")}
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              disabled={busy}
-              aria-label={t("common.close", "關閉")}
-              data-testid="qb-close"
-            >
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-        {/* 儲存鈕 disabled 的原因：緊接在標題列下方、醒目色，老師不用 hover 也看得到 */}
-        {validationMessage && (
-          <p
-            className="px-6 py-1.5 text-xs font-medium text-amber-800 bg-amber-50 border-b border-amber-100 shrink-0"
-            role="status"
-            data-testid="qb-validation"
-          >
-            {validationMessage}
-          </p>
-        )}
+        <QuestionSheetHeader
+          title={title}
+          showBatchHint={mode === "create" && !groupMode && !effectiveReadOnly}
+          units={units}
+          busy={busy}
+          saving={saving}
+          readOnly={effectiveReadOnly}
+          canDelete={canDeleteNow}
+          validationMessage={validationMessage}
+          onDelete={handleDelete}
+          onSave={handleSave}
+          onClose={handleClose}
+        />
 
         {/* 題組擷取：右側已有內容 → 先確認覆蓋（#1084） */}
         <Dialog
