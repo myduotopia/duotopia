@@ -520,16 +520,17 @@ def _existing_typed_answers_rejudged(
     ``prior_is_correct`` 鎖定「已答對」題，過期的 True 會讓訂正永遠交不出去。
     這裡讓 start 自我修正並 commit（設定沒變時 ``is_correct`` 重判結果不變；
     ``session.correct_count`` 會同步成本作業題目的去重計數）。選擇題小考不經過這裡。
+    只有真的改到值才 commit — 一般續考（設定沒變）維持唯讀。
     """
     existing = _existing_answers_for_session(db, session.id)
     items_by_id = {it.id: it for it in items}
-    _sync_typed_correctness(
+    if _sync_typed_correctness(
         assignment,
         items_by_id,
         {k: v for k, v in existing.items() if k in items_by_id},
         session,
-    )
-    db.commit()
+    ):
+        db.commit()
     return existing
 
 
@@ -1228,16 +1229,18 @@ def _sync_typed_correctness(
     items_by_id: Dict[int, ContentItem],
     latest: Dict[int, PracticeAnswer],
     session: Optional[PracticeSession],
-) -> None:
+) -> bool:
     """Issue #1092: 打字小考以作業目前設定重判每題最新答案的 ``is_correct`` 並寫回，
     同步 ``session.correct_count``（統計、訂正「全對才能交」都讀這兩個值）。
 
     作答中（IN_PROGRESS、live、訂正中的 session）老師改了大小寫開關時，作答當下
     存的 ``is_correct`` 會過期；這裡讓「答對題數」與扣分用同一個判定。
     選擇題小考不處理。舊作答在未改設定時重判結果不變。
+    回傳是否有任何欄位真的被改動（呼叫端據此決定要不要 commit）。
     """
     if assignment is None or (assignment.practice_mode or "") not in TYPED_QUIZ_MODES:
-        return
+        return False
+    changed = False
     for item_id, ans in latest.items():
         fresh = bool(
             evaluate_typed_quiz_answer(assignment, items_by_id.get(item_id), ans)[
@@ -1246,8 +1249,13 @@ def _sync_typed_correctness(
         )
         if ans.is_correct != fresh:
             ans.is_correct = fresh
+            changed = True
     if session is not None:
-        session.correct_count = sum(1 for ans in latest.values() if ans.is_correct)
+        correct_count = sum(1 for ans in latest.values() if ans.is_correct)
+        if session.correct_count != correct_count:
+            session.correct_count = correct_count
+            changed = True
+    return changed
 
 
 def _score_latest_answers(
@@ -1314,6 +1322,13 @@ def recompute_quiz_scores(db: Session, assignment: Assignment) -> int:
     （不寫分數），避免訂正中被鎖定的題目在新設定下變錯而卡住交卷。
     未作答題扣整題。只處理打字小考，其他模式回 0。不 commit，由呼叫端 commit。
     回傳值只算「已交卷、分數被重算」的人數。
+
+    查詢以整份作業批次撈（students / sessions / answers 各一次、清手動扣分一次），
+    不隨學生人數線性增加 round trip；邏輯與逐筆版的
+    ``_first_completed_quiz_session`` / ``latest_quiz_answers_by_item`` 相同。
+
+    已知競態（接受、不加鎖）：與學生 ``/complete`` 同一瞬間進行時，該生分數可能停在
+    舊設定的結果；詳見 docs/design/quiz-scoring-methods.md「重算」一節。
     """
     mode = assignment.practice_mode or ""
     if mode not in TYPED_QUIZ_MODES:
@@ -1321,49 +1336,69 @@ def recompute_quiz_scores(db: Session, assignment: Assignment) -> int:
     items = _assignment_quiz_items(db, assignment.id)
     items_by_id = {it.id: it for it in items}
     item_ids = set(items_by_id)
-    student_assignments = (
-        db.query(StudentAssignment)
-        .filter(
+    sa_by_id = {
+        sa.id: sa
+        for sa in db.query(StudentAssignment).filter(
             StudentAssignment.assignment_id == assignment.id,
             StudentAssignment.is_active.is_(True),
         )
-        .all()
-    )
-    recomputed = 0
-    for sa in student_assignments:
-        # 還沒交卷的 session（第一次作答中、訂正中）也用新設定重判 is_correct，
-        # 只寫 is_correct / correct_count，不寫分數、不動 status／時間戳。
-        # 否則訂正 session 裡被鎖定的「已答對」題，交卷時會被重判成錯 → 永遠卡在
-        # QUIZ_REVISION_INCOMPLETE（400 會 rollback 重判結果、該題又一直鎖住）。
-        for open_session in (
-            db.query(PracticeSession)
+    }
+    if not sa_by_id:
+        return 0
+
+    # 每位學生：第一個完成的 session（id 最小）＋所有還沒交卷的 session
+    first_completed: Dict[int, PracticeSession] = {}
+    open_sessions: List[PracticeSession] = []
+    for s in (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id.in_(sa_by_id),
+            PracticeSession.practice_mode == mode,
+        )
+        .order_by(PracticeSession.id.asc())
+    ):
+        if s.completed_at is None:
+            open_sessions.append(s)
+        else:
+            first_completed.setdefault(s.student_assignment_id, s)
+
+    # 每個 session 每題最新一筆（依 id 升冪、後者覆蓋前者，同 latest_quiz_answers_by_item）
+    target_sessions = list(first_completed.values()) + open_sessions
+    latest_by_session: Dict[int, Dict[int, PracticeAnswer]] = {
+        s.id: {} for s in target_sessions
+    }
+    if item_ids and target_sessions:
+        for ans in (
+            db.query(PracticeAnswer)
             .filter(
-                PracticeSession.student_assignment_id == sa.id,
-                PracticeSession.practice_mode == mode,
-                PracticeSession.completed_at.is_(None),
+                PracticeAnswer.practice_session_id.in_(latest_by_session),
+                PracticeAnswer.content_item_id.in_(item_ids),
             )
-            .all()
+            .order_by(PracticeAnswer.id.asc())
         ):
-            _sync_typed_correctness(
-                assignment,
-                items_by_id,
-                latest_quiz_answers_by_item(db, open_session.id, item_ids),
-                open_session,
-            )
-        session = _first_completed_quiz_session(db, sa.id, mode)
-        if session is None:
-            continue
-        latest = latest_quiz_answers_by_item(db, session.id, item_ids)
+            latest_by_session[ans.practice_session_id][ans.content_item_id] = ans
+
+    # 還沒交卷的 session（第一次作答中、訂正中）也用新設定重判 is_correct，
+    # 只寫 is_correct / correct_count，不寫分數、不動 status／時間戳。
+    # 否則訂正 session 裡被鎖定的「已答對」題，交卷時會被重判成錯 → 永遠卡在
+    # QUIZ_REVISION_INCOMPLETE（400 會 rollback 重判結果、該題又一直鎖住）。
+    for open_session in open_sessions:
+        _sync_typed_correctness(
+            assignment, items_by_id, latest_by_session[open_session.id], open_session
+        )
+
+    for sa_id, session in first_completed.items():
+        latest = latest_by_session[session.id]
         _sync_typed_correctness(assignment, items_by_id, latest, session)
-        if item_ids:
-            db.query(StudentItemProgress).filter(
-                StudentItemProgress.student_assignment_id == sa.id,
-                StudentItemProgress.content_item_id.in_(item_ids),
-                StudentItemProgress.teacher_review_score.isnot(None),
-            ).update({"teacher_review_score": None}, synchronize_session=False)
-        sa.score = _score_latest_answers(assignment, items, latest)
-        recomputed += 1
-    return recomputed
+        sa_by_id[sa_id].score = _score_latest_answers(assignment, items, latest)
+
+    if item_ids and first_completed:
+        db.query(StudentItemProgress).filter(
+            StudentItemProgress.student_assignment_id.in_(first_completed),
+            StudentItemProgress.content_item_id.in_(item_ids),
+            StudentItemProgress.teacher_review_score.isnot(None),
+        ).update({"teacher_review_score": None}, synchronize_session=False)
+    return len(first_completed)
 
 
 def finalize_quiz_submission(

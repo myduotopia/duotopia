@@ -486,6 +486,14 @@ def test_patch_fixed_method_requires_points(setup_database):
     assert resp.status_code == 422, resp.text
     assert resp.json()["detail"]["code"] == "QUIZ_SCORING_POINTS_REQUIRED"
     assert _sa(1).score == 90.0  # rollback：沒有重算
+    # 422 前已 setattr 的 method 不會被 commit（session rollback）
+    db = TestingSessionLocal()
+    try:
+        assignment = db.query(Assignment).filter_by(id=1).one()
+        assert assignment.quiz_scoring_method == "per_word"
+        assert assignment.quiz_scoring_points is None
+    finally:
+        db.close()
 
 
 def test_patch_fixed_points_change_recomputes(setup_database):
@@ -977,3 +985,31 @@ def test_patch_rejects_two_decimal_points(setup_database):
     resp = _patch(_teacher_headers(), quiz_scoring_points=0.25)
     assert resp.status_code == 422, resp.text
     assert _sa(1).score == 90.0
+
+
+def test_start_resume_without_setting_change_does_not_commit(setup_database):
+    """續考（設定沒變）→ 重判沒改到值就不另外 commit。
+
+    _start_quiz_session 本身續考時就會 commit 一次（#828 既有行為），這裡確認
+    _existing_typed_answers_rejudged 不再多加一次。"""
+    _seed_fresh_quiz("whole_question")
+    s_headers = _student_headers(1)
+    first = _start(s_headers)
+    _answer(s_headers, first, 2, "apple", ["apple"])
+
+    commits = []
+
+    def _count_commit(conn):
+        commits.append(conn)
+
+    event.listen(engine, "commit", _count_commit)
+    try:
+        start = client.get(
+            "/api/students/assignments/1/vocabulary/spelling_quiz/start",
+            headers=s_headers,
+        )
+    finally:
+        event.remove(engine, "commit", _count_commit)
+    assert start.status_code == 200, start.text
+    assert start.json()["session_id"] == first
+    assert len(commits) == 1

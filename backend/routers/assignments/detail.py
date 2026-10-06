@@ -186,6 +186,19 @@ def _compute_interim_score(
     return None
 
 
+def _quiz_scoring_settings(assignment: Assignment) -> dict:
+    """Issue #1092: 三個評分設定的原始值（points 轉 float，NULL 照回 None）。"""
+    points = getattr(assignment, "quiz_scoring_points", None)
+    case_sensitive = getattr(assignment, "quiz_case_sensitive", None)
+    return {
+        "quiz_scoring_method": getattr(assignment, "quiz_scoring_method", None),
+        "quiz_scoring_points": float(points) if points is not None else None,
+        "quiz_case_sensitive": (
+            bool(case_sensitive) if case_sensitive is not None else None
+        ),
+    }
+
+
 @router.get("/{assignment_id}")
 async def get_assignment_detail(
     assignment_id: int,
@@ -399,19 +412,6 @@ async def get_assignment_detail(
         ),
         # Issue #1092: 打字類小考評分設定（編輯 sheet 讀回原始值；NULL ＝ 舊作業整題計分）
         **_quiz_scoring_settings(assignment),
-    }
-
-
-def _quiz_scoring_settings(assignment: Assignment) -> dict:
-    """Issue #1092: 三個評分設定的原始值（points 轉 float，NULL 照回 None）。"""
-    points = getattr(assignment, "quiz_scoring_points", None)
-    case_sensitive = getattr(assignment, "quiz_case_sensitive", None)
-    return {
-        "quiz_scoring_method": getattr(assignment, "quiz_scoring_method", None),
-        "quiz_scoring_points": float(points) if points is not None else None,
-        "quiz_case_sensitive": (
-            bool(case_sensitive) if case_sensitive is not None else None
-        ),
     }
 
 

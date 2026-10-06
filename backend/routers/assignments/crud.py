@@ -14,7 +14,7 @@ import logging
 import random
 import uuid
 from decimal import Decimal
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Union
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -307,9 +307,9 @@ def _quiz_scoring_points_required(practice_mode: Optional[str], method: str):
     )
 
 
-def _to_points(value: Optional[float]) -> Optional[Decimal]:
+def _to_points(value: Union[float, Decimal, None]) -> Optional[Decimal]:
     # validator 已擋掉超過一位小數／範圍外的值（不捨入）；轉 Decimal 與
-    # NUMERIC(5,2) 讀回的型別一致
+    # NUMERIC(5,2) 讀回的型別一致（request 的 float 與 DB 讀回的 Decimal 都走這裡）
     return None if value is None else Decimal(str(value)).quantize(Decimal("0.01"))
 
 
@@ -347,9 +347,8 @@ def _effective_quiz_scoring(
     points 只在 D/E 才有意義（其餘視為 None）。"""
     method = effective_method(assignment.quiz_scoring_method)
     points = (
-        Decimal(str(assignment.quiz_scoring_points)).quantize(Decimal("0.01"))
+        _to_points(assignment.quiz_scoring_points)
         if method in METHODS_REQUIRING_POINTS
-        and assignment.quiz_scoring_points is not None
         else None
     )
     return method, points, bool(assignment.quiz_case_sensitive)

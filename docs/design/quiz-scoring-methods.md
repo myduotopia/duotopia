@@ -120,6 +120,14 @@
 - 清掉該作業題目的老師手動扣分（`StudentItemProgress.teacher_review_score`）。
 - 直接寫 `student_assignment.score`；**不動** status 與時間戳（被退回訂正中的學生仍是 RETURNED）。
 - 沒作答的題目扣整題。
+- 查詢以整份作業批次撈（學生、作答紀錄、答案各一次，清手動扣分一次），不隨班級人數線性增加。
+
+**已知競態（接受、不加鎖）**：重算沒有對 `student_assignments` 加 row lock。若學生的 `/complete`
+與老師的 PATCH 在同一瞬間各自進行，學生那筆 transaction 讀到的是舊設定、重算又還看不到這筆尚未
+commit 的交卷，該生分數會停在舊設定算出的值。`is_correct` 過期會在下次 start／complete 自我修正，
+只有這個「剛好同時交卷」的分數不會。發生機率極低（老師需在開考中改評分方式且與交卷同一瞬間）；
+發現時老師再存一次評分設定（改回再改）或退回訂正即可重算。若日後要根治，需在 PATCH 與
+`_complete_quiz` 兩邊都對該作業的 `StudentAssignment` 取 `with_for_update()`。
 
 ## 新增一種評分方式時要改哪裡
 
