@@ -456,6 +456,20 @@ describe("validateGroupDraft（儲存前的阻擋）", () => {
     return g;
   }
 
+  it("小題不做重複偵測：殘留的 exact_duplicate 不擋儲存", () => {
+    const g = completeGroup();
+    g.questions[0].similar = {
+      exact_duplicate: {
+        id: 99,
+        stem: "Q1",
+        is_owner: false,
+        visibility: "public",
+      },
+      similar: [],
+    } as unknown as GroupDraft["questions"][number]["similar"];
+    expect(validateGroupDraft(g)).toBeNull();
+  });
+
   it("排版有沒填完的區塊 → layoutIncomplete；填完就通過", () => {
     const g = completeGroup();
     expect(validateGroupDraft(g)).toBeNull();

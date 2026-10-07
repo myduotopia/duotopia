@@ -84,6 +84,24 @@ def _sync_dialogue(group: QuestionGroup) -> None:
         group.passage_text = dialogue_passage_text(group.passage_text, group.segments)
 
 
+def _check_question_grades(questions) -> None:
+    """小題年段上下限各自繼承題組，一邊自訂、一邊繼承可能變成 min > max。
+
+    DB 有 ck_questions_grade_range，不先擋會在 commit 變 500（前端看到 Failed to fetch）。
+    """
+    for q in questions:
+        if (
+            q.is_active is not False
+            and q.grade_min is not None
+            and q.grade_max is not None
+            and q.grade_min > q.grade_max
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="小題年段與題組年段衝突：grade_min 不可大於 grade_max",
+            )
+
+
 @router.post("/question-groups", status_code=status.HTTP_201_CREATED)
 def create_question_group(
     payload: QuestionGroupCreate,
@@ -148,6 +166,7 @@ def create_question_group(
                 group_order=qin.group_order if qin.group_order is not None else i,
                 blank_index=qin.blank_index,
             )
+            _check_question_grades([question])
             qbs.replace_options(question, [o.model_dump() for o in qin.options])
             qbs.replace_exam_points(
                 db, question, qin.exam_point_ids, source=EXAM_POINT_LINK_SOURCE_MANUAL
@@ -209,6 +228,8 @@ def _apply_group_question(
     question.stem_audio_url = qin.stem_audio_url
     question.grade_min = qin.grade_min if qin.grade_min is not None else group.grade_min
     question.grade_max = qin.grade_max if qin.grade_max is not None else group.grade_max
+    # 下面 replace_options 會 flush，年段衝突要在這之前擋下
+    _check_question_grades([question])
     question.allow_multiple_answers = qin.allow_multiple_answers
     question.show_stem_text = qin.show_stem_text
     question.visibility = group.visibility
@@ -255,6 +276,16 @@ def update_question_group(
         ):
             if field in data:
                 setattr(g, field, data[field])
+        # 先驗年段：下面 _replace_segments 會 flush，反轉的年段會在那裡變成 500
+        if (
+            g.grade_min is not None
+            and g.grade_max is not None
+            and g.grade_min > g.grade_max
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="grade_min 不可大於 grade_max",
+            )
         if "passage_text" in data:
             # 老師明確給文字版（含清空 → 由 layout 重新拼）
             g.passage_text = _effective_passage_text(data["passage_text"], g.layout)
@@ -270,15 +301,6 @@ def update_question_group(
             if "passage_text" not in data:
                 g.passage_text = previous_text
             _sync_dialogue(g)
-        if (
-            g.grade_min is not None
-            and g.grade_max is not None
-            and g.grade_min > g.grade_max
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="grade_min 不可大於 grade_max",
-            )
         if not (g.passage_text or g.image_url or g.layout):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -328,6 +350,7 @@ def update_question_group(
                         q.grade_min = g.grade_min
                     if "grade_max" in data:
                         q.grade_max = g.grade_max
+            _check_question_grades(g.questions)
 
         # 空格對應以「合併後」的狀態檢查：只改 layout 刪掉空格也要被擋下（#1085）
         active = [q for q in g.questions if q.is_active]

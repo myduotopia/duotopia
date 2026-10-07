@@ -396,8 +396,9 @@ export function validateGroupDraft(g: GroupDraft): string | null {
   }
   const stemOptional = groupStemOptional(g);
   for (const q of g.questions) {
+    // 小題不做重複偵測（後端同規則）：忽略殘留的 similar，避免 exact_duplicate 擋住儲存
     const err = validateDraft(
-      { ...q, visibility: g.visibility },
+      { ...q, visibility: g.visibility, similar: null },
       { stemOptional },
     );
     if (err) return err;

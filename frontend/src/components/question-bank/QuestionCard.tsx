@@ -82,6 +82,11 @@ export interface QuestionCardProps {
   testIdPrefix?: string;
   /** 題組內的小題：不畫外框，只靠編號與上方淡分隔線區隔（單題流程不用） */
   compact?: boolean;
+  /**
+   * 是否查相似／重複題（預設 true）。題組小題傳 false：後端刻意不對小題做重複偵測
+   * （同一篇文章的問法常重複），前端若照查會被 exact_duplicate 擋住無法儲存。
+   */
+  checkSimilar?: boolean;
 }
 
 function absoluteAudioUrl(url: string): string {
@@ -104,6 +109,7 @@ export default function QuestionCard({
   clozeBlank = null,
   testIdPrefix = "qc",
   compact = false,
+  checkSimilar = true,
 }: QuestionCardProps) {
   const { t } = useTranslation();
   const [ttsBusy, setTtsBusy] = useState(false);
@@ -121,7 +127,7 @@ export default function QuestionCard({
   const stemTrimmed = draft.stem.trim();
   useEffect(() => {
     if (readOnly) return;
-    if (!stemTrimmed) {
+    if (!checkSimilar || !stemTrimmed) {
       if (draft.similar) patch({ similar: null });
       return;
     }
@@ -144,7 +150,7 @@ export default function QuestionCard({
     };
     // draft 其他欄位變動不需要重查
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stemTrimmed, excludeId, readOnly]);
+  }, [stemTrimmed, excludeId, readOnly, checkSimilar]);
 
   // ---- 選項 ----
   const updateOption = (i: number, p: Partial<OptionDraft>) => {

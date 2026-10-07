@@ -381,8 +381,14 @@ class AiQuestionIn(BaseModel):
     key: str = Field(..., min_length=1, max_length=64)
     stem: str = Field(..., min_length=1, max_length=2000)
     options: List[str] = Field(..., min_length=2, max_length=6)
-    # 題組小題：主圖文純文字，附在題目前給模型（#1082）
-    passage: Optional[str] = Field(None, max_length=6000)
+    # 題組小題：主圖文純文字，附在題目前給模型（#1082）。
+    # 不用 max_length 硬擋：題組文字版可到 20000 字，超長改為截斷（與 AiGroupTitleIn 一致）
+    passage: Optional[str] = None
+
+    @field_validator("passage")
+    @classmethod
+    def _clip_passage(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else v[:MAX_PASSAGE_CHARS]
 
 
 class AiQuestionsIn(BaseModel):

@@ -679,6 +679,7 @@ export default function GroupCard({
                     clozeBlank={q.blank_index}
                     testIdPrefix={`qg-${index}-q`}
                     compact
+                    checkSimilar={false}
                   />
                 </div>
               ))}
@@ -723,6 +724,7 @@ export default function GroupCard({
                         disabled={disabled}
                         testIdPrefix={`qg-${index}-q`}
                         compact
+                        checkSimilar={false}
                       />
                     </SortableQuestion>
                   ))}

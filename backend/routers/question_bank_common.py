@@ -15,7 +15,7 @@ import uuid
 from typing import Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, literal, or_, union_all
+from sqlalchemy import and_, func, literal, or_, union_all
 from sqlalchemy.orm import Session, selectinload
 
 from models import (
@@ -381,17 +381,21 @@ def _grade_filter(query, model, grade_min, grade_max):
 def _merged_page_keys(db: Session, singles, groups, page: int, page_size: int):
     """單題與題組在 SQL 層合併分頁：回傳本頁的 [(kind, id)]，順序即顯示順序。
 
-    排序：updated_at desc（null 最後）、id desc、kind（同 updated_at／id 時單題在前）。
+    排序：COALESCE(updated_at, created_at) desc、id desc、kind（同時間／id 時單題在前）。
+    剛建立的列 updated_at 是 NULL（只有 onupdate）；單題與題組 id 來自不同 sequence，
+    不 fallback 到 created_at 的話新題組會排在所有沒改過、id 較大的單題後面。
     """
     s_sel = singles.with_entities(
         literal("single").label("kind"),
         Question.id.label("id"),
-        Question.updated_at.label("updated_at"),
+        func.coalesce(Question.updated_at, Question.created_at).label("updated_at"),
     )
     g_sel = groups.with_entities(
         literal("group").label("kind"),
         QuestionGroup.id.label("id"),
-        QuestionGroup.updated_at.label("updated_at"),
+        func.coalesce(QuestionGroup.updated_at, QuestionGroup.created_at).label(
+            "updated_at"
+        ),
     )
     u = union_all(s_sel.statement, g_sel.statement).subquery("merged")
     rows = (

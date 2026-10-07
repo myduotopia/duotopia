@@ -519,3 +519,23 @@ def test_cloze_inputs_keep_blank_numbers_in_prompt():
     # 提示模型 (n)____ 是第 n 個空格
     assert "marks blank number n" in prompt
     assert "marks blank number n" in qbai.build_analyze_prompt(items, [])
+
+
+def test_ai_answer_long_group_passage_is_truncated(test_client, teacher, monkeypatch):
+    """題組文字版可到 20000 字：小題帶的 passage 超長要截斷，不該整批 422。"""
+    seen = {}
+
+    async def _capture(self, items):
+        seen["passage"] = items[0].passage
+        return [], []
+
+    monkeypatch.setattr(qbai.QuestionBankAIService, "answer", _capture)
+    q = _q()
+    q["passage"] = "a" * (qbai.MAX_PASSAGE_CHARS + 500)
+    resp = test_client.post(
+        "/api/question-bank/ai/answer",
+        json={"questions": [q]},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    assert len(seen["passage"]) == qbai.MAX_PASSAGE_CHARS

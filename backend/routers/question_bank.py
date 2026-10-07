@@ -334,6 +334,12 @@ def update_question(
     db: Session = Depends(get_db),
 ):
     q = _require_editable(db, teacher, question_id)
+    if q.group_id is not None:
+        # 小題的公開／年段／歸屬跟隨題組，克漏字小題題幹可空 —— 單題端點會破壞這些規則
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="題組小題請在題組內編輯",
+        )
     data = payload.model_dump(exclude_unset=True)
 
     if "stem" in data:
@@ -417,14 +423,14 @@ def delete_question(
 ):
     """軟刪除：is_active=False，保留已派發考卷的參照。
 
-    克漏字小題不能從這裡刪：它與文章裡的 ``{{n}}`` 一一對應，單獨刪掉會讓題組
-    永遠驗證失敗（文章的空格沒有對應小題）。要刪請在題組編輯器裡刪掉空格（#1085）。
+    題組小題不能從這裡刪：克漏字小題與文章裡的 ``{{n}}`` 一一對應，單獨刪掉會讓題組
+    永遠驗證失敗（#1085）；閱讀小題刪光會留下沒有小題的題組。要刪請在題組編輯器裡刪。
     """
     q = _require_editable(db, teacher, question_id)
-    if q.blank_index is not None:
+    if q.group_id is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="克漏字小題請在題組內刪除",
+            detail="克漏字小題請在題組內刪除" if q.blank_index is not None else "題組小題請在題組內刪除",
         )
     q.is_active = False
     q.deleted_at = datetime.now(timezone.utc)

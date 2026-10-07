@@ -1717,3 +1717,105 @@ def test_single_question_still_requires_stem_or_image(test_client, teacher_a):
         headers=_headers(teacher_a),
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------- PR #1109 本機補審修正
+
+
+def test_list_new_group_sorts_before_older_unedited_singles(
+    test_client, teacher_a, shared_test_session
+):
+    """新建的列 updated_at 是 NULL：排序要 fallback 到 created_at，新題組才不會沉到最後一頁。"""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import text
+
+    singles = [
+        _create(test_client, teacher_a, stem=f"Old single {i}") for i in range(3)
+    ]
+    g = _create_group(test_client, teacher_a, **_group_payload(title="Fresh group"))
+    # 用原生 SQL：ORM bulk update 會觸發 onupdate 把 updated_at 也填上
+    old = datetime.now(timezone.utc) - timedelta(days=1)
+    for s in singles:
+        shared_test_session.execute(
+            text(
+                "UPDATE questions SET created_at = :t, updated_at = NULL WHERE id = :i"
+            ),
+            {"t": old, "i": s["id"]},
+        )
+    shared_test_session.execute(
+        text("UPDATE question_groups SET updated_at = NULL WHERE id = :i"),
+        {"i": g["id"]},
+    )
+    shared_test_session.commit()
+
+    first = test_client.get(
+        "/api/question-bank/questions",
+        params={"page": 1, "page_size": 1},
+        headers=_headers(teacher_a),
+    ).json()["items"][0]
+    assert (first.get("kind"), first["id"]) == ("group", g["id"])
+
+
+def test_single_endpoints_reject_group_subquestion(test_client, teacher_a):
+    """小題的公開／年段／歸屬跟隨題組：單題 PATCH／DELETE 不可直接改。"""
+    g = _create_group(test_client, teacher_a)
+    qid = g["questions"][0]["id"]
+    resp = test_client.patch(
+        f"/api/question-bank/questions/{qid}",
+        json={"visibility": "public"},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    assert "題組內編輯" in resp.text
+    resp = test_client.delete(
+        f"/api/question-bank/questions/{qid}", headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    assert "題組內刪除" in resp.text
+
+
+def test_group_subquestion_grade_conflict_is_422_not_500(test_client, teacher_a):
+    """小題只自訂一邊年段、另一邊繼承題組，合起來 min > max → 422（不是 DB CHECK 的 500）。"""
+    payload = _group_payload()  # 題組 7～9
+    payload["questions"][0]["grade_max"] = 5
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=payload,
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422, resp.text
+
+    g = _create_group(test_client, teacher_a)
+    questions = [
+        {
+            "id": q["id"],
+            "stem": q["stem"],
+            "grade_max": 5,
+            "options": [
+                {"text": o["text"], "is_correct": o["is_correct"]} for o in q["options"]
+            ],
+        }
+        for q in g["questions"]
+    ]
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"questions": questions},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_group_inverted_grade_with_segments_is_422(test_client, teacher_a):
+    """題組年段反轉要在 segments flush 之前擋下。"""
+    g = _create_group(test_client, teacher_a)
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={
+            "grade_min": 9,
+            "grade_max": 7,
+            "segments": [{"speaker_label": "A", "transcript": "Hi."}],
+        },
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422, resp.text
