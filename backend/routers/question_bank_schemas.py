@@ -35,7 +35,7 @@ from services.question_bank_layout import (
     validate_layout,
 )
 
-# 可建立的題型：單題端點只收 multiple_choice；reading 只能經題組端點建（#1082）
+# 可建立的題型：單題端點只收 multiple_choice；reading（#1082）、cloze（#1085）只能經題組端點建
 SINGLE_CREATABLE_TYPES = (QUESTION_TYPE_MULTIPLE_CHOICE,)
 GROUP_CREATABLE_TYPES = ("reading", "cloze")
 CREATABLE_TYPES = SINGLE_CREATABLE_TYPES + GROUP_CREATABLE_TYPES

@@ -19,7 +19,7 @@
  *
  * 四種模式（由 `questions` / `groupId` / `createType` 決定）：
  * - 新增（未傳／空）：左欄完整；批次值套到所有單元；公開設定由左欄選（必選）。
- *   `createType` 為題組題型（reading）時右欄是一張 `GroupCard`，一次只建一個題組
+ *   `createType` 為題組題型（reading、cloze）時右欄是一張 `GroupCard`，一次只建一個題組
  * - 單題編輯（1 題）：左欄 editOnly 只剩來源／公開，值預填該題
  * - 題組編輯（`groupId`）：開啟時 getQuestionGroup 載入 → 一張 GroupCard；左欄 editOnly；
  *   儲存 updateQuestionGroup（整組替換、單交易）、刪除 deleteQuestionGroup（整組軟刪除）

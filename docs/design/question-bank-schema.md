@@ -28,7 +28,7 @@
 | 欄位 | 型別 | 說明 |
 |------|------|------|
 | id | serial PK | |
-| question_type | varchar(30) NOT NULL | `multiple_choice` / `reading` / `cloze` / `listening_image` / ... 本期只實作 `multiple_choice` |
+| question_type | varchar(30) NOT NULL | `multiple_choice` / `reading` / `cloze` / `listening_image` / ... 已實作：`multiple_choice`（單題）、`reading`、`cloze`（題組）；其餘見 [question-bank-question-types.md](./question-bank-question-types.md) |
 | stem | text NOT NULL DEFAULT '' | 題幹；純圖題可為空字串，但 CHECK `ck_questions_has_content` 要求 stem / image_url / stem_audio_url 至少一個（題組小題 `group_id` 有值者除外） |
 | normalized_stem | text NOT NULL DEFAULT '' | 正規化題幹（小寫、去標點、壓空白），重複偵測用；空字串不做去重 |
 | stem_audio_url | text | 題幹語音（語音生成工具只生成題幹，不生成選項） |

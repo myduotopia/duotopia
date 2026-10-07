@@ -3,7 +3,7 @@
 
 - GET    /api/question-bank/questions                 列表：單題 + 題組列（kind 分流；可見範圍 + filter + 分頁）
 - POST   /api/question-bank/questions                 新增單題（只開放 multiple_choice）
-- POST   /api/question-bank/question-groups           新增題組（整組一個交易；#1082，reading）
+- POST   /api/question-bank/question-groups           新增題組（整組一個交易；reading #1082、cloze #1085；實作在 question_bank_groups.py）
 - GET    /api/question-bank/question-groups/{id}      題組（含小題）
 - GET    /api/question-bank/questions/similar?stem=   相似題（自己的 + public）
 - GET    /api/question-bank/questions/{id}            單題
