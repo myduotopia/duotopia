@@ -113,9 +113,7 @@ def _get_aggregated_classrooms(db: Session, student: Student) -> list:
 
 
 @router.post("/validate", response_model=StudentLoginResponse)
-async def validate_student(
-    request: StudentValidateRequest, db: Session = Depends(get_db)
-):
+def validate_student(request: StudentValidateRequest, db: Session = Depends(get_db)):
     """學生登入驗證（透過 Identity 統一密碼 + 跨帳號班級聚合）"""
     # 查詢 Identity（Email 流程直接用 Identity 密碼驗證）
     identity = (
@@ -238,7 +236,7 @@ async def validate_student(
 
 
 @router.post("/switch-classroom")
-async def switch_classroom(
+def switch_classroom(
     request: SwitchClassroomRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     Enum,
     Float,
+    Numeric,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -67,6 +68,13 @@ class Assignment(Base):
     )
     quiz_opened_at = Column(DateTime(timezone=True), nullable=True)
     quiz_closed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Issue #1092: 打字類小考（拼寫／克漏字）評分設定，規則見 utils/quiz_scoring.py。
+    # 三欄皆 nullable 無 backfill：method NULL ＝ 舊作業 ＝ 整題計分；
+    # points 只給 fixed_per_word / fixed_per_letter 用；case_sensitive NULL/false ＝ 不分大小寫。
+    quiz_scoring_method = Column(String(30), nullable=True)
+    quiz_scoring_points = Column(Numeric(5, 2), nullable=True)
+    quiz_case_sensitive = Column(Boolean, nullable=True)
 
     # 是否打亂題目順序
     shuffle_questions = Column(Boolean, default=False)

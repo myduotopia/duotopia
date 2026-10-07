@@ -79,6 +79,17 @@ return <ReadingAssessmentPanel {...panelProps} ... />;
 > 依 `content_item_id` upsert `StudentItemProgress.teacher_review_score`；**小考不送、
 > 後端也不處理 `item_results`**（其 passed→100/60 映射會覆寫扣分）。老師直接改總分時
 > 以送出的 `score` 為準，扣分不反向改寫。零 migration。
+>
+> **打字類小考評分方式（#1092）**。拼寫／克漏字小考可選五種評分方式，單題可能只扣
+> 部分分數，規則唯一來源是後端 `backend/utils/quiz_scoring.py`（見
+> [`quiz-scoring-methods.md`](./quiz-scoring-methods.md)）。`_build_quiz_submission`
+> 每題另回 `default_deduction`（依評分方式算出的預設扣分；全扣為 100/題數原值）與
+> `deduction_detail`（`{word_total, wrong_words, wrong_letters}`，打字小考有作答時才有），
+> `quiz_settings` 加 `quiz_scoring_method` / `quiz_scoring_points` / `quiz_case_sensitive`。
+> 前端 `quizDeductions.initialDeductions` 的預設值改用 `default_deduction`（舊回應沒有時
+> 才退回「答對 0／答錯 100/題數」），已存扣分與預設差 < 0.005 仍視為未改動。
+> `QuizGradingPanel` 彙總卡下方顯示目前評分方式，部分扣分題顯示原因（如「3 個單字錯 1 個」）。
+> 前端不自行判分 —— `lib/quizScoring.ts` 只給派發／編輯時的試算用。
 
 > **情境對話的 AI 與朗讀類不是同一套**（#1035）。朗讀走 Azure 發音評測（`/reanalyze-item`，
 > 評「唸得多準」，需要 reference_text）；情境對話是開放式回答，沒有可比對的正解，走

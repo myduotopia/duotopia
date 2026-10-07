@@ -94,7 +94,7 @@ def _build_account_info(db: Session, student: Student) -> dict:
 
 
 @router.get("/{student_id}/linked-accounts")
-async def get_linked_accounts(
+def get_linked_accounts(
     student_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -150,7 +150,7 @@ async def get_linked_accounts(
 
 
 @router.post("/switch-account")
-async def switch_account(
+def switch_account(
     request: SwitchAccountRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -228,7 +228,7 @@ async def switch_account(
 
 
 @router.delete("/{student_id}/email-binding")
-async def unbind_email(
+def unbind_email(
     student_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

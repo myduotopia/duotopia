@@ -1,8 +1,16 @@
 """
 Pydantic models and validators for assignments
+
+Issue #1092: Create / Update 加打字類小考評分設定 ``quiz_scoring_method``（五值
+Literal）、``quiz_scoring_points``（D/E 用，0.1 ≤ x ≤ 100、最多一位小數，
+NaN / Infinity 拒絕）、``quiz_case_sensitive``。「打字小考 create 時 method 必填」與
+「D/E 必填 points」依 practice_mode 而定，在 crud.create_assignment 檢查（PUT 也用
+CreateAssignmentRequest 但不改評分設定，故不放在 model validator）。
 """
 
-from typing import List, Optional, Dict, Any
+import math
+from decimal import Decimal
+from typing import List, Literal, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator, field_validator
 
@@ -30,6 +38,53 @@ def _validate_quiz_time_limit(value: Optional[int]) -> Optional[int]:
             "quiz_time_limit_seconds must be null (no limit) or between "
             f"0 and {_MAX_QUIZ_TIME_LIMIT_SECONDS}"
         )
+    return value
+
+
+# Issue #1092: 打字類小考評分方式（值與 utils.quiz_scoring.SCORING_METHODS 一致）
+QuizScoringMethod = Literal[
+    "whole_question",
+    "per_word",
+    "per_word_lenient",
+    "fixed_per_word",
+    "fixed_per_letter",
+]
+
+
+_MIN_QUIZ_SCORING_POINTS = Decimal("0.1")
+_MAX_QUIZ_SCORING_POINTS = Decimal("100")
+_ONE_DECIMAL = Decimal("0.1")
+
+
+def _validate_quiz_scoring_points(value: Optional[float]) -> Optional[float]:
+    """D/E 每錯一單位扣幾分：0.1 ≤ x ≤ 100、最多一位小數（使用者定案）。
+
+    NaN / Infinity 一律 422（NaN 會讓整班 /complete 算分崩潰、Infinity 原本 500）；
+    超過一位小數直接拒絕，不默默捨入。DB 欄位仍是 NUMERIC(5,2)。
+    """
+    if value is None:
+        return value
+    if not math.isfinite(value):
+        raise ValueError("quiz_scoring_points must be a finite number")
+    dec = Decimal(str(value))
+    # 先檢查範圍再檢查小數位：超大值（如 1e30）quantize 會丟 InvalidOperation → 500
+    if dec < _MIN_QUIZ_SCORING_POINTS or dec > _MAX_QUIZ_SCORING_POINTS:
+        raise ValueError("quiz_scoring_points must be between 0.1 and 100")
+    if dec != dec.quantize(_ONE_DECIMAL):
+        raise ValueError("quiz_scoring_points allows at most one decimal place")
+    return float(dec)
+
+
+def _reject_non_finite_points(value: Any) -> Any:
+    """before 驗證：NaN / ±Infinity 換成無法解析的字串，讓 float 型別回標準 422。
+
+    若交給 after validator 擋，錯誤內容的 ``input`` 會是 float nan/inf，FastAPI 預設的
+    422 handler 以 JSON 序列化時不允許 NaN/Infinity → 變成 500。這裡只作用於
+    ``quiz_scoring_points`` 這一個欄位，回應格式仍是 FastAPI 預設的錯誤清單
+    （``type: float_parsing``、``input: "non-finite number"``），不影響其他端點／欄位。
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return "non-finite number"
     return value
 
 
@@ -68,11 +123,25 @@ class CreateAssignmentRequest(BaseModel):
     show_option_images: Optional[bool] = None  # Issue #631
     show_example_sentence: Optional[bool] = None  # Issue #860
     score_category: Optional[str] = None
+    # Issue #1092: 打字類小考評分設定（打字小考必填 method，見 crud.create_assignment）
+    quiz_scoring_method: Optional[QuizScoringMethod] = None
+    quiz_scoring_points: Optional[float] = None
+    quiz_case_sensitive: Optional[bool] = None
 
     @field_validator("quiz_time_limit_seconds")
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("quiz_scoring_points", mode="before")
+    @classmethod
+    def _non_finite_quiz_scoring_points(cls, v: Any) -> Any:
+        return _reject_non_finite_points(v)
+
+    @field_validator("quiz_scoring_points")
+    @classmethod
+    def _check_quiz_scoring_points(cls, v: Optional[float]) -> Optional[float]:
+        return _validate_quiz_scoring_points(v)
 
     @field_validator("practice_mode")
     @classmethod
@@ -111,11 +180,26 @@ class UpdateAssignmentRequest(BaseModel):
     show_translation: Optional[bool] = None
     show_option_images: Optional[bool] = None  # Issue #631
     show_example_sentence: Optional[bool] = None  # Issue #860
+    # Issue #1092: 打字類小考評分設定；明確傳 null ＝ 不變更。任一有效值改變且為
+    # 打字小考 → PATCH 同 transaction 重算已交卷學生（回應帶 recomputed_count）
+    quiz_scoring_method: Optional[QuizScoringMethod] = None
+    quiz_scoring_points: Optional[float] = None
+    quiz_case_sensitive: Optional[bool] = None
 
     @field_validator("quiz_time_limit_seconds")
     @classmethod
     def _check_quiz_time_limit(cls, v: Optional[int]) -> Optional[int]:
         return _validate_quiz_time_limit(v)
+
+    @field_validator("quiz_scoring_points", mode="before")
+    @classmethod
+    def _non_finite_quiz_scoring_points(cls, v: Any) -> Any:
+        return _reject_non_finite_points(v)
+
+    @field_validator("quiz_scoring_points")
+    @classmethod
+    def _check_quiz_scoring_points(cls, v: Optional[float]) -> Optional[float]:
+        return _validate_quiz_scoring_points(v)
 
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "UpdateAssignmentRequest":

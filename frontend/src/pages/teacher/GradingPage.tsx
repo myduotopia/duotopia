@@ -179,6 +179,14 @@ export interface SubmissionItem {
   blanked_sentence?: string;
   options?: Array<{ text: string; image_url?: string | null }> | null;
   deduction?: number | null;
+  // Issue #1092: 依評分方式算出的預設扣分（全扣為 100/題數原值，顯示時 round1）
+  default_deduction?: number;
+  // Issue #1092: 打字小考錯字統計（部分扣分原因）；其他題型／未作答為 null
+  deduction_detail?: {
+    word_total: number;
+    wrong_words: number;
+    wrong_letters: number;
+  } | null;
 }
 
 // Issue #1045: 小考派發設定（批改頁題目區依此呈現）
@@ -188,6 +196,10 @@ export interface QuizSettings {
   show_option_images: boolean;
   show_translation: boolean;
   show_word: boolean;
+  // Issue #1092: 打字類小考評分設定（method null ＝ 舊作業整題計分）
+  quiz_scoring_method?: string | null;
+  quiz_scoring_points?: number | null;
+  quiz_case_sensitive?: boolean | null;
 }
 
 // Issue #843: practice_mode 型別統一由 @/lib/practiceMode 提供（含全部模式與三種小考），

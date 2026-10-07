@@ -44,7 +44,7 @@ def _first_visible_classroom(db: Session, student_id: int) -> Optional[Classroom
 
 
 @router.get("/profile")
-async def get_student_profile(
+def get_student_profile(
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
@@ -77,7 +77,7 @@ async def get_student_profile(
 
 
 @router.get("/me")
-async def get_current_student_info(
+def get_current_student_info(
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
@@ -121,7 +121,7 @@ async def get_current_student_info(
 
 
 @router.put("/me")
-async def update_student_profile(
+def update_student_profile(
     request: UpdateStudentProfileRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -163,7 +163,7 @@ async def update_student_profile(
 
 
 @router.put("/me/password")
-async def update_student_password(
+def update_student_password(
     request: UpdatePasswordRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -219,7 +219,7 @@ async def update_student_password(
 
 
 @router.get("/my-classrooms")
-async def get_my_classrooms(
+def get_my_classrooms(
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
@@ -268,7 +268,7 @@ async def get_my_classrooms(
 
 
 @router.get("/stats")
-async def get_student_stats(
+def get_student_stats(
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):

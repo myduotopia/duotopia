@@ -1,5 +1,8 @@
 """
 Grading operations (AI and manual)
+
+Issue #1092: 小考批改視圖（_build_quiz_submission）每題附 default_deduction /
+deduction_detail，quiz_settings 加打字類小考評分設定。
 """
 
 import json
@@ -47,6 +50,7 @@ from .dependencies import get_current_teacher
 from .detail import (
     _compute_interim_score,
     _get_canonical_items,
+    _quiz_scoring_settings,
     _SPEAKING_SCORE_MODES,
 )
 from services.analysis_quota import (
@@ -441,6 +445,9 @@ def _build_quiz_submission(
     #1045 題目區：每題附 image_url、blanked_sentence、options（選擇題：優先學生作答時
     存下的 answer_data.options_shown，舊資料以同 seed 重建）、deduction（已存扣分）；
     頂層附 quiz_settings 供前端依派發設定呈現。
+    #1092：每題另附 default_deduction（依評分方式算的預設扣分，與
+    compute_quiz_score 同源）與 deduction_detail（打字小考錯字統計）；有 typed_words
+    時 student_answer 以「＿」標出空格；quiz_settings 加三個評分設定。
     """
     source = (
         db.query(PracticeSession)
@@ -482,6 +489,7 @@ def _build_quiz_submission(
         _build_selection_options,
         _example_cloze_fields,
         _load_quiz_items,
+        quiz_item_deduction,
     )
     from utils.distractors import answer_text_for_item
 
@@ -538,6 +546,9 @@ def _build_quiz_submission(
         .all()
     }
 
+    # #1092 每題預設扣分（依作業評分方式，與 compute_quiz_score 同一來源）
+    per_q = 100 / len(items) if items else 0.0
+
     questions = []
     correct_count = 0
     for idx, item in enumerate(items, start=1):
@@ -547,6 +558,11 @@ def _build_quiz_submission(
         if practice_mode == "word_selection_quiz":
             options = data.get("options_shown") or fallback_options.get(item.id, [])
         student_answer = data.get("typed_answer") or data.get("selected_answer") or ""
+        typed_words = data.get("typed_words")
+        if isinstance(typed_words, list) and any(w for w in typed_words):
+            # #1092: 逐格作答以「＿」標出空格位置，老師看得出漏填哪一格
+            student_answer = " ".join((w or "").strip() or "＿" for w in typed_words)
+        default_deduction, evaluation = quiz_item_deduction(parent, per_q, item, ans)
         correct_answer = (
             data.get("correct_answer")
             or data.get("correct_text")
@@ -572,6 +588,18 @@ def _build_quiz_submission(
                 "blanked_sentence": _example_cloze_fields(item)["blanked_sentence"],
                 "options": options,
                 "deduction": deductions.get(item.id),
+                # #1092 依評分方式算出的預設扣分（全扣為 100/題數原值，不先捨入）；
+                # 打字小考有作答時附錯字統計供顯示部分扣分原因，其餘為 None
+                "default_deduction": default_deduction,
+                "deduction_detail": (
+                    {
+                        "word_total": evaluation["word_total"],
+                        "wrong_words": evaluation["wrong_words"],
+                        "wrong_letters": evaluation["wrong_letters"],
+                    }
+                    if evaluation is not None
+                    else None
+                ),
             }
         )
 
@@ -620,6 +648,8 @@ def _build_quiz_submission(
                 if parent is not None and parent.show_word is not None
                 else True
             ),
+            # #1092 打字類小考評分設定（NULL method ＝ 舊作業整題計分）
+            **_quiz_scoring_settings(parent),
         },
     }
 

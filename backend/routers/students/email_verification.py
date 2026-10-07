@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.post("/update-email")
-async def update_student_email(
+def update_student_email(
     request: EmailUpdateRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -63,7 +63,7 @@ async def update_student_email(
 
 
 @router.post("/unbind-email")
-async def unbind_student_email(
+def unbind_student_email(
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
@@ -99,7 +99,7 @@ async def unbind_student_email(
 
 
 @router.post("/{student_id}/email/request-verification")
-async def request_email_verification(
+def request_email_verification(
     student_id: int,
     email_request: Dict[str, str],
     db: Session = Depends(get_db),
@@ -151,7 +151,7 @@ async def request_email_verification(
 
 
 @router.post("/{student_id}/email/resend-verification")
-async def resend_email_verification(
+def resend_email_verification(
     student_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -193,7 +193,7 @@ async def resend_email_verification(
 
 
 @router.get("/verify-email/{token}")
-async def verify_email(token: str, db: Session = Depends(get_db)):
+def verify_email(token: str, db: Session = Depends(get_db)):
     """驗證 email token，並觸發身分整合"""
     from services.email_service import email_service
     from services.identity_service import identity_service
@@ -252,7 +252,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{student_id}/email-status")
-async def get_email_status(
+def get_email_status(
     student_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

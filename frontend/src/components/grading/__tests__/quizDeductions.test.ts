@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultDeduction,
   initialDeductions,
+  itemDefaultDeduction,
   perQuestionDeduction,
   round1,
   scoreFromDeductions,
@@ -62,6 +63,41 @@ describe("quizDeductions (#1045 V11)", () => {
     const deductions = initialDeductions(items, 30);
     expect(deductions[1]).toBe(100 / 30);
     expect(scoreFromDeductions(deductions)).toBe(0);
+  });
+
+  it("#1092: backend default_deduction (partial) is the default", () => {
+    const deductions = initialDeductions(
+      [
+        { content_item_id: 1, is_correct: false, default_deduction: 1.3 },
+        { content_item_id: 2, is_correct: false, default_deduction: 4 },
+        { content_item_id: 3, is_correct: true, default_deduction: 0 },
+      ],
+      25,
+    );
+    expect(deductions).toEqual({ 1: 1.3, 2: 4, 3: 0 });
+    expect(itemDefaultDeduction({ is_correct: false }, 4)).toBe(25);
+  });
+
+  it("#1092: a 2-decimal stored copy of the partial default stays the default", () => {
+    // 100/3 × 1/3 = 11.1（後端已 half-up 到一位）；存檔 DECIMAL(5,2) → 11.1
+    const deductions = initialDeductions(
+      [
+        {
+          content_item_id: 1,
+          is_correct: false,
+          default_deduction: 11.1,
+          deduction: 11.1,
+        },
+        {
+          content_item_id: 2,
+          is_correct: false,
+          default_deduction: 11.1,
+          deduction: 5,
+        },
+      ],
+      3,
+    );
+    expect(deductions).toEqual({ 1: 11.1, 2: 5 });
   });
 
   it("clamps at 0 and normalises -0", () => {

@@ -95,15 +95,12 @@
   },
   "assignmentDetail": {
     "sheet": {
-      "viewTitle": "作業詳情",
-      "editTitle": "編輯作業",
-      "editButton": "編輯",
+      "viewTitle": "作業設定",
       "titleLabel": "作業標題",
       "instructionsLabel": "作業說明",
       "dueDateLabel": "截止日期",
       "studentProgress": "學生完成狀況",
       "noStudents": "尚無學生資料",
-      "save": "儲存變更",
       "contentTitle": "作業單元內容",
       "questionCount": "題目數量：",
       "itemCount": "題",
@@ -111,6 +108,10 @@
       "averageScore": "平均分數",
       "startDateLabel": "開始日期",
       "lockedSettingHint": "已有學生開始作答，無法變更此設定",
+      "saving": "儲存中…",
+      "saved": "已儲存",
+      "saveFailed": "儲存失敗",
+      "liveQuizOpenHint": "小考進行中，請先收卷才能關閉即時小考",
       "gridView": "格狀檢視",
       "listView": "列表檢視",
       "tabAll": "全部",
@@ -147,6 +148,7 @@
       "updateSuccess": "作業資訊已更新",
       "updateError": "儲存失敗",
       "startDateAfterDueDate": "開始日期不可晚於截止日期",
+      "invalidDate": "日期還沒填完整，已還原為原本的日期",
       "notFound": "找不到作業資料",
       "loadError": "無法載入作業詳情",
       "titleRequired": "請輸入作業標題",
@@ -3049,7 +3051,7 @@
       "createProgram": "建立課程",
       "assignNewHomework": "指派新作業",
       "batchArchive": "批次封存",
-      "viewDetails": "查看詳情",
+      "viewDetails": "作業設定",
       "editContent": "編輯內容",
       "previewDemo": "預覽",
       "requestRevisionBatch": "要求訂正",
@@ -5282,6 +5284,80 @@
       "total": "總分"
     }
   },
+  "quizScoring": {
+    "title": "評分方式",
+    "required": "（必選）",
+    "placeholder": "請選擇評分方式",
+    "methods": {
+      "whole_question": {
+        "label": "整題計分",
+        "desc": "這題只要有一個地方錯，就不給分（原本的計分方式）。"
+      },
+      "per_word": {
+        "label": "依單字比例",
+        "desc": "錯幾個單字就扣幾份。例如答案有 3 個單字、錯 1 個，就扣這題分數的三分之一。"
+      },
+      "per_word_lenient": {
+        "label": "依單字比例＋拼字寬鬆",
+        "desc": "和「依單字比例」一樣，但只差 1 個字母（多打、少打或打錯一個）的單字，只扣一半。"
+      },
+      "fixed_per_word": {
+        "label": "每錯一個單字扣固定分數",
+        "desc": "每錯一個單字扣您設定的分數，最多扣到這題的配分為止。"
+      },
+      "fixed_per_letter": {
+        "label": "每錯一個字母扣固定分數",
+        "desc": "每多打、少打或打錯一個字母，扣您設定的分數，最多扣到這題的配分為止。"
+      }
+    },
+    "pointsPerWord": "每錯一個單字扣",
+    "pointsPerLetter": "每錯一個字母扣",
+    "pointsUnit": "分",
+    "pointsInvalid": "請填 0.1 到 100 之間的分數，最多一位小數（例如 0.5、2）。",
+    "pointsHint": "可填 0.1 到 100，最多一位小數。",
+    "caseSensitive": "區分大小寫",
+    "caseSensitiveDesc": "開啟後，Apple 和 apple 會被當成不同的答案（預設不區分）。",
+    "perQuestion": "每題配分 {{points}} 分（共 {{count}} 題）",
+    "preview": {
+      "title": "扣分試算：以「{{answer}}」這題為例",
+      "builtinNote": "（範例題目）",
+      "noCount": "還不知道這份小考有幾題，暫時無法算出分數。",
+      "singleWordHint": "這次的答案都只有一個單字，「整題計分」和「依單字比例」算出來會一樣。",
+      "colAnswer": "學生的答案",
+      "colDeduction": "扣分",
+      "colScore": "這題得分",
+      "colReason": "說明",
+      "unansweredCell": "（沒作答）"
+    },
+    "reason": {
+      "allCorrect": "全對",
+      "unanswered": "沒作答，整題扣分",
+      "wholeQuestion": "有錯，整題扣分",
+      "full": "扣到這題的配分上限",
+      "words": "{{total}} 個單字錯 {{wrong}} 個",
+      "wordsLenient": "{{total}} 個單字錯 {{wrong}} 個（只差 1 個字母的扣一半）",
+      "letters": "差 {{count}} 個字母"
+    },
+    "grading": {
+      "methodPrefix": "評分方式：",
+      "pointsPerWord": "（每錯一個單字扣 {{points}} 分）",
+      "pointsPerLetter": "（每錯一個字母扣 {{points}} 分）",
+      "caseSensitiveSuffix": " · 區分大小寫",
+      "partialReason": "{{reason}}，預設扣 {{points}} 分"
+    },
+    "errors": {
+      "methodRequired": "請先選擇小考的評分方式",
+      "pointsRequired": "請填每錯一個單字或字母要扣幾分"
+    },
+    "confirm": {
+      "title": "要用新的評分方式重算成績嗎？",
+      "description": "已交卷的 {{count}} 位學生，成績會依新的評分方式重新計算；您之前手動修改過的扣分和總分，會被新的結果取代。",
+      "descriptionUnknownCount": "已交卷學生的成績會依新的評分方式重新計算；您之前手動修改過的扣分和總分，會被新的結果取代。",
+      "confirm": "確定重算",
+      "cancel": "取消"
+    },
+    "recomputed": "已儲存，並依新的評分方式重算 {{count}} 位學生的成績"
+  },
   "wordQuiz": {
     "questionNav": "題號",
     "questionLabel": "第 {{current}} / {{total}} 題",
@@ -5309,7 +5385,8 @@
     },
     "revision": {
       "hint": "訂正模式：答錯會顯示正解，全部改對才能提交",
-      "correctAnswer": "正解：{{answer}}"
+      "correctAnswer": "正解：{{answer}}",
+      "settingsChanged": "老師調整了評分方式，有題目需要再修正，請修改後再交卷。"
     }
   },
   "wordSpelling": {
