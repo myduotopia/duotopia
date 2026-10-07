@@ -154,6 +154,91 @@ class TestWebhook:
         assert exc.value.status_code == 503
 
 
+class TestImageUpload:
+    """#1100：後台上傳公告圖片"""
+
+    PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    GIF = b"GIF89a" + b"0" * 64
+
+    @staticmethod
+    def _file(data, name="a.png"):
+        from io import BytesIO
+        from fastapi import UploadFile
+
+        return UploadFile(file=BytesIO(data), filename=name)
+
+    @pytest.mark.asyncio
+    async def test_stores_and_returns_url(self):
+        with patch.object(
+            ra,
+            "store_announcement_image",
+            return_value="https://storage.googleapis.com/duotopia-audio/announcements/x.png",
+        ) as store:
+            resp = await ra.upload_announcement_image(
+                file=self._file(self.PNG), purpose="body", admin=_Admin()
+            )
+        assert resp["url"].endswith("x.png")
+        assert store.call_args.args[1:] == ("image/png", "png")
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_image(self):
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(b"<html>"), purpose="body", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_rejects_over_10mb(self):
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(self.PNG + b"0" * (10 * 1024 * 1024)),
+                purpose="body",
+                admin=_Admin(),
+            )
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_hero_over_1mb_rejected_body_allowed(self):
+        big = self.PNG + b"0" * (1024 * 1024)
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(big), purpose="hero", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+        assert "1 MB" in exc.value.detail
+
+        with patch.object(
+            ra, "store_announcement_image", return_value="https://x/b.png"
+        ):
+            resp = await ra.upload_announcement_image(
+                file=self._file(big), purpose="body", admin=_Admin()
+            )
+        assert resp["url"] == "https://x/b.png"
+
+    @pytest.mark.asyncio
+    async def test_hero_must_be_jpeg_or_png(self):
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(self.GIF, "a.gif"), purpose="hero", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+        assert "JPEG" in exc.value.detail
+
+        with patch.object(
+            ra, "store_announcement_image", return_value="https://x/a.gif"
+        ):
+            resp = await ra.upload_announcement_image(
+                file=self._file(self.GIF, "a.gif"), purpose="body", admin=_Admin()
+            )
+        assert resp["url"] == "https://x/a.gif"
+
+    def test_webhook_content_accepts_https_hero(self):
+        assert ra.AnnouncementContent(image_url="https://a/b.png").image_url
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(image_url="http://a/b.png")
+
+
 class TestListAndGet:
     @pytest.mark.asyncio
     async def test_list_hides_merged_and_discarded_by_default(self, test_db_session):

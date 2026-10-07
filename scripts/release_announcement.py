@@ -33,7 +33,9 @@ BLOCK_END = "<!-- release-announcement:end -->"
 _ISSUES_RE = re.compile(r"<!-- release-announcement:issues ([\d,\s]*) -->")
 
 # 欄位 ↔ 區塊內的小標題（順序即區塊內的顯示順序）
+# image_url（#1100）是選填的主圖：LINE 卡片 hero + 官網封面；空白時解析結果不含此欄位
 FIELDS: List[Tuple[str, str]] = [
+    ("image_url", "主圖網址（選填）"),
     ("line_message_zh", "LINE 文案（中文）"),
     ("line_message_en", "LINE 文案（英文）"),
     ("article_title_zh", "官網標題（中文）"),
@@ -43,6 +45,26 @@ FIELDS: List[Tuple[str, str]] = [
 ]
 # 與後端 AI 草稿的驗證一致：中文 LINE 文案與中文標題是必要欄位
 REQUIRED_FIELDS = ("line_message_zh", "article_title_zh")
+OPTIONAL_FIELDS = ("image_url",)
+
+# 公告圖片存放處（#1100）：所有環境共用的公開 bucket，staging / production 草稿可用同一網址
+IMAGE_BUCKET = "duotopia-audio"
+IMAGE_PREFIX = "announcements"
+IMAGE_MAX_BYTES = 10 * 1024 * 1024
+HERO_MAX_BYTES = (
+    1024 * 1024
+)  # LINE Flex hero 保守上限，與 backend/services/announcement_images.py 一致
+# 與 backend/utils/image_types.py 相同的 magic bytes（腳本不能 import backend，修改時兩邊一起改）
+_IMAGE_SIGNATURES = (
+    (b"\xff\xd8\xff", "image/jpeg", "jpg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png", "png"),
+    (b"GIF87a", "image/gif", "gif"),
+    (b"GIF89a", "image/gif", "gif"),
+)
+# LINE Flex hero 只接受 JPEG / PNG
+HERO_MIME_TYPES = ("image/jpeg", "image/png")
+_MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?[^)]*\)")
+_HTML_IMG_RE = re.compile(r"""<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']""", re.I)
 
 # 公開 repo 任何人都能留言：只採用團隊成員寫的公告區塊
 TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
@@ -136,7 +158,21 @@ def parse_block(text: Optional[str]) -> Optional[Dict[str, Any]]:
         elif current:
             buffer.append(line)
     flush()
+    image_url = _extract_image_url(content.get("image_url", ""))
+    content.pop("image_url", None)
+    if image_url:
+        content["image_url"] = image_url
     return {"content": content, "issues": issues}
+
+
+def _extract_image_url(value: str) -> str:
+    """主圖欄位可能是純網址，或在 GitHub 直接貼圖產生的 ![](url) / <img src>。"""
+    value = (value or "").strip()
+    for pattern in (_MD_IMAGE_RE, _HTML_IMG_RE):
+        match = pattern.search(value)
+        if match:
+            return match.group(1).strip()
+    return value
 
 
 def is_complete(content: Optional[Dict[str, str]]) -> bool:
@@ -481,9 +517,89 @@ def _load_content(path: str) -> Dict[str, str]:
     )
     if wrong_type:
         raise SystemExit(f"content 欄位必須是字串或 null：{wrong_type}")
+    image_url = (data.get("image_url") or "").strip()
+    if image_url and not image_url.startswith("https://"):
+        raise SystemExit("image_url（主圖）必須是 https:// 開頭的網址")
     if not is_complete(data):
         raise SystemExit(f"content 缺少必要欄位：{REQUIRED_FIELDS}")
     return data
+
+
+def _detect_image(content: bytes) -> Optional[Tuple[str, str]]:
+    for signature, mime, ext in _IMAGE_SIGNATURES:
+        if content.startswith(signature):
+            return mime, ext
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    return None
+
+
+def _run(args: List[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(args, capture_output=True, text=True)
+
+
+def upload_image(
+    path: str,
+    *,
+    issue: int,
+    hero: bool = False,
+    runner=None,
+    stamp: Optional[str] = None,
+) -> str:
+    """把公告圖片上傳到 gs://duotopia-audio/announcements/issue-<N>/，回傳公開網址。
+
+    用開發者本機的 gcloud 身分；沒有寫入權限時給出開通方式。
+    """
+    import datetime
+    import uuid
+
+    runner = runner or _run
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if len(data) > IMAGE_MAX_BYTES:
+        raise SystemExit(f"圖片超過 10 MB：{path}")
+    detected = _detect_image(data)
+    if not detected:
+        raise SystemExit(f"不是支援的圖片格式（JPEG / PNG / GIF / WebP）：{path}")
+    mime, ext = detected
+    if hero and mime not in HERO_MIME_TYPES:
+        raise SystemExit(f"主圖只能是 JPEG 或 PNG（LINE 卡片限制），目前是 {mime}")
+    if hero and len(data) > HERO_MAX_BYTES:
+        raise SystemExit("主圖請小於 1 MB（LINE 卡片限制），可改用 --hero 截圖產生的 JPEG")
+
+    stamp = stamp or datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    name = f"{stamp}-{uuid.uuid4().hex[:8]}.{ext}"
+    object_path = f"{IMAGE_PREFIX}/issue-{issue}/{name}"
+    result = runner(
+        [
+            "gcloud",
+            "storage",
+            "cp",
+            f"--content-type={mime}",
+            "--cache-control=public, max-age=31536000",
+            path,
+            f"gs://{IMAGE_BUCKET}/{object_path}",
+        ]
+    )
+    if result.returncode != 0:
+        stderr = result.stderr or ""
+        if "403" in stderr or "does not have" in stderr or "denied" in stderr.lower():
+            account = (
+                runner(["gcloud", "config", "get-value", "account"]).stdout or ""
+            ).strip() or "<你的 Google 帳號>"
+            raise SystemExit(
+                f"沒有上傳公告圖片的權限（{account}）。\n"
+                f"請 GCP 管理員執行以下指令開通 gs://{IMAGE_BUCKET} 的寫入權限後再試：\n"
+                f"  gcloud storage buckets add-iam-policy-binding gs://{IMAGE_BUCKET} "
+                f"--member=user:{account} --role=roles/storage.objectCreator\n"
+                "（公告仍可先不帶圖片寫入，之後在後台「更新公告」頁補上）"
+            )
+        raise SystemExit(f"上傳失敗：{stderr.strip()}")
+    return f"https://storage.googleapis.com/{IMAGE_BUCKET}/{object_path}"
+
+
+def cmd_upload_image(args: argparse.Namespace) -> None:
+    print(upload_image(args.file, issue=args.issue, hero=args.hero))
 
 
 def _print(data: Any) -> None:
@@ -578,6 +694,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("pr-block", help="PR 描述內公告區塊的狀態")
     p.add_argument("pr", type=int)
     p.set_defaults(func=cmd_pr_block)
+
+    p = sub.add_parser("upload-image", help="上傳公告圖片到 GCS，回傳公開網址")
+    p.add_argument("file")
+    p.add_argument("--issue", type=int, required=True)
+    p.add_argument("--hero", action="store_true", help="主圖（只接受 JPEG / PNG）")
+    p.set_defaults(func=cmd_upload_image)
 
     p = sub.add_parser("render", help="預覽公告區塊（不寫入 GitHub）")
     p.add_argument("--content", required=True, help="六個欄位的 JSON 檔")

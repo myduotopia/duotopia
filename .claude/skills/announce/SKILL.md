@@ -41,16 +41,21 @@ python3 scripts/release_announcement.py <command> ...
 | `render --content <json> [--issues 1,2]` | 預覽區塊（不寫入 GitHub） |
 | `upsert-issue <N> --content <json>` | 寫入 / 更新 issue 公告留言 |
 | `upsert-pr <PR> --content <json> --issues 1,2` | 寫入 / 更新 PR 描述內的統整區塊 |
+| `upload-image <file> --issue N [--hero]` | 上傳公告圖片到 `gs://duotopia-audio/announcements/issue-N/`，回傳公開網址（`--hero` 只收 JPEG / PNG） |
 
-內容 JSON 固定六個欄位（`line_message_zh` 與 `article_title_zh` 必填）：
+內容 JSON 六個文字欄位（`line_message_zh` 與 `article_title_zh` 必填）+ 選填主圖 `image_url`：
 
 ```json
 {
+  "image_url": "https://storage.googleapis.com/duotopia-audio/announcements/issue-N/....jpg",
   "line_message_zh": "", "line_message_en": "",
   "article_title_zh": "", "article_body_zh": "",
   "article_title_en": "", "article_body_en": ""
 }
 ```
+
+內文可放 markdown 圖片 `![說明](網址)`，放在哪一段就顯示在哪一段（官網文章）；
+LINE 卡片只顯示主圖。圖片網址一律用 `upload-image` 上傳後的 GCS 網址。
 
 JSON 檔寫在 scratchpad（或 `/tmp`），**不要**寫進 repo。
 
@@ -88,7 +93,10 @@ issue **同時**有這兩個標籤才整理公告：
    - 程式差異：在 issue worktree 內用 `git diff origin/staging...HEAD --stat` 與重點檔案；
      已合併的話用 `git log origin/staging --grep "#N" --format=%H` 找 commit 再看
 3. 依下方「寫作原則」產生六個欄位，寫成 JSON 檔。
-4. `render` 預覽，把預覽貼給使用者看。
+3a. **產生圖片**（見下方「圖片」）：主圖 1 張 + 內文 0~3 張，上傳後把網址寫進 JSON
+    （`image_url` 與內文的 `![說明](網址)`）。產圖或上傳失敗時**不要中止**，
+    告訴使用者原因，公告先不帶圖寫入（之後可在後台補圖）。
+4. `render` 預覽，把預覽和截圖一起給使用者看，確認後再寫入。
 5. `upsert-issue N --content <json>`，回報留言網址。
 6. 提醒時間點：
    > 進 staging 的 Release PR 是 CI 在加上 `✅ tested-in-staging` 後自動開的。
@@ -105,6 +113,8 @@ issue **同時**有這兩個標籤才整理公告：
 3. 對 `eligible: true` 但 `content` 為 null 的 issue：依模式 A 的步驟 2–3 當場補產，
    並用 `upsert-issue` 寫回該 issue（之後改內容只要改留言）。
 4. 統整所有 eligible issue 的內容成**一則**公告（寫作原則見下），寫成 JSON 檔。
+   - **圖片沿用**：`image_url` 用第一個新功能 issue 的主圖；各 issue 內文裡的
+     `![說明](網址)` 保留在該 issue 的段落中（不重新截圖、不改網址）。
    - 只有一個 eligible issue → 直接沿用那則內容即可。
    - 沒有任何 eligible issue → 告訴使用者「本次沒有需要發布的公告」，跳過步驟 4–6，
      仍可照常開 PR。
@@ -122,6 +132,34 @@ issue **同時**有這兩個標籤才整理公告：
 合併後 push main 時，CI 會讀這個區塊建立 production 草稿。
 
 ---
+
+## 圖片（#1100）
+
+**新功能 / 改版 → 實際畫面截圖；修正類 → 圖卡。** 每張圖只在模式 A 做一次，模式 B 沿用。
+
+1. 安裝截圖工具（第一次）：`npm --prefix scripts/announce install`
+   （瀏覽器：`npx --prefix scripts/announce playwright install chromium`）
+2. **實際畫面截圖**：開這個 issue 的 per-issue preview 環境，以「Demo 教師」快速登入
+   （`demo@duotopia.com`，只有 demo 資料）。依改動決定頁面與操作：
+   ```bash
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... --hero --out /tmp/hero.jpg
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... --steps steps.json \
+     [--selector "CSS"] --out /tmp/step1.png
+   ```
+   - `--hero`：主圖，1200×780（20:13，LINE 卡片比例）JPEG，約 100 KB（主圖上限 1 MB）
+   - preview 不存在時工具會改用 staging 並提醒 —— 確認截到的是**新**畫面
+   - **用 Read 看過每張截圖**，確認內容正確、沒有彈窗遮擋、沒有個資
+3. **圖卡**（修正類或統整版主圖）：寫一份 1200×780 的 HTML（品牌色 `#4b56ac` / `#7ad7f4`，
+   參考 `frontend/public/release-announcement-banner.png`），轉成 PNG：
+   `node scripts/announce/screenshot.mjs --html card.html --out /tmp/card.png`
+4. 上傳：`python3 scripts/release_announcement.py upload-image /tmp/hero.jpg --issue N --hero`
+   - **沒有權限時**腳本會顯示需要的 IAM 指令：請使用者找 GCP 管理員開通
+     `roles/storage.objectCreator`（`gs://duotopia-audio`），這次公告先不帶圖
+5. 模式 B（統整）：**沿用**各 issue 公告留言裡的圖，不重新截圖；
+   主圖用第一個新功能 issue 的主圖（或另做一張統整圖卡）。
+
+CI 自動產生（`announce-issue.yml` / `announce-release.yml`）目前**不截圖**，只寫文字；
+需要圖片時在本機重跑 `/announce #N`，或由審稿者在後台「更新公告」頁上傳。
 
 ## 寫作原則
 
@@ -147,5 +185,6 @@ issue **同時**有這兩個標籤才整理公告：
   外部貢獻者的留言即使有區塊也會被忽略。
 - staging → main PR 描述也只採用團隊成員開的 PR。合併前請確認統整區塊，
   程式在 `/announce` 之後又有改動時記得重跑。
+- 截圖只用 Demo 教師帳號，不要登入真實帳號、不要截到真實學生資料。
 - 不要手動編輯區塊內的 `<!-- release-announcement:* -->` 標記或 `####` 小標題，
   一律透過腳本寫入（CI 靠它們解析）。

@@ -120,6 +120,21 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 - 本機版本優先：開始前與寫入前都檢查一次，已有留言 / 完整區塊就不覆蓋
 - 通知走 CI bot（`LINE_CHANNEL_ACCESS_TOKEN` → `LINE_USER_ID`），與 Release PR 通知相同
 
+## 公告圖片（#1100）
+
+- 公告區塊新增選填欄位 `#### 主圖網址（選填）`（`image_url`）；內文可放 markdown 圖片。
+  空白時解析結果不含 `image_url`（舊格式相容）；在 GitHub 直接貼圖產生的 `![](url)` /
+  `<img src>` 會自動取出網址
+- `/announce #N`：`scripts/announce/screenshot.mjs`（Playwright，Demo 教師登入 per-issue preview）
+  截圖 → `release_announcement.py upload-image` 用本機 gcloud 上傳 → 寫進留言；
+  `/announce release` 沿用，不重新截圖
+- 後端 `services/announcement_images.py`：只信任 `storage.googleapis.com/<bucket>/`；
+  GitHub user-attachments 在建立草稿時轉存（只允許 GitHub 圖片網域，redirect 逐跳檢查、10 MB 上限、
+  magic bytes 驗證）；主圖限 JPEG / PNG、1 MB；失敗不擋草稿
+- 後台：`POST /api/admin/release-announcements/upload-image?purpose=hero|body`，
+  編輯頁「上傳主圖」「插入圖片」（插在游標位置）
+- 預設主圖 `frontend/public/release-announcement-banner.png`（1200×780）
+
 ## /announce 與公告區塊（PR3）
 
 - skill：`.claude/skills/announce/SKILL.md`

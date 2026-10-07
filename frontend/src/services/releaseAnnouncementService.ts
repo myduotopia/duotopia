@@ -95,6 +95,15 @@ export const releaseAnnouncementApi = {
       { channels },
       auth(token),
     ),
+  /** 上傳公告圖片（#1100）：hero = LINE 卡片主圖（只收 JPEG / PNG），body = 文章內文圖片 */
+  uploadImage: (file: File, purpose: "hero" | "body", token: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    return axios.post<{ url: string }>(`${ENDPOINT}/upload-image`, form, {
+      params: { purpose },
+      ...auth(token),
+    });
+  },
   discard: (id: number, token: string) =>
     axios.post<ReleaseAnnouncement>(
       `${ENDPOINT}/${id}/discard`,

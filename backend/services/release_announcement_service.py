@@ -36,6 +36,7 @@ from models.release_announcement import (
     STATUS_PUBLISHED,
     ReleaseAnnouncement,
 )
+from services.announcement_images import rehost_content_images
 from services.blog_service import BlogService
 from services.line_publish_service import LinePublishError, LinePublishService
 from services.vertex_ai import get_vertex_ai_service
@@ -229,9 +230,15 @@ class ReleaseAnnouncementService:
             return existing, False
 
         parsed = cls.parse_release_title(release_title)
+        hero_image = None
         prewritten = cls._prewritten_content(content)
         if prewritten is not None:
-            content, generation_error = prewritten, None
+            # #1100：主圖與內文裡的 GitHub 圖片轉存到 GCS（失敗不擋草稿，主圖改用預設圖）
+            images, _warnings = await rehost_content_images(
+                {**prewritten, "image_url": (content or {}).get("image_url")}
+            )
+            hero_image = images.pop("image_url", None)
+            content, generation_error = images, None
         else:
             content, generation_error = await cls._generate_content(
                 parsed["clean_title"], parsed["change_type"]
@@ -245,7 +252,7 @@ class ReleaseAnnouncementService:
             issue_numbers=issue_numbers or parsed["issue_numbers"],
             release_title=release_title,
             change_type=parsed["change_type"],
-            image_url=settings.RELEASE_ANNOUNCEMENT_BANNER_URL,
+            image_url=hero_image or settings.RELEASE_ANNOUNCEMENT_BANNER_URL,
             status=STATUS_DRAFT,
             line_status=CHANNEL_PENDING,
             website_status=CHANNEL_PENDING,

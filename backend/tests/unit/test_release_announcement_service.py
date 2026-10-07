@@ -163,6 +163,69 @@ class TestCreateDraft:
         assert ann.issue_numbers == "860"
 
     @pytest.mark.asyncio
+    async def test_prewritten_hero_image_replaces_banner(self, test_db_session):
+        """#1100：/announce 帶來的主圖取代預設圖，GitHub 圖片會先轉存"""
+        hero = "https://storage.googleapis.com/duotopia-audio/announcements/i/h.png"
+        written = {
+            **AI_RESULT,
+            "image_url": "https://github.com/user-attachments/assets/x",
+        }
+        rehosted = {**AI_RESULT, "image_url": hero}
+        with patch(
+            "services.release_announcement_service.rehost_content_images",
+            new=AsyncMock(return_value=(rehosted, [])),
+        ) as rehost:
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=written,
+            )
+        assert rehost.await_count == 1
+        assert ann.image_url == hero
+
+    @pytest.mark.asyncio
+    async def test_github_hero_rehosted_end_to_end(self, test_db_session):
+        """不 mock rehost：GitHub 主圖實際走下載 → 儲存 → 寫入草稿"""
+        png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+        stored = "https://storage.googleapis.com/duotopia-audio/announcements/s/h.png"
+        written = {
+            **AI_RESULT,
+            "image_url": "https://github.com/user-attachments/assets/abc",
+        }
+        with patch(
+            "services.announcement_images.fetch_github_image",
+            new=AsyncMock(return_value=(png, "image/png", "png")),
+        ), patch(
+            "services.announcement_images.store_announcement_image",
+            return_value=stored,
+        ):
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="gh-hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=written,
+            )
+        assert ann.image_url == stored
+
+    @pytest.mark.asyncio
+    async def test_prewritten_without_hero_keeps_banner(self, test_db_session):
+        with patch(
+            "services.release_announcement_service.rehost_content_images",
+            new=AsyncMock(return_value=(dict(AI_RESULT), [])),
+        ):
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="no-hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=dict(AI_RESULT),
+            )
+        assert ann.image_url == "https://cdn/banner.png"
+
+    @pytest.mark.asyncio
     async def test_incomplete_prewritten_content_falls_back_to_ai(
         self, test_db_session
     ):
