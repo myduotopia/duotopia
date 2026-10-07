@@ -125,6 +125,8 @@ export default function OneCampusCallback() {
               student_number: data.student.student_number || "",
               classroom_id: data.student.classroom_id,
               classroom_name: data.student.classroom_name,
+              // 年級另存；顯示時才組合班名（#1097）
+              classroom_grade: data.student.classroom_grade ?? null,
               school_id: data.student.school_id,
               school_name: data.student.school_name,
               organization_id: data.student.organization_id,
@@ -184,6 +186,8 @@ export default function OneCampusCallback() {
             student_number: data.student.student_number || "",
             classroom_id: data.student.classroom_id,
             classroom_name: data.student.classroom_name,
+            // 年級另存；顯示時才組合班名（#1097）
+            classroom_grade: data.student.classroom_grade ?? null,
             school_id: data.student.school_id,
             school_name: data.student.school_name,
             organization_id: data.student.organization_id,
@@ -243,6 +247,8 @@ export default function OneCampusCallback() {
           student_number: data.student.student_number || "",
           classroom_id: data.student.classroom_id,
           classroom_name: data.student.classroom_name,
+          // 年級另存；顯示時才組合班名（#1097）
+          classroom_grade: data.student.classroom_grade ?? null,
           school_id: data.student.school_id,
           school_name: data.student.school_name,
           organization_id: data.student.organization_id,

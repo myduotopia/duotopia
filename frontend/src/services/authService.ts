@@ -29,6 +29,7 @@ export interface LinkedAccount {
   classroom: {
     id: number;
     name: string;
+    grade?: number | null; // 年級 1–12（#1097）
     teacher_name: string | null;
   } | null;
   school: {
@@ -65,6 +66,7 @@ interface StudentEmailLoginResponse {
     student_number: string;
     classroom_id: number | null;
     classroom_name: string | null;
+    classroom_grade?: number | null; // 年級 1–12（#1097）
     school_id: string | null;
     school_name: string | null;
     organization_id: string | null;
@@ -74,6 +76,7 @@ interface StudentEmailLoginResponse {
     classrooms: Array<{
       id: number;
       name: string;
+      grade?: number | null; // 年級 1–12（#1097）
       teacher_name: string | null;
       student_id: number;
       school_id?: string;

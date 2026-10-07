@@ -42,6 +42,7 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import has_read_org_materials_permission
+from utils.classroom_grade import parse_grade
 from utils.quiz_scoring import (
     METHODS_REQUIRING_POINTS,
     TYPED_QUIZ_MODES,
@@ -408,12 +409,13 @@ async def create_assignment(
     # 支援兩種授權路徑：
     # 1. 班級導師（teacher_id == current_teacher.id）
     # 2. 機構管理員（透過 organization_id 驗證角色）
+    # #1097：先排除已刪除；停用班級在授權通過後回 400（停用班不可派新作業）
     classroom = (
         db.query(Classroom)
         .filter(
             and_(
                 Classroom.id == request.classroom_id,
-                Classroom.is_active.is_(True),
+                Classroom.deleted_at.is_(None),
             )
         )
         .first()
@@ -459,6 +461,11 @@ async def create_assignment(
         raise HTTPException(
             status_code=404, detail="Classroom not found or you don't have permission"
         )
+
+    # #1097：停用（未刪除）的班級老師端其他功能照常可用，唯獨不能派新作業。
+    # 放在授權之後，避免對無權限者透露班級狀態。
+    if not classroom.is_active:
+        raise HTTPException(status_code=400, detail="班級已停用，無法派發作業")
 
     # 驗證所有 Content 存在並 eager load content_items
     contents = (
@@ -847,13 +854,14 @@ async def get_assignments(
     # Batch-load classroom names (avoid N+1)
     classroom_ids = list({a.classroom_id for a in assignments if a.classroom_id})
     classrooms = (
-        db.query(Classroom.id, Classroom.name)
+        db.query(Classroom.id, Classroom.name, Classroom.grade)
         .filter(Classroom.id.in_(classroom_ids))
         .all()
         if classroom_ids
         else []
     )
     classroom_name_map = {c.id: c.name for c in classrooms}
+    classroom_grade_map = {c.id: parse_grade(c.grade) for c in classrooms}
 
     # Batch-load assignment content counts (avoid N+1)
     assignment_ids = [a.id for a in assignments]
@@ -937,6 +945,8 @@ async def get_assignments(
                 "description": assignment.description,
                 "classroom_id": assignment.classroom_id,
                 "classroom_name": classroom_name_map.get(assignment.classroom_id),
+                # 年級 1–12，前端組合班名用（#1097）
+                "classroom_grade": classroom_grade_map.get(assignment.classroom_id),
                 "is_instant_practice": assignment.is_instant_practice or False,
                 "content_count": content_count,
                 "student_count": total_students,
@@ -1549,7 +1559,8 @@ async def get_classroom_students(
             and_(
                 Classroom.id == classroom_id,
                 Classroom.teacher_id == current_teacher.id,
-                Classroom.is_active.is_(True),
+                # #1097：停用班級老師端仍可讀取，只排除已刪除
+                Classroom.deleted_at.is_(None),
             )
         )
         .first()
@@ -1597,7 +1608,8 @@ async def get_available_contents(
                 and_(
                     Classroom.id == classroom_id,
                     Classroom.teacher_id == current_teacher.id,
-                    Classroom.is_active.is_(True),
+                    # #1097：停用班級老師端仍可讀取，只排除已刪除
+                    Classroom.deleted_at.is_(None),
                 )
             )
             .first()

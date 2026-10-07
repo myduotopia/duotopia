@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, Building2, School, Users, Check } from "lucide-react";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { authService, type LinkedAccount } from "@/services/authService";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 export function AccountSwitcher() {
   const { t } = useTranslation();
@@ -57,6 +58,7 @@ export function AccountSwitcher() {
         student_number: studentInfo.student_number || "",
         classroom_id: studentInfo.classroom?.id || 0,
         classroom_name: studentInfo.classroom?.name,
+        classroom_grade: studentInfo.classroom?.grade ?? null,
         teacher_name: studentInfo.classroom?.teacher_name || undefined,
         school_id: studentInfo.school?.id,
         school_name: studentInfo.school?.name,
@@ -72,8 +74,9 @@ export function AccountSwitcher() {
           org:
             studentInfo.organization?.name ||
             studentInfo.school?.name ||
-            studentInfo.classroom?.name ||
-            "",
+            (studentInfo.classroom
+              ? formatClassroomDisplayName(t, studentInfo.classroom)
+              : ""),
         }),
       );
 
@@ -125,7 +128,11 @@ export function AccountSwitcher() {
               <p className="text-xs text-gray-500 truncate">
                 {user?.organization_name ||
                   user?.school_name ||
-                  user?.classroom_name}
+                  (user?.classroom_name &&
+                    formatClassroomDisplayName(t, {
+                      name: user.classroom_name,
+                      grade: user.classroom_grade,
+                    }))}
               </p>
             </div>
             <Check className="h-4 w-4 text-blue-500 flex-shrink-0" />
@@ -177,7 +184,7 @@ export function AccountSwitcher() {
                       !account.school &&
                       account.classroom && (
                         <span className="truncate">
-                          {account.classroom.name}
+                          {formatClassroomDisplayName(t, account.classroom)}
                         </span>
                       )}
                   </div>

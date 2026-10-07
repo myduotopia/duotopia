@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, cast, Date
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from database import get_db
 from models import (
@@ -20,10 +20,27 @@ from auth import (
     get_password_hash,
     validate_student_password_strength,
 )
+from utils.classroom_grade import parse_grade
 from .dependencies import get_current_student, get_student_id
 from .validators import UpdateStudentProfileRequest, UpdatePasswordRequest
 
 router = APIRouter()
+
+
+def _first_visible_classroom(db: Session, student_id: int) -> Optional[Classroom]:
+    """學生目前所屬的第一個「啟用且未刪除」班級（停用／刪除的班學生看不到，#1097）"""
+    return (
+        db.query(Classroom)
+        .join(ClassroomStudent, ClassroomStudent.classroom_id == Classroom.id)
+        .filter(
+            ClassroomStudent.student_id == student_id,
+            ClassroomStudent.is_active.is_(True),
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
+        )
+        .order_by(ClassroomStudent.id)
+        .first()
+    )
 
 
 @router.get("/profile")
@@ -40,24 +57,11 @@ def get_student_profile(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # Get classroom info
-    classroom_student = (
-        db.query(ClassroomStudent)
-        .filter(ClassroomStudent.student_id == student.id)
-        .first()
-    )
-
-    classroom_name = None
-    classroom_id = None
-    if classroom_student:
-        classroom = (
-            db.query(Classroom)
-            .filter(Classroom.id == classroom_student.classroom_id)
-            .first()
-        )
-        if classroom:
-            classroom_name = classroom.name
-            classroom_id = classroom.id
+    # Get classroom info（只取啟用且未刪除的班級，#1097）
+    classroom = _first_visible_classroom(db, student.id)
+    classroom_id = classroom.id if classroom else None
+    classroom_name = classroom.name if classroom else None
+    classroom_grade = parse_grade(classroom.grade) if classroom else None
 
     return {
         "id": student.id,
@@ -66,6 +70,7 @@ def get_student_profile(
         "student_id": student.student_number,
         "classroom_id": classroom_id,
         "classroom_name": classroom_name,
+        "classroom_grade": classroom_grade,
         "target_wpm": student.target_wpm,
         "target_accuracy": student.target_accuracy,
     }
@@ -85,24 +90,11 @@ def get_current_student_info(
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
 
-    # Get classroom info
-    classroom_student = (
-        db.query(ClassroomStudent)
-        .filter(ClassroomStudent.student_id == student.id)
-        .first()
-    )
-
-    classroom_name = None
-    classroom_id = None
-    if classroom_student:
-        classroom = (
-            db.query(Classroom)
-            .filter(Classroom.id == classroom_student.classroom_id)
-            .first()
-        )
-        if classroom:
-            classroom_name = classroom.name
-            classroom_id = classroom.id
+    # Get classroom info（只取啟用且未刪除的班級，#1097）
+    classroom = _first_visible_classroom(db, student.id)
+    classroom_id = classroom.id if classroom else None
+    classroom_name = classroom.name if classroom else None
+    classroom_grade = parse_grade(classroom.grade) if classroom else None
 
     # Get 1Campus binding status from Identity
     one_campus_account = None
@@ -119,6 +111,7 @@ def get_current_student_info(
         "student_id": student.student_number,
         "classroom_id": classroom_id,
         "classroom_name": classroom_name,
+        "classroom_grade": classroom_grade,
         "target_wpm": student.target_wpm,
         "target_accuracy": student.target_accuracy,
         # 1Campus binding status
@@ -149,24 +142,11 @@ def update_student_profile(
     db.commit()
     db.refresh(student)
 
-    # Get classroom info
-    classroom_student = (
-        db.query(ClassroomStudent)
-        .filter(ClassroomStudent.student_id == student.id)
-        .first()
-    )
-
-    classroom_name = None
-    classroom_id = None
-    if classroom_student:
-        classroom = (
-            db.query(Classroom)
-            .filter(Classroom.id == classroom_student.classroom_id)
-            .first()
-        )
-        if classroom:
-            classroom_name = classroom.name
-            classroom_id = classroom.id
+    # Get classroom info（只取啟用且未刪除的班級，#1097）
+    classroom = _first_visible_classroom(db, student.id)
+    classroom_id = classroom.id if classroom else None
+    classroom_name = classroom.name if classroom else None
+    classroom_grade = parse_grade(classroom.grade) if classroom else None
 
     return {
         "id": student.id,
@@ -176,6 +156,7 @@ def update_student_profile(
         "student_id": student.student_number,
         "classroom_id": classroom_id,
         "classroom_name": classroom_name,
+        "classroom_grade": classroom_grade,
         "target_wpm": student.target_wpm,
         "target_accuracy": student.target_accuracy,
     }
@@ -242,7 +223,7 @@ def get_my_classrooms(
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """取得當前學生的所有班級列表"""
+    """取得當前學生的所有班級列表（只含啟用且未刪除的班級，#1097）"""
     student_id = int(current_student.get("sub"))
 
     classrooms = (
@@ -260,6 +241,8 @@ def get_my_classrooms(
         .filter(
             ClassroomStudent.student_id == student_id,
             ClassroomStudent.is_active.is_(True),
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
         .all()
     )
@@ -269,6 +252,7 @@ def get_my_classrooms(
         cr_info = {
             "id": cr.id,
             "name": cr.name,
+            "grade": parse_grade(cr.grade),
             "teacher_name": cr.teacher.name if cr.teacher else None,
         }
         cs = next((c for c in (cr.classroom_schools or []) if c.is_active), None)

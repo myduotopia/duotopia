@@ -18,6 +18,7 @@ from auth import (
     verify_password,
     _get_student_password_hash,
 )
+from utils.classroom_grade import parse_grade
 from .validators import SwitchAccountRequest
 
 router = APIRouter()
@@ -25,13 +26,18 @@ router = APIRouter()
 
 def _build_account_info(db: Session, student: Student) -> dict:
     """建立帳號資訊（含班級、學校、機構）"""
-    # 取得班級
-    enrollment = (
-        db.query(ClassroomStudent)
+    # 取得班級（只取啟用且未刪除的班級；停用／刪除的班學生看不到，#1097）
+    classroom = (
+        db.query(Classroom)
+        .join(ClassroomStudent, ClassroomStudent.classroom_id == Classroom.id)
+        .options(joinedload(Classroom.teacher))
         .filter(
             ClassroomStudent.student_id == student.id,
             ClassroomStudent.is_active.is_(True),
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
+        .order_by(ClassroomStudent.id)
         .first()
     )
 
@@ -39,47 +45,41 @@ def _build_account_info(db: Session, student: Student) -> dict:
     school_info = None
     organization_info = None
 
-    if enrollment:
-        classroom = (
-            db.query(Classroom)
-            .options(joinedload(Classroom.teacher))
-            .filter(Classroom.id == enrollment.classroom_id)
+    if classroom:
+        classroom_info = {
+            "id": classroom.id,
+            "name": classroom.name,
+            "grade": parse_grade(classroom.grade),
+            "teacher_name": classroom.teacher.name if classroom.teacher else None,
+        }
+
+        # 取得學校和機構
+        cs = (
+            db.query(ClassroomSchool)
+            .filter(
+                ClassroomSchool.classroom_id == classroom.id,
+                ClassroomSchool.is_active.is_(True),
+            )
             .first()
         )
-        if classroom:
-            classroom_info = {
-                "id": classroom.id,
-                "name": classroom.name,
-                "teacher_name": classroom.teacher.name if classroom.teacher else None,
-            }
-
-            # 取得學校和機構
-            cs = (
-                db.query(ClassroomSchool)
-                .filter(
-                    ClassroomSchool.classroom_id == classroom.id,
-                    ClassroomSchool.is_active.is_(True),
-                )
-                .first()
-            )
-            if cs:
-                school = db.query(School).filter(School.id == cs.school_id).first()
-                if school and school.is_active:
-                    school_info = {
-                        "id": str(school.id),
-                        "name": school.display_name or school.name,
-                    }
-                    if school.organization_id:
-                        org = (
-                            db.query(Organization)
-                            .filter(Organization.id == school.organization_id)
-                            .first()
-                        )
-                        if org and org.is_active:
-                            organization_info = {
-                                "id": str(org.id),
-                                "name": org.display_name or org.name,
-                            }
+        if cs:
+            school = db.query(School).filter(School.id == cs.school_id).first()
+            if school and school.is_active:
+                school_info = {
+                    "id": str(school.id),
+                    "name": school.display_name or school.name,
+                }
+                if school.organization_id:
+                    org = (
+                        db.query(Organization)
+                        .filter(Organization.id == school.organization_id)
+                        .first()
+                    )
+                    if org and org.is_active:
+                        organization_info = {
+                            "id": str(org.id),
+                            "name": org.display_name or org.name,
+                        }
 
     return {
         "student_id": student.id,

@@ -10,6 +10,7 @@ from datetime import timedelta, datetime, timezone
 from database import get_db
 from models import Student, Classroom, ClassroomStudent, Identity
 from models.organization import ClassroomSchool, School, Organization
+from utils.classroom_grade import parse_grade
 from auth import (
     create_access_token,
     verify_password,
@@ -28,7 +29,7 @@ router = APIRouter()
 
 
 def _get_classrooms_for_student(db: Session, student_id: int) -> list:
-    """取得指定學生的所有班級資訊"""
+    """取得指定學生的所有班級資訊（只含啟用且未刪除的班級，#1097）"""
     classrooms = (
         db.query(Classroom)
         .join(ClassroomStudent)
@@ -44,7 +45,11 @@ def _get_classrooms_for_student(db: Session, student_id: int) -> list:
         .filter(
             ClassroomStudent.student_id == student_id,
             ClassroomStudent.is_active.is_(True),
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
+        # 與 profile._first_visible_classroom 一致：預設班級＝最早加入的可見班級
+        .order_by(ClassroomStudent.id)
         .all()
     )
 
@@ -53,6 +58,7 @@ def _get_classrooms_for_student(db: Session, student_id: int) -> list:
         cr_info = {
             "id": cr.id,
             "name": cr.name,
+            "grade": parse_grade(cr.grade),
             "teacher_name": cr.teacher.name if cr.teacher else None,
             "student_id": student_id,
         }
@@ -185,6 +191,7 @@ def validate_student(request: StudentValidateRequest, db: Session = Depends(get_
     first_cr = classrooms_list[0] if classrooms_list else None
     classroom_id = first_cr["id"] if first_cr else None
     classroom_name = first_cr["name"] if first_cr else None
+    classroom_grade = first_cr.get("grade") if first_cr else None
     school_id = first_cr.get("school_id") if first_cr else None
     school_name = first_cr.get("school_name") if first_cr else None
     organization_id = first_cr.get("organization_id") if first_cr else None
@@ -215,6 +222,7 @@ def validate_student(request: StudentValidateRequest, db: Session = Depends(get_
             "student_number": student.student_number,
             "classroom_id": classroom_id,
             "classroom_name": classroom_name,
+            "classroom_grade": classroom_grade,
             "school_id": school_id,
             "school_name": school_name,
             "organization_id": organization_id,
@@ -299,6 +307,7 @@ def switch_classroom(
             "student_number": target_student.student_number,
             "classroom_id": first_cr["id"] if first_cr else None,
             "classroom_name": first_cr["name"] if first_cr else None,
+            "classroom_grade": first_cr.get("grade") if first_cr else None,
             "school_id": first_cr.get("school_id") if first_cr else None,
             "school_name": first_cr.get("school_name") if first_cr else None,
             "organization_id": first_cr.get("organization_id") if first_cr else None,

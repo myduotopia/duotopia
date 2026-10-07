@@ -10,12 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { School } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 interface ClassroomAssignDialogProps {
   open: boolean;
   onClose: () => void;
   onConfirm: (classroomId: number) => void;
-  classrooms: Array<{ id: number; name: string }>;
+  // grade：年級 1–12，選單顯示組合班名（#1097）
+  classrooms: Array<{ id: number; name: string; grade?: number | null }>;
   studentCount: number;
 }
 
@@ -78,7 +80,7 @@ export function ClassroomAssignDialog({
             </option>
             {classrooms.map((classroom) => (
               <option key={classroom.id} value={classroom.id}>
-                {classroom.name}
+                {formatClassroomDisplayName(t, classroom)}
               </option>
             ))}
           </select>

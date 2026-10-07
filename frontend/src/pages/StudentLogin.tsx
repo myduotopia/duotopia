@@ -27,6 +27,7 @@ import {
   saveRedirectTarget,
 } from "@/utils/redirectAfterLogin";
 import { resolveLoginErrorKey } from "@/utils/loginErrorMessage";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 interface TeacherHistory {
   email: string;
@@ -37,6 +38,7 @@ interface TeacherHistory {
 interface Classroom {
   id: number;
   name: string;
+  grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   studentCount: number;
 }
 
@@ -241,6 +243,7 @@ export default function StudentLogin() {
             response.user.student_number || response.user.id.toString(),
           classroom_id: selectedClassroom?.id ?? undefined,
           classroom_name: selectedClassroom?.name,
+          classroom_grade: selectedClassroom?.grade ?? null,
           teacher_name: teacherHistory.find((t) => t.email === teacherEmail)
             ?.name,
         } as StudentUser);
@@ -276,6 +279,7 @@ export default function StudentLogin() {
         student_number: s.student_number || "",
         classroom_id: s.classroom_id ?? undefined,
         classroom_name: s.classroom_name || undefined,
+        classroom_grade: s.classroom_grade ?? null,
         teacher_name: s.classrooms?.[0]?.teacher_name || undefined,
         school_id: s.school_id || undefined,
         school_name: s.school_name || undefined,
@@ -618,7 +622,7 @@ export default function StudentLogin() {
                     onClick={() => handleClassroomSelect(classroom)}
                   >
                     <span className="text-lg font-medium">
-                      {classroom.name}
+                      {formatClassroomDisplayName(t, classroom)}
                     </span>
                     <ChevronRight className="h-5 w-5" />
                   </Button>
@@ -651,7 +655,7 @@ export default function StudentLogin() {
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-xl font-semibold">
-                  {selectedClassroom.name}
+                  {formatClassroomDisplayName(t, selectedClassroom)}
                 </h2>
                 <p className="text-gray-600 mt-1">
                   {t("studentLogin.step3.title")}

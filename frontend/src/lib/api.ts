@@ -127,6 +127,30 @@ export class ApiError extends Error {
   }
 }
 
+/** 班級批次設定年級回應（個人端與機構端相同，#1097） */
+export interface BatchClassroomGradeResponse {
+  updated: { id: number; grade: number }[];
+  count: number;
+}
+
+/** 批次更新個人班級（年級／等級／啟用狀態）的單筆內容（#1097）；每筆至少帶一個欄位 */
+export interface BatchClassroomUpdateItem {
+  classroom_id: number;
+  grade?: number;
+  level?: string;
+  is_active?: boolean;
+}
+
+export interface BatchClassroomUpdateResponse {
+  updated: {
+    id: number;
+    grade: number | null;
+    level: string | null;
+    is_active: boolean;
+  }[];
+  count: number;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -519,16 +543,23 @@ class ApiClient {
     });
   }
 
+  /**
+   * 老師班級列表。預設只回啟用中的班級；
+   * include_inactive=true 時連停用班級一起回（僅「我的班級」頁使用，#1097）。
+   */
   async getTeacherClassrooms(params?: {
     mode?: string;
     school_id?: string;
     organization_id?: string;
+    include_inactive?: boolean;
   }) {
     const queryParams = new URLSearchParams();
     if (params?.mode) queryParams.append("mode", params.mode);
     if (params?.school_id) queryParams.append("school_id", params.school_id);
     if (params?.organization_id)
       queryParams.append("organization_id", params.organization_id);
+    if (params?.include_inactive)
+      queryParams.append("include_inactive", "true");
 
     const query = queryParams.toString();
     const url = query
@@ -766,7 +797,13 @@ class ApiClient {
   // ============ Classroom CRUD Methods ============
   async updateClassroom(
     classroomId: number,
-    data: { name?: string; description?: string; level?: string },
+    data: {
+      name?: string;
+      description?: string;
+      level?: string;
+      grade?: number;
+      is_active?: boolean;
+    },
   ) {
     return this.request(`/api/teachers/classrooms/${classroomId}`, {
       method: "PUT",
@@ -784,10 +821,31 @@ class ApiClient {
     name: string;
     description?: string;
     level: string;
+    grade: number;
   }) {
     return this.request("/api/teachers/classrooms", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  }
+
+  /** 批次設定個人班級年級（#1097）；全有或全無 */
+  async batchSetClassroomGrades(
+    items: { classroom_id: number; grade: number }[],
+  ): Promise<BatchClassroomGradeResponse> {
+    return this.request("/api/teachers/classrooms/batch-grade", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次更新個人班級的年級／等級／啟用狀態（#1097）；全有或全無，最多 200 筆 */
+  async batchUpdateClassrooms(
+    items: BatchClassroomUpdateItem[],
+  ): Promise<BatchClassroomUpdateResponse> {
+    return this.request("/api/teachers/classrooms/batch-update", {
+      method: "POST",
+      body: JSON.stringify({ items }),
     });
   }
 
@@ -798,6 +856,7 @@ class ApiClient {
       name: string;
       description?: string;
       level: string;
+      grade: number;
       teacher_id?: number | null;
     },
   ) {
@@ -807,12 +866,24 @@ class ApiClient {
     });
   }
 
+  /** 批次設定學校班級年級（#1097）；全有或全無 */
+  async batchSetSchoolClassroomGrades(
+    schoolId: string,
+    items: { classroom_id: number; grade: number }[],
+  ): Promise<BatchClassroomGradeResponse> {
+    return this.request(`/api/schools/${schoolId}/classrooms/batch-grade`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
   async updateSchoolClassroom(
     classroomId: number,
     data: {
       name?: string;
       description?: string;
       level?: string;
+      grade?: number;
       is_active?: boolean;
     },
   ) {

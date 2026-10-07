@@ -16,6 +16,7 @@ import {
   type ClassroomInfo,
 } from "@/stores/studentAuthStore";
 import { authService } from "@/services/authService";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 export function ClassroomSwitcher() {
   const { t } = useTranslation();
@@ -44,6 +45,7 @@ export function ClassroomSwitcher() {
           student_number: result.student.student_number || "",
           classroom_id: classroom.id,
           classroom_name: classroom.name,
+          classroom_grade: classroom.grade ?? null,
           teacher_name: classroom.teacher_name || undefined,
           school_id: classroom.school_id,
           school_name: classroom.school_name,
@@ -53,7 +55,9 @@ export function ClassroomSwitcher() {
           classrooms_count: result.student.classrooms_count,
         });
         toast.success(
-          t("classroomSwitcher.switchSuccess", { name: classroom.name }),
+          t("classroomSwitcher.switchSuccess", {
+            name: formatClassroomDisplayName(t, classroom),
+          }),
         );
         window.location.reload();
       } catch (err) {
@@ -101,7 +105,11 @@ export function ClassroomSwitcher() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">
-                {user?.classroom_name}
+                {user?.classroom_name &&
+                  formatClassroomDisplayName(t, {
+                    name: user.classroom_name,
+                    grade: user.classroom_grade,
+                  })}
               </p>
               <p className="text-xs text-gray-500 truncate">
                 {user?.teacher_name}
@@ -132,7 +140,7 @@ export function ClassroomSwitcher() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {classroom.name}
+                    {formatClassroomDisplayName(t, classroom)}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
                     {classroom.teacher_name}

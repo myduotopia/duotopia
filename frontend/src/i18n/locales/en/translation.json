@@ -922,7 +922,8 @@
   "studentAssignmentList": {
     "loading": "Loading...",
     "errors": {
-      "loadFailed": "Unable to load assignment list"
+      "loadFailed": "Unable to load assignment list",
+      "classroomInactive": "This class has been deactivated"
     },
     "flowStatus": {
       "title": "Assignment Progress Flow",
@@ -6147,5 +6148,148 @@
   },
   "orgMaterials": {
     "title": "Organization Materials"
+  },
+  "classroomGrade": {
+    "gradeLabel": "Grade {{grade}}",
+    "unset": "Not set",
+    "displayName": "Grade {{grade}} Class {{name}}",
+    "selectPlaceholder": "Select a grade",
+    "required": "Please select a grade",
+    "filter": {
+      "label": "Filter by grade",
+      "all": "All Grades",
+      "unset": "Grade not set",
+      "noMatch": "No classrooms match this grade filter"
+    },
+    "selection": {
+      "selectedCount": "{{count}} classroom(s) selected",
+      "selectAll": "Select all listed classrooms",
+      "selectRow": "Select {{name}}",
+      "clear": "Clear selection"
+    },
+    "banner": {
+      "message": "{{count}} classroom(s) have no grade set",
+      "action": "Set now"
+    },
+    "missingDialog": {
+      "title": "Set classroom grades",
+      "description": "Choose a grade for each classroom without one. Classrooms you leave blank stay unset.",
+      "rowLabel": "Grade for {{name}}",
+      "save": "Save ({{count}})"
+    },
+    "adjust": {
+      "button": "Adjust grade",
+      "title": "Adjust grade",
+      "description": "Choose to move up or down one grade, check each classroom's before and after, then apply. Classroom names are not changed.",
+      "up": "Up one grade",
+      "down": "Down one grade",
+      "changesTitle": "{{count}} classroom(s) will change",
+      "skippedTitle": "{{count}} classroom(s) skipped",
+      "nothingToChange": "No classrooms can be adjusted",
+      "reason": {
+        "max": "Already Grade {{grade}}, cannot go up",
+        "min": "Already Grade {{grade}}, cannot go down",
+        "unset": "Grade not set"
+      },
+      "confirm": "Apply ({{count}})"
+    },
+    "messages": {
+      "saveSuccess": "Updated grade for {{count}} classroom(s)",
+      "saveFailed": "Failed to update grades. Please try again.",
+      "forbidden": "You don't have permission to adjust classroom grades in this school",
+      "reloadFailed": "Saved, but the list could not be reloaded. Please refresh the page."
+    },
+    "limitExceeded": "You can adjust up to {{max}} classrooms at a time. Use the grade filter to work in batches.",
+    "missing": {
+      "limitExceeded": "You can save at most {{max}} classes at a time. Save some first, then continue."
+    },
+    "status": {
+      "column": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "switchDisable": "Disable",
+      "switchEnable": "Enable",
+      "switchDisableAria": "Disable this classroom",
+      "switchEnableAria": "Enable this classroom",
+      "filterLabel": "Filter by status",
+      "filterAll": "All statuses",
+      "activated": "Activated {{name}}",
+      "deactivated": "Deactivated {{name}}",
+      "updateFailed": "Failed to update the classroom status. Please try again later.",
+      "dispatchDisabled": "This classroom is inactive, so assignments can't be dispatched"
+    },
+    "inline": {
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "saveSuccess": "Updated {{name}}"
+    },
+    "level": {
+      "button": "Adjust level",
+      "title": "Adjust level",
+      "description": "Choose a target level, review each classroom's change, then apply. Classroom names are not changed.",
+      "targetLabel": "Target level",
+      "targetPlaceholder": "Select a level",
+      "changesTitle": "{{count}} classroom(s) will change",
+      "skippedTitle": "{{count}} classroom(s) skipped",
+      "alreadyAtTarget": "Already {{level}}",
+      "nothingToChange": "All selected classrooms are already at this level",
+      "confirm": "Apply ({{count}})",
+      "saveSuccess": "Updated the level of {{count}} classroom(s)",
+      "saveFailed": "Failed to update levels. Please try again later."
+    },
+    "bulk": {
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "deactivateTitle": "Deactivate {{count}} classroom(s)?",
+      "deactivateDescription": "Students will no longer see these classrooms, and you won't be able to dispatch assignments to them. Classroom data is kept and you can reactivate them at any time.",
+      "activateTitle": "Activate {{count}} classroom(s)?",
+      "activateDescription": "Students will see these classrooms again, and you can dispatch assignments to them.",
+      "deactivated": "Deactivated {{count}} classroom(s)",
+      "activated": "Activated {{count}} classroom(s)",
+      "switchDisableAria": "Disable selected classrooms",
+      "switchEnableAria": "Enable selected classrooms"
+    },
+    "sort": {
+      "gradeAsc": "Grade low→high",
+      "gradeDesc": "Grade high→low",
+      "levelAsc": "Level low→high",
+      "levelDesc": "Level high→low",
+      "studentCountAsc": "Fewest Students"
+    }
+  },
+  "schoolClassrooms": {
+    "labels": {
+      "level": "Language Level",
+      "teacher": "Homeroom Teacher",
+      "studentCount": "Students",
+      "status": "Status",
+      "activeToggle": "Classroom active"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "buttons": {
+      "assignTeacher": "Assign teacher",
+      "dispatch": "Assign",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "placeholders": {
+      "name": "e.g. Grade 1 Class A",
+      "level": "Select level"
+    },
+    "dialogs": {
+      "createTitle": "Create Classroom",
+      "createDescription": "Create a new classroom for {{school}}",
+      "schoolFallback": "the school",
+      "editDescription": "Update details for {{name}}"
+    },
+    "messages": {
+      "nameTooLong": "Classroom name cannot exceed 100 characters",
+      "schoolIdMissing": "School ID not found",
+      "createSuccess": "Classroom created",
+      "createFailed": "Failed to create classroom. Please try again later.",
+      "updateSuccess": "Classroom updated"
+    }
   }
 }

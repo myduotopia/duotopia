@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -29,24 +35,61 @@ import {
   GraduationCap,
   Trash2,
   AlertTriangle,
-  ChevronDown,
-  ChevronRight,
   ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   ClipboardList,
   Search,
+  Signal,
 } from "lucide-react";
 import { apiClient, ApiError } from "@/lib/api";
 import { AssignmentDialog } from "@/components/AssignmentDialog";
 import { toast } from "sonner";
 import { CloudDownload } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  GRADE_FILTER_ALL,
+  formatGradeLabel,
+  isValidGrade,
+  matchesGradeFilter,
+  type GradeUpdateItem,
+} from "@/components/classroom/classroomGrade";
+import {
+  CEFR_LEVELS,
+  getLevelSortValue,
+  normalizeLevel,
+} from "@/components/classroom/classroomLevel";
+import { GradeSelect } from "@/components/classroom/GradeSelect";
+import { LevelSelect } from "@/components/classroom/LevelSelect";
+import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
+import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
+import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
+import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import {
+  AdjustLevelDialog,
+  type LevelUpdateItem,
+} from "@/components/classroom/AdjustLevelDialog";
+import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
+import { LevelBadge } from "@/components/classroom/LevelBadge";
+import {
+  ClassroomDraftForm,
+  ClassroomStatusBadge,
+  ClassroomTableRow,
+  isClassroomInactive,
+} from "@/components/classroom/ClassroomTableRow";
+import {
+  useClassroomInlineEdit,
+  useClassroomStatusActions,
+  type ClassroomPatches,
+} from "@/components/classroom/useClassroomListActions";
+import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
+import { SortableTableHead } from "@/components/classroom/SortableTableHead";
 
 interface ClassroomDetail {
   id: number;
   name: string;
   description?: string;
   level?: string;
+  grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
+  is_active?: boolean; // false = 停用（列表帶 include_inactive 才會出現）（#1097）
   student_count: number;
   students: Array<{
     id: number;
@@ -63,8 +106,12 @@ interface ClassroomDetail {
   last_synced_at?: string | null;
 }
 
-type SortField = "name" | "student_count" | "created_at";
+type SortField = "grade" | "name" | "level" | "student_count" | "created_at";
 type SortDirection = "asc" | "desc";
+type StatusFilter = "all" | "active" | "inactive";
+
+const SELECT_CLASS =
+  "px-3 py-2 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm";
 
 export default function TeacherClassrooms() {
   const { t } = useTranslation();
@@ -72,24 +119,40 @@ export default function TeacherClassrooms() {
     useWorkspace();
   const [classrooms, setClassrooms] = useState<ClassroomDetail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingClassroom, setEditingClassroom] =
-    useState<ClassroomDetail | null>(null);
-  const [editFormData, setEditFormData] = useState({
-    name: "",
-    description: "",
-    level: "",
-  });
+  // 停用／啟用批次確認（#1097）
+  const [bulkStatusTarget, setBulkStatusTarget] = useState(false);
+  const [showBulkStatus, setShowBulkStatus] = useState(false);
+  // 開啟確認時凍結「會變更的班級數」，關閉動畫期間不重算
+  const [bulkStatusCount, setBulkStatusCount] = useState(0);
+  const [showAdjustLevel, setShowAdjustLevel] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createFormData, setCreateFormData] = useState({
+  const [createFormData, setCreateFormData] = useState<{
+    name: string;
+    description: string;
+    level: string;
+    grade: number | null;
+  }>({
     name: "",
     description: "",
     level: "A1",
+    grade: null,
   });
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
   const [levelFilter, setLevelFilter] = useState<string>("all");
+  const [gradeFilter, setGradeFilter] = useState<string>(GRADE_FILTER_ALL);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  // 年級批次調整／補填（#1097）— 只有個人班級可勾選
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showAdjustGrade, setShowAdjustGrade] = useState(false);
+  const [showMissingGrade, setShowMissingGrade] = useState(false);
+  // 與編輯／刪除按鈕停用條件相同：機構模式或選了學校時本頁唯讀
+  const canEditClassrooms = !(
+    mode === "organization" || selectedSchool !== null
+  );
 
   // Sorting
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -202,65 +265,129 @@ export default function TeacherClassrooms() {
     }
   };
 
-  const fetchClassrooms = useCallback(async () => {
-    try {
-      setLoading(true);
+  // silent：背景重新載入（批次設定年級後），不切換整頁 loading，
+  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容（#1097）。
+  // 回傳是否載入成功，讓背景重新載入的呼叫端能提示失敗。
+  // 只採用最後一次請求的回應：較早送出、較晚回來的（例如背景重新載入）一律丟棄
+  const fetchSeqRef = useRef(0);
+  const fetchClassrooms = useCallback(
+    async (options?: { silent?: boolean }): Promise<boolean> => {
+      const silent = options?.silent ?? false;
+      const seq = ++fetchSeqRef.current;
+      try {
+        if (!silent) setLoading(true);
 
-      // Build API params based on workspace context
-      const apiParams: {
-        mode?: string;
-        school_id?: string;
-        organization_id?: string;
-      } = {};
+        // Build API params based on workspace context
+        const apiParams: {
+          mode?: string;
+          school_id?: string;
+          organization_id?: string;
+          include_inactive?: boolean;
+        } = { include_inactive: true };
 
-      if (mode === "personal") {
-        apiParams.mode = "personal";
-      } else if (selectedSchool) {
-        apiParams.mode = "school";
-        apiParams.school_id = selectedSchool.id;
-      } else if (selectedOrganization) {
-        apiParams.mode = "organization";
-        apiParams.organization_id = selectedOrganization.id;
+        if (mode === "personal") {
+          apiParams.mode = "personal";
+        } else if (selectedSchool) {
+          apiParams.mode = "school";
+          apiParams.school_id = selectedSchool.id;
+        } else if (selectedOrganization) {
+          apiParams.mode = "organization";
+          apiParams.organization_id = selectedOrganization.id;
+        }
+
+        const data = (await apiClient.getTeacherClassrooms(
+          apiParams,
+        )) as ClassroomDetail[];
+        if (seq === fetchSeqRef.current) setClassrooms(data);
+        return true;
+      } catch (err) {
+        console.error("Fetch classrooms error:", err);
+        // 已被較新的請求取代時不算失敗
+        return seq !== fetchSeqRef.current;
+      } finally {
+        if (!silent) setLoading(false);
       }
+    },
+    [mode, selectedSchool, selectedOrganization],
+  );
 
-      const data = (await apiClient.getTeacherClassrooms(
-        apiParams,
-      )) as ClassroomDetail[];
-      setClassrooms(data);
-    } catch (err) {
-      console.error("Fetch classrooms error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [mode, selectedSchool, selectedOrganization]);
-
+  // 背景重新載入一律用目前工作區的 fetchClassrooms（避免舊 closure 帶到舊參數）
+  const fetchClassroomsRef = useRef(fetchClassrooms);
   useEffect(() => {
+    fetchClassroomsRef.current = fetchClassrooms;
     fetchClassrooms();
   }, [fetchClassrooms]);
 
-  const handleEdit = (classroom: ClassroomDetail) => {
-    setEditingClassroom(classroom);
-    setEditFormData({
-      name: classroom.name,
-      description: classroom.description || "",
-      level: classroom.level || "A1",
+  // 使用者改變列出範圍（篩選、搜尋、工作區）時清空勾選（#1097）
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [
+    searchQuery,
+    levelFilter,
+    gradeFilter,
+    statusFilter,
+    mode,
+    selectedSchool,
+    selectedOrganization,
+  ]);
+
+  // 儲存成功後背景重新載入；失敗只提示重新整理（已儲存的結果仍有效）
+  const reloadInBackground = () => {
+    void fetchClassroomsRef.current({ silent: true }).then((reloaded) => {
+      if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
     });
   };
 
-  const handleSaveEdit = async () => {
-    if (!editingClassroom) return;
-
-    try {
-      // API call to update classroom
-      await apiClient.updateClassroom(editingClassroom.id, editFormData);
-
-      // Refresh classrooms list
-      await fetchClassrooms();
-      setEditingClassroom(null);
-    } catch (err) {
-      console.error("Failed to update classroom:", err);
-      alert(t("teacherClassrooms.messages.updateFailed"));
+  // 行內編輯、停用／啟用與批次更新（#1097）：成功後就地更新再背景重新載入
+  // 改到編輯中的班級時結束編輯，舊草稿不會再蓋回去
+  const handlePatched = (patches: ClassroomPatches) => {
+    setClassrooms((prev) =>
+      prev.map((c) => (patches.has(c.id) ? { ...c, ...patches.get(c.id) } : c)),
+    );
+    if (inlineEdit.editingId !== null && patches.has(inlineEdit.editingId)) {
+      inlineEdit.exitEdit();
     }
+    reloadInBackground();
+  };
+  const inlineEdit = useClassroomInlineEdit({
+    classrooms,
+    onPatched: handlePatched,
+    // 工作區由外部切換、無法攔下確認，切換後直接結束行內編輯
+    resetKey: `${mode}|${selectedSchool?.id ?? ""}|${selectedOrganization?.id ?? ""}`,
+  });
+  const { guardEdit } = inlineEdit;
+  const statusActions = useClassroomStatusActions({ onPatched: handlePatched });
+
+  // 只計狀態會改變的班級（已停用的不算進「停用 N 個」）
+  const openBulkStatus = (active: boolean) => {
+    setBulkStatusTarget(active);
+    setBulkStatusCount(
+      selectedClassrooms.filter((c) => isClassroomInactive(c) === active)
+        .length,
+    );
+    setShowBulkStatus(true);
+  };
+
+  const handleBulkStatus = async (active: boolean) => {
+    if (await statusActions.bulkSetActive(selectedClassrooms, active)) {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // 批次調整等級成功：先關對話框再清勾選（同 handleAdjustGrades）
+  const handleAdjustLevels = async (
+    items: LevelUpdateItem<number>[],
+  ): Promise<boolean> => {
+    const ok = await statusActions.runBatchUpdate(
+      items.map(({ id, level }) => ({ classroom_id: id, level })),
+      "classroomGrade.level.saveSuccess",
+      "classroomGrade.level.saveFailed",
+    );
+    if (ok) {
+      setShowAdjustLevel(false);
+      setSelectedIds(new Set());
+    }
+    return ok;
   };
 
   const handleDelete = async () => {
@@ -285,14 +412,24 @@ export default function TeacherClassrooms() {
       alert(t("teacherClassrooms.messages.nameRequired"));
       return;
     }
+    const { grade } = createFormData;
+    if (grade === null) {
+      alert(t("classroomGrade.required"));
+      return;
+    }
 
     try {
-      await apiClient.createClassroom(createFormData);
+      await apiClient.createClassroom({ ...createFormData, grade });
 
       // Refresh the list after creation
       await fetchClassrooms();
       setShowCreateDialog(false);
-      setCreateFormData({ name: "", description: "", level: "A1" });
+      setCreateFormData({
+        name: "",
+        description: "",
+        level: "A1",
+        grade: null,
+      });
     } catch (error) {
       console.error("Error creating classroom:", error);
       // Show error to user
@@ -302,6 +439,39 @@ export default function TeacherClassrooms() {
           : t("teacherClassrooms.messages.createFailed");
       alert(`${t("teacherClassrooms.messages.error")}: ${errorMessage}`);
     }
+  };
+
+  // 補填年級與批次升降共用同一個批次端點（#1097）；回傳 true 讓對話框關閉。
+  // 不動勾選：補填不應清掉使用者的勾選，只有批次調整成功才清（見 handleAdjustGrades）。
+  const handleBatchSetGrades = async (
+    items: GradeUpdateItem<number>[],
+  ): Promise<boolean> => {
+    try {
+      const res = await apiClient.batchSetClassroomGrades(
+        items.map(({ id, grade }) => ({ classroom_id: id, grade })),
+      );
+      toast.success(
+        t("classroomGrade.messages.saveSuccess", { count: res.count }),
+      );
+      reloadInBackground();
+      return true;
+    } catch (err) {
+      console.error("Failed to set classroom grades:", err);
+      toast.error(t("classroomGrade.messages.saveFailed"));
+      return false;
+    }
+  };
+
+  // 批次調整成功：先關對話框再清勾選（對話框關閉期間沿用原清單，不會閃出空狀態）
+  const handleAdjustGrades = async (
+    items: GradeUpdateItem<number>[],
+  ): Promise<boolean> => {
+    const ok = await handleBatchSetGrades(items);
+    if (ok) {
+      setShowAdjustGrade(false);
+      setSelectedIds(new Set());
+    }
+    return ok;
   };
 
   const formatDate = (dateString?: string) => {
@@ -314,30 +484,8 @@ export default function TeacherClassrooms() {
     });
   };
 
-  const getLevelBadge = (level?: string) => {
-    const levelColors: Record<string, string> = {
-      PREA: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-      A1: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-      A2: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-      B1: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-      B2: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-      C1: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-      C2: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-    };
-    const color =
-      levelColors[level?.toUpperCase() || "A1"] ||
-      "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}
-      >
-        {level || "A1"}
-      </span>
-    );
-  };
-
   // Sort toggle handler
-  const handleSort = (field: SortField) => {
+  const handleSort = guardEdit((field: SortField) => {
     if (sortField === field) {
       if (sortDirection === "asc") {
         setSortDirection("desc");
@@ -349,7 +497,7 @@ export default function TeacherClassrooms() {
       setSortField(field);
       setSortDirection("asc");
     }
-  };
+  });
 
   // Expandable row toggle
   const toggleRowExpanded = (classroomId: number) => {
@@ -364,39 +512,18 @@ export default function TeacherClassrooms() {
     });
   };
 
-  // Sortable header component
-  const SortableHeader = ({
-    field,
-    children,
-    className,
-  }: {
+  const SortableHeader = (props: {
     field: SortField;
     children: React.ReactNode;
     className?: string;
-  }) => {
-    const isActive = sortField === field;
-    const icon = isActive ? (
-      sortDirection === "asc" ? (
-        <ArrowUp className="h-3 w-3" />
-      ) : (
-        <ArrowDown className="h-3 w-3" />
-      )
-    ) : (
-      <ArrowUpDown className="h-3 w-3 opacity-50" />
-    );
-
-    return (
-      <TableHead className={className}>
-        <button
-          onClick={() => handleSort(field)}
-          className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-xs sm:text-sm"
-        >
-          {children}
-          {icon}
-        </button>
-      </TableHead>
-    );
-  };
+  }) => (
+    <SortableTableHead
+      {...props}
+      activeField={sortField}
+      direction={sortDirection}
+      onSort={handleSort}
+    />
+  );
 
   // Filter and sort classrooms
   const processedClassrooms = useMemo(() => {
@@ -423,15 +550,38 @@ export default function TeacherClassrooms() {
     // Level filter
     if (levelFilter !== "all") {
       result = result.filter(
-        (c) => (c.level || "A1").toUpperCase() === levelFilter.toUpperCase(),
+        (c) => (normalizeLevel(c.level) ?? "A1") === levelFilter,
       );
+    }
+
+    // Grade filter (#1097)
+    result = result.filter((c) => matchesGradeFilter(c.grade, gradeFilter));
+
+    // Status filter (#1097)
+    if (statusFilter !== "all") {
+      const wantInactive = statusFilter === "inactive";
+      result = result.filter((c) => isClassroomInactive(c) === wantInactive);
     }
 
     // Sorting
     if (sortField) {
+      // 年級未設定一律排最後（不受升降冪影響）
+      const unsetGradeLast = (a: ClassroomDetail, b: ClassroomDetail) =>
+        Number(!isValidGrade(a.grade)) - Number(!isValidGrade(b.grade));
       result = [...result].sort((a, b) => {
         let comparison = 0;
         switch (sortField) {
+          case "grade": {
+            const unset = unsetGradeLast(a, b);
+            if (unset !== 0) return unset;
+            comparison = (a.grade ?? 0) - (b.grade ?? 0);
+            break;
+          }
+          case "level":
+            comparison =
+              getLevelSortValue(a.level || "A1") -
+              getLevelSortValue(b.level || "A1");
+            break;
           case "name":
             comparison = a.name.localeCompare(b.name, "zh-TW");
             break;
@@ -459,9 +609,63 @@ export default function TeacherClassrooms() {
     selectedOrganization,
     searchQuery,
     levelFilter,
+    gradeFilter,
+    statusFilter,
     sortField,
     sortDirection,
   ]);
+
+  // 年級勾選／補填只作用在個人班級（學校班級須在學校後台編輯）
+  const isSelectable = (c: ClassroomDetail) =>
+    canEditClassrooms && !c.school_id && !c.organization_id;
+  // 編輯中：該列不可勾選、不列入全選；操作列與補填入口隱藏（#1097）
+  const isEditingAny = inlineEdit.editingId !== null;
+  const canSelect = (c: ClassroomDetail) =>
+    isSelectable(c) && c.id !== inlineEdit.editingId;
+  const selectableVisible = processedClassrooms.filter(canSelect);
+  // 只計目前清單上看得到的勾選，篩選掉的班級不會被批次調整
+  const selectedClassrooms = selectableVisible.filter((c) =>
+    selectedIds.has(c.id),
+  );
+  const allVisibleSelected =
+    selectableVisible.length > 0 &&
+    selectedClassrooms.length === selectableVisible.length;
+  // 操作列開關狀態：勾選的班全部啟用才是「開」（混合或全停用 → 關）
+  const allSelectedActive =
+    selectedClassrooms.length > 0 &&
+    selectedClassrooms.every((c) => !isClassroomInactive(c));
+  // 編輯中的班級不在目前清單上（被刪除或重新載入後被篩掉）→ 直接結束編輯
+  const { editingId: currentEditingId, exitEdit } = inlineEdit;
+  useEffect(() => {
+    if (
+      currentEditingId !== null &&
+      !processedClassrooms.some((c) => c.id === currentEditingId)
+    ) {
+      exitEdit();
+    }
+  }, [currentEditingId, processedClassrooms, exitEdit]);
+  const missingGradeClassrooms = classrooms.filter(
+    (c) => isSelectable(c) && !isValidGrade(c.grade),
+  );
+
+  const toggleSelected = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      selectableVisible.forEach((c) =>
+        checked ? next.add(c.id) : next.delete(c.id),
+      );
+      return next;
+    });
+  };
 
   if (loading) {
     return (
@@ -485,7 +689,7 @@ export default function TeacherClassrooms() {
         </h2>
         <div className="flex items-center space-x-2 sm:space-x-4 w-full sm:w-auto">
           <Button
-            onClick={fetchClassrooms}
+            onClick={() => fetchClassrooms()}
             variant="outline"
             size="sm"
             className="flex-1 sm:flex-none"
@@ -571,7 +775,10 @@ export default function TeacherClassrooms() {
                 {t("teacherClassrooms.stats.activeClassrooms")}
               </p>
               <p className="text-xl sm:text-2xl font-bold dark:text-gray-100">
-                {processedClassrooms.length}
+                {
+                  processedClassrooms.filter((c) => !isClassroomInactive(c))
+                    .length
+                }
               </p>
             </div>
             <BookOpen className="h-6 w-6 sm:h-8 sm:w-8 text-purple-500 dark:text-purple-400" />
@@ -579,23 +786,46 @@ export default function TeacherClassrooms() {
         </div>
       </div>
 
+      {/* 尚未設定年級提醒（#1097） */}
+      <MissingGradeBanner
+        count={missingGradeClassrooms.length}
+        onAction={() => setShowMissingGrade(true)}
+        hideAction={isEditingAny}
+      />
+
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <select
           value={levelFilter}
-          onChange={(e) => setLevelFilter(e.target.value)}
-          className="px-3 py-2 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm"
+          onChange={guardEdit((e) => setLevelFilter(e.target.value))}
+          className={SELECT_CLASS}
         >
           <option value="all">
             {t("teacherClassrooms.filters.allLevels")}
           </option>
-          <option value="preA">Pre-A</option>
-          <option value="A1">A1</option>
-          <option value="A2">A2</option>
-          <option value="B1">B1</option>
-          <option value="B2">B2</option>
-          <option value="C1">C1</option>
-          <option value="C2">C2</option>
+          {CEFR_LEVELS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        <GradeFilterSelect
+          value={gradeFilter}
+          onChange={guardEdit(setGradeFilter)}
+        />
+        <select
+          aria-label={t("classroomGrade.status.filterLabel")}
+          value={statusFilter}
+          onChange={guardEdit((e) =>
+            setStatusFilter(e.target.value as StatusFilter),
+          )}
+          className={SELECT_CLASS}
+        >
+          <option value="all">{t("classroomGrade.status.filterAll")}</option>
+          <option value="active">{t("classroomGrade.status.active")}</option>
+          <option value="inactive">
+            {t("classroomGrade.status.inactive")}
+          </option>
         </select>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -603,14 +833,53 @@ export default function TeacherClassrooms() {
             type="text"
             placeholder={t("teacherClassrooms.placeholders.searchName")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={guardEdit((e) => setSearchQuery(e.target.value))}
             className="w-full pl-9 pr-3 py-2 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm"
           />
         </div>
       </div>
 
-      {/* Classrooms Table */}
-      <>
+      {/* Bulk Actions Bar — 年級／等級＋停用／啟用開關（#1097），底部置中浮動膠囊 */}
+      <GradeBulkBar
+        selectedCount={isEditingAny ? 0 : selectedClassrooms.length}
+        busy={statusActions.bulkBusy}
+        actions={[
+          {
+            key: "adjust-grade",
+            label: t("classroomGrade.adjust.button"),
+            icon: <GraduationCap className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowAdjustGrade(true),
+          },
+          {
+            key: "adjust-level",
+            label: t("classroomGrade.level.button"),
+            icon: <Signal className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowAdjustLevel(true),
+          },
+          // 停用／啟用開關：勾選的班全部啟用才是「開」（軌道寫停用，撥 → 全部停用）；
+          // 有任一停用就是「關」（寫啟用，撥 → 全部啟用）。撥動走既有確認流程。
+          {
+            key: "status",
+            kind: "switch",
+            checked: allSelectedActive,
+            label: allSelectedActive
+              ? t("classroomGrade.status.switchDisable")
+              : t("classroomGrade.status.switchEnable"),
+            ariaLabel: allSelectedActive
+              ? t("classroomGrade.bulk.switchDisableAria")
+              : t("classroomGrade.bulk.switchEnableAria"),
+            onToggle: (next) => openBulkStatus(next),
+          },
+        ]}
+        onClear={() => setSelectedIds(new Set())}
+      />
+
+      {/* Classrooms Table — 浮動操作列出現時預留底部空間，最後一列不被擋住 */}
+      <div
+        className={
+          !isEditingAny && selectedClassrooms.length > 0 ? "pb-24" : undefined
+        }
+      >
         {/* Mobile Sort + Card View */}
         <div className="md:hidden">
           {/* Mobile sort control */}
@@ -618,7 +887,7 @@ export default function TeacherClassrooms() {
             <ArrowUpDown className="h-4 w-4 text-gray-500" />
             <select
               value={sortField ? `${sortField}_${sortDirection}` : "default"}
-              onChange={(e) => {
+              onChange={guardEdit((e) => {
                 if (e.target.value === "default") {
                   setSortField(null);
                   setSortDirection("asc");
@@ -629,27 +898,31 @@ export default function TeacherClassrooms() {
                   setSortField(field);
                   setSortDirection(dir);
                 }
-              }}
+              })}
               className="px-2 py-1 border dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm"
             >
-              <option value="default">
-                {t("teacherClassrooms.sort.default")}
-              </option>
-              <option value="name_asc">
-                {t("teacherClassrooms.sort.nameAsc")}
-              </option>
-              <option value="name_desc">
-                {t("teacherClassrooms.sort.nameDesc")}
-              </option>
-              <option value="student_count_desc">
-                {t("teacherClassrooms.sort.studentCountDesc")}
-              </option>
-              <option value="created_at_desc">
-                {t("teacherClassrooms.sort.createdAtDesc")}
-              </option>
-              <option value="created_at_asc">
-                {t("teacherClassrooms.sort.createdAtAsc")}
-              </option>
+              {(
+                [
+                  ["default", "teacherClassrooms.sort.default"],
+                  ["grade_asc", "classroomGrade.sort.gradeAsc"],
+                  ["grade_desc", "classroomGrade.sort.gradeDesc"],
+                  ["name_asc", "teacherClassrooms.sort.nameAsc"],
+                  ["name_desc", "teacherClassrooms.sort.nameDesc"],
+                  ["level_asc", "classroomGrade.sort.levelAsc"],
+                  ["level_desc", "classroomGrade.sort.levelDesc"],
+                  ["student_count_asc", "classroomGrade.sort.studentCountAsc"],
+                  [
+                    "student_count_desc",
+                    "teacherClassrooms.sort.studentCountDesc",
+                  ],
+                  ["created_at_desc", "teacherClassrooms.sort.createdAtDesc"],
+                  ["created_at_asc", "teacherClassrooms.sort.createdAtAsc"],
+                ] as const
+              ).map(([value, key]) => (
+                <option key={value} value={value}>
+                  {t(key)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -662,28 +935,53 @@ export default function TeacherClassrooms() {
                 {/* Header */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3 flex-1">
+                    {isSelectable(classroom) && (
+                      <Checkbox
+                        disabled={inlineEdit.editingId === classroom.id}
+                        checked={selectedIds.has(classroom.id)}
+                        onCheckedChange={(checked) =>
+                          toggleSelected(classroom.id, checked === true)
+                        }
+                        aria-label={t("classroomGrade.selection.selectRow", {
+                          name: classroom.name,
+                        })}
+                      />
+                    )}
                     <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
                       <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          ID: {classroom.id}
-                        </span>
-                        {getLevelBadge(classroom.level)}
+                    {inlineEdit.editingId === classroom.id &&
+                    inlineEdit.draft ? (
+                      <div className="flex-1">
+                        <ClassroomDraftForm
+                          draft={inlineEdit.draft}
+                          onDraftChange={inlineEdit.setDraft}
+                          onSave={inlineEdit.saveEdit}
+                          onCancel={inlineEdit.exitEdit}
+                          saving={inlineEdit.saving}
+                        />
                       </div>
-                      <Link
-                        to={`/teacher/classroom/${classroom.id}`}
-                        className="font-medium text-lg text-blue-600 dark:text-blue-400 hover:underline block mt-1"
-                      >
-                        {classroom.name}
-                      </Link>
-                      {classroom.description && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          {classroom.description}
-                        </p>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <LevelBadge level={classroom.level} />
+                          <ClassroomStatusBadge
+                            active={!isClassroomInactive(classroom)}
+                          />
+                        </div>
+                        <Link
+                          to={`/teacher/classroom/${classroom.id}`}
+                          className="font-medium text-lg text-blue-600 dark:text-blue-400 hover:underline block mt-1"
+                        >
+                          {classroom.name}
+                        </Link>
+                        {classroom.description && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {classroom.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -707,6 +1005,15 @@ export default function TeacherClassrooms() {
                       {classroom.program_count || 0}
                     </span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {t("teacherClassrooms.labels.grade")}:
+                    </span>
+                    <span className="font-medium dark:text-gray-200">
+                      {formatGradeLabel(t, classroom.grade)}
+                    </span>
+                  </div>
                   <div className="col-span-2">
                     <span className="text-gray-600 dark:text-gray-400">
                       {t("teacherClassrooms.labels.createdAt")}:{" "}
@@ -724,7 +1031,15 @@ export default function TeacherClassrooms() {
                     size="sm"
                     onClick={() => setAssignmentClassroom(classroom)}
                     className="flex-1"
-                    disabled={classroom.student_count === 0}
+                    disabled={
+                      classroom.student_count === 0 ||
+                      isClassroomInactive(classroom)
+                    }
+                    title={
+                      isClassroomInactive(classroom)
+                        ? t("classroomGrade.status.dispatchDisabled")
+                        : undefined
+                    }
                   >
                     <ClipboardList className="h-4 w-4 mr-2" />
                     {t("teacherClassrooms.buttons.dispatchAssignment")}
@@ -732,10 +1047,11 @@ export default function TeacherClassrooms() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleEdit(classroom)}
+                    onClick={() => inlineEdit.startEdit(classroom)}
                     className="flex-1"
                     disabled={
-                      mode === "organization" || selectedSchool !== null
+                      !canEditClassrooms ||
+                      inlineEdit.editingId === classroom.id
                     }
                   >
                     <Edit className="h-4 w-4 mr-2" />
@@ -747,7 +1063,8 @@ export default function TeacherClassrooms() {
                     onClick={() => setDeleteConfirmId(classroom.id)}
                     className="flex-1 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400"
                     disabled={
-                      mode === "organization" || selectedSchool !== null
+                      !canEditClassrooms ||
+                      inlineEdit.editingId === classroom.id
                     }
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -775,24 +1092,57 @@ export default function TeacherClassrooms() {
               </TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50px] text-left text-xs sm:text-sm">
-                    ID
-                  </TableHead>
+                  {canEditClassrooms && (
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected
+                            ? true
+                            : selectedClassrooms.length > 0
+                              ? "indeterminate"
+                              : false
+                        }
+                        disabled={selectableVisible.length === 0}
+                        onCheckedChange={(checked) =>
+                          toggleSelectAllVisible(checked === true)
+                        }
+                        aria-label={t("classroomGrade.selection.selectAll")}
+                      />
+                    </TableHead>
+                  )}
+                  <SortableHeader
+                    field="grade"
+                    className="text-left text-xs sm:text-sm min-w-[90px]"
+                  >
+                    {t("teacherClassrooms.labels.grade")}
+                  </SortableHeader>
                   <SortableHeader
                     field="name"
                     className="text-left text-xs sm:text-sm min-w-[200px]"
                   >
                     {t("teacherClassrooms.labels.classroomName")}
                   </SortableHeader>
-                  <TableHead className="text-left text-xs sm:text-sm min-w-[60px]">
+                  <SortableHeader
+                    field="level"
+                    className="text-left text-xs sm:text-sm min-w-[80px]"
+                  >
                     {t("teacherClassrooms.labels.level")}
-                  </TableHead>
+                  </SortableHeader>
+                  <SortableHeader
+                    field="student_count"
+                    className="text-left text-xs sm:text-sm min-w-[70px]"
+                  >
+                    {t("teacherClassrooms.labels.studentCount")}
+                  </SortableHeader>
                   <SortableHeader
                     field="created_at"
                     className="text-left text-xs sm:text-sm min-w-[100px]"
                   >
                     {t("teacherClassrooms.labels.createdAt")}
                   </SortableHeader>
+                  <TableHead className="text-left text-xs sm:text-sm min-w-[110px]">
+                    {t("classroomGrade.status.column")}
+                  </TableHead>
                   <TableHead className="text-left text-xs sm:text-sm min-w-[120px]">
                     {t("teacherClassrooms.labels.actions")}
                   </TableHead>
@@ -801,116 +1151,45 @@ export default function TeacherClassrooms() {
               <TableBody>
                 {processedClassrooms.map((classroom) => {
                   const isExpanded = expandedRows.has(classroom.id);
+                  const isEditing = inlineEdit.editingId === classroom.id;
                   return (
                     <React.Fragment key={classroom.id}>
-                      {/* Main Row */}
-                      <TableRow
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                        onClick={() => toggleRowExpanded(classroom.id)}
-                      >
-                        <TableCell className="font-medium text-xs sm:text-sm">
-                          {classroom.id}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                            )}
-                            <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
-                              <GraduationCap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <Link
-                                to={`/teacher/classroom/${classroom.id}`}
-                                className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-sm"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {classroom.name}
-                              </Link>
-                              {/* Sub-info */}
-                              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                <span className="flex items-center gap-1">
-                                  <Users className="h-3 w-3" />
-                                  {classroom.student_count}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <BookOpen className="h-3 w-3" />
-                                  {classroom.program_count || 0}
-                                </span>
-                                {classroom.description && (
-                                  <span className="truncate max-w-[200px]">
-                                    {classroom.description}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>{getLevelBadge(classroom.level)}</TableCell>
-                        <TableCell className="text-xs sm:text-sm dark:text-gray-200">
-                          {formatDate(classroom.created_at)}
-                        </TableCell>
-                        <TableCell>
-                          <div
-                            className="flex items-center space-x-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {/* Dispatch Assignment */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title={t(
-                                "teacherClassrooms.buttons.dispatchAssignment",
-                              )}
-                              onClick={() => setAssignmentClassroom(classroom)}
-                              className="p-1 sm:p-2"
-                              disabled={classroom.student_count === 0}
-                            >
-                              <ClipboardList className="h-3 w-3 sm:h-4 sm:w-4" />
-                              <span className="hidden sm:inline ml-1 text-xs">
-                                {t(
-                                  "teacherClassrooms.buttons.dispatchAssignment",
-                                )}
-                              </span>
-                            </Button>
-                            {/* Edit */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title={t("common.edit")}
-                              onClick={() => handleEdit(classroom)}
-                              className="p-1 sm:p-2"
-                              disabled={
-                                mode === "organization" ||
-                                selectedSchool !== null
-                              }
-                            >
-                              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                            {/* Delete */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title={t("common.delete")}
-                              onClick={() => setDeleteConfirmId(classroom.id)}
-                              className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 p-1 sm:p-2"
-                              disabled={
-                                mode === "organization" ||
-                                selectedSchool !== null
-                              }
-                            >
-                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <ClassroomTableRow
+                        classroom={classroom}
+                        showSelectColumn={canEditClassrooms}
+                        selectable={isSelectable(classroom)}
+                        selectDisabled={isEditing}
+                        selected={selectedIds.has(classroom.id)}
+                        onSelectedChange={(checked) =>
+                          toggleSelected(classroom.id, checked)
+                        }
+                        expanded={isExpanded}
+                        onToggleExpanded={() => toggleRowExpanded(classroom.id)}
+                        createdAtText={formatDate(classroom.created_at)}
+                        readOnly={!canEditClassrooms}
+                        onDispatch={() => setAssignmentClassroom(classroom)}
+                        onEdit={() => inlineEdit.startEdit(classroom)}
+                        onDelete={() => setDeleteConfirmId(classroom.id)}
+                        canToggleStatus={isSelectable(classroom)}
+                        statusBusy={statusActions.statusBusyId !== null}
+                        onToggleActive={(active) =>
+                          statusActions.toggleActive(classroom, active)
+                        }
+                        editing={isEditing}
+                        draft={isEditing ? inlineEdit.draft : null}
+                        onDraftChange={inlineEdit.setDraft}
+                        onSave={inlineEdit.saveEdit}
+                        onCancel={inlineEdit.exitEdit}
+                        saving={inlineEdit.saving}
+                      />
 
                       {/* Expanded Detail Row */}
                       {isExpanded && (
                         <TableRow className="bg-gray-50 dark:bg-gray-700/30">
-                          <TableCell colSpan={5} className="py-3 px-6">
+                          <TableCell
+                            colSpan={canEditClassrooms ? 8 : 7}
+                            className="py-3 px-6"
+                          >
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
                                 <span className="text-gray-500 dark:text-gray-400 text-xs">
@@ -962,7 +1241,7 @@ export default function TeacherClassrooms() {
             </Table>
           </div>
         </div>
-      </>
+      </div>
 
       {/* Empty State */}
       {processedClassrooms.length === 0 && (
@@ -984,100 +1263,6 @@ export default function TeacherClassrooms() {
           </Button>
         </div>
       )}
-
-      {/* Edit Dialog */}
-      <Dialog
-        open={!!editingClassroom}
-        onOpenChange={(open) => !open && setEditingClassroom(null)}
-      >
-        <DialogContent
-          className="bg-white"
-          style={{ backgroundColor: "white" }}
-        >
-          <DialogHeader>
-            <DialogTitle>
-              {t("teacherClassrooms.dialogs.editTitle")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("teacherClassrooms.dialogs.editDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-              <label
-                htmlFor="name"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.classroomName")}
-              </label>
-              <input
-                id="name"
-                value={editFormData.name}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, name: e.target.value })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start gap-2 sm:gap-4">
-              <label
-                htmlFor="description"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.description")}
-              </label>
-              <textarea
-                id="description"
-                value={editFormData.description}
-                onChange={(e) =>
-                  setEditFormData({
-                    ...editFormData,
-                    description: e.target.value,
-                  })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-                rows={3}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-              <label
-                htmlFor="level"
-                className="text-left sm:text-right text-sm font-medium"
-              >
-                {t("teacherClassrooms.labels.level")}
-              </label>
-              <select
-                id="level"
-                value={editFormData.level}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, level: e.target.value })
-                }
-                className="col-span-1 sm:col-span-3 px-3 py-2 border rounded-md text-sm"
-              >
-                <option value="preA">Pre-A</option>
-                <option value="A1">A1</option>
-                <option value="A2">A2</option>
-                <option value="B1">B1</option>
-                <option value="B2">B2</option>
-                <option value="C1">C1</option>
-                <option value="C2">C2</option>
-              </select>
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setEditingClassroom(null)}
-              className="w-full sm:w-auto"
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={handleSaveEdit} className="w-full sm:w-auto">
-              {t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       {/* 1Campus Sync Confirmation Dialog (#761) */}
@@ -1172,29 +1357,74 @@ export default function TeacherClassrooms() {
               {t("teacherClassrooms.dialogs.createDescription")}
             </DialogDescription>
           </DialogHeader>
+          {/* 老師習慣先定年級再定班級（#1097）：年級＋名稱並排，其次等級、描述 */}
           <div className="space-y-4">
+            <div className="grid grid-cols-[auto_1fr] gap-3">
+              <div>
+                <label
+                  htmlFor="create-grade"
+                  className="text-sm font-medium block mb-1"
+                >
+                  {t("teacherClassrooms.labels.grade")}
+                </label>
+                <GradeSelect
+                  id="create-grade"
+                  value={createFormData.grade}
+                  onChange={(grade) =>
+                    setCreateFormData({ ...createFormData, grade })
+                  }
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="create-name"
+                  className="text-sm font-medium block mb-1"
+                >
+                  {t("teacherClassrooms.labels.classroomName")}
+                </label>
+                <input
+                  id="create-name"
+                  type="text"
+                  className="w-full px-3 py-2 border rounded-md text-sm"
+                  value={createFormData.name}
+                  onChange={(e) =>
+                    setCreateFormData({
+                      ...createFormData,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder={t(
+                    "teacherClassrooms.placeholders.classroomName",
+                  )}
+                />
+              </div>
+            </div>
             <div>
-              <label className="text-sm font-medium block mb-1">
-                {t("teacherClassrooms.labels.classroomName")}
+              <label
+                htmlFor="create-level"
+                className="text-sm font-medium block mb-1"
+              >
+                {t("teacherClassrooms.labels.level")}
               </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                value={createFormData.name}
-                onChange={(e) =>
-                  setCreateFormData({
-                    ...createFormData,
-                    name: e.target.value,
-                  })
+              <LevelSelect
+                id="create-level"
+                value={createFormData.level}
+                onChange={(level) =>
+                  setCreateFormData({ ...createFormData, level })
                 }
-                placeholder={t("teacherClassrooms.placeholders.classroomName")}
+                className="w-full px-3 py-2 border rounded-md text-sm"
               />
             </div>
             <div>
-              <label className="text-sm font-medium block mb-1">
+              <label
+                htmlFor="create-description"
+                className="text-sm font-medium block mb-1"
+              >
                 {t("teacherClassrooms.labels.description")}
               </label>
               <textarea
+                id="create-description"
                 className="w-full px-3 py-2 border rounded-md text-sm"
                 value={createFormData.description}
                 onChange={(e) =>
@@ -1206,40 +1436,6 @@ export default function TeacherClassrooms() {
                 placeholder={t("teacherClassrooms.placeholders.description")}
                 rows={3}
               />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1">
-                {t("teacherClassrooms.labels.grade")}
-              </label>
-              <select
-                className="w-full px-3 py-2 border rounded-md text-sm"
-                value={createFormData.level}
-                onChange={(e) =>
-                  setCreateFormData({
-                    ...createFormData,
-                    level: e.target.value,
-                  })
-                }
-              >
-                <option value="A1">
-                  {t("dialogs.createProgramDialog.custom.levels.A1")}
-                </option>
-                <option value="A2">
-                  {t("dialogs.createProgramDialog.custom.levels.A2")}
-                </option>
-                <option value="B1">
-                  {t("dialogs.createProgramDialog.custom.levels.B1")}
-                </option>
-                <option value="B2">
-                  {t("dialogs.createProgramDialog.custom.levels.B2")}
-                </option>
-                <option value="C1">
-                  {t("dialogs.createProgramDialog.custom.levels.C1")}
-                </option>
-                <option value="C2">
-                  {t("dialogs.createProgramDialog.custom.levels.C2")}
-                </option>
-              </select>
             </div>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
@@ -1256,6 +1452,50 @@ export default function TeacherClassrooms() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 年級補填／批次調整（#1097） */}
+      <MissingGradeDialog
+        open={showMissingGrade}
+        onOpenChange={setShowMissingGrade}
+        classrooms={missingGradeClassrooms}
+        onSave={handleBatchSetGrades}
+      />
+      <AdjustGradeDialog
+        open={showAdjustGrade}
+        onOpenChange={setShowAdjustGrade}
+        classrooms={selectedClassrooms}
+        onConfirm={handleAdjustGrades}
+      />
+      <AdjustLevelDialog
+        open={showAdjustLevel}
+        onOpenChange={setShowAdjustLevel}
+        classrooms={selectedClassrooms}
+        onConfirm={handleAdjustLevels}
+      />
+      {/* 批次停用／啟用確認（#1097） */}
+      <ConfirmDialog
+        open={showBulkStatus}
+        onOpenChange={setShowBulkStatus}
+        title={t(
+          bulkStatusTarget
+            ? "classroomGrade.bulk.activateTitle"
+            : "classroomGrade.bulk.deactivateTitle",
+          { count: bulkStatusCount },
+        )}
+        description={t(
+          bulkStatusTarget
+            ? "classroomGrade.bulk.activateDescription"
+            : "classroomGrade.bulk.deactivateDescription",
+        )}
+        confirmText={t(
+          bulkStatusTarget
+            ? "classroomGrade.bulk.activate"
+            : "classroomGrade.bulk.deactivate",
+        )}
+        cancelText={t("common.cancel")}
+        variant={bulkStatusTarget ? "default" : "destructive"}
+        onConfirm={() => void handleBulkStatus(bulkStatusTarget)}
+      />
 
       {/* Assignment Dialog */}
       {assignmentClassroom && (

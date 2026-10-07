@@ -4,7 +4,7 @@ Classroom-School Relationship API Routes
 Manages the linking of classrooms to schools within the organization hierarchy.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -31,7 +31,9 @@ from routers.schemas.classroom import (
     SchoolClassroomCreate,
     SchoolClassroomUpdate,
     AssignTeacherRequest,
+    BatchClassroomGradeRequest,
 )
+from utils.classroom_grade import grade_to_storage, parse_grade
 
 
 router = APIRouter(tags=["classroom-schools"])
@@ -131,6 +133,7 @@ class ClassroomInfo(BaseModel):
     id: str
     name: str
     program_level: str
+    grade: int | None = None  # 年級 1–12；未設定或歷史雜值為 None（#1097）
     is_active: bool
     created_at: datetime
     teacher_name: str | None = None
@@ -153,6 +156,7 @@ class ClassroomInfo(BaseModel):
             id=str(classroom.id),
             name=classroom.name,
             program_level=classroom.level.value if classroom.level else "A1",
+            grade=parse_grade(classroom.grade),
             is_active=classroom.is_active,
             created_at=classroom.created_at,
             teacher_name=classroom.teacher.name if classroom.teacher else None,
@@ -343,6 +347,7 @@ async def unlink_classroom_from_school(
 @router.get("/api/schools/{school_id}/classrooms", response_model=List[ClassroomInfo])
 async def list_school_classrooms(
     school_id: uuid.UUID,
+    include_inactive: bool = Query(False, description="true＝含停用班級（已刪除一律排除，#1097）"),
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
@@ -407,6 +412,15 @@ async def list_school_classrooms(
         .subquery()
     )
 
+    # #1097：預設只列啟用班級；include_inactive=true 時連停用班級一起列出
+    # （is_active 讓前端顯示「停用」徽章、可重新啟用）。已刪除一律排除。
+    classroom_filters = [
+        Classroom.id.in_(classroom_ids),
+        Classroom.deleted_at.is_(None),
+    ]
+    if not include_inactive:
+        classroom_filters.append(Classroom.is_active.is_(True))
+
     # Get classrooms with teacher preloaded and counts in a single query
     classrooms_query = (
         db.query(
@@ -419,7 +433,7 @@ async def list_school_classrooms(
         .outerjoin(student_counts, Classroom.id == student_counts.c.classroom_id)
         .outerjoin(assignment_counts, Classroom.id == assignment_counts.c.classroom_id)
         .outerjoin(program_counts, Classroom.id == program_counts.c.classroom_id)
-        .filter(Classroom.id.in_(classroom_ids), Classroom.is_active.is_(True))
+        .filter(*classroom_filters)
         .all()
     )
 
@@ -499,6 +513,7 @@ async def create_school_classroom(
         name=classroom_data.name,
         description=classroom_data.description,
         level=program_level,
+        grade=grade_to_storage(classroom_data.grade),
         teacher_id=classroom_data.teacher_id,
         is_active=True,
     )
@@ -515,6 +530,57 @@ async def create_school_classroom(
 
     # Return with counts (0 for new classroom)
     return ClassroomInfo.from_orm_with_counts(classroom, 0, 0, 0)
+
+
+@router.post("/api/schools/{school_id}/classrooms/batch-grade")
+async def batch_set_school_classroom_grades(
+    school_id: uuid.UUID,
+    payload: BatchClassroomGradeRequest,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """
+    Batch set grade for classrooms in a school (#1097).
+    All-or-nothing: any classroom not (actively) in this school → 404.
+    Requires school_admin role or org-level manage_materials permission.
+    """
+    if not has_school_materials_permission(teacher.id, school_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to update classroom",
+        )
+
+    classroom_ids = [item.classroom_id for item in payload.items]
+
+    classrooms = (
+        db.query(Classroom)
+        .join(ClassroomSchool, ClassroomSchool.classroom_id == Classroom.id)
+        .filter(
+            ClassroomSchool.school_id == school_id,
+            ClassroomSchool.is_active.is_(True),
+            Classroom.id.in_(classroom_ids),
+            # 停用班級仍在機構列表上，可一起調整年級；已刪除排除（#1097）
+            Classroom.deleted_at.is_(None),
+        )
+        .all()
+    )
+    classroom_map = {c.id: c for c in classrooms}
+    if len(classroom_map) != len(classroom_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Classroom not found in this school",
+        )
+
+    for item in payload.items:
+        classroom_map[item.classroom_id].grade = grade_to_storage(item.grade)
+    db.commit()
+
+    return {
+        "updated": [
+            {"id": item.classroom_id, "grade": item.grade} for item in payload.items
+        ],
+        "count": len(payload.items),
+    }
 
 
 @router.put("/api/classrooms/{classroom_id}/teacher", response_model=ClassroomInfo)
@@ -667,6 +733,8 @@ async def update_classroom(
             "C2": ProgramLevel.C2,
         }
         classroom.level = level_map.get(level_upper, classroom.level)
+    if update_data.grade is not None:
+        classroom.grade = grade_to_storage(update_data.grade)
     if update_data.is_active is not None:
         classroom.is_active = update_data.is_active
 
