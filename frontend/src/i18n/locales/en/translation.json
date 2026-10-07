@@ -2906,7 +2906,7 @@
       "createProgram": "Create Program",
       "assignNewHomework": "Assign New Homework",
       "batchArchive": "Batch Archive",
-      "viewDetails": "Edit",
+      "viewDetails": "Assignment settings",
       "previewDemo": "Preview",
       "requestRevisionBatch": "Revise",
       "gradeHub": "Grade",
@@ -3241,6 +3241,8 @@
       "updateSuccess": "Assignment information updated",
       "updateFailed": "Update failed, please try again later",
       "startDateAfterDueDate": "Start date cannot be after due date",
+      "invalidDate": "The date is incomplete, so it was reverted",
+      "updateError": "Save failed",
       "assignSuccess": "Successfully assigned to student",
       "assignFailed": "Assignment failed, please try again later",
       "unassignSuccess": "Unassigned student \"{{name}}\"",
@@ -3301,15 +3303,12 @@
       "editContent": "Edit Assignment Content"
     },
     "sheet": {
-      "viewTitle": "Assignment Details",
-      "editTitle": "Edit Assignment",
-      "editButton": "Edit",
+      "viewTitle": "Assignment settings",
       "titleLabel": "Title",
       "instructionsLabel": "Instructions",
       "dueDateLabel": "Due Date",
       "studentProgress": "Student Progress",
       "noStudents": "No student data",
-      "save": "Save Changes",
       "contentTitle": "Assignment Content Units",
       "questionCount": "Questions: ",
       "itemCount": "items",
@@ -3317,6 +3316,10 @@
       "averageScore": "Average Score",
       "startDateLabel": "Start Date",
       "lockedSettingHint": "Students have started this assignment. This setting cannot be changed.",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveFailed": "Save failed",
+      "liveQuizOpenHint": "The live quiz is in progress. Collect it before turning off live mode.",
       "gridView": "Grid View",
       "listView": "List View",
       "tabAll": "All",
@@ -5253,6 +5256,80 @@
       "total": "Total"
     }
   },
+  "quizScoring": {
+    "title": "Scoring method",
+    "required": "(required)",
+    "placeholder": "Choose a scoring method",
+    "methods": {
+      "whole_question": {
+        "label": "Whole question",
+        "desc": "Any mistake in a question loses the whole question (the original method)."
+      },
+      "per_word": {
+        "label": "By word",
+        "desc": "Lose a share for each wrong word. E.g. 1 wrong word out of 3 loses one third of the question."
+      },
+      "per_word_lenient": {
+        "label": "By word, lenient spelling",
+        "desc": "Same as \"By word\", but a word that is off by just 1 letter (extra, missing or wrong) loses only half."
+      },
+      "fixed_per_word": {
+        "label": "Fixed points per wrong word",
+        "desc": "Each wrong word loses the points you set, up to the question's full points."
+      },
+      "fixed_per_letter": {
+        "label": "Fixed points per wrong letter",
+        "desc": "Each extra, missing or wrong letter loses the points you set, up to the question's full points."
+      }
+    },
+    "pointsPerWord": "Each wrong word loses",
+    "pointsPerLetter": "Each wrong letter loses",
+    "pointsUnit": "points",
+    "pointsInvalid": "Enter a number from 0.1 to 100 with at most one decimal place (e.g. 0.5 or 2).",
+    "pointsHint": "From 0.1 to 100, at most one decimal place.",
+    "caseSensitive": "Case-sensitive",
+    "caseSensitiveDesc": "When on, Apple and apple count as different answers (off by default).",
+    "perQuestion": "Each question is worth {{points}} points ({{count}} questions)",
+    "preview": {
+      "title": "Example: the answer \"{{answer}}\"",
+      "builtinNote": "(sample answer)",
+      "noCount": "The number of questions isn't known yet, so points can't be shown.",
+      "singleWordHint": "Every answer here is a single word, so \"Whole question\" and \"By word\" give the same result.",
+      "colAnswer": "Student answer",
+      "colDeduction": "Deduction",
+      "colScore": "Question score",
+      "colReason": "Why",
+      "unansweredCell": "(no answer)"
+    },
+    "reason": {
+      "allCorrect": "All correct",
+      "unanswered": "No answer, whole question lost",
+      "wholeQuestion": "Has a mistake, whole question lost",
+      "full": "Capped at the question's points",
+      "words": "{{wrong}} of {{total}} words wrong",
+      "wordsLenient": "{{wrong}} of {{total}} words wrong (1-letter slips lose half)",
+      "letters": "{{count}} letter(s) off"
+    },
+    "grading": {
+      "methodPrefix": "Scoring method: ",
+      "pointsPerWord": " ({{points}} points per wrong word)",
+      "pointsPerLetter": " ({{points}} points per wrong letter)",
+      "caseSensitiveSuffix": " · Case-sensitive",
+      "partialReason": "{{reason}}; default deduction {{points}}"
+    },
+    "errors": {
+      "methodRequired": "Please choose a scoring method for the quiz",
+      "pointsRequired": "Please enter how many points each wrong word or letter loses"
+    },
+    "confirm": {
+      "title": "Recalculate scores with the new method?",
+      "description": "Scores for the {{count}} student(s) who have submitted will be recalculated with the new scoring method. Any deductions or totals you changed by hand will be replaced.",
+      "descriptionUnknownCount": "Scores for students who have submitted will be recalculated with the new scoring method. Any deductions or totals you changed by hand will be replaced.",
+      "confirm": "Recalculate",
+      "cancel": "Cancel"
+    },
+    "recomputed": "Saved. Recalculated scores for {{count}} student(s) with the new method"
+  },
   "wordQuiz": {
     "questionNav": "Q",
     "questionLabel": "Question {{current}} / {{total}}",
@@ -5280,7 +5357,8 @@
     },
     "revision": {
       "hint": "Revision mode: wrong answers reveal the correct answer; fix them all to submit.",
-      "correctAnswer": "Answer: {{answer}}"
+      "correctAnswer": "Answer: {{answer}}",
+      "settingsChanged": "Your teacher changed how this quiz is scored, so some answers need fixing. Please correct them and submit again."
     }
   },
   "wordSpelling": {

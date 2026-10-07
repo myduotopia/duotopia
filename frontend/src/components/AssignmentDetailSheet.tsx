@@ -1,4 +1,53 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+/**
+ * AssignmentDetailSheet — 班級頁「作業設定」sheet（原位修改、改完即存）
+ *
+ * Issue #1092 驗收回饋：入口「查看詳情」改名「作業設定」，拿掉「編輯」按鈕與檢視／編輯兩套
+ * 排版。所有可改的欄位直接在原位修改、改完即存（單一排版，由上到下）：
+ *   1. 基本資訊：標題（失焦／Enter 存，空白或沒變不存）、類型 badge、作業說明（失焦存）
+ *   2. 批改按鈕列
+ *   3. 統計卡：指派對象／開始日期／截止日期／完成狀況／平均分數 —— 兩張日期卡是日期輸入，
+ *      失焦／Enter 存；先檢查開始 ≤ 截止（後端不檢查），不合法就提示並退回
+ *   4. 進階設定（PracticeModeSettingsPanel）：一改就存；熟練度滑桿放開才存（onCommit）；
+ *      live 小考開考中「即時小考」開關 disabled＋提示
+ *   5. 評分方式（QuizScoringMethodField，僅打字類小考）：方式／大小寫一改就存、扣分失焦存；
+ *      只在「設定完整且有效值有變」時存。已有學生交卷（或進度載入失敗）→ 存之前先跳重算
+ *      確認視窗；取消就把評分方式退回最後儲存值；確定才 PATCH，依 recomputed_count 提示並
+ *      重抓學生進度
+ *   6. 作業單元內容（含內容編輯 overlay，有自己的儲存鈕）
+ *   7. 學生名單（StudentStatusPanel）：維持面板內「勾選 → 取消／儲存派發」，不即存
+ *   Footer 只剩「關閉」。
+ *
+ * 儲存走 useAssignmentAutoSave（序列化合併佇列，只送有變的欄位、成功後併進 detailData，
+ * 失敗把該欄位退回最後儲存值並 toast；保留 EXAMPLE_AUDIO_REQUIRED／CLOZE_ANSWER_REQUIRED／
+ * 評分設定 422 的提示，live 開考中關閉即時小考的 400 另有提示）。各區標題右側顯示儲存狀態。
+ * 詳情（GET）載入前所有控制項 disabled。畫面以 detailData／本地值為準（prop 只當開啟瞬間的
+ * 佔位）。關閉（Esc／X／點外面／關閉鈕）前先 commit 尚未失焦的輸入並等佇列送完；本次有存過
+ * 才在關閉時呼叫一次 onAssignmentUpdated（重算成功也會呼叫），不是每個開關都整頁重抓。
+ *
+ * Review 修正：
+ * - 關閉時等佇列最多 10 秒，逾時照樣關（PATCH 沒回應也不會卡住）；關閉前也補存進階設定
+ *   （滑桿可能在元件外放開）。逾時關閉後佇列最終送完且有存過 → 再呼叫一次 onAssignmentUpdated。
+ *   「AI 批改」（同頁開 modal）先走同一條關閉流程；「批改作業」維持原本行為：不關面板、
+ *   把尚未失焦的欄位排進佇列（不等待）後在 click 內同步呼叫 onGradeClick，window.open 才不會
+ *   被瀏覽器擋。關閉中 AI 批改鈕 disabled。
+ * - 日期以台北時區換算成 YYYY-MM-DD（API 回 UTC，開始日期直接切 "T" 會早一天）；打到一半
+ *   的日期（badInput、年份 < 2000）失焦時只檢查失焦的那一格：退回（連同 DOM 值一起清掉半成品）、
+ *   不存，另一格照常可存；刻意清空才存 null。
+ * - 輸入法選字中的 Enter（isComposing／keyCode 229）不觸發儲存；合併送出的評分 patch 重算提示
+ *   只出現一次。
+ * - 開啟時把上一份作業的進階設定／評分／進度全部清掉，載入中不露出舊資料；詳情與進度（含重算
+ *   後的重抓）只採用最新一次載入、且仍是同一份作業的回應。上一份作業的 PATCH 較晚失敗時只
+ *   toast，不退回新面板的欄位。
+ */
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  type FocusEvent,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
@@ -29,14 +78,20 @@ import {
   clampQuizTime,
   type PracticeModeSettings,
 } from "@/components/assignment/practiceModeSettings";
+import {
+  useAssignmentAutoSave,
+  type AutoSaveResult,
+  type AutoSaveSection,
+  type PatchBody,
+  type SaveState,
+} from "@/components/assignment/useAssignmentAutoSave";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import {
-  Pencil,
-  Save,
   X,
   Loader2,
   CheckCircle,
+  AlertCircle,
   Sparkles,
   BookOpen,
   ChevronRight,
@@ -47,6 +102,26 @@ import StudentStatusPanel, {
   StudentProgress,
 } from "@/components/StudentStatusPanel";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { QuizScoringMethodField } from "@/components/assignment/QuizScoringMethodField";
+import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
+import {
+  EMPTY_QUIZ_SCORING,
+  isQuizScoringComplete,
+  isTypedQuizMode,
+  quizScoringChanged,
+  quizScoringErrorCode,
+  quizScoringFromDetail,
+  quizScoringPayload,
+  type QuizScoringSettings,
+} from "@/lib/quizScoring";
+
+// Issue #1092: 已交卷（有第一次作答成績）的狀態 —— 改評分方式會被重算的學生
+const SUBMITTED_STATUSES = new Set([
+  "SUBMITTED",
+  "RESUBMITTED",
+  "GRADED",
+  "RETURNED",
+]);
 
 interface AssignmentContent {
   id: number;
@@ -56,8 +131,46 @@ interface AssignmentContent {
 }
 
 // #878 Stage 3.5：與派發共用同一設定型別（含 quiz_time_limit_seconds + 時間 literal union），
-// 編輯區改用共用 PracticeModeSettingsPanel，與派發 dialog 一致（#846）。
+// 進階設定區用共用 PracticeModeSettingsPanel，與派發 dialog 一致（#846）。
 type AdvancedSettings = PracticeModeSettings;
+
+const DEFAULT_ADVANCED: AdvancedSettings = {
+  time_limit_per_question: 30,
+  quiz_time_limit_seconds: 0,
+  is_live_quiz: false,
+  shuffle_questions: false,
+  show_answer: false,
+  play_audio: false,
+  target_proficiency: 80,
+  show_word: true,
+  show_image: true,
+  show_translation: true,
+  show_option_images: false,
+  show_example_sentence: false,
+};
+const ADVANCED_KEYS = Object.keys(DEFAULT_ADVANCED) as Array<
+  keyof AdvancedSettings
+>;
+const SCORING_KEYS = [
+  "quiz_scoring_method",
+  "quiz_scoring_points",
+  "quiz_case_sensitive",
+];
+
+/** #1092 review：關閉時等佇列送完的上限；逾時照樣關閉（之後失敗仍會 toast） */
+const CLOSE_FLUSH_TIMEOUT_MS = 10_000;
+/** 年份小於這個值視為還沒打完的日期（例如 Chrome 打年份時的 0202） */
+const MIN_DATE_YEAR = 2000;
+
+/** 日期輸入是否為打到一半的值（瀏覽器回報 badInput、或年份不合理）—— 這種值不存 */
+function isPartialDateInput(el: HTMLInputElement | null): boolean {
+  if (!el) return false;
+  if (el.validity.badInput) return true;
+  return el.value !== "" && Number(el.value.slice(0, 4)) < MIN_DATE_YEAR;
+}
+
+/** PATCH 回應（後端不回作業本身） */
+type PatchResponse = { success?: boolean; recomputed_count?: number } | null;
 
 interface ContentDetail {
   id?: number;
@@ -85,6 +198,114 @@ interface AssignmentDetailSheetProps {
   onAssignmentUpdated?: () => void;
 }
 
+/** 詳情 API 的進階設定 → 畫面值（與派發 dialog 相同的預設／clamp） */
+function advancedFromDetail(detail: Record<string, unknown>): AdvancedSettings {
+  return {
+    time_limit_per_question: clampPerQuestionTime(
+      detail.time_limit_per_question,
+    ),
+    quiz_time_limit_seconds: clampQuizTime(detail.quiz_time_limit_seconds),
+    is_live_quiz: (detail.is_live_quiz as boolean) ?? false,
+    shuffle_questions: (detail.shuffle_questions as boolean) ?? false,
+    show_answer: (detail.show_answer as boolean) ?? false,
+    play_audio: (detail.play_audio as boolean) ?? false,
+    target_proficiency: (detail.target_proficiency as number) ?? 80,
+    show_word: (detail.show_word as boolean) ?? true,
+    show_image: (detail.show_image as boolean) ?? true,
+    show_translation: (detail.show_translation as boolean) ?? true,
+    show_option_images: (detail.show_option_images as boolean) ?? false,
+    show_example_sentence: (detail.show_example_sentence as boolean) ?? false,
+  };
+}
+
+/**
+ * ISO 時間字串 → 日期輸入用的 YYYY-MM-DD，以台北時區換算（#1092 review：detail API 回 UTC，
+ * 開始日期 00:00+08:00 ＝ 前一天 16:00 UTC，直接切 "T" 會早一天）。送出的字串（+08:00）與
+ * API 回的 UTC 字串都走這裡，baseline 與畫面用同一種換算，不會出現沒改卻被 diff 成有改。
+ */
+const TAIPEI_DATE_FORMAT = new Intl.DateTimeFormat("en", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+function dateOnly(iso: unknown): string {
+  if (typeof iso !== "string" || !iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.split("T")[0];
+  // 用 formatToParts 自己組 YYYY-MM-DD，不依賴特定 locale 的輸出格式
+  const parts = TAIPEI_DATE_FORMAT.formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  const year = get("year");
+  const month = get("month");
+  const day = get("day");
+  return year && month && day ? `${year}-${month}-${day}` : iso.split("T")[0];
+}
+// Taiwan-only product: hardcode TST (+08:00) for TIMESTAMPTZ columns
+const dueDateBody = (d: string) => (d ? `${d}T23:59:59+08:00` : null);
+const startDateBody = (d: string) => (d ? `${d}T00:00:00+08:00` : null);
+
+/**
+ * #1092：自動儲存的「最後儲存值」—— 以畫面格式正規化（說明 null → ""、日期重組成送出格式、
+ * 進階設定套預設／clamp、評分設定用 quizScoringPayload），diff 才不會把沒改的欄位當成有改。
+ */
+function savedFieldsFromDetail(
+  detail: Record<string, unknown>,
+  typedQuiz: boolean,
+): PatchBody {
+  return {
+    title: (detail.title as string) ?? "",
+    description: (detail.description as string | null) ?? "",
+    due_date: dueDateBody(dateOnly(detail.due_date)),
+    start_date: startDateBody(dateOnly(detail.start_date)),
+    ...advancedFromDetail(detail),
+    ...(typedQuiz ? quizScoringPayload(quizScoringFromDetail(detail)) : {}),
+  };
+}
+
+/** /progress 回應 → 學生進度陣列（兼容新舊格式） */
+function progressList(response: unknown): StudentProgress[] {
+  const data = Array.isArray(response)
+    ? response
+    : (
+        response as {
+          students_progress?: unknown[];
+          data?: unknown[];
+        }
+      ).students_progress ||
+      (response as { data?: unknown[] }).data ||
+      [];
+  return data as StudentProgress[];
+}
+
+/** #1092：區塊標題右側的小型儲存狀態（儲存中…／已儲存 ✓／儲存失敗） */
+function SaveIndicator({ state }: { state: SaveState }) {
+  const { t } = useTranslation();
+  if (state === "idle") return null;
+  if (state === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {t("assignmentDetail.sheet.saving")}
+      </span>
+    );
+  }
+  if (state === "saved") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-green-600">
+        <CheckCircle className="h-3 w-3" />
+        {t("assignmentDetail.sheet.saved")}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-red-600">
+      <AlertCircle className="h-3 w-3" />
+      {t("assignmentDetail.sheet.saveFailed")}
+    </span>
+  );
+}
+
 export function AssignmentDetailSheet({
   open,
   onOpenChange,
@@ -97,9 +318,13 @@ export function AssignmentDetailSheet({
 }: AssignmentDetailSheetProps) {
   const { t } = useTranslation();
   const { sidebarWidth } = useSidebar();
-  const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // #1092: 派發儲存有自己的 saving，與自動儲存狀態分開
+  const [savingStudents, setSavingStudents] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  // #1092: 派發有變（關閉時要讓班級頁重抓列表）
+  const listDirtyRef = useRef(false);
   const [studentProgress, setStudentProgress] = useState<StudentProgress[]>([]);
   const [isEditingStudents, setIsEditingStudents] = useState(false);
   const [pendingStudentIds, setPendingStudentIds] = useState<number[] | null>(
@@ -131,113 +356,162 @@ export function AssignmentDetailSheet({
     }
   }, [editingContentId]);
 
-  // Detail data from API (includes advanced settings)
+  // Detail data from API（#1092：最後一次儲存成功的值，自動儲存成功後併入）
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(
     null,
   );
 
-  // Edit form state
+  // 畫面上的欄位值（原位修改）
   const [editTitle, setEditTitle] = useState("");
   const [editInstructions, setEditInstructions] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const [editStartDate, setEditStartDate] = useState("");
-  const [editAdvanced, setEditAdvanced] = useState<AdvancedSettings>({
-    time_limit_per_question: 30,
-    quiz_time_limit_seconds: 0,
-    is_live_quiz: false,
-    shuffle_questions: false,
-    show_answer: false,
-    play_audio: false,
-    target_proficiency: 80,
-    show_word: true,
-    show_image: true,
-    show_translation: true,
-    show_option_images: false,
-    show_example_sentence: false,
+  const [editAdvanced, setEditAdvanced] =
+    useState<AdvancedSettings>(DEFAULT_ADVANCED);
+  // Issue #1092: 打字類小考評分設定與重算確認視窗
+  const [editScoring, setEditScoring] =
+    useState<QuizScoringSettings>(EMPTY_QUIZ_SCORING);
+  const editScoringRef = useRef<QuizScoringSettings>(EMPTY_QUIZ_SCORING);
+  editScoringRef.current = editScoring;
+  const [confirmRecomputeOpen, setConfirmRecomputeOpen] = useState(false);
+  // #1092: 等待確認的評分設定；確認視窗關閉時仍有值 ＝ 取消 → 退回最後儲存值
+  const pendingScoringRef = useRef<QuizScoringSettings | null>(null);
+  // #1092: /progress 是否載入成功；失敗時不知道交卷人數，改評分方式一律跳確認
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  // #1092 review：合併送出的評分 patch 會 resolve 給多個呼叫端 → 重算後的副作用每筆回應只做一次
+  const handledResponsesRef = useRef(new WeakSet<object>());
+  const startDateInputRef = useRef<HTMLInputElement>(null);
+  const dueDateInputRef = useRef<HTMLInputElement>(null);
+
+  const assignmentId = assignment?.id;
+  // #1092 review：非同步回來時判斷是否還是同一份作業
+  const assignmentIdRef = useRef(assignmentId);
+  assignmentIdRef.current = assignmentId;
+  const autoSave = useAssignmentAutoSave<PatchResponse>({
+    // #1092 review：每筆在排進佇列時記下作業 id 與這個 patch（閉包住當下的 assignmentId），
+    // 關閉後換到別份作業時，舊作業排隊中的變動不會送到新作業
+    target: assignmentId,
+    patch: (body) =>
+      apiClient.patch<PatchResponse>(
+        `/api/teachers/assignments/${assignmentId}`,
+        body,
+      ),
+    // 成功的欄位併進 detailData（最後儲存值）
+    onSaved: (body) =>
+      setDetailData((prev) => (prev ? { ...prev, ...body } : prev)),
   });
+  const { reset: resetAutoSave } = autoSave;
+
+  // #1092 review：只採用最新一次載入的回應（快速切換作業時，舊作業較晚回來的資料不蓋掉新的）
+  const fetchSeqRef = useRef(0);
 
   const fetchAssignmentData = useCallback(async () => {
     if (!assignment) return;
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
+    // #1092 review：進度是否載入成功先記下，確認回應沒過期才寫進 state
+    let progressOk = false;
     try {
       // Fetch assignment detail (includes contents) and student progress in parallel
       const [detailResponse, progressResponse] = await Promise.all([
         apiClient.get(`/api/teachers/assignments/${assignment.id}`),
         apiClient
           .get(`/api/teachers/assignments/${assignment.id}/progress`)
-          .catch(() => []),
+          // #1092: 記下進度是否載入成功（失敗時改評分方式仍要跳確認）
+          .then((data) => {
+            progressOk = true;
+            return data;
+          })
+          .catch(() => {
+            progressOk = false;
+            return [];
+          }),
       ]);
+      if (seq !== fetchSeqRef.current) return;
+      setProgressLoaded(progressOk);
 
-      // Store full detail response for advanced settings
       const detail = detailResponse as Record<string, unknown>;
       setDetailData(detail);
 
-      // Initialize start_date from detail
-      const startDateStr = detail.start_date as string | null;
-      setEditStartDate(startDateStr ? startDateStr.split("T")[0] : "");
-
-      // Initialize advanced settings from detail
-      setEditAdvanced({
-        time_limit_per_question: clampPerQuestionTime(
-          detail.time_limit_per_question,
+      // #1092: 畫面值改以詳情為準（prop 只是開啟瞬間的佔位）
+      setEditTitle((detail.title as string) ?? "");
+      setEditInstructions((detail.description as string | null) ?? "");
+      setEditDueDate(dateOnly(detail.due_date));
+      setEditStartDate(dateOnly(detail.start_date));
+      setEditAdvanced(advancedFromDetail(detail));
+      setEditScoring(quizScoringFromDetail(detail));
+      resetAutoSave(
+        savedFieldsFromDetail(
+          detail,
+          isTypedQuizMode(
+            (detail.practice_mode as string | null) ?? assignment.practice_mode,
+          ),
         ),
-        quiz_time_limit_seconds: clampQuizTime(detail.quiz_time_limit_seconds),
-        is_live_quiz: (detail.is_live_quiz as boolean) ?? false,
-        shuffle_questions: (detail.shuffle_questions as boolean) ?? false,
-        show_answer: (detail.show_answer as boolean) ?? false,
-        play_audio: (detail.play_audio as boolean) ?? false,
-        target_proficiency: (detail.target_proficiency as number) ?? 80,
-        show_word: (detail.show_word as boolean) ?? true,
-        show_image: (detail.show_image as boolean) ?? true,
-        show_translation: (detail.show_translation as boolean) ?? true,
-        show_option_images: (detail.show_option_images as boolean) ?? false,
-        show_example_sentence:
-          (detail.show_example_sentence as boolean) ?? false,
-      });
+      );
 
       // Extract contents from detail response
       const contents =
         (detail as { contents?: AssignmentContent[] }).contents || [];
       setAssignmentContents(contents);
 
-      // Extract student progress
-      const progressData = Array.isArray(progressResponse)
-        ? progressResponse
-        : (
-            progressResponse as {
-              students_progress?: unknown[];
-              data?: unknown[];
-            }
-          ).students_progress ||
-          (progressResponse as { data?: unknown[] }).data ||
-          [];
-      setStudentProgress(progressData as StudentProgress[]);
+      setStudentProgress(progressList(progressResponse));
     } catch {
+      if (seq !== fetchSeqRef.current) return;
+      setProgressLoaded(progressOk);
       setStudentProgress([]);
       setAssignmentContents([]);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
-  }, [assignment]);
+  }, [assignment, resetAutoSave]);
 
-  // Reset state when assignment changes or sheet closes
+  // #1092: 只重抓學生進度（重算評分後）
+  const fetchProgress = useCallback(async () => {
+    if (!assignmentId) return;
+    // #1092 review：回來時若已重新載入或換了作業就丟掉
+    const seq = fetchSeqRef.current;
+    const isStale = () =>
+      seq !== fetchSeqRef.current || assignmentIdRef.current !== assignmentId;
+    try {
+      const data = await apiClient.get(
+        `/api/teachers/assignments/${assignmentId}/progress`,
+      );
+      if (isStale()) return;
+      setProgressLoaded(true);
+      setStudentProgress(progressList(data));
+    } catch {
+      if (isStale()) return;
+      setProgressLoaded(false);
+    }
+  }, [assignmentId]);
+
+  // Reset state when assignment changes or sheet opens
   useEffect(() => {
     if (assignment && open) {
+      // 佔位：detail 到了再覆蓋
       setEditTitle(assignment.title);
       setEditInstructions(
         assignment.instructions || assignment.description || "",
       );
-      setEditDueDate(
-        assignment.due_date ? assignment.due_date.split("T")[0] : "",
-      );
-      setEditStartDate(
-        assignment.start_date ? assignment.start_date.split("T")[0] : "",
-      );
-      setIsEditing(false);
+      setEditDueDate(dateOnly(assignment.due_date));
+      setEditStartDate(dateOnly(assignment.start_date));
       setDetailData(null);
       setAssignmentContents([]);
       setContentDetails({});
       setExpandedContentId(null);
+      setEditingContentId(null);
+      // #1092 review：上一份作業的設定／進度不可在載入中露出
+      setEditAdvanced(DEFAULT_ADVANCED);
+      setEditScoring(EMPTY_QUIZ_SCORING);
+      editScoringRef.current = EMPTY_QUIZ_SCORING;
+      setStudentProgress([]);
+      setProgressLoaded(false);
+      setIsEditingStudents(false);
+      setPendingStudentIds(null);
+      setConfirmRecomputeOpen(false);
+      pendingScoringRef.current = null;
+      handledResponsesRef.current = new WeakSet();
+      listDirtyRef.current = false;
       fetchAssignmentData();
     }
   }, [assignment?.id, open, fetchAssignmentData]);
@@ -259,6 +533,18 @@ export function AssignmentDetailSheet({
     [studentProgress],
   );
 
+  // Issue #1092: 評分設定（只有打字類小考）
+  const isTypedQuiz = isTypedQuizMode(assignment?.practice_mode);
+  const submittedCount = useMemo(
+    () =>
+      studentProgress.filter((sp) => SUBMITTED_STATUSES.has(sp.status)).length,
+    [studentProgress],
+  );
+  const ready = !!detailData;
+  // #1092: live 小考開考中（已開放、未收卷）—— 不能關閉「即時小考」
+  const liveQuizOpen =
+    !!detailData?.quiz_opened_at && !detailData?.quiz_closed_at;
+
   const loadContentDetail = async (contentId: number, forceReload = false) => {
     if (!forceReload && contentDetails[contentId]) return;
     if (loadingRef.current.has(contentId)) return;
@@ -276,106 +562,335 @@ export function AssignmentDetailSheet({
     }
   };
 
-  const handleSave = async () => {
-    if (!assignment) return;
-    // 細節尚未載入完成就按儲存 → editAdvanced 仍是初始預設值（如 quiz_time_limit_seconds: 0），
-    // PATCH 的 `...editAdvanced` 會覆寫既有設定造成資料遺失。擋住直到 detailData 載入。
-    if (!detailData) return;
-    // Validate date order
-    if (editStartDate && editDueDate && editStartDate > editDueDate) {
+  // ─── #1092 改完即存 ───
+
+  /** 失敗的欄位退回最後儲存值（含排隊中的較新變動） */
+  const revertKeys = (keys: string[]) => {
+    const base = autoSave.baseline();
+    if (keys.includes("title")) setEditTitle((base.title as string) ?? "");
+    if (keys.includes("description"))
+      setEditInstructions((base.description as string) ?? "");
+    if (keys.includes("due_date")) setEditDueDate(dateOnly(base.due_date));
+    if (keys.includes("start_date"))
+      setEditStartDate(dateOnly(base.start_date));
+    const advancedKeys = ADVANCED_KEYS.filter((k) => keys.includes(k));
+    if (advancedKeys.length > 0) {
+      setEditAdvanced((prev) => {
+        const next = { ...prev } as Record<string, unknown>;
+        advancedKeys.forEach((k) => {
+          next[k] = base[k];
+        });
+        return next as unknown as AdvancedSettings;
+      });
+    }
+    if (SCORING_KEYS.some((k) => keys.includes(k))) {
+      setEditScoring(quizScoringFromDetail(base));
+    }
+  };
+
+  /** 儲存失敗提示（保留既有 422 提示；live 開考中關閉的 400 另有提示）。 */
+  const toastSaveError = (error: unknown, keys: string[]) => {
+    // 同一次合併送出的失敗會 reject 給多個呼叫端 → 用固定 id 避免重複 toast
+    const id = "assignment-settings-save-error";
+    // Issue #1092: 後端擋下評分設定不完整
+    const scoringCode = quizScoringErrorCode(error);
+    if (scoringCode) {
+      toast.error(
+        t(
+          scoringCode === "QUIZ_SCORING_POINTS_REQUIRED"
+            ? "quizScoring.errors.pointsRequired"
+            : "quizScoring.errors.methodRequired",
+        ),
+        { id },
+      );
+      return;
+    }
+    if (error instanceof ApiError && error.status === 422) {
+      const detail = error.detail as {
+        code?: string;
+        content_titles?: string[];
+      } | null;
+      // Issue #757: play_audio 切到 True 時副本缺例句音檔
+      if (detail?.code === "EXAMPLE_AUDIO_REQUIRED") {
+        const titles = detail.content_titles?.join("、") || "";
+        toast.error(t("dialogs.assignmentDialog.errors.missingAudio"), {
+          id,
+          description: t("dialogs.assignmentDialog.errors.missingAudioDesc", {
+            contents: titles,
+          }),
+        });
+        return;
+      }
+      // Issue #632 / #860: 副本缺克漏字答案，提示老師回編輯內容補齊
+      if (detail?.code === "CLOZE_ANSWER_REQUIRED") {
+        const titles = detail.content_titles?.join("、") || "";
+        toast.error(t("dialogs.assignmentDialog.errors.missingClozeAnswer"), {
+          id,
+          description: t(
+            "dialogs.assignmentDialog.errors.missingClozeAnswerDesc",
+            { contents: titles },
+          ),
+        });
+        return;
+      }
+    }
+    // Issue #835: live 小考開考中不能關閉即時小考（先收卷）
+    if (
+      error instanceof ApiError &&
+      error.status === 400 &&
+      keys.includes("is_live_quiz")
+    ) {
+      toast.error(t("assignmentDetail.sheet.liveQuizOpenHint"), { id });
+      return;
+    }
+    toast.error(t("assignmentDetail.messages.updateError", "儲存失敗"), { id });
+  };
+
+  /**
+   * 排進自動儲存佇列。成功回結果、沒差異回 null、失敗回 false（已退回欄位並提示）。
+   */
+  const save = async (
+    section: AutoSaveSection,
+    next: PatchBody,
+  ): Promise<AutoSaveResult<PatchResponse> | null | false> => {
+    const startedFor = assignmentIdRef.current;
+    try {
+      return await autoSave.saveFields(section, next);
+    } catch (error) {
+      const keys = Object.keys(next);
+      // 上一份作業較晚失敗（逾時關閉後已開別份）→ 只提示，不退回新面板的欄位
+      if (startedFor === assignmentIdRef.current) revertKeys(keys);
+      toastSaveError(error, keys);
+      return false;
+    }
+  };
+
+  const commitTitle = () => {
+    if (!ready) return;
+    const trimmed = editTitle.trim();
+    if (!trimmed) {
+      // 空白標題不存，退回最後儲存值
+      setEditTitle((autoSave.baseline().title as string) ?? "");
+      return;
+    }
+    if (trimmed !== editTitle) setEditTitle(trimmed);
+    void save("basic", { title: trimmed });
+  };
+
+  const commitInstructions = () => {
+    if (!ready) return;
+    void save("basic", { description: editInstructions });
+  };
+
+  const commitDates = (start: string, due: string) => {
+    if (!ready) return;
+    if (start && due && start > due) {
       toast.error(
         t(
           "assignmentDetail.messages.startDateAfterDueDate",
           "開始日期不可晚於截止日期",
         ),
       );
+      revertDates();
       return;
     }
-    setSaving(true);
-    try {
-      await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
-        title: editTitle,
-        description: editInstructions,
-        // Taiwan-only product: hardcode TST (+08:00) for TIMESTAMPTZ columns
-        due_date: editDueDate ? `${editDueDate}T23:59:59+08:00` : null,
-        start_date: editStartDate ? `${editStartDate}T00:00:00+08:00` : null,
-        ...editAdvanced,
-      });
-      toast.success(t("assignmentDetail.messages.updateSuccess", "已儲存變更"));
-      setIsEditing(false);
-      onAssignmentUpdated?.();
-    } catch (error) {
-      // Issue #757: PATCH 在 play_audio 切到 True 時若副本缺例句音檔會回
-      // 422 EXAMPLE_AUDIO_REQUIRED。對齊派發 dialog 的提示語、明確告訴
-      // 老師缺哪些單字集 + 怎麼修。
-      if (error instanceof ApiError && error.status === 422) {
-        const detail = error.detail as {
-          code?: string;
-          content_titles?: string[];
-        } | null;
-        if (detail?.code === "EXAMPLE_AUDIO_REQUIRED") {
-          const titles = detail.content_titles?.join("、") || "";
-          toast.error(t("dialogs.assignmentDialog.errors.missingAudio"), {
-            description: t("dialogs.assignmentDialog.errors.missingAudioDesc", {
-              contents: titles,
-            }),
-          });
-          return;
-        }
-        // Issue #632: 切到 word_cloze 時若副本缺克漏字答案，提示老師回編輯內容補齊
-        if (detail?.code === "CLOZE_ANSWER_REQUIRED") {
-          const titles = detail.content_titles?.join("、") || "";
-          toast.error(t("dialogs.assignmentDialog.errors.missingClozeAnswer"), {
-            description: t(
-              "dialogs.assignmentDialog.errors.missingClozeAnswerDesc",
-              { contents: titles },
-            ),
-          });
-          return;
-        }
-      }
-      toast.error(t("assignmentDetail.messages.updateError", "儲存失敗"));
-    } finally {
-      setSaving(false);
+    void save("basic", {
+      start_date: startDateBody(start),
+      due_date: dueDateBody(due),
+    });
+  };
+
+  /** 兩個日期輸入任一個是打到一半的值（關閉流程用） */
+  const datesPartial = () =>
+    isPartialDateInput(startDateInputRef.current) ||
+    isPartialDateInput(dueDateInputRef.current);
+
+  /**
+   * 日期退回最後儲存值。DOM 值也一併寫回：已儲存值是 "" 且只打了半個日期時，React 看到的
+   * 值一直是 ""，單靠 setState 清不掉輸入框裡打到一半的年／月／日。
+   */
+  const revertDates = (which: "start" | "due" | "both" = "both") => {
+    const base = autoSave.baseline();
+    if (which !== "due") {
+      const v = dateOnly(base.start_date);
+      setEditStartDate(v);
+      if (startDateInputRef.current) startDateInputRef.current.value = v;
+    }
+    if (which !== "start") {
+      const v = dateOnly(base.due_date);
+      setEditDueDate(v);
+      if (dueDateInputRef.current) dueDateInputRef.current.value = v;
     }
   };
 
-  const handleCancelEdit = () => {
-    if (!assignment || !detailData) return;
-    setEditTitle(assignment.title);
-    setEditInstructions(
-      assignment.instructions || assignment.description || "",
-    );
-    setEditDueDate(
-      assignment.due_date ? assignment.due_date.split("T")[0] : "",
-    );
-    const startDateStr = detailData.start_date as string | null;
-    setEditStartDate(startDateStr ? startDateStr.split("T")[0] : "");
-    setEditAdvanced({
-      time_limit_per_question: clampPerQuestionTime(
-        detailData.time_limit_per_question,
-      ),
-      quiz_time_limit_seconds: clampQuizTime(
-        detailData.quiz_time_limit_seconds,
-      ),
-      is_live_quiz: (detailData.is_live_quiz as boolean) ?? false,
-      shuffle_questions: (detailData.shuffle_questions as boolean) ?? false,
-      show_answer: (detailData.show_answer as boolean) ?? false,
-      play_audio: (detailData.play_audio as boolean) ?? false,
-      target_proficiency: (detailData.target_proficiency as number) ?? 80,
-      show_word: (detailData.show_word as boolean) ?? true,
-      show_image: (detailData.show_image as boolean) ?? true,
-      show_translation: (detailData.show_translation as boolean) ?? true,
-      show_option_images: (detailData.show_option_images as boolean) ?? false,
-      show_example_sentence:
-        (detailData.show_example_sentence as boolean) ?? false,
-    });
-    setIsEditing(false);
+  /**
+   * 日期失焦：只檢查失焦的那一格。打到一半（badInput／年份 < 2000）→ 退回那一格、不存；
+   * 刻意清空（空值且非 badInput）照常存 null。另一格若是半成品就用它的最後儲存值比較／送出，
+   * 不會擋住這一格的儲存。
+   */
+  const handleDateBlur = (e: FocusEvent<HTMLInputElement>) => {
+    if (!ready) return;
+    const isStart = e.currentTarget === startDateInputRef.current;
+    if (isPartialDateInput(e.currentTarget)) {
+      toast.error(t("assignmentDetail.messages.invalidDate"), {
+        id: "assignment-settings-invalid-date",
+      });
+      revertDates(isStart ? "start" : "due");
+      return;
+    }
+    const base = autoSave.baseline();
+    const start =
+      !isStart && isPartialDateInput(startDateInputRef.current)
+        ? dateOnly(base.start_date)
+        : editStartDate;
+    const due =
+      isStart && isPartialDateInput(dueDateInputRef.current)
+        ? dateOnly(base.due_date)
+        : editDueDate;
+    commitDates(start, due);
+  };
+
+  const commitAdvanced = (next: AdvancedSettings) => {
+    if (!ready) return;
+    void save("advanced", next as unknown as PatchBody);
+  };
+
+  /** 送出評分設定；有重算就提示、重抓進度並讓班級頁更新。 */
+  const performScoringSave = async (next: QuizScoringSettings) => {
+    const result = await save("scoring", quizScoringPayload(next));
+    if (!result) return;
+    // 同一筆（合併後）回應只處理一次（body 物件對所有等待者是同一個）
+    if (handledResponsesRef.current.has(result.body)) return;
+    handledResponsesRef.current.add(result.body);
+    const recomputed = result.response?.recomputed_count ?? 0;
+    void fetchProgress();
+    if (recomputed > 0) {
+      toast.success(t("quizScoring.recomputed", { count: recomputed }), {
+        id: "assignment-settings-recomputed",
+      });
+      onAssignmentUpdated?.();
+    }
+  };
+
+  /**
+   * 評分設定「可以存了」：設定完整且有效值與最後儲存值不同才存；已有人交卷（或進度不明）
+   * 先跳確認。`allowConfirm=false`（關閉 sheet 時）需要確認的就不存。
+   */
+  const attemptScoringSave = (
+    next: QuizScoringSettings,
+    allowConfirm = true,
+  ) => {
+    if (!isTypedQuiz || !ready) return;
+    if (!isQuizScoringComplete(next)) return;
+    const saved = quizScoringFromDetail(autoSave.baseline());
+    if (!quizScoringChanged(saved, next)) return;
+    if (!progressLoaded || submittedCount > 0) {
+      if (!allowConfirm) return;
+      pendingScoringRef.current = next;
+      setConfirmRecomputeOpen(true);
+      return;
+    }
+    void performScoringSave(next);
+  };
+
+  const handleScoringChange = (next: QuizScoringSettings) => {
+    const prev = editScoringRef.current;
+    editScoringRef.current = next;
+    setEditScoring(next);
+    // 扣分打字中不存（等失焦）；換方式／大小寫立即嘗試
+    const pointsOnly =
+      next.method === prev.method && next.caseSensitive === prev.caseSensitive;
+    if (!pointsOnly) attemptScoringSave(next);
+  };
+
+  const handleConfirmOpenChange = (nextOpen: boolean) => {
+    setConfirmRecomputeOpen(nextOpen);
+    if (!nextOpen && pendingScoringRef.current) {
+      // 取消：評分方式退回最後儲存值
+      pendingScoringRef.current = null;
+      setEditScoring(quizScoringFromDetail(autoSave.baseline()));
+    }
+  };
+
+  /** 把尚未失焦的欄位排進佇列（不等待）；評分需要確認的不存 */
+  const commitPendingEdits = () => {
+    if (!ready) return;
+    commitTitle();
+    commitInstructions();
+    // 打到一半的日期不存（下次開啟會重新載入）
+    if (!datesPartial()) commitDates(editStartDate, editDueDate);
+    commitAdvanced(editAdvanced);
+    attemptScoringSave(editScoringRef.current, false);
+  };
+
+  /**
+   * 關閉前：commit 尚未失焦的輸入（含滑桿可能在元件外放開的進階設定）、等佇列送完
+   * （最多 CLOSE_FLUSH_TIMEOUT_MS，逾時照樣關閉，之後失敗仍會 toast），有存過才通知班級頁重抓。
+   * 回傳 true ＝ 已關閉；正在關閉中再按一次回 false（不會永久吞掉：finally 一定釋放）。
+   */
+  const requestClose = async (): Promise<boolean> => {
+    if (closingRef.current) return false;
+    closingRef.current = true;
+    setClosing(true);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let flushed = false;
+    try {
+      commitPendingEdits();
+      const flushing = autoSave.flush().then(() => {
+        flushed = true;
+      });
+      await Promise.race([
+        flushing,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, CLOSE_FLUSH_TIMEOUT_MS);
+        }),
+      ]);
+      if (!flushed) {
+        // 逾時先關；佇列最終送完且有存過 → 再讓班級頁重抓一次
+        void flushing.then(() => {
+          if (autoSave.hasSaved()) onAssignmentUpdated?.();
+        });
+      }
+    } catch {
+      // flush 不會 reject；保險起見任何例外都照樣關閉
+    } finally {
+      if (timer) clearTimeout(timer);
+      closingRef.current = false;
+      setClosing(false);
+    }
+    if (autoSave.hasSaved() || listDirtyRef.current) {
+      listDirtyRef.current = false;
+      onAssignmentUpdated?.();
+    }
+    onOpenChange(false);
+    return true;
+  };
+
+  /** AI 批改（同頁開 modal）：先走同一條關閉流程（commit＋flush＋通知），關閉後才開 */
+  const closeThen = async (action?: (id: number) => void) => {
+    if (!assignment) return;
+    const id = assignment.id;
+    if (await requestClose()) action?.(id);
+  };
+
+  /**
+   * 批改作業：維持原本行為 —— 不關面板；尚未失焦的欄位排進佇列（不等待），並在 click 內
+   * 同步呼叫 onGradeClick（會 window.open，等待後才開會被瀏覽器擋彈出視窗）。
+   */
+  const handleGradeClick = () => {
+    if (!assignment) return;
+    commitPendingEdits();
+    onGradeClick?.(assignment.id);
+  };
+
+  const handleSheetOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) onOpenChange(true);
+    else void requestClose();
   };
 
   const handleSaveStudents = async () => {
     if (!assignment || !pendingStudentIds) return;
-    setSaving(true);
+    setSavingStudents(true);
     try {
       await apiClient.patch(`/api/teachers/assignments/${assignment.id}`, {
         student_ids: pendingStudentIds,
@@ -383,18 +898,30 @@ export function AssignmentDetailSheet({
       toast.success(t("assignmentDetail.messages.updateSuccess", "派發已更新"));
       setIsEditingStudents(false);
       setPendingStudentIds(null);
-      fetchAssignmentData();
-      onAssignmentUpdated?.();
+      listDirtyRef.current = true;
     } catch {
       toast.error(t("assignmentDetail.messages.updateError", "更新失敗"));
-    } finally {
-      setSaving(false);
+      setSavingStudents(false);
+      return;
     }
-  };
-
-  const handleCancelEditStudents = () => {
-    setIsEditingStudents(false);
-    setPendingStudentIds(null);
+    try {
+      // #1092: 只更新派發相關資料（學生名單／進度），不覆蓋正在編輯的欄位
+      const [detail, progress] = await Promise.all([
+        apiClient.get<Record<string, unknown>>(
+          `/api/teachers/assignments/${assignment.id}`,
+        ),
+        apiClient.get(`/api/teachers/assignments/${assignment.id}/progress`),
+      ]);
+      setDetailData((prev) =>
+        prev ? { ...prev, student_ids: detail.student_ids } : prev,
+      );
+      setProgressLoaded(true);
+      setStudentProgress(progressList(progress));
+    } catch {
+      // 重抓失敗不影響已儲存的派發；下次開啟會重新載入
+    } finally {
+      setSavingStudents(false);
+    }
   };
 
   const getContentTypeBadge = () => {
@@ -481,10 +1008,25 @@ export function AssignmentDetailSheet({
   const typeBadge = getContentTypeBadge();
   // 自動計分模式不需手動批改鈕；改用 registry 的 isAutoScoredMode（含三種小考，修舊本地 set 漏列）。
   const showGradingButtons = !isAutoScoredMode(assignment.practice_mode);
+  // #1092: 指派人數以詳情的 student_ids 為準（派發儲存後會更新），載入前用 prop 佔位
+  const studentCount = Array.isArray(detailData?.student_ids)
+    ? (detailData.student_ids as unknown[]).length
+    : assignment.student_count;
+  const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+    // 輸入法選字中的 Enter 不算（不然選字就會存）
+    if (
+      e.key === "Enter" &&
+      !e.nativeEvent.isComposing &&
+      e.keyCode !== 229 // Safari 輸入法確認選字
+    ) {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  };
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open} onOpenChange={handleSheetOpenChange}>
         <SheetContent
           side="right"
           className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl p-0 flex flex-col"
@@ -497,309 +1039,325 @@ export function AssignmentDetailSheet({
         >
           {/* Header */}
           <SheetHeader className="px-6 pt-6 pb-4 border-b dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-lg">
-                {isEditing
-                  ? t("assignmentDetail.sheet.editTitle", "編輯作業")
-                  : t("assignmentDetail.sheet.viewTitle", "作業詳情")}
-              </SheetTitle>
-              {!isEditing && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => setIsEditing(true)}
-                  className="gap-1.5 mr-6"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  {t("assignmentDetail.sheet.editButton", "編輯")}
-                </Button>
-              )}
-            </div>
+            <SheetTitle className="text-lg">
+              {t("assignmentDetail.sheet.viewTitle", "作業設定")}
+            </SheetTitle>
             <SheetDescription className="sr-only">
-              {assignment.title}
+              {editTitle || assignment.title}
             </SheetDescription>
           </SheetHeader>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-            {isEditing ? (
-              /* ─── Edit Mode ─── */
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-5 space-y-5">
+            <div className="space-y-5">
+              {/* ─── 基本資訊：標題、類型、說明 ─── */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="assignment-settings-title"
+                    className="text-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
                     {t("assignmentDetail.sheet.titleLabel", "作業標題")}
                   </label>
-                  <Input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                  />
+                  <SaveIndicator state={autoSave.saveStates.basic} />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {t("assignmentDetail.sheet.instructionsLabel", "作業說明")}
-                  </label>
-                  <Textarea
-                    value={editInstructions}
-                    onChange={(e) => setEditInstructions(e.target.value)}
-                    rows={3}
-                  />
+                <Input
+                  id="assignment-settings-title"
+                  value={editTitle}
+                  disabled={!ready}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={commitTitle}
+                  onKeyDown={blurOnEnter}
+                  className="text-base font-semibold"
+                />
+                <div className="flex gap-2 flex-wrap">
+                  <Badge variant="secondary" className={typeBadge.className}>
+                    {typeBadge.label}
+                  </Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {t("assignmentDetail.sheet.startDateLabel", "開始日期")}
-                    </label>
-                    <Input
-                      type="date"
-                      value={editStartDate}
-                      onChange={(e) => setEditStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {t("assignmentDetail.sheet.dueDateLabel", "截止日期")}
-                    </label>
-                    <Input
-                      type="date"
-                      value={editDueDate}
-                      onChange={(e) => setEditDueDate(e.target.value)}
-                    />
-                  </div>
-                </div>
+                <label
+                  htmlFor="assignment-settings-instructions"
+                  className="block text-xs font-medium text-gray-500 dark:text-gray-400 pt-1"
+                >
+                  {t("assignmentDetail.sheet.instructionsLabel", "作業說明")}
+                </label>
+                <Textarea
+                  id="assignment-settings-instructions"
+                  value={editInstructions}
+                  disabled={!ready}
+                  onChange={(e) => setEditInstructions(e.target.value)}
+                  onBlur={commitInstructions}
+                  rows={3}
+                />
+              </div>
 
-                {assignment.practice_mode && (
+              {/* Grading Buttons */}
+              {showGradingButtons && (
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white"
+                    onClick={handleGradeClick}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {t("assignmentDetail.buttons.gradeAssignment", "批改作業")}
+                  </Button>
+                  {canUseAiGrading && (
+                    <Button
+                      className="flex-1 bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700 dark:text-white"
+                      onClick={() => void closeThen(onBatchGradeClick)}
+                      disabled={closing}
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {t("assignmentDetail.buttons.batchGrade", "AI 批改")}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Stats grid（#1092：開始／截止日期卡可直接修改） */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 min-w-0">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {t("classroomDetail.labels.assignedTo")}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {studentCount
+                      ? t("classroomDetail.labels.studentCountWithUnit", {
+                          count: studentCount,
+                        })
+                      : t("classroomDetail.labels.allClass")}
+                  </div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 min-w-0">
+                  <label
+                    htmlFor="assignment-settings-start-date"
+                    className="block text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    {t("assignmentDetail.sheet.startDateLabel", "開始日期")}
+                  </label>
+                  <Input
+                    id="assignment-settings-start-date"
+                    ref={startDateInputRef}
+                    type="date"
+                    value={editStartDate}
+                    disabled={!ready}
+                    onChange={(e) => setEditStartDate(e.target.value)}
+                    onBlur={handleDateBlur}
+                    onKeyDown={blurOnEnter}
+                    className="mt-1 h-8 w-full min-w-0 px-2 text-sm font-semibold bg-white dark:bg-gray-900"
+                  />
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 min-w-0">
+                  <label
+                    htmlFor="assignment-settings-due-date"
+                    className="block text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    {t("classroomDetail.labels.dueDate")}
+                  </label>
+                  <Input
+                    id="assignment-settings-due-date"
+                    ref={dueDateInputRef}
+                    type="date"
+                    value={editDueDate}
+                    disabled={!ready}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    onBlur={handleDateBlur}
+                    onKeyDown={blurOnEnter}
+                    className="mt-1 h-8 w-full min-w-0 px-2 text-sm font-semibold bg-white dark:bg-gray-900"
+                  />
+                  {!editDueDate && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t("classroomDetail.labels.noDeadline")}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 min-w-0">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {t("classroomDetail.labels.completionProgress")}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {completionRate}%
+                  </div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 min-w-0">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {t("assignmentDetail.sheet.averageScore", "平均分數")}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
+                    {averageScoreDisplay}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div
+                  className="bg-green-500 dark:bg-green-600 h-2 rounded-full transition-all"
+                  style={{ width: `${completionRate}%` }}
+                />
+              </div>
+
+              {/* ─── 進階設定（一改就存；滑桿放開才存） ─── */}
+              {assignment.practice_mode && (
+                <div className="relative">
+                  <div className="absolute top-3 right-3 z-10">
+                    <SaveIndicator state={autoSave.saveStates.advanced} />
+                  </div>
                   <PracticeModeSettingsPanel
                     mode={assignment.practice_mode}
                     value={editAdvanced}
                     onChange={setEditAdvanced}
-                    context={{ locked: hasStudentsStarted }}
+                    onCommit={commitAdvanced}
+                    disabled={!ready}
+                    context={{ locked: hasStudentsStarted, liveQuizOpen }}
                   />
-                )}
-              </div>
-            ) : (
-              /* ─── Read-Only Mode ─── */
-              <div className="space-y-5">
-                {/* Title & badges */}
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {assignment.title}
-                  </h3>
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge variant="secondary" className={typeBadge.className}>
-                      {typeBadge.label}
-                    </Badge>
-                  </div>
-                  {(assignment.instructions || assignment.description) && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                      {assignment.instructions || assignment.description}
-                    </p>
-                  )}
                 </div>
+              )}
 
-                {/* Grading Buttons */}
-                {showGradingButtons && (
-                  <div className="flex gap-2">
-                    <Button
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white"
-                      onClick={() => onGradeClick?.(assignment.id)}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      {t(
-                        "assignmentDetail.buttons.gradeAssignment",
-                        "批改作業",
-                      )}
-                    </Button>
-                    {canUseAiGrading && (
-                      <Button
-                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700 dark:text-white"
-                        onClick={() => onBatchGradeClick?.(assignment.id)}
+              {/* ─── Issue #1092: 打字類小考評分方式（學生已作答仍可改，改了會重算已交卷者） ─── */}
+              {isTypedQuiz &&
+                assignment.practice_mode &&
+                (ready ? (
+                  <div className="relative">
+                    <div className="absolute top-3 right-3 z-10">
+                      <SaveIndicator state={autoSave.saveStates.scoring} />
+                    </div>
+                    <QuizScoringMethodField
+                      value={editScoring}
+                      onChange={handleScoringChange}
+                      onPointsBlur={() =>
+                        attemptScoringSave(editScoringRef.current)
+                      }
+                      practiceMode={assignment.practice_mode}
+                      contentIds={assignmentContents.map((c) => c.id)}
+                      idPrefix="edit-quiz-scoring"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                  </div>
+                ))}
+
+              {/* Assignment Contents */}
+              {assignmentContents.length > 0 && (
+                <div className="border dark:border-gray-700 rounded-lg">
+                  <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-t-lg">
+                    <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                      {t("assignmentDetail.sheet.contentTitle", "作業單元內容")}{" "}
+                      ({assignmentContents.length})
+                    </h4>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {assignmentContents.map((content, index) => (
+                      <div
+                        key={content.id}
+                        className="border dark:border-gray-700 rounded-lg p-3 hover:shadow-md transition-shadow"
                       >
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        {t("assignmentDetail.buttons.batchGrade", "AI 批改")}
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {/* Stats grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {t("classroomDetail.labels.assignedTo")}
-                    </div>
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                      {assignment.student_count
-                        ? t("classroomDetail.labels.studentCountWithUnit", {
-                            count: assignment.student_count,
-                          })
-                        : t("classroomDetail.labels.allClass")}
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {t("classroomDetail.labels.dueDate")}
-                    </div>
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                      {assignment.due_date
-                        ? new Date(assignment.due_date).toLocaleDateString(
-                            "zh-TW",
-                          )
-                        : t("classroomDetail.labels.noDeadline")}
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {t("classroomDetail.labels.completionProgress")}
-                    </div>
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                      {completionRate}%
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {t("assignmentDetail.sheet.averageScore", "平均分數")}
-                    </div>
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                      {averageScoreDisplay}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-green-500 dark:bg-green-600 h-2 rounded-full transition-all"
-                    style={{ width: `${completionRate}%` }}
-                  />
-                </div>
-
-                {/* Assignment Contents */}
-                {assignmentContents.length > 0 && (
-                  <div className="border dark:border-gray-700 rounded-lg">
-                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-t-lg">
-                      <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                        {t(
-                          "assignmentDetail.sheet.contentTitle",
-                          "作業單元內容",
-                        )}{" "}
-                        ({assignmentContents.length})
-                      </h4>
-                    </div>
-                    <div className="p-3 space-y-2">
-                      {assignmentContents.map((content, index) => (
-                        <div
-                          key={content.id}
-                          className="border dark:border-gray-700 rounded-lg p-3 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
-                              <span className="text-sm font-bold text-blue-600 flex-shrink-0">
-                                #{index + 1}
-                              </span>
-                              <span className="font-medium text-sm truncate">
-                                {content.title}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className="text-xs flex-shrink-0"
-                              >
-                                {getContentTypeLabel(content.type || "")}
-                              </Badge>
-                            </div>
-                            <div className="flex gap-1 flex-shrink-0">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  if (expandedContentId === content.id) {
-                                    setExpandedContentId(null);
-                                  } else {
-                                    setExpandedContentId(content.id);
-                                    loadContentDetail(content.id);
-                                  }
-                                }}
-                                className="text-blue-600 hover:text-blue-700 text-xs px-2"
-                              >
-                                <ChevronRight
-                                  className={`h-4 w-4 transition-transform ${
-                                    expandedContentId === content.id
-                                      ? "rotate-90"
-                                      : ""
-                                  }`}
-                                />
-                                <span className="ml-1">
-                                  {t("common.expand", "展開")}
-                                </span>
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingContentId(content.id);
-                                  loadContentDetail(content.id);
-                                }}
-                                className="text-orange-600 hover:text-orange-700 border-orange-200 hover:bg-orange-50 text-xs px-2"
-                              >
-                                <Edit2 className="h-3.5 w-3.5 mr-1" />
-                                {t("common.edit", "編輯")}
-                              </Button>
-                            </div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+                            <span className="text-sm font-bold text-blue-600 flex-shrink-0">
+                              #{index + 1}
+                            </span>
+                            <span className="font-medium text-sm truncate">
+                              {content.title}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-xs flex-shrink-0"
+                            >
+                              {getContentTypeLabel(content.type || "")}
+                            </Badge>
                           </div>
-                          {/* Expanded content detail */}
-                          {expandedContentId === content.id &&
-                            contentDetails[content.id] && (
-                              <div className="mt-3 space-y-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                <div className="text-sm">
-                                  <span className="text-gray-600 dark:text-gray-300">
-                                    {t(
-                                      "assignmentDetail.sheet.questionCount",
-                                      "題目數量：",
-                                    )}
-                                  </span>
-                                  <span className="font-medium ml-2">
-                                    {contentDetails[content.id].items?.length ||
-                                      0}{" "}
-                                    {t(
-                                      "assignmentDetail.sheet.itemCount",
-                                      "題",
-                                    )}
-                                  </span>
-                                </div>
-                                <div className="space-y-1 max-h-60 overflow-y-auto">
-                                  {contentDetails[content.id].items?.map(
-                                    (item, idx) => (
-                                      <div
-                                        key={item.id}
-                                        className="text-xs p-2 bg-white dark:bg-gray-800 rounded"
-                                      >
-                                        <span className="text-gray-600 dark:text-gray-400">
-                                          {idx + 1}.
-                                        </span>{" "}
-                                        <span className="font-medium">
-                                          {item.text}
-                                        </span>
-                                        {item.translation && (
-                                          <span className="text-gray-500 ml-2">
-                                            ({item.translation})
-                                          </span>
-                                        )}
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                          <div className="flex gap-1 flex-shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (expandedContentId === content.id) {
+                                  setExpandedContentId(null);
+                                } else {
+                                  setExpandedContentId(content.id);
+                                  loadContentDetail(content.id);
+                                }
+                              }}
+                              className="text-blue-600 hover:text-blue-700 text-xs px-2"
+                            >
+                              <ChevronRight
+                                className={`h-4 w-4 transition-transform ${
+                                  expandedContentId === content.id
+                                    ? "rotate-90"
+                                    : ""
+                                }`}
+                              />
+                              <span className="ml-1">
+                                {t("common.expand", "展開")}
+                              </span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingContentId(content.id);
+                                loadContentDetail(content.id);
+                              }}
+                              className="text-orange-600 hover:text-orange-700 border-orange-200 hover:bg-orange-50 text-xs px-2"
+                            >
+                              <Edit2 className="h-3.5 w-3.5 mr-1" />
+                              {t("common.edit", "編輯")}
+                            </Button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                        {/* Expanded content detail */}
+                        {expandedContentId === content.id &&
+                          contentDetails[content.id] && (
+                            <div className="mt-3 space-y-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                              <div className="text-sm">
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  {t(
+                                    "assignmentDetail.sheet.questionCount",
+                                    "題目數量：",
+                                  )}
+                                </span>
+                                <span className="font-medium ml-2">
+                                  {contentDetails[content.id].items?.length ||
+                                    0}{" "}
+                                  {t("assignmentDetail.sheet.itemCount", "題")}
+                                </span>
+                              </div>
+                              <div className="space-y-1 max-h-60 overflow-y-auto">
+                                {contentDetails[content.id].items?.map(
+                                  (item, idx) => (
+                                    <div
+                                      key={item.id}
+                                      className="text-xs p-2 bg-white dark:bg-gray-800 rounded"
+                                    >
+                                      <span className="text-gray-600 dark:text-gray-400">
+                                        {idx + 1}.
+                                      </span>{" "}
+                                      <span className="font-medium">
+                                        {item.text}
+                                      </span>
+                                      {item.translation && (
+                                        <span className="text-gray-500 ml-2">
+                                          ({item.translation})
+                                        </span>
+                                      )}
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
-            {/* Student Status Panel (always shown) */}
+            {/* Student Status Panel（派發仍需按面板內的「儲存派發」） */}
             <StudentStatusPanel
               students={studentProgress}
               assignmentId={assignment?.id ?? 0}
@@ -809,56 +1367,21 @@ export function AssignmentDetailSheet({
               onEditingStudentsChange={setIsEditingStudents}
               onStudentIdsChanged={setPendingStudentIds}
               onSave={handleSaveStudents}
-              saving={saving}
+              saving={savingStudents}
               loading={loading}
             />
           </div>
 
-          {/* Footer */}
+          {/* Footer（#1092：只剩關閉；派發按鈕在學生名單面板內） */}
           <div className="border-t dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
-            {isEditingStudents ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={handleCancelEditStudents}
-                  disabled={saving}
-                >
-                  <X className="h-4 w-4 mr-1.5" />
-                  {t("common.cancel", "取消")}
-                </Button>
-                <Button onClick={handleSaveStudents} disabled={saving}>
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-1.5" />
-                  )}
-                  {t("assignmentDetail.sheet.saveStudents", "儲存派發")}
-                </Button>
-              </>
-            ) : isEditing ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={handleCancelEdit}
-                  disabled={saving}
-                >
-                  <X className="h-4 w-4 mr-1.5" />
-                  {t("common.cancel", "取消")}
-                </Button>
-                <Button onClick={handleSave} disabled={saving || !detailData}>
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-1.5" />
-                  )}
-                  {t("assignmentDetail.sheet.save", "儲存變更")}
-                </Button>
-              </>
-            ) : (
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                {t("common.close", "關閉")}
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              onClick={() => void requestClose()}
+              disabled={closing}
+            >
+              {closing && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+              {t("common.close", "關閉")}
+            </Button>
           </div>
 
           {/* Content Edit Overlay — inside SheetContent to stay within Radix focus trap */}
@@ -933,7 +1456,7 @@ export function AssignmentDetailSheet({
                           size="sm"
                           onClick={() => {
                             setEditingContentId(null);
-                            onOpenChange(false);
+                            void requestClose();
                           }}
                           className="hover:bg-gray-200"
                         >
@@ -980,6 +1503,27 @@ export function AssignmentDetailSheet({
             })()}
         </SheetContent>
       </Sheet>
+
+      {/* Issue #1092: 改評分方式且已有人交卷 → 確認後才 PATCH 重算；取消退回最後儲存值。
+          Radix Dialog 疊在 Sheet 上會接手 focus trap（Esc / 取消只關確認視窗，不關 Sheet）。 */}
+      <ConfirmDialog
+        open={confirmRecomputeOpen}
+        onOpenChange={handleConfirmOpenChange}
+        title={t("quizScoring.confirm.title")}
+        description={
+          progressLoaded
+            ? t("quizScoring.confirm.description", { count: submittedCount })
+            : // 進度沒載入成功：不知道人數，用不帶數字的說法
+              t("quizScoring.confirm.descriptionUnknownCount")
+        }
+        confirmText={t("quizScoring.confirm.confirm")}
+        cancelText={t("quizScoring.confirm.cancel")}
+        onConfirm={() => {
+          const next = pendingScoringRef.current;
+          pendingScoringRef.current = null;
+          if (next) void performScoringSave(next);
+        }}
+      />
     </>
   );
 }

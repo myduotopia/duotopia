@@ -1,11 +1,20 @@
 """
 Assignment CRUD operations
+
+Issue #1092: 打字類小考（word_spelling_quiz / word_cloze_quiz）評分設定
+    - create：``quiz_scoring_method`` 必填（422 ``QUIZ_SCORING_METHOD_REQUIRED``），
+      fixed_per_word / fixed_per_letter 另需 ``quiz_scoring_points``（422
+      ``QUIZ_SCORING_POINTS_REQUIRED``）；其他 practice_mode 一律存 NULL。
+    - PATCH：三欄可改；有效值（NULL 視同 whole_question / 不分大小寫）有變且為打字
+      小考 → 同一 transaction 內 ``recompute_quiz_scores`` 重算已交卷學生，回應帶
+      ``recomputed_count``。
 """
 
 import logging
 import random
 import uuid
-from typing import Optional, List
+from decimal import Decimal
+from typing import Optional, List, Tuple, Union
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,6 +42,11 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import has_read_org_materials_permission
+from utils.quiz_scoring import (
+    METHODS_REQUIRING_POINTS,
+    TYPED_QUIZ_MODES,
+    effective_method,
+)
 from utils.score_category import resolve_score_category
 from .validators import (
     CreateAssignmentRequest,
@@ -282,6 +296,93 @@ def _raise_if_missing_examples(
         )
 
 
+def _quiz_scoring_points_required(practice_mode: Optional[str], method: str):
+    return HTTPException(
+        status_code=422,
+        detail={
+            "code": "QUIZ_SCORING_POINTS_REQUIRED",
+            "practice_mode": practice_mode,
+            "quiz_scoring_method": method,
+        },
+    )
+
+
+def _to_points(value: Union[float, Decimal, None]) -> Optional[Decimal]:
+    # validator 已擋掉超過一位小數／範圍外的值（不捨入）；轉 Decimal 與
+    # NUMERIC(5,2) 讀回的型別一致（request 的 float 與 DB 讀回的 Decimal 都走這裡）
+    return None if value is None else Decimal(str(value)).quantize(Decimal("0.01"))
+
+
+def _resolve_create_quiz_scoring(
+    request: CreateAssignmentRequest,
+) -> Tuple[Optional[str], Optional[Decimal], Optional[bool]]:
+    """Issue #1092: create 時解析 (method, points, case_sensitive)。
+
+    打字小考 method 必填、D/E 必填 points；A/B/C 不存 points。其他模式一律 NULL
+    （選擇題小考固定整題計分）。
+    """
+    if (request.practice_mode or "") not in TYPED_QUIZ_MODES:
+        return None, None, None
+    method = request.quiz_scoring_method
+    if not method:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "QUIZ_SCORING_METHOD_REQUIRED",
+                "practice_mode": request.practice_mode,
+            },
+        )
+    points = None
+    if method in METHODS_REQUIRING_POINTS:
+        if request.quiz_scoring_points is None:
+            raise _quiz_scoring_points_required(request.practice_mode, method)
+        points = _to_points(request.quiz_scoring_points)
+    return method, points, request.quiz_case_sensitive
+
+
+def _effective_quiz_scoring(
+    assignment: Assignment,
+) -> Tuple[str, Optional[Decimal], bool]:
+    """比較用的有效設定：NULL method ＝ whole_question、NULL 大小寫 ＝ False，
+    points 只在 D/E 才有意義（其餘視為 None）。"""
+    method = effective_method(assignment.quiz_scoring_method)
+    points = (
+        _to_points(assignment.quiz_scoring_points)
+        if method in METHODS_REQUIRING_POINTS
+        else None
+    )
+    return method, points, bool(assignment.quiz_case_sensitive)
+
+
+def _apply_patch_quiz_scoring(
+    assignment: Assignment, request: UpdateAssignmentRequest, provided: set
+) -> bool:
+    """Issue #1092: PATCH 套用評分設定。回「有效設定是否改變」（呼叫端據此重算）。
+
+    明確傳 null ＝ 不變更；非打字小考忽略這三欄。結果為 D/E 卻沒有 points → 422；
+    改成 A/B/C 時清掉 points。
+    """
+    fields = ("quiz_scoring_method", "quiz_scoring_points", "quiz_case_sensitive")
+    if (assignment.practice_mode or "") not in TYPED_QUIZ_MODES or not any(
+        f in provided for f in fields
+    ):
+        return False
+    before = _effective_quiz_scoring(assignment)
+    if request.quiz_scoring_method is not None:
+        assignment.quiz_scoring_method = request.quiz_scoring_method
+    if request.quiz_scoring_points is not None:
+        assignment.quiz_scoring_points = _to_points(request.quiz_scoring_points)
+    if request.quiz_case_sensitive is not None:
+        assignment.quiz_case_sensitive = request.quiz_case_sensitive
+    method = effective_method(assignment.quiz_scoring_method)
+    if method in METHODS_REQUIRING_POINTS:
+        if assignment.quiz_scoring_points is None:
+            raise _quiz_scoring_points_required(assignment.practice_mode, method)
+    else:
+        assignment.quiz_scoring_points = None
+    return _effective_quiz_scoring(assignment) != before
+
+
 @router.post("/create")
 async def create_assignment(
     request: CreateAssignmentRequest,
@@ -385,6 +486,14 @@ async def create_assignment(
             detail=f"At most 2 vocabulary sets per assignment (got {vocab_count})",
         )
 
+    # Issue #1092: 打字類小考派發時必選評分方式（無預設）；D/E 必填每單位扣分。
+    # 放在教材資料驗證之前：這是派發畫面本身的欄位，先回報。
+    (
+        quiz_scoring_method,
+        quiz_scoring_points,
+        quiz_case_sensitive,
+    ) = _resolve_create_quiz_scoring(request)
+
     # Issue #673 / #757: block reading / rearrangement / word_cloze on vocab
     # contents whose items don't carry example_sentence + translation, and
     # additionally block the listening-flavoured modes when example sentence
@@ -436,6 +545,10 @@ async def create_assignment(
         # Issue #860: 「顯示例句（答案挖空）」是獨立附加開關，只在選項上方多顯示挖空
         # 例句；選項語言仍由 show_image 決定，與圖片/選項圖片/播放音檔皆不互斥。
         show_example_sentence=bool(request.show_example_sentence),
+        # Issue #1092: 打字類小考評分設定（其他模式為 NULL）
+        quiz_scoring_method=quiz_scoring_method,
+        quiz_scoring_points=quiz_scoring_points,
+        quiz_case_sensitive=quiz_case_sensitive,
         # score_category is auto-resolved; any client-supplied value is ignored.
         # See docs/design/score-category-mapping.md
         score_category=resolve_score_category(
@@ -1070,6 +1183,10 @@ async def patch_assignment(
         if field in provided:
             setattr(assignment, field, getattr(request, field))
 
+    # Issue #1092: 評分設定另外處理（null ＝ 不變更、D/E 需 points），不放進
+    # advanced_fields 的直接 setattr。記下是否變更，驗證全部通過後再重算。
+    quiz_scoring_changed = _apply_patch_quiz_scoring(assignment, request, provided)
+
     # Issue #860: 開啟「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 +
     # cloze 答案，否則學生端題目會空白/挖不出空。與 play_audio 一樣，只在「切換為
     # 開」時重新驗證；關閉永遠安全。
@@ -1157,6 +1274,22 @@ async def patch_assignment(
                 f"{assignment.id} after show_image toggle "
                 f"({prev_show_image} -> {assignment.show_image})"
             )
+
+    # Issue #1092: 評分設定有變 → 同一 transaction 內以新設定重算已交卷學生
+    # （老師手動扣分與總分被取代；不動 status／時間戳）。沒變就不重算。
+    recomputed_count = 0
+    if quiz_scoring_changed:
+        # 函式內 import 避免 students.quiz_assignments ↔ assignments 循環（同 grading.py）
+        from routers.students.quiz_assignments import recompute_quiz_scores
+
+        recomputed_count = recompute_quiz_scores(db, assignment)
+        logger.info(
+            f"Recomputed quiz scores for {recomputed_count} students in assignment "
+            f"{assignment.id} after scoring settings change "
+            f"(method={assignment.quiz_scoring_method}, "
+            f"points={assignment.quiz_scoring_points}, "
+            f"case_sensitive={assignment.quiz_case_sensitive})"
+        )
 
     # 更新 StudentAssignment 記錄
     update_fields = {}
@@ -1278,6 +1411,8 @@ async def patch_assignment(
         "success": True,
         "assignment_id": assignment_id,
         "message": "Assignment updated successfully",
+        # Issue #1092: 評分設定變更時重算的已交卷人數（未變更為 0）
+        "recomputed_count": recomputed_count,
     }
 
 
