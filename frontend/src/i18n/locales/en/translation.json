@@ -4719,6 +4719,7 @@
       "extractFailed": "AI extraction failed. Please try again later.",
       "selectAtLeastOne": "Please select at least one item.",
       "quota": "{{remaining}} / {{limit}} free left this month; overage billed with points.",
+      "quotaUnlimited": "Admin account: unlimited extractions",
       "cancel": "Cancel",
       "pickFile": "Choose an image or PDF (one at a time)",
       "autoFillHint": "After extraction, missing fields are auto-filled on insert per the AI translate / audio / example settings above.",
@@ -4740,6 +4741,11 @@
       "dialogDescVocab": "Upload an image or PDF; AI extracts words, translations, and examples for you to review before inserting.",
       "noQuestionExtracted": "No multiple-choice questions found. Try a clearer image.",
       "insertedNQuestions": "Extracted {{count}} question(s) into the editor",
+      "noGroupExtracted": "No question group found. Try a clearer image or PDF.",
+      "insertedGroup": "Extracted the group ({{count}} sub-questions) into the editor",
+      "croppedImageUploadFailed": "{{count}} image(s) failed to upload. Please add them by hand on the card.",
+      "groupImageFallbackWhole": "AI could not locate the stimulus area; the whole image was used. Replace it in the layout if needed.",
+      "groupImageNeedsUpload": "Images cannot be cropped from a PDF here. The text and blanks were extracted; please add the pictures (stimulus, figures, question and option images) by hand.",
       "pasteHint": "or press Ctrl+V to paste a screenshot / PDF"
     },
     "batchTabs": {
@@ -5986,7 +5992,8 @@
       "grade": "Grade",
       "examPoints": "Exam Points",
       "visibility": "Visibility",
-      "sources": "Source"
+      "sources": "Source",
+      "programs": "Materials"
     },
     "visibility": {
       "private": "Private",
@@ -6016,7 +6023,10 @@
       "deleteFailed": "Failed to delete",
       "createdCount": "{{count}} question(s) created",
       "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again",
-      "bulkSaved": "Updated {{updated}}, created {{created}}"
+      "bulkSaved": "Updated {{updated}}, created {{created}}",
+      "groupCreated": "Group created",
+      "groupUpdated": "Group updated",
+      "groupDeleted": "Group deleted"
     },
     "form": {
       "titleCreate": "New Multiple-Choice Question",
@@ -6048,7 +6058,7 @@
       "removeLink": "Remove link",
       "confirmDelete": "Delete this question? Assigned papers are not affected.",
       "errors": {
-        "stemRequired": "Question is required",
+        "stemRequired": "Enter the question or add an image",
         "duplicate": "Duplicate of an existing question",
         "minOptions": "At least {{min}} options",
         "noCorrect": "Tick a correct answer",
@@ -6057,7 +6067,13 @@
         "duplicateInBatch": "Duplicate question within this batch",
         "atQuestion": "Question {{n}}: {{message}}",
         "examPointRequired": "Pick at least one exam point",
-        "visibilityRequired": "Choose whether to share the questions"
+        "visibilityRequired": "Choose whether to share the questions",
+        "groupNeedsQuestions": "A group needs at least one question",
+        "groupNeedsContent": "A group needs a passage, an image or a layout",
+        "layoutIncomplete": "The layout has unfinished blocks (empty text, an image without a file, or a dialogue line missing content)",
+        "clozeNeedsBlank": "A cloze group needs at least one blank in the passage",
+        "clozeBlankMismatch": "Blanks and questions do not match (check for missing, extra or duplicate blank numbers)",
+        "clozeDuplicateBlank": "Blank {{n}} appears twice in the passage"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -6067,6 +6083,7 @@
       "optionRequiredPlaceholder": "Option {{letter}}",
       "optionOptionalPlaceholder": "Option {{letter}} (optional)",
       "optionImage": "Option {{letter}} image",
+      "stemImage": "Question image",
       "removeImage": "Remove image",
       "explanationPlaceholder": "Explanation (optional)",
       "generateAudio": "Generate question audio",
@@ -6087,6 +6104,7 @@
         "needStem": "Enter a question on the right first",
         "upload": "PDF / image upload",
         "uploadHint": "Upload an exam page and let AI extract the questions and options",
+        "uploadHintGroup": "Upload the whole group (image or PDF): AI extracts the passage or poster, glossary and sub-questions into the editor",
         "aiTitle": "AI assist",
         "aiApplied": "Filled {{applied}} question(s), skipped {{skipped}} (already set or undecidable)",
         "aiNothingToSend": "No question on the right is ready (needs a stem and at least 2 options)",
@@ -6117,11 +6135,14 @@
       },
       "audioGenerated": "Audio generated",
       "audioPlayFailed": "Cannot play audio ({{code}})",
-      "titleBulkEdit": "Bulk edit {{count}} questions"
+      "titleBulkEdit": "Bulk edit {{count}} questions",
+      "stemOptionalPlaceholder": "Stem (optional for cloze)"
     },
     "list": {
       "selectAll": "Select / deselect all",
       "selectRow": "Select this question",
+      "imageOption": "(image)",
+      "groupQuestionCount": "{{count}} questions",
       "selected": "{{count}} selected",
       "dirty": "{{count}} with unsaved changes",
       "save": "Save",
@@ -6143,7 +6164,113 @@
       "examPointClear": "Clear exam point filter",
       "bulkEdit": "Edit",
       "bulkEditTypeMismatch": "Questions of different types can't be edited together",
-      "bulkEditNoPermission": "No permission to edit the selected questions"
+      "bulkEditNoPermission": "No permission to edit the selected questions",
+      "deleteGroup": "Delete group",
+      "confirmDeleteWithGroups": "Delete {{count}} question(s) and {{groups}} group(s) (all sub-questions)? Assigned papers are not affected.",
+      "groupDeleted": "Group deleted",
+      "groupDeleteFailed": "Failed to delete the group"
+    },
+    "group": {
+      "titleCreate": "New {{type}}",
+      "titleEdit": "Edit {{type}}",
+      "titlePlaceholder": "Group title (optional, shown in the list)",
+      "titleAi": "AI title",
+      "titleAiEmpty": "Add a passage or a question first",
+      "loading": "Loading group…",
+      "loadFailed": "Failed to load the group",
+      "confirmDelete": "Delete the whole group (all sub-questions)? Assigned papers are not affected.",
+      "layout": {
+        "title": "Passage layout",
+        "frame": "Border",
+        "frameRow": "Add border",
+        "frameAll": "Frame whole passage",
+        "unframe": "Remove border",
+        "resizeColumns": "Drag to resize columns (1/3, 1/2, 2/3)",
+        "addBlock": "Add block",
+        "insertHere": "Insert here",
+        "removeBlock": "Remove block",
+        "dragBlock": "Drag block (drop beside another to place side by side)",
+        "block": {
+          "heading": "Heading",
+          "paragraph": "Paragraph",
+          "image": "Image",
+          "dialogue": "Dialogue"
+        },
+        "bold": "Bold",
+        "underline": "Underline",
+        "doubleUnderline": "Double underline",
+        "insertBlank": "Insert blank",
+        "blankLimit": "All blank numbers (1–999) are in use",
+        "headingPlaceholder": "Heading text",
+        "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
+        "imageUpload": "Upload image",
+        "imageReplace": "Click to replace image",
+        "imageAlt": "Alt text",
+        "imageCaption": "Caption",
+        "imageSize": {
+          "small": "Small",
+          "medium": "Medium",
+          "large": "Large",
+          "original": "Original"
+        },
+        "imageFrame": "Border",
+        "alignLeft": "Left",
+        "alignCenter": "Center",
+        "alignRight": "Right",
+        "dialogueSpeaker": "Speaker",
+        "dialogueText": "Line",
+        "addLine": "Add line",
+        "removeLine": "Remove line",
+        "preview": "Preview",
+        "previewHint": "What students will see; switch between desktop and mobile width",
+        "previewDesktop": "Desktop",
+        "previewMobile": "Mobile",
+        "empty": "Nothing yet — “Add block” to start writing, or upload a whole image (poster / comic / map)",
+        "uploadWholeImage": "Upload image"
+      },
+      "preview": {
+        "questionsTitle": "Questions",
+        "textViewNotice": "Text version (students won't see this)"
+      },
+      "glossary": {
+        "title": "Glossary",
+        "placeholder": "timeline 時間軸\ncompose 作曲"
+      },
+      "passage": {
+        "tabLayout": "Layout",
+        "tabText": "Text version",
+        "hint": "Hidden from students; used for search and AI analysis. Generated from the layout by default and editable.",
+        "placeholder": "Poster / comic groups: paste the text from the image here",
+        "regenerate": "Regenerate",
+        "edited": "Edited manually",
+        "emptyReverts": "Leaving this empty restores the text generated from the layout",
+        "dialogueReadonly": "Dialogue transcript extracted by AI from the picture; used to generate audio and can't be edited."
+      },
+      "extract": {
+        "overwriteTitle": "Replace the current group content?",
+        "overwriteDesc": "This group already has content. The extracted result will replace the title, layout, text version, glossary and all sub-questions.",
+        "overwriteConfirm": "Replace"
+      },
+      "questions": {
+        "title": "Sub-questions ({{count}})",
+        "add": "Add sub-question",
+        "empty": "No sub-questions yet",
+        "drag": "Drag to reorder",
+        "blankN": "Blank {{n}}",
+        "blankMissing": "Blank {{n}} is not in the passage",
+        "blankUnassigned": "No blank assigned",
+        "reinsertBlank": "Re-insert at the end",
+        "removeBlank": "Delete sub-question",
+        "appendBlank": "Insert a blank at the end",
+        "renumber": "Renumber in reading order"
+      },
+      "render": {
+        "zoomImage": "Zoom image"
+      }
+    },
+    "groupTypes": {
+      "reading": "Reading group",
+      "cloze": "Cloze group"
     }
   },
   "orgMaterials": {

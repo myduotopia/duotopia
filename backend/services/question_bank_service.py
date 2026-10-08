@@ -1,5 +1,5 @@
 """
-題庫 service（Issue #1061 / #1062）。
+題庫 service（Issue #1061 / #1062 / #1082）。
 
 集中三件事，router 不自己寫 query：
 1. **可見範圍**：老師 T 看得到哪些題目（``visible_questions_query``）。
@@ -16,6 +16,9 @@
   4. 學校題庫（school_id 有值）且 T 是該學校 active 成員
   5. visibility = 'organization_only' 且 T 屬於任一機構
   6. visibility = 'individual_only' 且 T 不屬於任何機構
+
+題組（QuestionGroup）套同一套規則（``visible_groups_query``）；題組內小題的
+visibility／歸屬跟隨題組，列表只列題組列、不列小題。
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from models import (
     ExamPointAlias,
     Question,
     QuestionExamPoint,
+    QuestionGroup,
     QuestionOption,
     QuestionProgramLink,
     QuestionSource,
@@ -143,6 +147,60 @@ def visible_questions_query(db: Session, teacher: Teacher) -> Query:
         conds.append(Question.school_id.in_(school_ids))
 
     return db.query(Question).filter(Question.is_active.is_(True), or_(*conds))
+
+
+def _visibility_conds(model, db: Session, teacher: Teacher) -> list:
+    """questions / question_groups 共用的可見條件（欄位同名）。"""
+    org_ids = teacher_org_ids(db, teacher.id)
+    school_ids = teacher_school_ids(db, teacher.id)
+    own = and_(
+        model.teacher_id == teacher.id,
+        model.organization_id.is_(None),
+        model.school_id.is_(None),
+    )
+    conds = [own, model.visibility == "public"]
+    if org_ids:
+        conds.append(model.organization_id.in_(org_ids))
+        conds.append(model.visibility == "organization_only")
+    else:
+        conds.append(model.visibility == "individual_only")
+    if school_ids:
+        conds.append(model.school_id.in_(school_ids))
+    return conds
+
+
+def visible_groups_query(db: Session, teacher: Teacher) -> Query:
+    """老師可見的題組（未刪除）。規則與 visible_questions_query 相同。"""
+    return db.query(QuestionGroup).filter(
+        QuestionGroup.is_active.is_(True),
+        or_(*_visibility_conds(QuestionGroup, db, teacher)),
+    )
+
+
+def get_visible_group(
+    db: Session, teacher: Teacher, group_id: int
+) -> Optional[QuestionGroup]:
+    return (
+        visible_groups_query(db, teacher)
+        .options(
+            selectinload(QuestionGroup.segments),
+            selectinload(QuestionGroup.questions).selectinload(Question.options),
+            selectinload(QuestionGroup.questions)
+            .selectinload(Question.exam_point_links)
+            .selectinload(QuestionExamPoint.exam_point),
+            selectinload(QuestionGroup.questions)
+            .selectinload(Question.program_links)
+            .selectinload(QuestionProgramLink.program),
+            selectinload(QuestionGroup.questions)
+            .selectinload(Question.program_links)
+            .selectinload(QuestionProgramLink.lesson),
+            selectinload(QuestionGroup.questions)
+            .selectinload(Question.source_links)
+            .selectinload(QuestionSourceLink.source),
+        )
+        .filter(QuestionGroup.id == group_id)
+        .first()
+    )
 
 
 def dedup_scope_query(db: Session, teacher: Teacher) -> Query:
@@ -415,7 +473,12 @@ def get_visible_question(
             selectinload(Question.exam_point_links).selectinload(
                 QuestionExamPoint.exam_point
             ),
-            selectinload(Question.program_links),
+            selectinload(Question.program_links).selectinload(
+                QuestionProgramLink.program
+            ),
+            selectinload(Question.program_links).selectinload(
+                QuestionProgramLink.lesson
+            ),
             selectinload(Question.source_links).selectinload(QuestionSourceLink.source),
         )
         .filter(Question.id == question_id)

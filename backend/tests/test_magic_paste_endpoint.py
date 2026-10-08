@@ -5,6 +5,7 @@ AI 呼叫全程 mock，只驗證：驗證、配額、擷取結果整形、成本
 """
 
 import io
+import json
 
 import pytest
 
@@ -13,6 +14,10 @@ from services.magic_paste_service import (
     MagicPasteError,
     EXTRACT_MODE_VOCABULARY,
     EXTRACT_MODE_SENTENCE,
+    EXTRACT_MODE_READING_GROUP,
+    GROUP_TITLE_MAX_CHARS,
+    FIGURE_CAPTION_MAX_CHARS,
+    MC_MAX_OPTIONS,
 )
 from services import magic_paste_quota as mpq
 
@@ -346,3 +351,640 @@ def test_quota_endpoint(test_client, auth_headers_teacher):
     assert body["free_limit"] == mpq.FREE_MONTHLY_LIMIT
     assert body["free_remaining"] == mpq.FREE_MONTHLY_LIMIT
     assert body["can_use"] is True
+
+
+# ---------------------------------------------------- reading_group（#1084 一份檔→一個題組）
+
+
+def test_reading_group_prompt_asks_for_stimulus_box_and_questions():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    assert "box_2d" in prompt
+    assert "[ymin, xmin, ymax, xmax]" in prompt
+    assert '"kind": "text" | "image"' in prompt
+    assert "glossary" in prompt
+    assert "Never guess" in prompt
+
+
+def test_reading_group_prompt_requires_a_title_even_without_printed_one():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    assert "ALWAYS return a title" in prompt
+    assert "at most 8 words" in prompt
+    # 沒印刷標題時要自己下標，而不是留空
+    assert 'otherwise ""' not in prompt.split("`stimulus.kind`")[0]
+
+
+def test_normalize_reading_group_truncates_long_title_and_allows_empty():
+    long_title = "A" * 260
+    g = MagicPasteService._normalize_reading_group(
+        {"title": long_title, "stimulus": {"kind": "text", "paragraphs": ["p"]}}
+    )[0]
+    assert len(g["title"]) == GROUP_TITLE_MAX_CHARS
+    assert g["title"] == "A" * GROUP_TITLE_MAX_CHARS
+
+    # 模型偶爾不給 title：仍是合法結果，只是空字串
+    no_title = MagicPasteService._normalize_reading_group(
+        {"stimulus": {"kind": "text", "paragraphs": ["p"]}}
+    )[0]
+    assert no_title["title"] == ""
+
+
+def test_normalize_reading_group_text_kind():
+    raw = {
+        "title": " Vivaldi ",
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["  Antonio Vivaldi was a violin player. ", "", "Sadly..."],
+            "text": "",
+            "box_2d": [0, 0, 500, 1000],
+        },
+        "glossary": [
+            {"word": "timeline", "zh": "時間軸"},
+            {"word": "", "zh": "空"},
+            {"word": "only", "zh": ""},
+        ],
+        "questions": [
+            {"stem": "25. Which is the best title?", "options": ["A", "B", "C", "D"]},
+            {"stem": "", "options": ["x", "y"]},
+            {"stem": "too few", "options": ["only one"]},
+        ],
+    }
+    items = MagicPasteService._normalize_reading_group(raw)
+    assert len(items) == 1
+    g = items[0]
+    assert g["title"] == "Vivaldi"
+    assert g["stimulus"]["kind"] == "text"
+    assert g["stimulus"]["paragraphs"] == [
+        "Antonio Vivaldi was a violin player.",
+        "Sadly...",
+    ]
+    # text 模式不帶座標
+    assert g["stimulus"]["box_2d"] is None
+    assert g["glossary"] == [{"word": "timeline", "zh": "時間軸"}]
+    assert [q["stem"] for q in g["questions"]] == ["25. Which is the best title?"]
+
+
+def test_normalize_reading_group_image_kind_and_bad_box():
+    good = {
+        "stimulus": {
+            "kind": "image",
+            "paragraphs": ["ignored for image"],
+            "text": "Happy Town Lantern Festival",
+            "box_2d": [12.4, 0, 640, 1000],
+            "page": 1,
+        },
+        "questions": [],
+    }
+    g = MagicPasteService._normalize_reading_group(good)[0]
+    assert g["stimulus"]["kind"] == "image"
+    assert g["stimulus"]["paragraphs"] == []
+    assert g["stimulus"]["box_2d"] == [12, 0, 640, 1000]
+    assert g["stimulus"]["page"] == 1
+    assert g["stimulus"]["text"] == "Happy Town Lantern Festival"
+    assert g["questions"] == []
+
+    for bad_box in (
+        [0, 0, 0, 1000],
+        [1, 2, 3],
+        [0, 0, 1200, 1000],
+        "nope",
+        [True, 0, 1, 1],
+    ):
+        raw = {"stimulus": {"kind": "image", "text": "t", "box_2d": bad_box}}
+        g = MagicPasteService._normalize_reading_group(raw)[0]
+        assert g["stimulus"]["box_2d"] is None, bad_box
+
+
+def test_normalize_reading_group_infers_kind_and_drops_empty():
+    inferred = MagicPasteService._normalize_reading_group(
+        {"stimulus": {"paragraphs": ["p1"]}, "questions": []}
+    )
+    assert inferred[0]["stimulus"]["kind"] == "text"
+    # 沒素材也沒小題 → 不回傳（endpoint 不扣配額）
+    assert MagicPasteService._normalize_reading_group({"stimulus": {}}) == []
+    assert MagicPasteService._normalize_reading_group("garbage") == []
+
+
+def test_endpoint_reading_group_mode_returns_single_group_and_charges_once(
+    test_client, auth_headers_teacher, monkeypatch
+):
+    seen = {}
+
+    async def fake_extract(self, file_bytes, mime_type, **kwargs):
+        seen["extract_mode"] = kwargs.get("extract_mode")
+        return {
+            "items": [
+                {
+                    "title": "",
+                    "stimulus": {
+                        "kind": "image",
+                        "paragraphs": [],
+                        "text": "poster text",
+                        "box_2d": [0, 0, 600, 1000],
+                        "page": 1,
+                    },
+                    "glossary": [],
+                    "questions": [
+                        {
+                            "stem": "What is the purpose?",
+                            "options": ["a", "b", "c", "d"],
+                            "correct_indexes": [],
+                            "explanation": "",
+                        }
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "estimated_cost_usd": 0.0,
+            "provider": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr(MagicPasteService, "extract", fake_extract)
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+        data={"extract_mode": EXTRACT_MODE_READING_GROUP},
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["extract_mode"] == EXTRACT_MODE_READING_GROUP
+    body = resp.json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["stimulus"]["box_2d"] == [0, 0, 600, 1000]
+    assert body["charge"]["charged"] == "free"
+    assert body["quota"]["free_used"] == 1
+
+
+# ------------------------------------- 插圖 / 題幹圖 / 選項圖 / 克漏字空格（#1084 / #1086）
+
+
+def test_reading_group_prompt_asks_for_figures_blanks_and_option_boxes():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    # 文章內插圖：座標 + 在第幾段之後
+    assert "`stimulus.figures`" in prompt
+    assert "after_paragraph" in prompt
+    # 克漏字：印刷空格重編為 {{n}}
+    assert "{{n}}" in prompt
+    assert "blanks_renumbered" in prompt
+    assert "`questions[i].blank`" in prompt
+    # 題幹圖與選項圖
+    assert "`questions[i].stem_box_2d`" in prompt
+    assert "`questions[i].option_boxes`" in prompt
+    # 圖片選項不准編字
+    assert "never invent words for a picture choice" in prompt
+
+
+def test_multiple_choice_prompt_asks_for_stem_and_option_boxes():
+    from services.magic_paste_service import EXTRACT_MODE_MULTIPLE_CHOICE
+
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_MULTIPLE_CHOICE)
+    assert "`stem_box_2d`" in prompt
+    assert "`option_boxes`" in prompt
+    assert "[ymin, xmin, ymax, xmax]" in prompt
+
+
+def test_normalize_mc_items_keeps_image_only_options():
+    """四個圖片選項（題本第 29 題）：text 全空字串，靠 option_boxes 認。"""
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "Which picture shows the answer?",
+                    "stem_box_2d": [10, 10, 100, 200],
+                    "options": ["", "", "", ""],
+                    "option_boxes": [
+                        [100, 0, 200, 250],
+                        [100, 250, 200, 500],
+                        [100, 500, 200, 750],
+                        [100, 750, 200, 1000],
+                    ],
+                    "correct_indexes": [2],
+                }
+            ]
+        }
+    )
+    assert len(items) == 1
+    it = items[0]
+    assert it["options"] == ["", "", "", ""]
+    assert it["stem_box_2d"] == [10, 10, 100, 200]
+    assert it["option_boxes"][1] == [100, 250, 200, 500]
+    assert it["correct_indexes"] == [2]
+
+
+def test_normalize_mc_items_drops_options_without_text_or_box():
+    """沒字也沒圖的位置不算選項；剩不到兩個就整題丟掉。"""
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "mixed",
+                    "options": ["cat", "", "dog", ""],
+                    "option_boxes": [None, [0, 0, 10, 10], None],
+                },
+                {"stem": "too few", "options": ["", ""], "option_boxes": []},
+            ]
+        }
+    )
+    assert len(items) == 1
+    assert items[0]["options"] == ["cat", "", "dog"]
+    assert items[0]["option_boxes"] == [None, [0, 0, 10, 10], None]
+
+
+def test_normalize_mc_items_drops_bad_boxes_but_keeps_question():
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "bad boxes",
+                    "stem_box_2d": [500, 0, 100, 1000],  # ymin >= ymax
+                    "options": ["a", "b"],
+                    "option_boxes": [[0, 0, 10, 2000], "nope"],  # 超範圍 / 非 list
+                }
+            ]
+        }
+    )
+    assert len(items) == 1
+    assert items[0]["stem_box_2d"] is None
+    assert items[0]["option_boxes"] == [None, None]
+
+
+def test_normalize_mc_items_keeps_empty_stem_only_for_cloze_or_stem_image():
+    """克漏字小題題本上只印選項（題幹真的是空字串），不能被當成壞題丟掉。"""
+    items = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {"stem": "", "blank": 2, "options": ["in", "on", "at", "by"]},
+                {
+                    "stem": "",
+                    "stem_box_2d": [0, 0, 100, 100],
+                    "options": ["a", "b"],
+                },
+                {"stem": "", "options": ["a", "b"]},  # 沒 blank 沒圖 → 丟掉
+            ]
+        }
+    )
+    assert len(items) == 2
+    assert items[0]["blank"] == 2
+    assert items[1]["stem_box_2d"] == [0, 0, 100, 100]
+
+
+@pytest.mark.parametrize("bad", [0, -1, 1000, "3", True, None, 2.5e9])
+def test_normalize_blank_index_rejects_out_of_range(bad):
+    assert MagicPasteService._normalize_blank_index(bad) is None
+
+
+def test_normalize_reading_group_figures_clamped_to_paragraphs():
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["First paragraph.", "Second paragraph."],
+            "figures": [
+                {
+                    "box_2d": [0, 600, 300, 1000],
+                    "after_paragraph": 0,
+                    "caption": " 聖誕老人 ",
+                },
+                {"box_2d": [400, 600, 600, 1000], "after_paragraph": 9},  # 夾到最後一段
+                {"box_2d": [700, 0, 800, 100], "after_paragraph": -5},  # 夾到文章前
+                {"box_2d": [0, 0, 0, 0]},  # 面積 0 → 丟掉
+                {"after_paragraph": 1},  # 沒座標 → 丟掉
+                "garbage",
+            ],
+        },
+        "questions": [],
+    }
+    g = MagicPasteService._normalize_reading_group(raw)[0]
+    figures = g["stimulus"]["figures"]
+    assert [f["after_paragraph"] for f in figures] == [0, 1, -1]
+    assert figures[0]["caption"] == "聖誕老人"
+    assert figures[1]["caption"] == ""
+
+
+def test_normalize_reading_group_cloze_blanks_and_renumber_flag():
+    raw = {
+        "title": "Santa's Letter",
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["Dear Santa, I {{1}} a bike.", "I will {{2}} good."],
+            "blanks_renumbered": True,
+        },
+        "questions": [
+            {"stem": "", "blank": 1, "options": ["want", "wants", "wanted", "wanting"]},
+            {"stem": "", "blank": 2, "options": ["be", "being", "been", "to be"]},
+        ],
+    }
+    g = MagicPasteService._normalize_reading_group(raw)[0]
+    assert g["stimulus"]["blanks_renumbered"] is True
+    assert [q["blank"] for q in g["questions"]] == [1, 2]
+    # 連號檢查交前端驗證：normalize 不改寫段落文字
+    assert g["stimulus"]["paragraphs"][0] == "Dear Santa, I {{1}} a bike."
+
+
+def test_normalize_reading_group_image_kind_drops_figures():
+    raw = {
+        "stimulus": {
+            "kind": "image",
+            "text": "poster text",
+            "box_2d": [0, 0, 500, 1000],
+            "figures": [{"box_2d": [0, 0, 100, 100], "after_paragraph": 0}],
+        },
+        "questions": [],
+    }
+    g = MagicPasteService._normalize_reading_group(raw)[0]
+    assert g["stimulus"]["figures"] == []
+    assert g["stimulus"]["blanks_renumbered"] is False
+
+
+def test_normalize_mc_items_remaps_correct_indexes_after_compaction():
+    """選項壓縮（丟掉無字無 box 的位置）後，correct_indexes 要指回新位置（#1084）。"""
+    raw = {
+        "stem": "Which picture?",
+        "stem_box_2d": [10, 10, 100, 200],
+        "options": ["", "", "", ""],
+        # 第 2 個 box 壞掉 → 該位置無字無圖被丟掉，存活 3 個選項
+        "option_boxes": [
+            [100, 0, 200, 250],
+            "nope",
+            [100, 500, 200, 750],
+            [100, 750, 200, 1000],
+        ],
+    }
+    it = MagicPasteService._normalize_mc_items(
+        {"items": [{**raw, "correct_indexes": [2]}]}
+    )[0]
+    assert len(it["options"]) == 3
+    assert it["correct_indexes"] == [1]
+
+    it = MagicPasteService._normalize_mc_items(
+        {"items": [{**raw, "correct_indexes": [3]}]}
+    )[0]
+    assert it["correct_indexes"] == [2]
+
+    # 被丟掉的位置本身是答案 → 排除（寧可沒答案，也不要指到別的選項）
+    it = MagicPasteService._normalize_mc_items(
+        {"items": [{**raw, "correct_indexes": [1]}]}
+    )[0]
+    assert it["correct_indexes"] == []
+
+
+def test_normalize_mc_items_remaps_correct_indexes_for_text_options():
+    it = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "text options",
+                    "options": ["cat", "", "dog", "bird"],
+                    "correct_indexes": [3],
+                }
+            ]
+        }
+    )[0]
+    assert it["options"] == ["cat", "dog", "bird"]
+    assert it["correct_indexes"] == [2]
+
+
+def test_normalize_mc_items_drops_correct_index_beyond_max_options():
+    """超過 MC_MAX_OPTIONS 被截掉的位置不能留在 correct_indexes。"""
+    it = MagicPasteService._normalize_mc_items(
+        {
+            "items": [
+                {
+                    "stem": "seven options",
+                    "options": ["a", "b", "c", "d", "e", "f", "g"],
+                    "correct_indexes": [6],
+                }
+            ]
+        }
+    )[0]
+    assert len(it["options"]) == MC_MAX_OPTIONS
+    assert it["correct_indexes"] == []
+
+
+def test_normalize_figures_truncates_long_caption():
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["Only paragraph."],
+            "figures": [{"box_2d": [0, 0, 100, 100], "caption": "長" * 500}],
+        },
+        "questions": [],
+    }
+    caption = MagicPasteService._normalize_reading_group(raw)[0]["stimulus"]["figures"][
+        0
+    ]["caption"]
+    assert len(caption) == FIGURE_CAPTION_MAX_CHARS == 300
+
+
+def test_normalize_handles_non_finite_numbers():
+    """`json.loads` 預設吃得下 NaN／Infinity；一律當沒給，不能拋例外（#1084）。"""
+    payload = json.loads(
+        """
+        {
+          "stimulus": {
+            "kind": "text",
+            "paragraphs": ["Only paragraph."],
+            "page": NaN,
+            "figures": [
+              {"box_2d": [0, 0, 100, Infinity], "after_paragraph": 0},
+              {"box_2d": [0, 0, 100, 100], "after_paragraph": NaN}
+            ]
+          },
+          "questions": [
+            {
+              "stem": "",
+              "blank": Infinity,
+              "stem_box_2d": [0, 0, 100, 100],
+              "options": ["a", "b"],
+              "correct_indexes": [NaN, 1]
+            }
+          ]
+        }
+        """
+    )
+    g = MagicPasteService._normalize_reading_group(payload)[0]
+    assert g["stimulus"]["page"] is None
+    # 含 Infinity 的座標整項丟掉；after_paragraph 是 NaN 退回 -1
+    figures = g["stimulus"]["figures"]
+    assert len(figures) == 1
+    assert figures[0]["after_paragraph"] == -1
+    assert g["questions"][0]["blank"] is None
+    assert g["questions"][0]["correct_indexes"] == [1]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_normalize_blank_index_rejects_non_finite(bad):
+    assert MagicPasteService._normalize_blank_index(bad) is None
+
+
+def test_reading_group_prompt_asks_ai_to_decide_figure_placement_and_width():
+    prompt = MagicPasteService._build_prompt("A1", EXTRACT_MODE_READING_GROUP)
+    assert "`placement`" in prompt
+    assert "`side`" in prompt
+    assert "`width`" in prompt
+    # 寬度要 AI 依原卷判斷，不准固定一個值
+    assert "do not default to one value" in prompt
+
+
+def test_normalize_reading_group_figure_placement_side_and_width():
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["First.", "Second."],
+            "figures": [
+                {
+                    "box_2d": [0, 600, 300, 1000],
+                    "placement": "BESIDE",
+                    "after_paragraph": 1,
+                    "side": "Left",
+                    "width": 0.48,
+                },
+                # placement／side 不合法 → full / right；width 吸附到 2/3
+                {
+                    "box_2d": [400, 0, 600, 1000],
+                    "placement": "floating",
+                    "after_paragraph": 0,
+                    "side": "middle",
+                    "width": 0.7,
+                },
+            ],
+        },
+        "questions": [],
+    }
+    figures = MagicPasteService._normalize_reading_group(raw)[0]["stimulus"]["figures"]
+    assert figures[0]["placement"] == "beside"
+    assert figures[0]["side"] == "left"
+    assert figures[0]["width"] == 0.5
+    assert figures[1]["placement"] == "full"
+    assert figures[1]["side"] == "right"
+    assert figures[1]["width"] == pytest.approx(2 / 3)
+
+
+@pytest.mark.parametrize(
+    "box,expected",
+    [
+        # AI 沒給 width → 用 box_2d 寬度佔頁面比例推：320/1000 → 1/3
+        ([0, 650, 300, 970], 1 / 3),
+        # 半版寬 → 1/2
+        ([0, 0, 300, 520], 1 / 2),
+        # 幾乎整行 → 2/3（可用比例的上限）
+        ([0, 0, 300, 950], 2 / 3),
+    ],
+)
+def test_figure_width_falls_back_to_box_geometry(box, expected):
+    assert MagicPasteService._figure_width(None, box) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("bad", ["0.5", True, None, 0.05, 1.5, float("nan")])
+def test_figure_width_rejects_bad_values_and_uses_box(bad):
+    # 一律退回 box 幾何（這個 box 是 1/3）
+    assert MagicPasteService._figure_width(bad, [0, 650, 300, 970]) == pytest.approx(
+        1 / 3
+    )
+
+
+def test_normalize_reading_group_caps_figure_count():
+    """模型誤框一堆小圖時只留前 MAX_FIGURES 張（插圖與段落各佔 layout 一列）。"""
+    from services.magic_paste_service import MAX_FIGURES
+
+    raw = {
+        "stimulus": {
+            "kind": "text",
+            "paragraphs": ["First."],
+            "figures": [
+                {"box_2d": [i, 0, i + 10, 100], "after_paragraph": 0}
+                for i in range(MAX_FIGURES + 5)
+            ],
+        },
+        "questions": [],
+    }
+    figures = MagicPasteService._normalize_reading_group(raw)[0]["stimulus"]["figures"]
+    assert len(figures) == MAX_FIGURES
+    # 留的是前面幾張（依閱讀順序）
+    assert figures[0]["box_2d"] == [0, 0, 10, 100]
+
+
+# ---------------------------------------------- 管理者不受配額限制（is_admin，2026-10-04）
+
+
+def test_admin_quota_status_is_unlimited(shared_test_session, demo_teacher):
+    """管理者帳號：狀態回 unlimited，can_use 恆真。"""
+    demo_teacher.is_admin = True
+    shared_test_session.commit()
+
+    status = mpq.get_quota_status(shared_test_session, demo_teacher)
+    assert status["unlimited"] is True
+    assert status["can_use"] is True
+
+    demo_teacher.is_admin = False
+    shared_test_session.commit()
+    assert mpq.get_quota_status(shared_test_session, demo_teacher)["unlimited"] is False
+
+
+def test_admin_consume_does_not_count_or_charge(shared_test_session, demo_teacher):
+    """管理者擷取不寫計數列、不扣點數，連續用超過免費上限也不會被擋。"""
+    demo_teacher.is_admin = True
+    shared_test_session.commit()
+
+    for _ in range(mpq.FREE_MONTHLY_LIMIT + 3):
+        charge = mpq.consume(shared_test_session, demo_teacher)
+        assert charge["charged"] == "unlimited"
+        assert charge["points_used"] == 0
+
+    # 沒有建立當月計數列（一般老師會有）
+    assert (
+        mpq._get_usage(shared_test_session, demo_teacher.id, mpq.current_year_month())
+        is None
+    )
+    status = mpq.get_quota_status(shared_test_session, demo_teacher)
+    assert status["can_use"] is True
+    assert status["free_used"] == 0
+
+
+def test_non_admin_still_limited(shared_test_session, demo_teacher):
+    """一般老師維持原規則：免費額度會被扣掉。"""
+    demo_teacher.is_admin = False
+    shared_test_session.commit()
+
+    charge = mpq.consume(shared_test_session, demo_teacher)
+    assert charge["charged"] == "free"
+    status = mpq.get_quota_status(shared_test_session, demo_teacher)
+    assert status["unlimited"] is False
+    assert status["free_used"] == 1
+
+
+def test_endpoint_admin_unlimited_does_not_count_or_deduct(
+    test_client,
+    auth_headers_teacher,
+    demo_teacher,
+    shared_test_session,
+    mock_extract,
+    monkeypatch,
+):
+    """管理者呼叫端點：200、quota.unlimited=True、不建當月計數列、不扣點（#1084）。"""
+    from services.quota_service import QuotaService
+
+    demo_teacher.is_admin = True
+    shared_test_session.commit()
+
+    def fail_deduct(*args, **kwargs):
+        pytest.fail("管理者擷取不應呼叫 QuotaService.deduct_quota")
+
+    monkeypatch.setattr(QuotaService, "deduct_quota", staticmethod(fail_deduct))
+
+    resp = test_client.post(
+        "/api/programs/magic-paste",
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["items"]) == 1
+    assert body["charge"]["charged"] == "unlimited"
+    assert body["quota"]["unlimited"] is True
+    assert body["quota"]["can_use"] is True
+
+    shared_test_session.expire_all()
+    assert (
+        mpq._get_usage(shared_test_session, demo_teacher.id, mpq.current_year_month())
+        is None
+    )

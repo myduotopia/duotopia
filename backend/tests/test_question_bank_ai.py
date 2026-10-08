@@ -364,17 +364,178 @@ def test_magic_paste_normalize_mc_items():
         ]
     }
     items = MagicPasteService._normalize_mc_items(raw)
+    # #1084 起 normalize 另帶 blank／stem_box_2d／option_boxes；純文字考卷這三欄皆為空
     assert items == [
         {
             "stem": "1. I ___ never been to Japan.",
+            "blank": None,
+            "stem_box_2d": None,
             "options": ["have", "has", "had"],
+            "option_boxes": [None, None, None],
             "correct_indexes": [0],
             "explanation": "have + p.p.",
         },
         {
             "stem": "no answer printed",
+            "blank": None,
+            "stem_box_2d": None,
             "options": ["a", "b"],
+            "option_boxes": [None, None],
             "correct_indexes": [],
             "explanation": "",
         },
     ]
+
+
+# ---------------------------------------------------------------- AI 題組標題（#1084）
+
+
+def test_build_title_prompt_rules():
+    prompt = qbai.build_title_prompt("Vivaldi was a violin player.", ["Q1?"])
+    assert "at most 8 words" in prompt
+    assert "Vivaldi was a violin player." in prompt
+    assert "Q1?" in prompt
+    # 泛稱開頭要被禁止
+    assert '"Reading"' in prompt
+
+
+@pytest.mark.asyncio
+async def test_suggest_title_strips_quotes_truncates_and_rejects_empty(monkeypatch):
+    svc = qbai.QuestionBankAIService()
+
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate({"title": '  "Vivaldi" '}),
+    )
+    assert await svc.suggest_title("p", []) == "Vivaldi"
+
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate({"title": "A" * 260}),
+    )
+    assert len(await svc.suggest_title("p", [])) == qbai.MAX_TITLE_CHARS
+
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService, "generate", _fake_generate({"title": "   "})
+    )
+    with pytest.raises(qbai.QuestionBankAIOutputError):
+        await svc.suggest_title("p", [])
+
+
+def test_ai_group_title_endpoint(test_client, teacher, monkeypatch):
+    monkeypatch.setattr(
+        qbai.QuestionBankAIService,
+        "generate",
+        _fake_generate({"title": "Antonio Vivaldi The Red Priest"}),
+    )
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"passage": "Antonio Vivaldi was a violin player.", "stems": []},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"title": "Antonio Vivaldi The Red Priest"}
+
+    # 只有小題題幹也可以
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"stems": ["What is the best title?", "  "]},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+
+    # 未登入
+    assert (
+        test_client.post(
+            "/api/question-bank/ai/group-title", json={"passage": "x"}
+        ).status_code
+        == 401
+    )
+
+
+def test_ai_group_title_long_passage_is_truncated(test_client, teacher, monkeypatch):
+    """超過上限的 passage 不該 422，而是被截斷後照常處理（#1084）。"""
+    seen = {}
+
+    async def _capture(self, passage, stems):
+        seen["passage"] = passage
+        return "Long Passage"
+
+    monkeypatch.setattr(qbai.QuestionBankAIService, "suggest_title", _capture)
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"passage": "a" * (qbai.MAX_PASSAGE_CHARS + 500), "stems": []},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"title": "Long Passage"}
+    assert len(seen["passage"]) == qbai.MAX_PASSAGE_CHARS
+
+
+def test_ai_group_title_requires_content(test_client, teacher):
+    for payload in ({}, {"passage": "   ", "stems": []}, {"stems": ["  ", ""]}):
+        resp = test_client.post(
+            "/api/question-bank/ai/group-title",
+            json=payload,
+            headers=_headers(teacher),
+        )
+        assert resp.status_code == 422, payload
+
+
+def test_ai_group_title_provider_failure_is_502(test_client, teacher, monkeypatch):
+    async def boom(self, prompt, max_tokens):
+        raise TimeoutError("slow")
+
+    monkeypatch.setattr(qbai.QuestionBankAIService, "generate", boom)
+    resp = test_client.post(
+        "/api/question-bank/ai/group-title",
+        json={"passage": "hello"},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------- 克漏字（#1085）
+
+
+def test_cloze_inputs_keep_blank_numbers_in_prompt():
+    """克漏字小題：題幹是「Fill in blank (n).」、passage 用 (n)____ 保留編號。"""
+    items = qbai.normalize_inputs(
+        [
+            {
+                "key": "c1",
+                "stem": "Fill in blank (3).",
+                "options": ["different", "the same"],
+                "passage": "Lapland is snowy, but this year is (3)____ .",
+            }
+        ]
+    )
+    assert items[0].passage is not None
+    prompt = qbai.build_answer_prompt(items)
+    assert "Fill in blank (3)." in prompt
+    assert "(3)____" in prompt
+    # 提示模型 (n)____ 是第 n 個空格
+    assert "marks blank number n" in prompt
+    assert "marks blank number n" in qbai.build_analyze_prompt(items, [])
+
+
+def test_ai_answer_long_group_passage_is_truncated(test_client, teacher, monkeypatch):
+    """題組文字版可到 20000 字：小題帶的 passage 超長要截斷，不該整批 422。"""
+    seen = {}
+
+    async def _capture(self, items):
+        seen["passage"] = items[0].passage
+        return [], []
+
+    monkeypatch.setattr(qbai.QuestionBankAIService, "answer", _capture)
+    q = _q()
+    q["passage"] = "a" * (qbai.MAX_PASSAGE_CHARS + 500)
+    resp = test_client.post(
+        "/api/question-bank/ai/answer",
+        json={"questions": [q]},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    assert len(seen["passage"]) == qbai.MAX_PASSAGE_CHARS

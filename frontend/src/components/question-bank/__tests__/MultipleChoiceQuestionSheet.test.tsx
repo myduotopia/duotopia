@@ -2,15 +2,18 @@
  * MultipleChoiceQuestionSheet 測試（Issue #1064）— 單字集同款左欄 + 右欄多題。
  *
  * 驗證：左欄順序與上傳／AI 為即將推出；進階設定預設收起；考點必填、公開必選擋送出；
+ * 驗證訊息延後顯示（打開時無提示列與卡片紅字、儲存鈕只在儲存中停用；按儲存有錯才出現並捲到
+ * 出錯卡、不送出不跳 toast；修正後即時消失）；
  * 左側批次覆寫所有卡且新增題帶批次值；編輯模式單卡預填走 updateQuestion（含 source_ids）；
  * 逐題送出與部分失敗；批次編輯中途失敗（#1077：停在失敗題、sheet 不關、該卡顯示後端訊息、
- * toast 部分成功）；readOnly。
+ * toast 部分成功）；readOnly；預覽（#1082：略過空白卡、儲存中停用；閱讀／克漏字題組也在標題列，
+ * 排版打字後立即預覽即含新內容）。
  *
  * Radix Select 在 jsdom 難以操作，需要「已選公開設定」的送出流程用編輯模式（值已預填）。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 
@@ -23,6 +26,136 @@ const findSimilarQuestions = vi.fn();
 const listExamPoints = vi.fn();
 const listSources = vi.fn();
 const aiAnswerQuestions = vi.fn();
+
+// 題組擷取（#1084）：MagicPasteInput 換成 stub，按鈕直接觸發 onInsertGroup；裁圖／上傳 mock
+const {
+  cropImageFileMock,
+  cropImageFileManyMock,
+  uploadImageFileMock,
+  GROUP_RESULT,
+  CLOZE_RESULT,
+  MC_ITEMS,
+} = vi.hoisted(() => ({
+  cropImageFileMock: vi.fn(),
+  cropImageFileManyMock: vi.fn(),
+  uploadImageFileMock: vi.fn(),
+  // 單題擷取（#1084）：題幹圖 + 四個「只有圖沒有字」的選項
+  MC_ITEMS: [
+    {
+      stem: "Which picture shows the answer?",
+      stem_box_2d: [0, 0, 100, 1000],
+      options: ["", "", "", ""],
+      option_boxes: [
+        [100, 0, 200, 250],
+        [100, 250, 200, 500],
+        [100, 500, 200, 750],
+        [100, 750, 200, 1000],
+      ],
+      correct_indexes: [1],
+      explanation: "",
+    },
+  ],
+  // 克漏字擷取（#1086）：文章有 {{n}}、小題題幹一律是空字串
+  CLOZE_RESULT: {
+    title: "Santa's Letter",
+    stimulus: {
+      kind: "text",
+      paragraphs: ["Dear Santa, I {{1}} a bike.", "I will {{2}} good."],
+      text: "",
+      box_2d: null,
+      page: null,
+      blanks_renumbered: true,
+    },
+    glossary: [],
+    questions: [
+      {
+        stem: "",
+        blank: 1,
+        options: ["want", "wants", "wanted", "wanting"],
+        correct_indexes: [0],
+        explanation: "",
+      },
+      {
+        stem: "",
+        blank: 2,
+        options: ["be", "being", "been", "to be"],
+        correct_indexes: [0],
+        explanation: "",
+      },
+    ],
+  },
+  GROUP_RESULT: {
+    title: "Lantern",
+    stimulus: {
+      kind: "image",
+      paragraphs: [],
+      text: "Happy Town Lantern Festival",
+      box_2d: [0, 0, 600, 1000],
+      page: 1,
+    },
+    glossary: [{ word: "lantern", zh: "燈籠" }],
+    questions: [
+      {
+        stem: "What is the purpose?",
+        options: ["a", "b", "c", "d"],
+        correct_indexes: [2],
+        explanation: "",
+      },
+    ],
+  },
+}));
+vi.mock("@/components/shared/MagicPasteInput", () => ({
+  __esModule: true,
+  default: (props: {
+    extractMode?: string;
+    onInsertGroup?: (r: unknown, f: File) => void | Promise<void>;
+    onInsertQuestions?: (items: unknown[], f: File) => void | Promise<void>;
+  }) => (
+    <div data-testid="mp-stub" data-mode={props.extractMode ?? "vocabulary"}>
+      <button
+        type="button"
+        data-testid="mp-trigger-group"
+        onClick={() =>
+          void props.onInsertGroup?.(
+            GROUP_RESULT,
+            new File(["x"], "paper.png", { type: "image/png" }),
+          )
+        }
+      />
+      <button
+        type="button"
+        data-testid="mp-trigger-cloze"
+        onClick={() =>
+          void props.onInsertGroup?.(
+            CLOZE_RESULT,
+            new File(["x"], "paper.png", { type: "image/png" }),
+          )
+        }
+      />
+      <button
+        type="button"
+        data-testid="mp-trigger-mc"
+        onClick={() =>
+          void props.onInsertQuestions?.(
+            MC_ITEMS,
+            new File(["x"], "paper.png", { type: "image/png" }),
+          )
+        }
+      />
+    </div>
+  ),
+}));
+vi.mock("../cropImage", () => ({
+  cropImageFile: (...a: unknown[]) => cropImageFileMock(...a),
+  cropImageFileMany: (...a: unknown[]) => cropImageFileManyMock(...a),
+}));
+vi.mock("../uploadImageFile", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../uploadImageFile")>();
+  return {
+    ...mod,
+    uploadImageFile: (...a: unknown[]) => uploadImageFileMock(...a),
+  };
+});
 vi.mock("@/lib/api", () => ({
   apiClient: {
     createQuestion: (...a: unknown[]) => createQuestion(...a),
@@ -232,14 +365,86 @@ describe("MultipleChoiceQuestionSheet", () => {
     await user.click(screen.getByTestId("qc-0-advanced-toggle"));
     expect(screen.getByTestId("qc-0-advanced")).toBeTruthy();
     expect(screen.getByTestId("qc-0-grade")).toBeTruthy();
+    // 題幹旁有插圖鈕（#1083），沒圖時沒有預覽
+    expect(screen.getByTestId("qc-0-stem-image-button")).toBeTruthy();
+    expect(screen.queryByTestId("qc-0-stem-image-preview")).toBeNull();
   });
 
-  it("驗證順序：題幹 → 選項 → 考點 → 公開設定", async () => {
+  it("打開面板時不顯示驗證提示與卡片紅字（含考點紅框）；儲存鈕可按", () => {
+    renderSheet();
+    expect(screen.queryByTestId("qb-validation")).toBeNull();
+    expect(screen.queryByTestId("qc-0-error")).toBeNull();
+    expect(
+      screen
+        .getByTestId("qc-0-exam-points-trigger")
+        .getAttribute("aria-invalid"),
+    ).toBeNull();
+    expect(saveBtn().disabled).toBe(false);
+    expect(saveBtn().title).toBe("");
+  });
+
+  it("題組打開時不顯示紅字；按儲存後才出現", async () => {
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+    expect(screen.queryByTestId("qb-validation")).toBeNull();
+    expect(screen.queryByTestId("qg-0-error")).toBeNull();
+    await user.click(saveBtn());
+    expect(screen.getByTestId("qb-validation")).toBeTruthy();
+    expect(screen.getByTestId("qg-0-error")).toBeTruthy();
+  });
+
+  it("按儲存有錯：出現提示列與該卡紅字、捲到第一個出錯的卡；不送出、不跳 toast；修正後提示消失", async () => {
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    vi.mocked(toast.error).mockClear();
+    const q1 = baseQuestion({ id: 5, stem: "First" });
+    const q2 = baseQuestion({ id: 6, stem: "" });
+    updateQuestion.mockResolvedValue(q1);
+    const user = userEvent.setup();
+    renderSheet({ questions: [q1, q2] });
+    expect(screen.queryByTestId("qb-validation")).toBeNull();
+    expect(screen.queryByTestId("qc-1-error")).toBeNull();
+
+    await user.click(saveBtn());
+    expect(screen.getByTestId("qb-validation").textContent).toBe(
+      "Q2: stem required",
+    );
+    expect(screen.getByTestId("qc-1-error").textContent).toBe("stem required");
+    expect(screen.queryByTestId("qc-0-error")).toBeNull();
+    expect(updateQuestion).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(
+      scrolled[scrolled.length - 1]?.contains(screen.getByTestId("qc-1-stem")),
+    ).toBe(true);
+
+    // 之後即時更新：修好就消失
+    await user.type(screen.getByTestId("qc-1-stem"), "Fixed");
+    await waitFor(() =>
+      expect(screen.queryByTestId("qb-validation")).toBeNull(),
+    );
+    expect(screen.queryByTestId("qc-1-error")).toBeNull();
+  });
+
+  it("儲存中：儲存鈕 disabled", async () => {
+    updateQuestion.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderSheet({ questions: [baseQuestion()] });
+    expect(saveBtn().disabled).toBe(false);
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(saveBtn().disabled).toBe(true);
+  });
+
+  it("驗證順序：題幹 → 選項 → 考點 → 公開設定（按過儲存後即時更新）", async () => {
     const user = userEvent.setup();
     renderSheet();
+    await user.click(saveBtn());
     expect(screen.getByTestId("qb-validation").textContent).toBe(
       "Q1: stem required",
     );
+    expect(createQuestion).not.toHaveBeenCalled();
     await fillCard(user, 0, "What?", [
       ["a", true],
       ["b", false],
@@ -256,7 +461,10 @@ describe("MultipleChoiceQuestionSheet", () => {
         "Q1: visibility required",
       ),
     );
-    expect(saveBtn().disabled).toBe(true);
+    // 驗證失敗不再停用儲存鈕；按下仍擋住不送出
+    expect(saveBtn().disabled).toBe(false);
+    await user.click(saveBtn());
+    expect(createQuestion).not.toHaveBeenCalled();
   });
 
   it("考點只在單題設定：右側卡片可挑考點；左側沒有考點批次卡", async () => {
@@ -293,6 +501,7 @@ describe("MultipleChoiceQuestionSheet", () => {
       ["a", true],
       ["b", false],
     ]);
+    await user.click(saveBtn());
     await waitFor(() =>
       expect(screen.getByTestId("qb-validation").textContent).toBe(
         "Q1: dup in batch",
@@ -315,6 +524,7 @@ describe("MultipleChoiceQuestionSheet", () => {
     renderSheet();
     await fillCard(user, 0, "Exists", [["a", true]]);
     expect(await screen.findByTestId("qc-0-duplicate")).toBeTruthy();
+    await user.click(saveBtn());
     await waitFor(() =>
       expect(screen.getByTestId("qb-validation").textContent).toBe(
         "Q1: duplicate",
@@ -422,6 +632,157 @@ describe("MultipleChoiceQuestionSheet", () => {
     ).toBe(true);
   });
 
+  it("預覽（#1082）：無內容時 disabled；兩題依序編號、有選項、不顯示解析", async () => {
+    const user = userEvent.setup();
+    render(
+      <MultipleChoiceQuestionSheet
+        open
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        programs={[]}
+      />,
+    );
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(true);
+
+    await fillCard(user, 0, "First stem", [
+      ["apple", true],
+      ["banana", false],
+    ]);
+    await user.click(screen.getByTestId("qb-add-question"));
+    await fillCard(user, 1, "Second stem", [["cat", false]]);
+    await user.type(screen.getByTestId("qc-0-explanation"), "SECRET-WHY");
+    expect(previewBtn().disabled).toBe(false);
+
+    await user.click(previewBtn());
+    const q0 = await screen.findByTestId("qb-preview-panel-questions-q-0");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-0-number"),
+    ).toHaveTextContent("1.");
+    expect(q0).toHaveTextContent("First stem");
+    expect(q0).toHaveTextContent("(A)apple");
+    expect(q0).toHaveTextContent("(B)banana");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-1"),
+    ).toHaveTextContent("Second stem");
+    expect(screen.getByTestId("qb-preview-panel-dialog")).not.toHaveTextContent(
+      "SECRET-WHY",
+    );
+  });
+
+  it("預覽（#1082）閱讀題組：標題列同一顆按鈕；空題組 disabled；排版打字後立即預覽就看得到；排版工具列沒有預覽鈕", async () => {
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(true);
+    expect(screen.queryByTestId("qg-0-layout-preview-open")).toBeNull();
+
+    await user.click(screen.getByTestId("qg-0-layout-add"));
+    await user.click(await screen.findByTestId("qg-0-layout-add-paragraph"));
+    await user.type(
+      screen.getByTestId("qg-0-layout-block-0-text"),
+      "Freshly typed",
+    );
+    expect(previewBtn().disabled).toBe(false);
+
+    // 編輯器即時 onChange 回草稿：不用離開編輯器，標題列預覽就是當下內容
+    await user.click(previewBtn());
+    const group = await screen.findByTestId("qb-preview-panel-group");
+    expect(group).toHaveTextContent("Freshly typed");
+    expect(screen.getByTestId("qb-preview-panel")).toHaveAttribute(
+      "data-mode",
+      "desktop",
+    );
+    await user.click(screen.getByTestId("qb-preview-panel-mobile"));
+    const panel = screen.getByTestId("qb-preview-panel");
+    expect(panel).toHaveAttribute("data-mode", "mobile");
+    expect(panel.className).toContain("w-[390px]");
+    expect(within(panel).getByTestId("layout-renderer")).toHaveAttribute(
+      "data-stack",
+      "true",
+    );
+  });
+
+  it("預覽（#1083）跟著主圖文分頁走：文字版分頁按預覽 → 主圖文以文字版呈現", async () => {
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+    await user.click(screen.getByTestId("qg-0-layout-add"));
+    await user.click(await screen.findByTestId("qg-0-layout-add-paragraph"));
+    await user.type(
+      screen.getByTestId("qg-0-layout-block-0-text"),
+      "Text tab body",
+    );
+
+    await user.click(screen.getByTestId("qg-0-tab-text"));
+    await user.click(screen.getByTestId("qb-preview"));
+    const group = await screen.findByTestId("qb-preview-panel-group");
+    expect(
+      within(group).getByTestId("qb-preview-panel-group-text-notice"),
+    ).toBeTruthy();
+    expect(
+      within(group).getByTestId("qb-preview-panel-group-text-passage"),
+    ).toHaveTextContent("Text tab body");
+    expect(within(group).queryByTestId("layout-renderer")).toBeNull();
+  });
+
+  it("預覽（#1082）克漏字題組：擷取前 disabled；擷取後標題列預覽看到文章與空格小題", async () => {
+    cropImageFileManyMock.mockReset().mockResolvedValue([]);
+    uploadImageFileMock.mockReset();
+    const user = userEvent.setup();
+    renderSheet({ createType: "cloze" });
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(true);
+
+    await user.click(screen.getByTestId("mp-trigger-cloze"));
+    await screen.findByTestId("qg-0-q-0-blank-badge");
+    await waitFor(() => expect(previewBtn().disabled).toBe(false));
+
+    await user.click(previewBtn());
+    const group = await screen.findByTestId("qb-preview-panel-group");
+    expect(group).toHaveTextContent("Dear Santa");
+    expect(screen.getByTestId("qb-preview-panel-group-q-0-blank")).toBeTruthy();
+  });
+
+  it("預覽（#1082）：完全空白的卡片略過，編號依過濾後順序 1、2", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await fillCard(user, 0, "First stem", [["apple", true]]);
+    await user.click(screen.getByTestId("qb-add-question"));
+    await user.click(screen.getByTestId("qb-add-question"));
+    await fillCard(user, 2, "Third stem", [["cat", false]]);
+
+    await user.click(screen.getByTestId("qb-preview"));
+    const list = await screen.findByTestId("qb-preview-panel-questions-list");
+    expect(list.children).toHaveLength(2);
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-0"),
+    ).toHaveTextContent("First stem");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-1-number"),
+    ).toHaveTextContent("2.");
+    expect(
+      screen.getByTestId("qb-preview-panel-questions-q-1"),
+    ).toHaveTextContent("Third stem");
+    expect(screen.queryByTestId("qb-preview-panel-questions-q-2")).toBeNull();
+  });
+
+  it("預覽（#1082）：儲存中按鈕 disabled", async () => {
+    const existing = baseQuestion();
+    updateQuestion.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderSheet({ questions: [existing] });
+    const previewBtn = () =>
+      screen.getByTestId("qb-preview") as HTMLButtonElement;
+    expect(previewBtn().disabled).toBe(false);
+
+    await user.click(saveBtn());
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(previewBtn().disabled).toBe(true);
+  });
+
   it("批次編輯：N 張卡各自帶值、左欄完整但批次值空白；左欄改公開 → 全部卡；儲存逐題 PATCH", async () => {
     const q1 = baseQuestion({ id: 5, stem: "First", visibility: "private" });
     const q2 = baseQuestion({
@@ -488,5 +849,134 @@ describe("MultipleChoiceQuestionSheet", () => {
     expect(onSaved).toHaveBeenCalledWith(q1);
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId("qb-sheet")).toBeTruthy();
+  });
+
+  it("題組模式擷取（#1084）：上傳走 reading_group、裁圖上傳、填進題組卡；再擷取一次要先確認覆蓋", async () => {
+    cropImageFileMock.mockReset();
+    cropImageFileManyMock
+      .mockReset()
+      .mockImplementation(async (_f: File, boxes: (number[] | null)[]) =>
+        boxes.map((b) =>
+          b ? new File(["c"], "crop.png", { type: "image/png" }) : null,
+        ),
+      );
+    uploadImageFileMock.mockReset().mockResolvedValue("https://cdn/crop.png");
+    const user = userEvent.setup();
+    renderSheet({ createType: "reading" });
+
+    // 左欄上傳區是題組模式；沒有「新增題目」鍵
+    expect(
+      screen.getByTestId("qb-upload").getAttribute("data-extract-mode"),
+    ).toBe("reading_group");
+    expect(screen.getByTestId("mp-stub").getAttribute("data-mode")).toBe(
+      "reading_group",
+    );
+    expect(screen.getByTestId("qb-upload-group-hint")).toBeTruthy();
+    expect(screen.queryByTestId("qb-add-question")).toBeNull();
+
+    await user.click(screen.getByTestId("mp-trigger-group"));
+    await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(1));
+    // 依 box_2d 裁圖（素材圖在第一個位置，後面是小題題幹／選項的空位），上傳的是裁好的檔
+    expect(cropImageFileManyMock).toHaveBeenCalledWith(
+      expect.any(File),
+      [[0, 0, 600, 1000], null, null, null, null, null],
+      "crop",
+    );
+    expect((uploadImageFileMock.mock.calls[0][0] as File).name).toBe(
+      "crop.png",
+    );
+    // 標題、小題、圖片都進了題組卡
+    expect(
+      ((await screen.findByTestId("qg-0-title")) as HTMLInputElement).value,
+    ).toBe("Lantern");
+    expect(
+      (screen.getByTestId("qg-0-q-0-stem") as HTMLTextAreaElement).value,
+    ).toBe("What is the purpose?");
+    expect(
+      document.querySelector('img[src="https://cdn/crop.png"]'),
+    ).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledWith(
+      "contentEditor.magicPaste.insertedGroup",
+    );
+
+    // 已有內容 → 再擷取先問覆蓋；取消不動、確認才套用
+    await user.click(screen.getByTestId("mp-trigger-group"));
+    expect(await screen.findByTestId("qb-extract-overwrite")).toBeTruthy();
+    await user.click(screen.getByTestId("qb-extract-overwrite-cancel"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("qb-extract-overwrite")).toBeNull(),
+    );
+    expect(uploadImageFileMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId("mp-trigger-group"));
+    await user.click(await screen.findByTestId("qb-extract-overwrite-confirm"));
+    await waitFor(() => expect(uploadImageFileMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("克漏字擷取後（#1086）：小題題幹是空的，AI 作答／考點分析仍可按（題幹由文章承擔）", async () => {
+    cropImageFileManyMock.mockReset().mockResolvedValue([]);
+    uploadImageFileMock.mockReset();
+    const user = userEvent.setup();
+    renderSheet({ createType: "cloze" });
+
+    // 擷取前：沒有任何題幹也沒有文章 → 兩鍵 disabled
+    expect(
+      (screen.getByTestId("qb-ai-answer") as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await user.click(screen.getByTestId("mp-trigger-cloze"));
+
+    // 擷取後：小題卡只有「空格 n」徽章、沒有題幹文字框，但文章有 {{1}}／{{2}} → 兩鍵要可按
+    expect(await screen.findByTestId("qg-0-q-0-blank-badge")).toBeTruthy();
+    expect(screen.queryByTestId("qg-0-q-0-stem")).toBeNull();
+    await waitFor(() =>
+      expect(
+        (screen.getByTestId("qb-ai-answer") as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+    expect(
+      (screen.getByTestId("qb-ai-analyze") as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("單題擷取（#1084）：帶原始檔裁題幹圖與選項圖，圖片選項沒有字也填進卡片", async () => {
+    cropImageFileManyMock
+      .mockReset()
+      .mockImplementation(async (_f: File, boxes: (number[] | null)[]) =>
+        boxes.map((b) =>
+          b ? new File(["c"], "crop.png", { type: "image/png" }) : null,
+        ),
+      );
+    uploadImageFileMock.mockReset().mockResolvedValue("https://cdn/crop.png");
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.click(screen.getByTestId("mp-trigger-mc"));
+
+    // 題幹圖 + 四個選項圖，一次解碼、五個 box 一起裁
+    await waitFor(() =>
+      expect(cropImageFileManyMock).toHaveBeenCalledWith(
+        expect.any(File),
+        [
+          [0, 0, 100, 1000],
+          [100, 0, 200, 250],
+          [100, 250, 200, 500],
+          [100, 500, 200, 750],
+          [100, 750, 200, 1000],
+        ],
+        "crop",
+      ),
+    );
+    expect(uploadImageFileMock).toHaveBeenCalledTimes(5);
+    expect(
+      ((await screen.findByTestId("qc-0-stem")) as HTMLTextAreaElement).value,
+    ).toBe("Which picture shows the answer?");
+    expect(screen.getByTestId("qc-0-stem-image-preview")).toBeTruthy();
+    // 圖片選項：輸入框是空的，圖已填好
+    expect(
+      (screen.getByTestId("qc-0-option-0") as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      document.querySelectorAll('img[src="https://cdn/crop.png"]').length,
+    ).toBeGreaterThanOrEqual(2);
   });
 });

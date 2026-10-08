@@ -11,6 +11,9 @@ import type {
   ExamPoint,
   Question,
   QuestionCreateInput,
+  QuestionGroup,
+  QuestionGroupCreateInput,
+  QuestionGroupUpdateInput,
   QuestionListParams,
   QuestionListResponse,
   QuestionSource,
@@ -626,6 +629,29 @@ class ApiClient {
     return this.delete<void>(`/api/question-bank/questions/${questionId}`);
   }
 
+  // 題組（#1079）：整組一個交易建立；小題不可單獨建
+  async createQuestionGroup(data: QuestionGroupCreateInput) {
+    return this.post<QuestionGroup>("/api/question-bank/question-groups", data);
+  }
+
+  async getQuestionGroup(groupId: number) {
+    return this.get<QuestionGroup>(
+      `/api/question-bank/question-groups/${groupId}`,
+    );
+  }
+
+  /** 整組替換（單交易）：group 欄位只送有改的；questions 帶 id 更新、無 id 新增、缺席刪除 */
+  async updateQuestionGroup(groupId: number, data: QuestionGroupUpdateInput) {
+    return this.patch<QuestionGroup>(
+      `/api/question-bank/question-groups/${groupId}`,
+      data,
+    );
+  }
+
+  async deleteQuestionGroup(groupId: number) {
+    return this.delete<void>(`/api/question-bank/question-groups/${groupId}`);
+  }
+
   async findSimilarQuestions(stem: string, excludeId?: number) {
     const qs = new URLSearchParams({ stem });
     if (excludeId !== undefined) qs.append("exclude_id", String(excludeId));
@@ -646,6 +672,14 @@ class ApiClient {
       "/api/question-bank/ai/analyze",
       { questions },
     );
+  }
+
+  /** AI 依主圖文／小題題幹產一個題組標題（#1084，不扣點）。 */
+  async aiSuggestGroupTitle(passage: string, stems: string[]) {
+    return this.post<{ title: string }>("/api/question-bank/ai/group-title", {
+      passage,
+      stems,
+    });
   }
 
   async listSources(q?: string) {
@@ -1859,6 +1893,8 @@ class ApiClient {
       points_per_image: number;
       paid_quota_remaining: number;
       can_use: boolean;
+      /** 管理者帳號（is_admin）不受張數限制 */
+      unlimited?: boolean;
     }>("/api/programs/magic-paste/quota");
   }
 
@@ -1908,6 +1944,7 @@ class ApiClient {
         free_remaining: number;
         free_limit: number;
         can_use: boolean;
+        unlimited?: boolean;
       };
       estimated_cost_usd: number;
       provider: string;

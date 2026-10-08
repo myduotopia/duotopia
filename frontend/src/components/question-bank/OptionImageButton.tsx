@@ -1,26 +1,25 @@
 /**
  * 選項圖片按鈕（Issue #1064）。
  *
- * 抽自 VocabularySetPanel 的 handleImageUpload：2MB 上限、型別白名單、
- * `apiClient.uploadImage`（題庫不帶 content_id / item_index）。
- * 無圖＝圖片 icon；有圖＝縮圖，hover 顯示移除。
+ * 上傳邏輯在 `uploadImageFile`（2MB 上限、型別白名單、`apiClient.uploadImage`），
+ * 與題組排版的圖片區塊共用。無圖＝圖片 icon；有圖＝縮圖，hover 顯示移除。
+ * 縮圖是 56px 白底方框，圖片等比縮小置中（object-contain），很寬或很高的圖也看得到整張、不裁切。
+ * 題幹插圖（#1083）用同一顆按鈕，一併適用。
  */
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ImagePlus, Loader2, X } from "lucide-react";
-import { toast } from "sonner";
 
-import { apiClient } from "@/lib/api";
-
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const VALID_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+import { VALID_IMAGE_TYPES, uploadImageFile } from "./uploadImageFile";
 
 export interface OptionImageButtonProps {
   imageUrl: string | null;
   onChange: (url: string | null) => void;
   disabled?: boolean;
   label: string;
+  /** data-testid 前綴（預設 option-image）；題幹插圖（#1083）用同一顆按鈕，換前綴避免撞名 */
+  testId?: string;
 }
 
 export default function OptionImageButton({
@@ -28,29 +27,17 @@ export default function OptionImageButton({
   onChange,
   disabled,
   label,
+  testId = "option-image",
 }: OptionImageButtonProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File) => {
-    if (file.size > MAX_IMAGE_BYTES) {
-      toast.error(t("vocabularySet.image.tooLarge"));
-      return;
-    }
-    if (!VALID_TYPES.includes(file.type)) {
-      toast.error(t("vocabularySet.image.invalidType"));
-      return;
-    }
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await apiClient.uploadImage(formData);
-      onChange(res.image_url);
-    } catch (err) {
-      console.error("Option image upload failed:", err);
-      toast.error(t("vocabularySet.image.uploadFailed"));
+      const url = await uploadImageFile(file, t);
+      if (url) onChange(url);
     } finally {
       setUploading(false);
     }
@@ -61,7 +48,7 @@ export default function OptionImageButton({
       <input
         ref={inputRef}
         type="file"
-        accept={VALID_TYPES.join(",")}
+        accept={VALID_IMAGE_TYPES.join(",")}
         className="hidden"
         disabled={disabled || uploading}
         onChange={(e) => {
@@ -69,18 +56,25 @@ export default function OptionImageButton({
           if (f) void handleFile(f);
           e.target.value = "";
         }}
-        data-testid="option-image-input"
+        data-testid={`${testId}-input`}
       />
       {imageUrl ? (
-        <div className="group relative h-9 w-9 rounded border border-gray-200 overflow-hidden">
-          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+        <div
+          className="group relative flex h-14 w-14 items-center justify-center overflow-hidden rounded border border-gray-200 bg-white"
+          data-testid={`${testId}-thumb`}
+        >
+          <img
+            src={imageUrl}
+            alt=""
+            className="max-h-full max-w-full object-contain"
+          />
           {!disabled && (
             <button
               type="button"
               onClick={() => onChange(null)}
               className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/50 text-white"
               aria-label={t("questionBank.form.removeImage")}
-              data-testid="option-image-remove"
+              data-testid={`${testId}-remove`}
             >
               <X size={14} />
             </button>
@@ -94,7 +88,7 @@ export default function OptionImageButton({
           className="h-9 w-9 flex items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:text-blue-600 hover:border-blue-400 disabled:opacity-50"
           aria-label={label}
           title={label}
-          data-testid="option-image-button"
+          data-testid={`${testId}-button`}
         >
           {uploading ? (
             <Loader2 size={16} className="animate-spin" />

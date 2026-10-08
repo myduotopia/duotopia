@@ -2,6 +2,8 @@
 
 > 討論紀錄與定案。P1-P3（題庫 tab / 新增選擇題 / 查詢 filter）依此實作；
 > P4-P5（派發、考卷 PDF）另開 issue，但本設計已為混合題型試卷留位。
+>
+> **新增題型**（單題／題組骨架、三種題型對照表、加題型檢查清單）見 [`question-bank-question-types.md`](./question-bank-question-types.md)，或用 skill `/qb-add-type`。
 
 ## 定案摘要
 
@@ -26,7 +28,7 @@
 | 欄位 | 型別 | 說明 |
 |------|------|------|
 | id | serial PK | |
-| question_type | varchar(30) NOT NULL | `multiple_choice` / `reading` / `cloze` / `listening_image` / ... 本期只實作 `multiple_choice` |
+| question_type | varchar(30) NOT NULL | `multiple_choice` / `reading` / `cloze` / `listening_image` / ... 已實作：`multiple_choice`（單題）、`reading`、`cloze`（題組）；其餘見 [question-bank-question-types.md](./question-bank-question-types.md) |
 | stem | text NOT NULL DEFAULT '' | 題幹；純圖題可為空字串，但 CHECK `ck_questions_has_content` 要求 stem / image_url / stem_audio_url 至少一個（題組小題 `group_id` 有值者除外） |
 | normalized_stem | text NOT NULL DEFAULT '' | 正規化題幹（小寫、去標點、壓空白），重複偵測用；空字串不做去重 |
 | stem_audio_url | text | 題幹語音（語音生成工具只生成題幹，不生成選項） |
@@ -40,7 +42,7 @@
 | answer_match_mode | varchar(20), nullable | 填充題比對規則：`exact` / `case_insensitive` / `ignore_punctuation` |
 | group_id | int FK question_groups ON DELETE CASCADE, nullable | 屬於題組時填；一般單題為 NULL |
 | group_order | smallint, nullable | 題組內順序 |
-| blank_index | smallint, nullable | 克漏字：對應 `passage_text` 內 `{{n}}` 的 n |
+| blank_index | smallint, nullable | 克漏字：對應 `question_groups.layout` 內 `{{n}}` 的 n（1–999，#1085） |
 | segment_id | int FK question_group_segments, nullable | 預留：小題只針對對話中某一段（本期不做 UI） |
 | teacher_id | int FK teachers | 建立者（平台題庫 = contact@duotopia.co 對應的 teacher） |
 | organization_id | uuid FK organizations, nullable | 機構題庫 |
@@ -83,7 +85,7 @@
 | id | serial PK | |
 | stimulus_type | varchar(20) NOT NULL | `passage` / `audio` / `dialogue` / `image` / `mixed` |
 | title | varchar(200) | 題組標題（列表顯示用） |
-| passage_text | text | 文章；克漏字用 `{{1}}` `{{2}}` 標記空格 |
+| passage_text | text | 文章的純文字副本（搜尋／AI）；空格一律去編號成 `____`。帶編號的 `{{n}}` 只存在 `layout` 裡 |
 | audio_url | text | 整段合併音檔（播放快取；segments 變動時重生成） |
 | image_url | text | 以圖為準的題組（海報／漫畫／地圖）整組原圖 |
 | layout | jsonb | 排版樹（#1079 閱讀題組，migration 在 sub-issue #1081；見下方「layout 格式」）；NULL 時退回 `passage_text` + `image_url` |
@@ -105,6 +107,43 @@
 - 原卷「文繞圖」刻意改成「左文右圖 + 下一段全寬」
 - `passage_text` 為 layout 內所有文字區塊拼出的純文字副本，供搜尋、重複偵測、AI 考點分析；以圖為準的題組由 AI 擷取填入、老師可在「文字版」分頁修改
 
+#### 克漏字題組（#1085）
+
+> 與單題選擇題、閱讀題組的差異點對照見 [`question-bank-question-types.md`](./question-bank-question-types.md)「三、現有三種題型對照表」。
+
+克漏字 = 閱讀題組的文字區塊裡有 `{{n}}` 空格，每個空格對一個小題。`question_groups.question_type` 由小題的 `question_type = 'cloze'` 推得，`questions.blank_index` 存空格編號。
+
+- **空格編號是權威**：`{{n}}` 的 n 就是小題的 `blank_index`，也是畫面顯示的編號。拖拉重排區塊**不改編號**；手動插入時 n = **目前（文章與小題）最大編號 + 1**（新題組從 1 開始；文章已有 1–4 時接著插入拿到 5）。**AI 擷取一律把印刷空格重編成 1..k**（見下方「考卷擷取」），所以題庫不存原卷題號（如 40–43）；考卷上實際印出的題號由派發時的排版位置決定（P4／P5）。只有 max + 1 超過上限 999 時才退回「最小未使用編號」—— 以前是 clamp 回 999，但 999 已被用掉會變成兩張小題對同一個空格；1–999 全部用完時回 `null`，「插入空格」與「在文末插入空格」按鈕 disabled（`group.layout.blankLimit`）。老師按「依閱讀順序重新編號」才會把 layout 的 `{{舊}}` 與小題 `blank_index` 一起映射成 1..k（一次 replace 完成，交換編號不會互撞）。
+- **插入**：段落聚焦工具列的「插入空格」在游標處插入 `{{n}}`（非包裹式）。只改文字 —— 對應的小題卡由 `syncClozeQuestions` 從空格差集自動建立，狀態只有一份。「在文末插入空格」把 `{{n}}` 加到最後一個段落尾端（沒有段落就補一列）。
+- **刪除**：文字變更後比對前後的空格集合；消失的編號若對應小題還是「空白」（無題幹／圖、無填好的選項、無考點、無解析）就自動移除，有內容則保留並在卡上標「找不到空格 n」，提供「重新插入到文末」與「刪除小題」，驗證阻擋儲存。
+- **只有完整 `{{n}}` 配對才算空格**：老師打到一半的 `{{4` 不會觸發同步。
+- **小題卡**：隱藏題幹文字框與題幹插圖，標題改成徽章「空格 n」；選項、正確答案、考點、解析、進階不變。列表依 `blank_index` 升冪，不開放拖曳排序。
+- **驗證**（前端 `clozeBlankError`、後端 `services/question_bank_layout.validate_cloze_blanks`，同規則）：layout 至少要有一個空格；每個小題都要有 `blank_index`；編號不可重複（小題之間，以及**文章內同一個 `{{n}}` 不可出現兩次** —— 兩個空格只能對一張小題）；layout 的空格集合與小題 `blank_index` 集合必須相等。不合格建立／PATCH 皆回 422 並指出缺的或多的編號。PATCH 以**合併後**的狀態檢查，所以只改 layout 把空格刪掉也會被擋。
+- **reading 題組的文章不得含 `{{n}}`**（`assert_no_cloze_blanks`）→ 422「請改用克漏字題組」。
+- **小題不需要自身題幹／插圖／語音**：題組小題（reading 與 cloze）一律放行空題幹，題幹由文章承擔（DB `ck_questions_has_content` 本來就排除 `group_id` 非空的列）。單題端點 `POST /questions` 維持「題幹／圖片／語音至少一個」。
+- **克漏字小題不能從單題端點刪**：`DELETE /questions/{id}` 對 `blank_index` 非空回 422「克漏字小題請在題組內刪除」，否則題組會永遠驗證失敗（文章的空格沒有對應小題）。
+- **`passage_text`（搜尋用）維持 `____`**，不帶編號。
+- **AI 作答／考點分析**：小題題幹空白時送 `Fill in blank (n).`；passage 改用保留編號的版本（`layoutToNumberedText`：`{{3}}` → `(3)____`），prompt 另有一行說明 `(n)____` 代表第 n 個空格。
+
+#### 考卷擷取（magic paste `reading_group` / `multiple_choice`，#1084／#1086）
+
+上傳一份考卷圖片或 PDF → `backend/services/magic_paste_service.py` 一次 AI 呼叫回結構化結果，前端自己裁圖。
+
+- **素材**：`stimulus.kind = "text"`（散文、書信、對話）或 `"image"`（海報／漫畫／地圖／時刻表，版面即內容，整塊裁成一張圖）。`box_2d` 一律 `[ymin, xmin, ymax, xmax]`、0–1000 正規化。
+- **文章內插圖**：`stimulus.figures[] = { box_2d, after_paragraph, caption }`，只在 `kind = "text"` 回。`after_paragraph` 是 `paragraphs` 的 0-based 索引（-1 = 第一段之前），前端 `paragraphsToLayout` 把圖片區塊插在那一段之後、同一欄直排（`align: center`，不設寬度），老師可再拖成並排。
+- **題幹圖與選項圖**：`questions[i].stem_box_2d`、`questions[i].option_boxes`（與 `options` 等長，不是圖的位置為 `null`）。**圖片選項可以沒有字**：`options[i]` 為空字串、靠 `option_boxes[i]` 認；normalize 的「選項非空」規則改成「有字或有座標」。列表對這種選項顯示「(圖片)」。
+- **克漏字空格**：AI 必須把文章內的印刷空格（`__40__`、`___(40)___`、`(40)` …）**依閱讀順序重寫成 `{{1}}`…`{{k}}`**（`blanks_renumbered`），每個小題回對應的 `blank`。前端只在「每題都有 blank、不重複、且集合等於文章空格集合」時採用；否則整批改依閱讀順序補配（文章第 i 個空格 ↔ 第 i 題，`matchClozeBlanks`），多出來的小題 `blank_index` 留 `null` 交既有驗證提示。閱讀題組若意外拿到 `{{n}}`，前端轉回底線 `____`（避免 `assert_no_cloze_blanks` 422）。
+- **裁圖在前端**：所有 box 攤平成一批交給 `cropImageFileMany`（原圖只解碼一次），再循序上傳（`uploadCroppedBoxes`）。單張裁切或上傳失敗只讓那個位置變 `null`，不中斷其他張，老師可在卡片上換圖。
+- **PDF 不能裁圖**（前端沒有 pdf.js）：文字與空格照常擷取，圖片全部略過並 toast 提示手動補圖。
+
+#### 題組端點與列表（#1082）
+
+- `POST /api/question-bank/question-groups`：題組 + 小題 + 選項／考點／教材／來源同一個交易，任何失敗整組 rollback；小題的題型／公開／歸屬跟隨題組，年段未給時繼承
+- `GET /api/question-bank/question-groups/{id}`、`PATCH …/{id}`（整組替換：小題帶 id 更新、無 id 新增、缺席軟刪；未知 id → 422）、`DELETE …/{id}`（整組含小題軟刪除）；可見／可編輯規則與單題相同
+- `layout`／`glossary` 由 `backend/services/question_bank_layout.py` 深度驗證（區塊型別、必要欄位、數量與長度上限），不合格回 422 並指出路徑；五組樣本 JSON 為正向測試資料
+- `GET /api/question-bank/questions` 回傳單題與題組列混合：每列帶 `kind: "single" | "group"`，題組列含 `title`、`preview`（文章前 200 字）、`question_count`、小題來源與考點的聯集；小題不單獨出現。分頁在 SQL 層合併（單題／題組各投影 `(kind, id, updated_at)` UNION ALL 後排序 `updated_at desc nullslast, id desc`，offset/limit 只取本頁鍵，再各自 selectinload），`total` = 兩邊 count 相加
+- 列表對題組的操作：勾選、公開快速改（`PATCH` 只帶 `visibility`）、批次刪除、列尾刪除；批次編輯與派發只對單題
+
 ### `question_group_segments` — 題組素材分段（對話／獨白聽力）
 
 對話聽力有 2-3 位角色穿插說話，每一句是一段、各自有音檔與語音角色。獨白 = 只有一段的特例。文章閱讀的 `passage_text` 仍放題組層，不拆段。
@@ -121,6 +160,24 @@
 | pause_after_ms | int default 0 | 段後停頓 |
 
 `UNIQUE (group_id, order_index)`
+
+#### 圖片題組的對話文稿（#1083，2026-10-06 開始使用）
+
+以圖為準的題組（漫畫、對話情境圖）擷取時，AI 另回逐句對話 `stimulus.dialogue = [{speaker, text}]`，存成這張表的一句一段（`order_index` 依閱讀順序、`speaker_label`、`transcript`；`audio_url`／`tts_voice`／`pause_after_ms` 留給之後的題組對話音檔）。不需要 migration。
+
+- **API**：`POST`／`PATCH /question-groups` 收 `segments: [{speaker_label, transcript}]`（兩者都不可空白；說話者 ≤50 字、台詞 ≤2000 字、最多 100 句）。建立時依序寫入；PATCH 有帶就整組替換（`[]` = 清掉），不帶不動。`GET` 與建立／更新回應都帶 `segments`。
+- **`passage_text` 由 segments 推導**：格式為「非對話文字（標題、旁白、標示；可無）＋空行＋逐句 `Speaker: line`」。後端只保留送來文字版**開頭**的非對話文字（結尾必須正好是這份對話，否則旁白也不留），對話部分一律由 segments 重組；PATCH 只改排版時沿用原本的旁白。沒有 segments 的題組（海報、地圖、散文、舊資料）規則不變。
+- **說話者命名**（使用者定案；一律不加冠詞 the，比照會考／英檢聽力稿 `Man:`、`Woman:`）：
+  1. 素材印有人名且能明確對應到說話者 → 用人名（小題會用名字提問，例如 Hank、David、Mary）；對應不確定就退回下面的規則
+  2. 圖中有明確職業或角色 → 職稱：Teacher、Doctor、Clerk、Coach…
+  3. 依外觀用英文泛稱：Girl／Boy／Woman／Man；多人一起說用 Girls／Boys／Women／Men，混合群體 Boy and girl、Boys and girls
+  4. 同類出現兩人以上加代號：Girl A、Girl B；Boy A、Boy B；Woman A、Woman B；Man A、Man B
+
+  擷取整理（`_normalize_dialogue`）另把說話者開頭的 `the ` 去掉並首字大寫，再保險一次。
+- **決策：對話文稿不可修改**。編輯畫面「文字版」分頁有 segments 時以唯讀對話樣式顯示（說話者粗體＋冒號＋台詞、逐句交錯底色，上方說明「對話文稿由 AI 從圖片整理，會用來產生音檔，無法修改」），沒有 segments 時維持可編輯文字框。原因：
+  - 對話文稿是題組對話音檔的唯一來源（一題組一個音檔，Gemini 2.5 Flash TTS 多說話者）；老師改了文稿而音檔沒重生，文字與聲音就會不一致
+  - 圖片上的文字本來就改不了，學生看到的是圖；以 AI 整理的逐句對話為準
+  - 原本的問題是「圖片擷取出的文字一整坨疊在一起、難以對照」。不做「點圖分段修改」，改用清楚的說話者標示解決
 
 ### `exam_points` — 考點（平台維護、有階層、多語）
 

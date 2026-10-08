@@ -8,16 +8,32 @@ import { describe, it, expect } from "vitest";
 import {
   BASE_OPTION_SLOTS,
   batchDefaultsFromQuestion,
+  deriveStimulusType,
   draftFromQuestion,
+  draftsEligibleForAi,
   emptyBatchDefaults,
   emptyDraft,
+  emptyGroupDraft,
+  emptyGroupQuestion,
   findBatchDuplicateKeys,
+  groupDraftFromGroup,
+  groupPassageText,
+  mapUnitQuestions,
   normalizeStem,
   optionFilled,
+  toAiInputs,
+  toCreateGroupInput,
   toCreateInput,
+  toUpdateGroupInput,
+  unitPassageByKey,
+  unitQuestions,
   validateDraft,
+  validateGroupDraft,
+  type UnitDraft,
+  glossaryToText,
+  parseGlossaryText,
 } from "../questionDraft";
-import type { ExamPoint, Question } from "@/types/questionBank";
+import type { ExamPoint, Question, QuestionGroup } from "@/types/questionBank";
 
 const EP: ExamPoint = {
   id: 7,
@@ -157,6 +173,25 @@ describe("validateDraft", () => {
     d.options[1] = { text: "", is_correct: false, image_url: "http://x/b.png" };
     expect(validateDraft(d)).toBeNull();
   });
+  it("題幹空但有插圖（#1083）→ 通過；payload 帶 image_url；只有插圖的題不送 AI", () => {
+    const d = draftWith("", [
+      ["a", true],
+      ["b", false],
+    ]);
+    expect(validateDraft(d)).toBe("stemRequired");
+    d.image_url = "http://x/venn.png";
+    expect(validateDraft(d)).toBeNull();
+    expect(toCreateInput(d).image_url).toBe("http://x/venn.png");
+    expect(toCreateInput(d).stem).toBe("");
+    expect(draftsEligibleForAi([d])).toEqual([]);
+    expect(
+      draftFromQuestion({
+        ...baseQuestion,
+        stem: "",
+        image_url: "http://x/v.png",
+      }).image_url,
+    ).toBe("http://x/v.png");
+  });
 });
 
 describe("findBatchDuplicateKeys / normalizeStem", () => {
@@ -214,6 +249,7 @@ describe("toCreateInput", () => {
       { id: 12, label: "b" },
     ];
     const payload = toCreateInput(d, "org-1");
+    expect(payload.question_type).toBe("multiple_choice");
     expect(payload.stem).toBe("Pick one");
     expect(payload.options).toEqual([
       { text: "alpha", is_correct: true, image_url: null },
@@ -235,6 +271,104 @@ describe("toCreateInput", () => {
     ]);
     d.visibility = "private";
     expect(toCreateInput(d).program_links).toEqual([]);
+  });
+});
+
+describe("題組草稿與單元（#1082 骨架）", () => {
+  it("emptyDraft 預設 multiple_choice、無題組；emptyGroupQuestion 帶題組的題型／年段／公開／來源", () => {
+    const d = emptyDraft();
+    expect(d.question_type).toBe("multiple_choice");
+    expect(d.groupKey).toBeNull();
+    const g = emptyGroupDraft("reading");
+    g.grade = [7, 9];
+    g.visibility = "public";
+    g.sources = [{ id: 3, label: "s" }];
+    const q = emptyGroupQuestion(g);
+    expect(q.question_type).toBe("reading");
+    expect(q.groupKey).toBe(g.key);
+    expect(q.grade).toEqual([7, 9]);
+    expect(q.visibility).toBe("public");
+    expect(q.sources).toEqual([{ id: 3, label: "s" }]);
+    expect(q.exam_points).toEqual([]);
+  });
+  it("validateGroupDraft：沒主圖文 → groupNeedsContent；沒小題 → groupNeedsQuestions；小題錯誤往上冒；公開未選擋", () => {
+    const g = emptyGroupDraft("reading");
+    g.visibility = "private";
+    expect(validateGroupDraft(g)).toBe("groupNeedsContent");
+    g.passage_text = "text";
+    expect(validateGroupDraft(g)).toBe("groupNeedsQuestions");
+    // 排版有沒填完的區塊 → layoutIncomplete
+    g.layout = {
+      version: 1,
+      rows: [
+        { columns: [{ span: 1, blocks: [{ type: "paragraph", text: "  " }] }] },
+      ],
+    };
+    expect(validateGroupDraft(g)).toBe("layoutIncomplete");
+    g.layout = null;
+    const q = draftWith("Q", [
+      ["a", true],
+      ["b", false],
+    ]);
+    g.questions = [q];
+    expect(validateGroupDraft(g)).toBeNull();
+    g.questions = [draftWith("", [["a", true]])];
+    expect(validateGroupDraft(g)).toBe("stemRequired");
+    g.questions = [q];
+    g.visibility = null;
+    expect(validateGroupDraft(g)).toBe("visibilityRequired");
+  });
+  it("toCreateGroupInput：小題不帶題型／歸屬／公開，依序帶 group_order；空 glossary → null", () => {
+    const g = emptyGroupDraft("reading");
+    g.title = " Vivaldi ";
+    g.passage_text = "text";
+    g.visibility = "organization_only";
+    g.grade = [7, 9];
+    g.questions = [
+      draftWith("Q1", [
+        ["a", true],
+        ["b", false],
+      ]),
+      draftWith("Q2", [
+        ["c", false],
+        ["d", true],
+      ]),
+    ];
+    const payload = toCreateGroupInput(g, "org-9");
+    expect(payload.question_type).toBe("reading");
+    expect(payload.title).toBe("Vivaldi");
+    expect(payload.visibility).toBe("organization_only");
+    expect(payload.organization_id).toBe("org-9");
+    expect(payload.glossary).toBeNull();
+    expect(payload.grade_min).toBe(7);
+    expect(payload.questions.map((q) => q.group_order)).toEqual([0, 1]);
+    const first = payload.questions[0] as Record<string, unknown>;
+    expect(first.question_type).toBeUndefined();
+    expect(first.visibility).toBeUndefined();
+    expect(first.organization_id).toBeUndefined();
+    expect(first.stem).toBe("Q1");
+  });
+  it("unitQuestions / mapUnitQuestions 含題組小題", () => {
+    const g = emptyGroupDraft("reading");
+    g.questions = [emptyGroupQuestion(g), emptyGroupQuestion(g)];
+    const s = emptyDraft();
+    const units: UnitDraft[] = [
+      { kind: "single", draft: s },
+      { kind: "group", draft: g },
+    ];
+    expect(unitQuestions(units).map((q) => q.key)).toEqual([
+      s.key,
+      g.questions[0].key,
+      g.questions[1].key,
+    ]);
+    const next = mapUnitQuestions(units, (d) => ({ ...d, stem: "X" }));
+    expect(next[0].kind === "single" && next[0].draft.stem).toBe("X");
+    expect(
+      next[1].kind === "group" &&
+        next[1].draft.questions.every((q) => q.stem === "X"),
+    ).toBe(true);
+    // 原陣列不變
+    expect(s.stem).toBe("");
   });
 });
 
@@ -416,5 +550,302 @@ describe("AI 套用（#1065）：只填空的", () => {
     expect(b.extraOptionsShown).toBe(true);
     expect(b.allow_multiple).toBe(true);
     expect(b.options[4].is_correct).toBe(true);
+    // 沒傳圖：題幹與選項都沒有 image_url
+    expect(a.image_url).toBeNull();
+    expect(a.options.every((o) => o.image_url === null)).toBe(true);
+  });
+
+  it("draftsFromExtracted：帶題幹圖與選項圖（圖片選項 text 為空字串）", async () => {
+    const { draftsFromExtracted } = await import("../questionDraft");
+    const [d] = draftsFromExtracted(
+      [{ stem: "", options: ["", ""], correct_indexes: [0], explanation: "" }],
+      { exam_points: [], grade: [null, null], program_link: null },
+      {
+        stemUrls: ["https://cdn/stem.png"],
+        optionUrls: [["https://cdn/a.png", "https://cdn/b.png"]],
+      },
+    );
+    expect(d.image_url).toBe("https://cdn/stem.png");
+    expect(d.options.map((o) => o.image_url)).toEqual([
+      "https://cdn/a.png",
+      "https://cdn/b.png",
+      // 多出來的空槽不帶圖
+      null,
+      null,
+    ]);
+  });
+
+  it("toCreateGroupInput：有 layout 時 passage_text 由 layout 拼出（去標記）", () => {
+    const g = emptyGroupDraft("reading");
+    g.visibility = "private";
+    g.passage_text = "old copy";
+    g.layout = {
+      version: 1,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [
+                { type: "heading", level: 2, text: "Vivaldi" },
+                { type: "paragraph", text: "He wrote **500** pieces." },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    g.questions = [
+      draftWith("Q1", [
+        ["a", true],
+        ["b", false],
+      ]),
+    ];
+    expect(toCreateGroupInput(g).passage_text).toBe(
+      "Vivaldi\n\nHe wrote 500 pieces.",
+    );
+  });
+  it("文字版先後（#1083）：沒改過 → 推導；改過 → 老師的；純圖沒推導 → 老師手打的", () => {
+    const layout = {
+      version: 1 as const,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [{ type: "paragraph" as const, text: "Intro" }],
+            },
+          ],
+        },
+      ],
+    };
+    const g = emptyGroupDraft("reading");
+    g.visibility = "private";
+    g.layout = layout;
+    g.passage_text = "stale copy";
+    expect(groupPassageText(g)).toBe("Intro");
+    g.passage_text_edited = true;
+    g.passage_text = "Intro plus the poster text";
+    expect(groupPassageText(g)).toBe("Intro plus the poster text");
+    expect(toUpdateGroupInput(g).passage_text).toBe(
+      "Intro plus the poster text",
+    );
+    // 純圖排版：推導為空，老師手打的文字版就算沒標 edited 也要送
+    const img = emptyGroupDraft("reading");
+    img.layout = {
+      version: 1,
+      rows: [
+        {
+          columns: [
+            {
+              span: 1,
+              blocks: [{ type: "image", url: "http://x/poster.png" }],
+            },
+          ],
+        },
+      ],
+    };
+    img.passage_text = "Text on the poster";
+    expect(groupPassageText(img)).toBe("Text on the poster");
+    img.passage_text = "   ";
+    expect(groupPassageText(img)).toBeNull();
+  });
+  it("groupDraftFromGroup：存的文字版與推導不同 → passage_text_edited；相同或空 → 未改", () => {
+    const base = {
+      id: 1,
+      question_type: "reading",
+      stimulus_type: "mixed",
+      title: null,
+      image_url: null,
+      audio_url: null,
+      glossary: null,
+      grade_min: null,
+      grade_max: null,
+      visibility: "private",
+      is_platform: false,
+      teacher_id: 1,
+      organization_id: null,
+      school_id: null,
+      is_owner: true,
+      can_edit: true,
+      questions: [],
+      created_at: null,
+      updated_at: null,
+      layout: {
+        version: 1,
+        rows: [
+          {
+            columns: [
+              { span: 1, blocks: [{ type: "paragraph", text: "Intro" }] },
+            ],
+          },
+        ],
+      },
+    } as unknown as QuestionGroup;
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: "Intro" })
+        .passage_text_edited,
+    ).toBe(false);
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: null }).passage_text_edited,
+    ).toBe(false);
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: "Intro\n\nPoster text" })
+        .passage_text_edited,
+    ).toBe(true);
+
+    // 對話文稿（#1083）：segments 往返；文字版由 segments 組成、不標記改過
+    const withDialogue = groupDraftFromGroup({
+      ...base,
+      passage_text: "Hank's Day\n\nMary: Hi.\nHank: Hello.",
+      segments: [
+        { order_index: 0, speaker_label: "Mary", transcript: "Hi." },
+        { order_index: 1, speaker_label: "Hank", transcript: "Hello." },
+      ],
+    });
+    expect(withDialogue.segments).toEqual([
+      { speaker_label: "Mary", transcript: "Hi." },
+      { speaker_label: "Hank", transcript: "Hello." },
+    ]);
+    expect(withDialogue.passage_text_edited).toBe(false);
+    expect(groupPassageText(withDialogue)).toBe(
+      "Hank's Day\n\nMary: Hi.\nHank: Hello.",
+    );
+    const patch = toUpdateGroupInput(withDialogue);
+    expect(patch.segments).toEqual(withDialogue.segments);
+    expect(patch.passage_text).toBe("Hank's Day\n\nMary: Hi.\nHank: Hello.");
+    // 文字版被改壞（結尾不是這份對話）→ 只留對話，不留旁白
+    expect(
+      groupPassageText({ ...withDialogue, passage_text: "tampered" }),
+    ).toBe("Mary: Hi.\nHank: Hello.");
+    // 舊資料沒有 segments 欄位 → 空陣列，PATCH 送 []（不影響）
+    expect(
+      groupDraftFromGroup({ ...base, passage_text: null }).segments,
+    ).toEqual([]);
+  });
+  it("toUpdateGroupInput：帶 existingId 的小題送 id，新小題不送；不含題型／歸屬", () => {
+    const g = emptyGroupDraft("reading");
+    g.visibility = "public";
+    g.passage_text = "text";
+    const kept = draftWith("Q1", [
+      ["a", true],
+      ["b", false],
+    ]);
+    kept.existingId = 42;
+    const fresh = draftWith("Q2", [
+      ["c", true],
+      ["d", false],
+    ]);
+    g.questions = [kept, fresh];
+    const payload = toUpdateGroupInput(g);
+    expect(payload).not.toHaveProperty("question_type");
+    expect(payload).not.toHaveProperty("organization_id");
+    expect(payload.visibility).toBe("public");
+    expect(payload.questions?.map((q) => [q.id, q.group_order])).toEqual([
+      [42, 0],
+      [undefined, 1],
+    ]);
+  });
+  it("passage_view（主圖文分頁）是純 UI 狀態：預設 layout，建立／更新都不送", () => {
+    const g = emptyGroupDraft("reading");
+    expect(g.passage_view).toBe("layout");
+    g.passage_view = "text";
+    expect(toCreateGroupInput(g)).not.toHaveProperty("passage_view");
+    expect(toUpdateGroupInput(g)).not.toHaveProperty("passage_view");
+  });
+  it("AI 輸入：題組小題附主圖文純文字，單題沒有", () => {
+    const g = emptyGroupDraft("reading");
+    g.passage_text = "The passage.";
+    const sub = draftWith("", [
+      ["a", true],
+      ["b", false],
+    ]);
+    g.questions = [sub];
+    const solo = draftWith("Solo", [
+      ["a", true],
+      ["b", false],
+    ]);
+    const units: UnitDraft[] = [
+      { kind: "group", draft: g },
+      { kind: "single", draft: solo },
+    ];
+    const map = unitPassageByKey(units);
+    expect(map.get(sub.key)).toBe("The passage.");
+    expect(map.has(solo.key)).toBe(false);
+    const inputs = toAiInputs(unitQuestions(units), map);
+    expect(inputs[0].passage).toBe("The passage.");
+    expect(inputs[1]).not.toHaveProperty("passage");
+  });
+});
+
+describe("deriveStimulusType（#1082 修訂：素材類型由內容判定）", () => {
+  const rows = (blocks: { type: "paragraph" | "image" }[]) => ({
+    version: 1 as const,
+    rows: blocks.map((b) => ({
+      columns: [
+        {
+          span: 1,
+          blocks: [
+            b.type === "image"
+              ? { type: "image" as const, url: "x.png" }
+              : { type: "paragraph" as const, text: "t" },
+          ],
+        },
+      ],
+    })),
+  });
+
+  it("只有圖片 → image；只有文字 → passage；圖文都有 → mixed", () => {
+    expect(deriveStimulusType(rows([{ type: "image" }]), null)).toBe("image");
+    expect(deriveStimulusType(rows([{ type: "paragraph" }]), null)).toBe(
+      "passage",
+    );
+    expect(
+      deriveStimulusType(
+        rows([{ type: "paragraph" }, { type: "image" }]),
+        null,
+      ),
+    ).toBe("mixed");
+  });
+
+  it("沒有排版：有整組圖片 → image，否則 passage", () => {
+    expect(deriveStimulusType(null, "poster.png")).toBe("image");
+    expect(deriveStimulusType(null, null)).toBe("passage");
+    expect(deriveStimulusType({ version: 1, rows: [] }, null)).toBe("passage");
+  });
+
+  it("送後端的 payload 用判定值，不用草稿裡的 stimulus_type", () => {
+    const g = emptyGroupDraft("reading");
+    g.stimulus_type = "passage";
+    g.layout = rows([{ type: "image" }]);
+    expect(toCreateGroupInput(g).stimulus_type).toBe("image");
+    expect(toUpdateGroupInput(g).stimulus_type).toBe("image");
+  });
+});
+
+describe("單字註解文字框 parse／format", () => {
+  it("parseGlossaryText：半形／全形空格、多段中文、無中文、空行", () => {
+    expect(
+      parseGlossaryText(
+        "timeline 時間軸\ncompose\u3000作曲 譜曲\n\nweak\n  spaced   虛弱的  ",
+      ),
+    ).toEqual([
+      { word: "timeline", zh: "時間軸" },
+      { word: "compose", zh: "作曲 譜曲" },
+      { word: "", zh: "" },
+      { word: "weak", zh: "" },
+      { word: "spaced", zh: "虛弱的" },
+    ]);
+  });
+
+  it("glossaryToText 與 parseGlossaryText 往返；沒中文的只剩單字", () => {
+    const entries = [
+      { word: "timeline", zh: "時間軸" },
+      { word: "compose", zh: "作曲" },
+    ];
+    const text = glossaryToText(entries);
+    expect(text).toBe("timeline 時間軸\ncompose 作曲");
+    expect(parseGlossaryText(text)).toEqual(entries);
+    expect(glossaryToText([{ word: "weak", zh: "" }])).toBe("weak");
   });
 });

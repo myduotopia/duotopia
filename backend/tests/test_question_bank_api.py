@@ -11,6 +11,7 @@
 - 表單驗證：選項 < 2、沒勾正確答案、單選勾兩個 → 422
 - PATCH / DELETE（軟刪除）與權限
 - filter：考點 OR、年級交集、關鍵字
+- 題組（#1082）：整組一個交易建立、失敗 rollback、可見範圍與機構成員、列表單題＋題組列混合
 """
 
 import uuid
@@ -23,6 +24,7 @@ from models import (
     ExamPointAlias,
     Organization,
     Question,
+    QuestionGroup,
     QuestionSource,
     Teacher,
     TeacherOrganization,
@@ -227,7 +229,8 @@ def test_create_rejects_bad_grade_range(test_client, teacher_a):
 def test_create_rejects_unopened_type(test_client, teacher_a):
     resp = test_client.post(
         "/api/question-bank/questions",
-        json=_mc_payload(question_type="cloze"),
+        # cloze 已開放（但只能經題組端點建）→ 改用仍未開放的題型
+        json=_mc_payload(question_type="listening"),
         headers=_headers(teacher_a),
     )
     assert resp.status_code == 422  # Literal 擋在 schema 層
@@ -892,7 +895,44 @@ def test_program_links_replace_dedups(test_client, shared_test_session, teacher_
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["program_links"] == [
-        {"program_id": program.id, "lesson_id": None}
+        {
+            "program_id": program.id,
+            "lesson_id": None,
+            "program_name": program.name,
+            "lesson_name": None,
+        }
+    ]
+
+
+def test_program_links_carry_names(test_client, shared_test_session, teacher_a):
+    """單題列表的 program_links 帶教材包／單元名稱（列表「教材」欄用）。"""
+    from tests.factories import TestDataFactory
+
+    program = TestDataFactory.create_program(
+        shared_test_session, teacher_a, name="國中會考總複習"
+    )
+    lesson = TestDataFactory.create_lesson(
+        shared_test_session, program, name="Unit 3 時態"
+    )
+    q = _create(test_client, teacher_a, stem="Named links")
+    resp = test_client.put(
+        f"/api/question-bank/questions/{q['id']}/program-links",
+        json={"program_links": [{"program_id": program.id, "lesson_id": lesson.id}]},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    (row,) = [i for i in listing["items"] if i["id"] == q["id"]]
+    assert row["program_links"] == [
+        {
+            "program_id": program.id,
+            "lesson_id": lesson.id,
+            "program_name": "國中會考總複習",
+            "lesson_name": "Unit 3 時態",
+        }
     ]
 
 
@@ -961,3 +1001,821 @@ def test_list_filters(test_client, teacher_a, exam_points):
         headers=_headers(teacher_a),
     ).json()
     assert page["total"] == 4 and len(page["items"]) == 2
+
+
+# ---------------------------------------------------------------- 題組（#1082 骨架）
+
+
+def _group_payload(**overrides):
+    payload = {
+        "question_type": "reading",
+        "stimulus_type": "passage",
+        "title": "Vivaldi",
+        "passage_text": "Antonio Vivaldi was a violin player with red hair.",
+        "layout": {
+            "version": 1,
+            "rows": [
+                {
+                    "columns": [
+                        {
+                            "span": 1,
+                            "blocks": [
+                                {
+                                    "type": "paragraph",
+                                    "text": "Antonio Vivaldi was a violin player.",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ],
+        },
+        "glossary": [{"word": "timeline", "zh": "時間軸"}],
+        "grade_min": 7,
+        "grade_max": 9,
+        "visibility": "private",
+        "questions": [
+            {
+                "stem": "Which is the best title for the reading?",
+                "options": [
+                    {"text": "Vivaldi Life Story", "is_correct": True},
+                    {"text": "Vivaldi and His Students"},
+                ],
+            },
+            {
+                "stem": "According to the reading, which is WRONG?",
+                "options": [
+                    {"text": "He had red hair."},
+                    {"text": "He never played the violin.", "is_correct": True},
+                ],
+            },
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _create_group(client, teacher, **kw):
+    resp = client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(**kw),
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_create_question_group_one_transaction(test_client, teacher_a, exam_points):
+    pp = exam_points["present_perfect"].id
+    payload = _group_payload()
+    payload["questions"][0]["exam_point_ids"] = [pp]
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=payload,
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 201, resp.text
+    g = resp.json()
+    assert g["question_type"] == "reading"
+    assert g["stimulus_type"] == "passage"
+    assert g["layout"]["rows"][0]["columns"][0]["blocks"][0]["type"] == "paragraph"
+    assert g["glossary"] == [{"word": "timeline", "zh": "時間軸"}]
+    assert g["is_owner"] is True and g["can_edit"] is True
+    assert [q["group_order"] for q in g["questions"]] == [0, 1]
+    # 小題跟隨題組：題型、公開、年段、group_id
+    for q in g["questions"]:
+        assert q["question_type"] == "reading"
+        assert q["visibility"] == "private"
+        assert q["group_id"] == g["id"]
+        assert (q["grade_min"], q["grade_max"]) == (7, 9)
+    assert [ep["id"] for ep in g["questions"][0]["exam_points"]] == [pp]
+
+    # GET 回同一份
+    got = test_client.get(
+        f"/api/question-bank/question-groups/{g['id']}", headers=_headers(teacher_a)
+    )
+    assert got.status_code == 200
+    assert [q["id"] for q in got.json()["questions"]] == [
+        q["id"] for q in g["questions"]
+    ]
+
+    # 小題不出現在單題列表；題組以 kind=group 一列出現
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    assert listing["total"] == 1
+    (row,) = listing["items"]
+    assert row["kind"] == "group"
+    assert row["id"] == g["id"]
+    assert row["question_count"] == 2
+    assert row["question_type"] == "reading"
+    assert row["title"] == "Vivaldi"
+
+
+def test_group_row_program_links_union(test_client, shared_test_session, teacher_a):
+    """題組列的 program_links＝小題關聯的聯集（去重、帶名稱）。"""
+    from tests.factories import TestDataFactory
+
+    program = TestDataFactory.create_program(
+        shared_test_session, teacher_a, name="閱讀教材"
+    )
+    lesson = TestDataFactory.create_lesson(
+        shared_test_session, program, name="Unit 1 音樂家"
+    )
+    g = _create_group(test_client, teacher_a)
+    q1, q2 = g["questions"]
+    for qid, links in (
+        (q1["id"], [{"program_id": program.id, "lesson_id": lesson.id}]),
+        (
+            q2["id"],
+            [
+                {"program_id": program.id, "lesson_id": lesson.id},  # 與 q1 重複
+                {"program_id": program.id},  # 只掛教材包
+            ],
+        ),
+    ):
+        resp = test_client.put(
+            f"/api/question-bank/questions/{qid}/program-links",
+            json={"program_links": links},
+            headers=_headers(teacher_a),
+        )
+        assert resp.status_code == 200, resp.text
+
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    (row,) = [
+        i for i in listing["items"] if i["kind"] == "group" and i["id"] == g["id"]
+    ]
+    assert row["program_links"] == [
+        {
+            "program_id": program.id,
+            "lesson_id": lesson.id,
+            "program_name": "閱讀教材",
+            "lesson_name": "Unit 1 音樂家",
+        },
+        {
+            "program_id": program.id,
+            "lesson_id": None,
+            "program_name": "閱讀教材",
+            "lesson_name": None,
+        },
+    ]
+
+
+def _count_queries(engine):
+    """SQLAlchemy 查詢計數 context manager（專案沒有 assertNumQueries 等工具）。"""
+    import contextlib
+
+    from sqlalchemy import event
+
+    @contextlib.contextmanager
+    def _ctx():
+        counter = {"n": 0}
+
+        def _on_exec(conn, cursor, statement, parameters, context, executemany):
+            counter["n"] += 1
+
+        event.listen(engine, "before_cursor_execute", _on_exec)
+        try:
+            yield counter
+        finally:
+            event.remove(engine, "before_cursor_execute", _on_exec)
+
+    return _ctx()
+
+
+def _group_with_program_links(client, session, teacher, n_questions: int):
+    """建一個 n 小題的題組，每個小題各掛一組教材關聯，回傳題組 id。"""
+    from tests.factories import TestDataFactory
+
+    program = TestDataFactory.create_program(session, teacher, name=f"教材{n_questions}")
+    questions = [
+        {
+            "stem": f"Question {i}?",
+            "options": [
+                {"text": "right", "is_correct": True},
+                {"text": "wrong"},
+            ],
+        }
+        for i in range(n_questions)
+    ]
+    g = _create_group(client, teacher, questions=questions)
+    for q in g["questions"]:
+        lesson = TestDataFactory.create_lesson(session, program, name=f"Unit {q['id']}")
+        resp = client.put(
+            f"/api/question-bank/questions/{q['id']}/program-links",
+            json={
+                "program_links": [
+                    {"program_id": program.id, "lesson_id": lesson.id},
+                    {"program_id": program.id},
+                ]
+            },
+            headers=_headers(teacher),
+        )
+        assert resp.status_code == 200, resp.text
+    return g["id"]
+
+
+def test_group_detail_query_count_is_constant(
+    test_client, shared_test_session, test_engine, teacher_a
+):
+    """題組詳情的查詢數不隨小題數增加（program/lesson 名稱已 selectinload 預載）。"""
+    small_id = _group_with_program_links(test_client, shared_test_session, teacher_a, 2)
+    large_id = _group_with_program_links(test_client, shared_test_session, teacher_a, 8)
+
+    counts = {}
+    for label, gid in (("small", small_id), ("large", large_id)):
+        with _count_queries(test_engine) as counter:
+            resp = test_client.get(
+                f"/api/question-bank/question-groups/{gid}",
+                headers=_headers(teacher_a),
+            )
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()["questions"]) == (2 if label == "small" else 8)
+        counts[label] = counter["n"]
+
+    assert counts["small"] == counts["large"], counts
+
+
+def test_create_question_group_validation(test_client, teacher_a):
+    # 沒有小題
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(questions=[]),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # 沒有文章／圖片／排版
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(passage_text=None, layout=None, image_url=None),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # layout.rows 不是陣列
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(layout={"version": 1, "rows": "x"}),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # 小題沒勾正確答案
+    bad = _group_payload()
+    bad["questions"][1]["options"] = [{"text": "a"}, {"text": "b"}]
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    # 單題端點不收 reading
+    resp = test_client.post(
+        "/api/question-bank/questions",
+        json=_mc_payload(question_type="reading"),
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code in (400, 422)
+
+
+def test_create_question_group_rollback_on_failure(
+    test_client, shared_test_session, teacher_a, monkeypatch
+):
+    """第二個小題處理時炸掉 → 整組（group + 第一個小題）都不能留下。"""
+    import routers.question_bank as router_module
+
+    calls = {"n": 0}
+    original = router_module.qbs.replace_sources
+
+    def boom(db, question, teacher, source_ids):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("boom")
+        return original(db, question, teacher, source_ids)
+
+    monkeypatch.setattr(router_module.qbs, "replace_sources", boom)
+    with pytest.raises(RuntimeError):
+        test_client.post(
+            "/api/question-bank/question-groups",
+            json=_group_payload(),
+            headers=_headers(teacher_a),
+        )
+    s = shared_test_session
+    assert s.query(QuestionGroup).count() == 0
+    assert s.query(Question).count() == 0
+
+
+def test_question_group_visibility_and_membership(
+    test_client, shared_test_session, teacher_a, teacher_b
+):
+    s = shared_test_session
+    org = Organization(id=uuid.uuid4(), name="QB Org G")
+    s.add(org)
+    s.flush()
+    s.add(
+        TeacherOrganization(
+            teacher_id=teacher_a.id, organization_id=org.id, role="org_owner"
+        )
+    )
+    s.commit()
+
+    private_g = _create_group(test_client, teacher_a, title="A private")
+    public_g = _create_group(
+        test_client, teacher_a, title="A public", visibility="public"
+    )
+    org_g = _create_group(
+        test_client, teacher_a, title="Org group", organization_id=str(org.id)
+    )
+    assert org_g["organization_id"] == str(org.id)
+
+    # B 看得到 public，看不到 private／機構
+    assert (
+        test_client.get(
+            f"/api/question-bank/question-groups/{public_g['id']}",
+            headers=_headers(teacher_b),
+        ).status_code
+        == 200
+    )
+    for gid in (private_g["id"], org_g["id"]):
+        assert (
+            test_client.get(
+                f"/api/question-bank/question-groups/{gid}",
+                headers=_headers(teacher_b),
+            ).status_code
+            == 404
+        )
+    listing_b = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_b)
+    ).json()
+    assert {i["id"] for i in listing_b["items"]} == {public_g["id"]}
+    assert listing_b["items"][0]["is_owner"] is False
+    assert listing_b["items"][0]["can_edit"] is False
+
+    # B 不是機構成員：不能建到機構題庫
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=_group_payload(organization_id=str(org.id)),
+        headers=_headers(teacher_b),
+    )
+    assert resp.status_code == 403
+
+    # organization scope 只列機構的（only_own）
+    org_list = test_client.get(
+        "/api/question-bank/questions",
+        params={
+            "scope": "organization",
+            "organization_id": str(org.id),
+            "only_own": True,
+        },
+        headers=_headers(teacher_a),
+    ).json()
+    assert {i["id"] for i in org_list["items"]} == {org_g["id"]}
+
+
+def test_list_mixed_singles_and_groups(test_client, teacher_a, exam_points):
+    pp = exam_points["present_perfect"].id
+    single = _create(
+        test_client, teacher_a, stem="Single question here", grade_min=3, grade_max=5
+    )
+    g = _group_payload(title="Group with point", grade_min=10, grade_max=12)
+    g["questions"][0]["exam_point_ids"] = [pp]
+    g["questions"][0]["stem"] = "Group stem about Vivaldi music"
+    group = _create_group(test_client, teacher_a, **g)
+
+    def rows(**params):
+        res = test_client.get(
+            "/api/question-bank/questions", params=params, headers=_headers(teacher_a)
+        ).json()
+        return res["total"], [(i.get("kind", "single"), i["id"]) for i in res["items"]]
+
+    total, items = rows()
+    assert total == 2
+    assert set(items) == {("single", single["id"]), ("group", group["id"])}
+    # 題型 filter
+    assert rows(question_type="reading")[1] == [("group", group["id"])]
+    assert rows(question_type="multiple_choice")[1] == [("single", single["id"])]
+    # 考點 filter 看小題
+    assert rows(exam_point_ids=[pp])[1] == [("group", group["id"])]
+    # 年級看題組
+    assert rows(grade_min=11)[1] == [("group", group["id"])]
+    assert rows(grade_max=5)[1] == [("single", single["id"])]
+    # 關鍵字：題組標題／文章／小題題幹都算
+    assert rows(q="Group with point")[1] == [("group", group["id"])]
+    assert rows(q="vivaldi music")[1] == [("group", group["id"])]
+    assert rows(q="single question")[1] == [("single", single["id"])]
+    # 分頁：page_size=1 兩頁各一列、不重複
+    t1, p1 = rows(page=1, page_size=1)
+    t2, p2 = rows(page=2, page_size=1)
+    assert t1 == t2 == 2
+    assert len(p1) == len(p2) == 1 and p1 != p2
+
+
+def test_list_merged_pagination_deep_page(test_client, teacher_a):
+    """SQL 層合併分頁：5 單題 + 2 題組，page_size=3 → 三頁 3/3/1，不重複不遺漏，順序穩定。"""
+    for i in range(5):
+        _create(test_client, teacher_a, stem=f"Deep page single {i}")
+    for i in range(2):
+        _create_group(test_client, teacher_a, **_group_payload(title=f"Deep group {i}"))
+
+    def rows(page):
+        res = test_client.get(
+            "/api/question-bank/questions",
+            params={"page": page, "page_size": 3},
+            headers=_headers(teacher_a),
+        ).json()
+        assert res["total"] == 7
+        return [(i.get("kind", "single"), i["id"]) for i in res["items"]]
+
+    p1, p2, p3, p4 = rows(1), rows(2), rows(3), rows(4)
+    assert len(p1) == 3 and len(p2) == 3 and len(p3) == 1 and p4 == []
+    all_rows = p1 + p2 + p3
+    assert len(set(all_rows)) == 7
+    assert {k for k, _ in all_rows} == {"single", "group"}
+    # 同一頁重打結果一致（排序穩定）
+    assert rows(3) == p3
+
+
+# ---------------------------------------------------------------- 題組 PATCH / DELETE（#1082）
+
+
+def test_create_group_derives_passage_text_and_validates_layout(test_client, teacher_a):
+    # 沒給 passage_text → 由 layout 文字區塊拼出純文字副本
+    g = _create_group(test_client, teacher_a, passage_text=None)
+    assert g["passage_text"] == "Antonio Vivaldi was a violin player."
+    # layout 深度驗證：壞的區塊要回 422 並指出路徑
+    bad = _group_payload(
+        layout={
+            "version": 1,
+            "rows": [{"columns": [{"span": 1, "blocks": [{"type": "video"}]}]}],
+        }
+    )
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    assert "layout.rows[0].columns[0].blocks[0].type" in resp.text
+    bad = _group_payload(glossary=[{"word": "x"}])
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=bad, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    assert "glossary[0].zh" in resp.text
+
+
+def test_patch_group_upserts_questions_in_one_transaction(
+    test_client, shared_test_session, teacher_a, teacher_b, exam_points
+):
+    g = _create_group(test_client, teacher_a)
+    q1, q2 = g["questions"]
+    pp = exam_points["present_perfect"].id
+
+    # 更新 q2、刪 q1、新增 q3；改標題與 layout（passage_text 重拼）；公開改 public
+    payload = {
+        "title": "Vivaldi v2",
+        "visibility": "public",
+        "layout": {
+            "version": 1,
+            "rows": [
+                {
+                    "columns": [
+                        {
+                            "span": 1,
+                            "blocks": [
+                                {"type": "heading", "level": 2, "text": "Vivaldi"},
+                                {
+                                    "type": "paragraph",
+                                    "text": "He wrote **500** pieces.",
+                                },
+                            ],
+                        }
+                    ]
+                }
+            ],
+        },
+        "questions": [
+            {
+                "id": q2["id"],
+                "stem": "Updated second question?",
+                "options": [
+                    {"text": "yes", "is_correct": True},
+                    {"text": "no"},
+                ],
+                "exam_point_ids": [pp],
+            },
+            {
+                "stem": "Brand new third question?",
+                "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+            },
+        ],
+    }
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json=payload,
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()
+    assert out["title"] == "Vivaldi v2"
+    assert out["passage_text"] == "Vivaldi\n\nHe wrote 500 pieces."
+    assert [q["stem"] for q in out["questions"]] == [
+        "Updated second question?",
+        "Brand new third question?",
+    ]
+    assert [q["group_order"] for q in out["questions"]] == [0, 1]
+    assert out["questions"][0]["id"] == q2["id"]
+    assert [ep["id"] for ep in out["questions"][0]["exam_points"]] == [pp]
+    # 小題公開跟隨題組
+    assert all(q["visibility"] == "public" for q in out["questions"])
+    # q1 軟刪除
+    s = shared_test_session
+    s.expire_all()
+    old = s.query(Question).filter(Question.id == q1["id"]).one()
+    assert old.is_active is False and old.deleted_at is not None
+    # 老師 B 現在看得到（public）但不能改
+    assert (
+        test_client.patch(
+            f"/api/question-bank/question-groups/{g['id']}",
+            json={"title": "hack"},
+            headers=_headers(teacher_b),
+        ).status_code
+        == 403
+    )
+    # 別組的小題 id → 422
+    other = _create_group(test_client, teacher_a, title="Other")
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={
+            "questions": [
+                {
+                    "id": other["questions"][0]["id"],
+                    "stem": "x",
+                    "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+                }
+            ]
+        },
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    # 壞 layout → 422 且不留下半套改動
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"title": "should not persist", "layout": {"version": 1, "rows": "x"}},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    assert (
+        test_client.get(
+            f"/api/question-bank/question-groups/{g['id']}",
+            headers=_headers(teacher_a),
+        ).json()["title"]
+        == "Vivaldi v2"
+    )
+
+
+def test_delete_group_soft_deletes_questions(
+    test_client, shared_test_session, teacher_a, teacher_b
+):
+    g = _create_group(test_client, teacher_a)
+    assert (
+        test_client.delete(
+            f"/api/question-bank/question-groups/{g['id']}",
+            headers=_headers(teacher_b),
+        ).status_code
+        == 404
+    )
+    resp = test_client.delete(
+        f"/api/question-bank/question-groups/{g['id']}", headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 204
+    assert (
+        test_client.get(
+            f"/api/question-bank/question-groups/{g['id']}",
+            headers=_headers(teacher_a),
+        ).status_code
+        == 404
+    )
+    listing = test_client.get(
+        "/api/question-bank/questions", headers=_headers(teacher_a)
+    ).json()
+    assert listing["total"] == 0
+    s = shared_test_session
+    s.expire_all()
+    assert all(
+        q.is_active is False
+        for q in s.query(Question).filter(Question.group_id == g["id"]).all()
+    )
+
+
+# ---------------------------------------------------------------- 以圖為準（#1083）
+
+
+def _image_layout(url="http://x/poster.png"):
+    return {
+        "version": 1,
+        "rows": [
+            {
+                "columns": [
+                    {
+                        "span": 1,
+                        "blocks": [{"type": "image", "url": url, "align": "center"}],
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def test_create_image_only_group_stores_image_stimulus(test_client, teacher_a):
+    # 海報／漫畫：layout 只有一張圖；推導不出文字 → passage_text 為空
+    g = _create_group(
+        test_client,
+        teacher_a,
+        stimulus_type="image",
+        passage_text=None,
+        layout=_image_layout(),
+    )
+    assert g["stimulus_type"] == "image"
+    assert g["passage_text"] is None
+    assert g["layout"]["rows"][0]["columns"][0]["blocks"][0]["type"] == "image"
+
+
+def test_teacher_passage_text_wins_over_layout_derivation(test_client, teacher_a):
+    # 文字版：有送 passage_text 就存老師的（搜尋與 AI 用），不被 layout 推導覆蓋
+    g = _create_group(
+        test_client,
+        teacher_a,
+        stimulus_type="image",
+        passage_text="Happy Town Lantern Festival 2026\nDate: February 28",
+        layout=_image_layout(),
+    )
+    assert g["passage_text"] == "Happy Town Lantern Festival 2026\nDate: February 28"
+    # 列表關鍵字搜尋能命中文字版
+    page = test_client.get(
+        "/api/question-bank/questions",
+        params={"q": "Lantern Festival"},
+        headers=_headers(teacher_a),
+    ).json()
+    assert any(
+        row.get("kind") == "group" and row["id"] == g["id"] for row in page["items"]
+    )
+    # PATCH 只送 layout（不送 passage_text）→ 依現行規則重推導（前端一律兩者都送，鎖住行為）
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"layout": _group_payload()["layout"]},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["passage_text"] == "Antonio Vivaldi was a violin player."
+    # PATCH 兩者都送 → 老師的
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"layout": _group_payload()["layout"], "passage_text": "teacher copy"},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["passage_text"] == "teacher copy"
+
+
+def test_sub_question_with_image_and_empty_stem(test_client, teacher_a):
+    # 題本 33 題：題幹是一張文氏圖，文字可空
+    questions = [
+        {
+            "stem": "",
+            "image_url": "http://x/venn.png",
+            "options": [
+                {"text": "A new soccer player", "is_correct": True},
+                {"text": "Very confident in himself"},
+            ],
+        }
+    ]
+    g = _create_group(test_client, teacher_a, questions=questions)
+    q = g["questions"][0]
+    assert q["stem"] == ""
+    assert q["image_url"] == "http://x/venn.png"
+    # 題組小題沒題幹也沒圖同樣放行（#1085）：題幹在題組的文章裡，
+    # 克漏字小題更是只有選項。單題端點才要求素材（見下一個測試）。
+    plain = _group_payload(
+        questions=[
+            {
+                "stem": "",
+                "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+            }
+        ]
+    )
+    resp = test_client.post(
+        "/api/question-bank/question-groups", json=plain, headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_single_question_still_requires_stem_or_image(test_client, teacher_a):
+    """單題端點維持原規則：題幹／圖片／語音至少一個。"""
+    resp = test_client.post(
+        "/api/question-bank/questions",
+        json={
+            "stem": "",
+            "options": [{"text": "a", "is_correct": True}, {"text": "b"}],
+        },
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------- PR #1109 本機補審修正
+
+
+def test_list_new_group_sorts_before_older_unedited_singles(
+    test_client, teacher_a, shared_test_session
+):
+    """新建的列 updated_at 是 NULL：排序要 fallback 到 created_at，新題組才不會沉到最後一頁。"""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import text
+
+    singles = [
+        _create(test_client, teacher_a, stem=f"Old single {i}") for i in range(3)
+    ]
+    g = _create_group(test_client, teacher_a, **_group_payload(title="Fresh group"))
+    # 用原生 SQL：ORM bulk update 會觸發 onupdate 把 updated_at 也填上
+    old = datetime.now(timezone.utc) - timedelta(days=1)
+    for s in singles:
+        shared_test_session.execute(
+            text(
+                "UPDATE questions SET created_at = :t, updated_at = NULL WHERE id = :i"
+            ),
+            {"t": old, "i": s["id"]},
+        )
+    shared_test_session.execute(
+        text("UPDATE question_groups SET updated_at = NULL WHERE id = :i"),
+        {"i": g["id"]},
+    )
+    shared_test_session.commit()
+
+    first = test_client.get(
+        "/api/question-bank/questions",
+        params={"page": 1, "page_size": 1},
+        headers=_headers(teacher_a),
+    ).json()["items"][0]
+    assert (first.get("kind"), first["id"]) == ("group", g["id"])
+
+
+def test_single_endpoints_reject_group_subquestion(test_client, teacher_a):
+    """小題的公開／年段／歸屬跟隨題組：單題 PATCH／DELETE 不可直接改。"""
+    g = _create_group(test_client, teacher_a)
+    qid = g["questions"][0]["id"]
+    resp = test_client.patch(
+        f"/api/question-bank/questions/{qid}",
+        json={"visibility": "public"},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422
+    assert "題組內編輯" in resp.text
+    resp = test_client.delete(
+        f"/api/question-bank/questions/{qid}", headers=_headers(teacher_a)
+    )
+    assert resp.status_code == 422
+    assert "題組內刪除" in resp.text
+
+
+def test_group_subquestion_grade_conflict_is_422_not_500(test_client, teacher_a):
+    """小題只自訂一邊年段、另一邊繼承題組，合起來 min > max → 422（不是 DB CHECK 的 500）。"""
+    payload = _group_payload()  # 題組 7～9
+    payload["questions"][0]["grade_max"] = 5
+    resp = test_client.post(
+        "/api/question-bank/question-groups",
+        json=payload,
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422, resp.text
+
+    g = _create_group(test_client, teacher_a)
+    questions = [
+        {
+            "id": q["id"],
+            "stem": q["stem"],
+            "grade_max": 5,
+            "options": [
+                {"text": o["text"], "is_correct": o["is_correct"]} for o in q["options"]
+            ],
+        }
+        for q in g["questions"]
+    ]
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={"questions": questions},
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_group_inverted_grade_with_segments_is_422(test_client, teacher_a):
+    """題組年段反轉要在 segments flush 之前擋下。"""
+    g = _create_group(test_client, teacher_a)
+    resp = test_client.patch(
+        f"/api/question-bank/question-groups/{g['id']}",
+        json={
+            "grade_min": 9,
+            "grade_max": 7,
+            "segments": [{"speaker_label": "A", "transcript": "Hi."}],
+        },
+        headers=_headers(teacher_a),
+    )
+    assert resp.status_code == 422, resp.text
