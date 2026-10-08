@@ -94,7 +94,8 @@ issue **同時**有這兩個標籤才整理公告：
      已合併的話用 `git log origin/staging --grep "#N" --format=%H` 找 commit 再看
 3. 依下方「寫作原則」產生六個欄位，寫成 JSON 檔。
 3a. **產生圖片**（見下方「圖片」）：主圖 1 張 + 內文 0~3 張，上傳後把網址寫進 JSON
-    （`image_url` 與內文的 `![說明](網址)`）。產圖或上傳失敗時**不要中止**，
+    （`image_url` 與內文的 `![說明](網址)`）。內文圖**中英各截一套**：中文文章放中文介面截圖、
+    英文文章放英文介面截圖（同一個畫面、同樣的操作，只換語言）。產圖或上傳失敗時**不要中止**，
     告訴使用者原因，公告先不帶圖寫入（之後可在後台補圖）。
 4. `render` 預覽，把預覽和截圖一起給使用者看，確認後再寫入。
 5. `upsert-issue N --content <json>`，回報留言網址。
@@ -114,7 +115,8 @@ issue **同時**有這兩個標籤才整理公告：
    並用 `upsert-issue` 寫回該 issue（之後改內容只要改留言）。
 4. 統整所有 eligible issue 的內容成**一則**公告（寫作原則見下），寫成 JSON 檔。
    - **圖片沿用**：`image_url` 用第一個新功能 issue 的主圖；各 issue 內文裡的
-     `![說明](網址)` 保留在該 issue 的段落中（不重新截圖、不改網址）。
+     `![說明](網址)` 保留在該 issue 的段落中（不重新截圖、不改網址）；
+     中文文章用 `article_body_zh` 的圖、英文文章用 `article_body_en` 的圖，不要混用。
    - 只有一個 eligible issue → 直接沿用那則內容即可。
    - 沒有任何 eligible issue → 告訴使用者「本次沒有需要發布的公告」，跳過步驟 4–6，
      仍可照常開 PR。
@@ -137,6 +139,11 @@ issue **同時**有這兩個標籤才整理公告：
 
 **新功能 / 改版 → 實際畫面截圖；修正類 → 圖卡。** 每張圖只在模式 A 做一次，模式 B 沿用。
 
+**中英文章用不同語言的截圖**：`article_body_zh` 的圖用中文介面（`--lang zh-TW`）、
+`article_body_en` 的圖用英文介面（`--lang en`），同一個畫面各截一次、各自上傳。
+主圖（`image_url`）只有一張，LINE 卡片與中英文章共用，用中文介面（LINE 卡片中文在前）；
+圖卡上的文字也以中文為主。
+
 1. 安裝截圖工具（第一次）：`npm --prefix scripts/announce install`
    （瀏覽器：`npx --prefix scripts/announce playwright install chromium`）
 2. **實際畫面截圖**：開這個 issue 的 per-issue preview 環境，以「Demo 教師」快速登入
@@ -144,11 +151,16 @@ issue **同時**有這兩個標籤才整理公告：
    ```bash
    node scripts/announce/screenshot.mjs --issue N --path /teacher/... --hero --out /tmp/hero.jpg
    node scripts/announce/screenshot.mjs --issue N --path /teacher/... --steps steps.json \
-     [--selector "CSS"] --out /tmp/step1.png
+     [--selector "CSS"] --lang zh-TW --out /tmp/step1-zh.png
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... --steps steps.json \
+     [--selector "CSS"] --lang en --out /tmp/step1-en.png
    ```
+   - `--lang zh-TW|en`：介面語言（預設 zh-TW）。steps 裡用文字定位的步驟（`text=…`）
+     要配合語言改寫，或改用 `data-testid` 等不分語言的 selector
    - `--hero`：主圖，1200×780（20:13，LINE 卡片比例）JPEG，約 100 KB（主圖上限 1 MB）
    - preview 不存在時工具會改用 staging 並提醒 —— 確認截到的是**新**畫面
-   - **用 Read 看過每張截圖**，確認內容正確、沒有彈窗遮擋、沒有個資
+   - **用 Read 看過每張截圖**，確認內容正確、沒有彈窗遮擋、沒有個資；
+     英文版確認介面真的是英文（demo 資料本身的中文標題不算）
 3. **圖卡**（修正類或統整版主圖）：寫一份 1200×780 的 HTML（品牌色 `#4b56ac` / `#7ad7f4`，
    參考 `frontend/public/release-announcement-banner.png`），轉成 PNG：
    `node scripts/announce/screenshot.mjs --html card.html --out /tmp/card.png`
