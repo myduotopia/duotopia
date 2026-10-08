@@ -9,6 +9,7 @@
  *      [--steps steps.json]   進到畫面前的操作（點擊、輸入、等待…），格式見下方
  *      [--selector CSS]       只截某個元素
  *      [--hero]               主圖：1200×780（20:13，LINE 卡片 hero）JPEG
+ *      [--lang zh-TW|en]      介面語言（預設 zh-TW）；中文文章用 zh-TW、英文文章用 en 各截一次
  *      [--base URL]           指定網站（預設 per-issue preview，不存在時改用 staging）
  *
  * 2. 圖卡（修正類）：把 HTML 轉成 1200×780 PNG
@@ -34,6 +35,7 @@ const REGION = "asia-east1";
 const STAGING = `https://duotopia-staging-frontend-${PROJECT_HASH}.${REGION}.run.app`;
 const HERO = { width: 1200, height: 780 }; // 20:13
 const PAGE = { width: 1280, height: 800 };
+const LANGS = { "zh-TW": "zh-TW", en: "en-US" }; // 介面語言 → 瀏覽器 locale
 
 function parseArgs(argv) {
   const args = {};
@@ -121,18 +123,22 @@ async function main() {
       return;
     }
 
+    const lang = args.lang ? String(args.lang) : "zh-TW";
+    if (!LANGS[lang]) fail(`--lang 只支援 ${Object.keys(LANGS).join(" / ")}`);
     const base = await resolveBase(args);
     const hero = Boolean(args.hero);
     const context = await browser.newContext({
       viewport: hero ? HERO : PAGE,
       deviceScaleFactor: 1.5,
-      locale: "zh-TW",
+      locale: LANGS[lang],
     });
     // 截圖畫面保持乾淨：不跳「操作手冊」、收合右側教學工具列（只存在這個瀏覽器的 localStorage）
-    await context.addInitScript(() => {
+    // 介面語言：i18next 先讀 localStorage 的 i18nextLng，沒有才看瀏覽器語言
+    await context.addInitScript((uiLang) => {
       localStorage.setItem("duotopia_help_dismissed", "true");
       localStorage.setItem("duotopia-toolbar-collapsed", "true");
-    });
+      localStorage.setItem("i18nextLng", uiLang);
+    }, lang);
     const page = await context.newPage();
     await loginAsDemoTeacher(page, base);
     if (args.path) await page.goto(`${base}${args.path}`, { waitUntil: "networkidle" });
