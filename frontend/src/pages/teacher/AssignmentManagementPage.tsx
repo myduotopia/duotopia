@@ -4,6 +4,7 @@
  * 跨班級的作業總覽，包含一般作業和即刻練習。
  * 支援篩選：班級、類型（一般/即刻練習）、練習模式、日期。
  * 管理操作：查看詳情、封存/取消封存、刪除。
+ * 班級名稱一律以 formatClassroomDisplayName 組合年級顯示（「8年12班」，#1097）。
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -47,6 +48,7 @@ import {
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { AssignmentAnalysisDialog } from "@/components/AssignmentAnalysisDialog";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 interface Assignment {
   id: number;
@@ -54,6 +56,7 @@ interface Assignment {
   description?: string;
   classroom_id?: number;
   classroom_name?: string;
+  classroom_grade?: number | null; // 年級 1–12（#1097）
   is_instant_practice: boolean;
   content_count: number;
   student_count: number;
@@ -72,6 +75,7 @@ interface Assignment {
 interface Classroom {
   id: number;
   name: string;
+  grade?: number | null;
 }
 
 export default function AssignmentManagementPage() {
@@ -139,15 +143,21 @@ export default function AssignmentManagementPage() {
     const map = new Map<number, string>();
     for (const a of all) {
       if (a.classroom_id && a.classroom_name) {
-        map.set(a.classroom_id, a.classroom_name);
+        map.set(
+          a.classroom_id,
+          formatClassroomDisplayName(t, {
+            name: a.classroom_name,
+            grade: a.classroom_grade,
+          }),
+        );
       }
     }
     // Merge with fetched classrooms
     for (const c of classrooms) {
-      if (!map.has(c.id)) map.set(c.id, c.name);
+      if (!map.has(c.id)) map.set(c.id, formatClassroomDisplayName(t, c));
     }
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [assignments, archivedAssignments, classrooms]);
+  }, [assignments, archivedAssignments, classrooms, t]);
 
   // Filter logic
   const filteredAssignments = useMemo(() => {
@@ -490,7 +500,12 @@ export default function AssignmentManagementPage() {
                       {assignment.title}
                     </TableCell>
                     <TableCell className="text-sm text-gray-500">
-                      {assignment.classroom_name || "—"}
+                      {assignment.classroom_name
+                        ? formatClassroomDisplayName(t, {
+                            name: assignment.classroom_name,
+                            grade: assignment.classroom_grade,
+                          })
+                        : "—"}
                     </TableCell>
                     <TableCell>
                       {assignment.is_instant_practice ? (
@@ -714,8 +729,12 @@ export default function AssignmentManagementPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                   <span>
-                    {assignment.classroom_name ||
-                      t("assignmentManagement.labels.noClassroom")}
+                    {assignment.classroom_name
+                      ? formatClassroomDisplayName(t, {
+                          name: assignment.classroom_name,
+                          grade: assignment.classroom_grade,
+                        })
+                      : t("assignmentManagement.labels.noClassroom")}
                   </span>
                   <span>{formatDate(assignment.created_at)}</span>
                 </div>

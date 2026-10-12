@@ -7,7 +7,7 @@ production 環境改推給指定測試帳號（push），避免測試訊息轟�
 由 ReleaseAnnouncementService 負責，以維持單一職責與可測試性。
 
 憑證來自 core.config.settings（LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN /
-LINE_ANNOUNCE_TEST_USER_ID）：Duotopia 官方帳號專用，刻意不與 CI 通知 bot 共用，
+LINE_ANNOUNCE_USER_ID）：Duotopia 官方帳號專用，刻意不與 CI 通知 bot 共用，
 避免 production broadcast 到錯的帳號。
 """
 
@@ -103,9 +103,9 @@ class LinePublishService:
 
     @classmethod
     async def push(cls, to: str, messages: List[Dict[str, Any]]) -> Optional[str]:
-        """推播給單一使用者（非 production 環境用來驗證訊息外觀）。"""
+        """推播給單一使用者（草稿待審核通知、非 production 環境的發布）。"""
         if not to:
-            raise LineConfigError("尚未設定測試收件人：LINE_ANNOUNCE_TEST_USER_ID")
+            raise LineConfigError("尚未設定公告收件人：LINE_ANNOUNCE_USER_ID")
         if not messages:
             raise LinePublishError("訊息內容不可為空")
         return await cls._post("/message/push", {"to": to, "messages": messages})

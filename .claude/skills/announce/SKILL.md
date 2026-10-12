@@ -18,6 +18,13 @@ allowed-tools: Bash, Read, Write, Grep, Glob, AskUserQuestion
 
 **開始時宣告：**「我使用 announce skill 整理更新公告內容。」
 
+> **CI 會自動執行同樣的流程，本機版是保險 / 覆寫：**
+> - issue 同時有兩個標籤時，`announce-issue.yml` 會自動產生公告留言（Opus 5.5）並 LINE 通知
+> - 開 staging → main PR 時，`announce-release.yml` 會自動統整寫進 PR 描述並 LINE 通知
+> - 已經有公告留言 / 完整區塊時 CI 不覆蓋；本機重跑 `/announce` 會覆蓋 CI 版本
+>
+> 所以本機只在「CI 失敗（LINE 會通知）」或「想重寫內容」時才需要執行。
+
 這個 skill **只寫內容，不對外發布**。實際發 LINE / 官網一律由管理者在後台
 「更新公告」頁按「發布」。
 
@@ -34,16 +41,24 @@ python3 scripts/release_announcement.py <command> ...
 | `render --content <json> [--issues 1,2]` | 預覽區塊（不寫入 GitHub） |
 | `upsert-issue <N> --content <json>` | 寫入 / 更新 issue 公告留言 |
 | `upsert-pr <PR> --content <json> --issues 1,2` | 寫入 / 更新 PR 描述內的統整區塊 |
+| `upload-image <file> --issue N [--hero]` | 上傳公告圖片到 `gs://duotopia-audio/announcements/issue-N/`，回傳公開網址（`--hero` 只收 JPEG / PNG） |
 
-內容 JSON 固定六個欄位（`line_message_zh` 與 `article_title_zh` 必填）：
+內容 JSON 六個文字欄位（`line_message_zh` 與 `article_title_zh` 必填）+ 選填主圖
+`image_url`（中文介面）與 `image_url_en`（英文介面）：
 
 ```json
 {
+  "image_url": "https://storage.googleapis.com/duotopia-audio/announcements/issue-N/....jpg",
+  "image_url_en": "https://storage.googleapis.com/duotopia-audio/announcements/issue-N/....jpg",
   "line_message_zh": "", "line_message_en": "",
   "article_title_zh": "", "article_body_zh": "",
   "article_title_en": "", "article_body_en": ""
 }
 ```
+
+內文可放 markdown 圖片 `![說明](網址)`，放在哪一段就顯示在哪一段（官網文章）。
+`image_url` 是 LINE 卡片主圖與中文文章封面；`image_url_en` 是英文文章封面（空白時沿用
+`image_url`）。圖片網址一律用 `upload-image` 上傳後的 GCS 網址。
 
 JSON 檔寫在 scratchpad（或 `/tmp`），**不要**寫進 repo。
 
@@ -80,8 +95,12 @@ issue **同時**有這兩個標籤才整理公告：
    - 相關 PR：`gh pr list --state all --search "#N in:title,body" --json number,title,body`
    - 程式差異：在 issue worktree 內用 `git diff origin/staging...HEAD --stat` 與重點檔案；
      已合併的話用 `git log origin/staging --grep "#N" --format=%H` 找 commit 再看
-3. 依下方「寫作原則」產生六個欄位，寫成 JSON 檔。
-4. `render` 預覽，把預覽貼給使用者看。
+3. 依下方「寫作原則」產生六個文字欄位，寫成 JSON 檔。
+3a. **產生圖片**（見下方「圖片」）：主圖 1 張 + 內文 0~3 張，**每張都中英各截一套**
+    （同一個畫面、同樣的操作，只換語言），上傳後把網址寫進 JSON：中文主圖 → `image_url`、
+    英文主圖 → `image_url_en`；中文內文圖放 `article_body_zh`、英文內文圖放 `article_body_en`。產圖或上傳失敗時**不要中止**，
+    告訴使用者原因，公告先不帶圖寫入（之後可在後台補圖）。
+4. `render` 預覽，把預覽和截圖一起給使用者看，確認後再寫入。
 5. `upsert-issue N --content <json>`，回報留言網址。
 6. 提醒時間點：
    > 進 staging 的 Release PR 是 CI 在加上 `✅ tested-in-staging` 後自動開的。
@@ -98,6 +117,9 @@ issue **同時**有這兩個標籤才整理公告：
 3. 對 `eligible: true` 但 `content` 為 null 的 issue：依模式 A 的步驟 2–3 當場補產，
    並用 `upsert-issue` 寫回該 issue（之後改內容只要改留言）。
 4. 統整所有 eligible issue 的內容成**一則**公告（寫作原則見下），寫成 JSON 檔。
+   - **圖片沿用**：`image_url` / `image_url_en` 一起用第一個新功能 issue 的中／英主圖；各 issue 內文裡的
+     `![說明](網址)` 保留在該 issue 的段落中（不重新截圖、不改網址）；
+     中文文章用 `article_body_zh` 的圖、英文文章用 `article_body_en` 的圖，不要混用。
    - 只有一個 eligible issue → 直接沿用那則內容即可。
    - 沒有任何 eligible issue → 告訴使用者「本次沒有需要發布的公告」，跳過步驟 4–6，
      仍可照常開 PR。
@@ -106,6 +128,8 @@ issue **同時**有這兩個標籤才整理公告：
      `Release: staging → main（#N 短名、#M 短名）`（列出本次所有 issue，不只 eligible），
      描述包含「本次發版內容」表格（issue / 內容 / commit），比照過去的 release PR（例：#1072）。
      開 PR 前先讓使用者確認標題與描述。
+     **開 PR 時就把 `render --issues ...` 產生的公告區塊放進描述**（不要先開 PR 再補）：
+     PR 一開，`announce-release.yml` 就會檢查描述，已有完整區塊才會略過自動統整。
 6. `upsert-pr <PR> --content <json> --issues <eligible issue，逗號分隔>`，回報 PR 網址。
    - 腳本會再檢查一次 `--issues` 的標籤，列入不符合的 issue 會被拒絕。
    - 描述裡原本的內容會保留，只替換（或附加）公告區塊。
@@ -113,6 +137,56 @@ issue **同時**有這兩個標籤才整理公告：
 合併後 push main 時，CI 會讀這個區塊建立 production 草稿。
 
 ---
+
+## 圖片（#1100）
+
+**新功能 / 改版 → 實際畫面截圖；修正類 → 圖卡。** 每張圖只在模式 A 做一次，模式 B 沿用。
+
+**中英文章用不同語言的截圖**：中文用中文介面（`--lang zh-TW`）、英文用英文介面
+（`--lang en`），同一個畫面各截一次、各自上傳：
+
+| 圖片 | 中文介面 | 英文介面 |
+|------|---------|---------|
+| 主圖 | `image_url`（LINE 卡片 + 中文文章封面） | `image_url_en`（英文文章封面／分享縮圖） |
+| 內文圖 | `article_body_zh` | `article_body_en` |
+
+圖卡也做中英兩版（卡片上的文字換語言）。
+
+1. 安裝截圖工具（第一次）：`npm --prefix scripts/announce install`
+   （瀏覽器：`npx --prefix scripts/announce playwright install chromium`）
+2. **實際畫面截圖**：開這個 issue 的 per-issue preview 環境，以「Demo 教師」快速登入
+   （`demo@duotopia.com`，只有 demo 資料）。依改動決定頁面與操作：
+   ```bash
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... [--steps steps.json] \
+     --hero --lang zh-TW --out /tmp/hero-zh.jpg
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... [--steps steps.json] \
+     --hero --lang en --out /tmp/hero-en.jpg
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... --steps steps.json \
+     [--selector "CSS"] --lang zh-TW --out /tmp/step1-zh.png
+   node scripts/announce/screenshot.mjs --issue N --path /teacher/... --steps steps.json \
+     [--selector "CSS"] --lang en --out /tmp/step1-en.png
+   ```
+   - `--lang zh-TW|en`：介面語言（預設 zh-TW）。steps 裡用文字定位的步驟（`text=…`）
+     要配合語言改寫，或改用 `data-testid` 等不分語言的 selector
+   - `--hero`：主圖，固定 1200×780（20:13，LINE 卡片比例）JPEG，約 100 KB（主圖上限 1 MB）；
+     內文圖為 1.5 倍解析度 PNG
+   - preview 不存在時工具會改用 staging 並提醒 —— 確認截到的是**新**畫面
+   - preview 還在但登入逾時（後端已收掉）→ issue 已合併的話用 `--base <staging 網址>` 改截 staging；
+     Demo 教師同時多個登入容易逾時，一張一張截
+   - **用 Read 看過每張截圖**，確認內容正確、沒有彈窗遮擋、沒有個資；
+     英文版確認介面真的是英文（demo 資料本身的中文標題不算）
+3. **圖卡**（修正類或統整版主圖）：寫一份 1200×780 的 HTML（品牌色 `#4b56ac` / `#7ad7f4`，
+   參考 `frontend/public/release-announcement-banner.png`），轉成 PNG：
+   `node scripts/announce/screenshot.mjs --html card.html --out /tmp/card.png`（中英各一份 HTML）
+4. 上傳：`python3 scripts/release_announcement.py upload-image /tmp/hero-zh.jpg --issue N --hero`
+   （英文主圖同樣加 `--hero`）
+   - **沒有權限時**腳本會顯示需要的 IAM 指令：請使用者找 GCP 管理員開通
+     `roles/storage.objectCreator`（`gs://duotopia-audio`），這次公告先不帶圖
+5. 模式 B（統整）：**沿用**各 issue 公告留言裡的圖，不重新截圖；
+   `image_url` / `image_url_en` 用第一個新功能 issue 的中／英主圖（或另做一組中英統整圖卡）。
+
+CI 自動產生（`announce-issue.yml` / `announce-release.yml`）目前**不截圖**，只寫文字；
+需要圖片時在本機重跑 `/announce #N`，或由審稿者在後台「更新公告」頁上傳。
 
 ## 寫作原則
 
@@ -138,5 +212,6 @@ issue **同時**有這兩個標籤才整理公告：
   外部貢獻者的留言即使有區塊也會被忽略。
 - staging → main PR 描述也只採用團隊成員開的 PR。合併前請確認統整區塊，
   程式在 `/announce` 之後又有改動時記得重跑。
+- 截圖只用 Demo 教師帳號，不要登入真實帳號、不要截到真實學生資料。
 - 不要手動編輯區塊內的 `<!-- release-announcement:* -->` 標記或 `####` 小標題，
   一律透過腳本寫入（CI 靠它們解析）。

@@ -96,6 +96,20 @@ class TestWebhook:
         row = test_db_session.get(ReleaseAnnouncement, resp.id)
         assert row.line_message_zh == "CI 帶來的現成文案"
 
+    @pytest.mark.asyncio
+    async def test_new_draft_notifies_announce_user_once(self, test_db_session):
+        with patch.object(
+            ra.ReleaseAnnouncementService,
+            "notify_draft_created",
+            new=AsyncMock(return_value=True),
+        ) as notify:
+            first = await _create(test_db_session, source_ref="notify-1")
+            # CI 重跑同一個 commit：草稿已存在，不再通知
+            await _create(test_db_session, source_ref="notify-1")
+
+        assert notify.await_count == 1
+        assert notify.await_args.args[0].id == first.id
+
     def test_content_fields_have_length_limits(self):
         with pytest.raises(ValidationError):
             ra.AnnouncementContent(line_message_zh="字" * 5001)
@@ -138,6 +152,96 @@ class TestWebhook:
                 _body(), x_release_secret="SECRET", db=test_db_session
             )
         assert exc.value.status_code == 503
+
+
+class TestImageUpload:
+    """#1100：後台上傳公告圖片"""
+
+    PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    GIF = b"GIF89a" + b"0" * 64
+
+    @staticmethod
+    def _file(data, name="a.png"):
+        from io import BytesIO
+        from fastapi import UploadFile
+
+        return UploadFile(file=BytesIO(data), filename=name)
+
+    @pytest.mark.asyncio
+    async def test_stores_and_returns_url(self):
+        with patch.object(
+            ra,
+            "store_announcement_image",
+            return_value="https://storage.googleapis.com/duotopia-audio/announcements/x.png",
+        ) as store:
+            resp = await ra.upload_announcement_image(
+                file=self._file(self.PNG), purpose="body", admin=_Admin()
+            )
+        assert resp["url"].endswith("x.png")
+        assert store.call_args.args[1:] == ("image/png", "png")
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_image(self):
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(b"<html>"), purpose="body", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_rejects_over_10mb(self):
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(self.PNG + b"0" * (10 * 1024 * 1024)),
+                purpose="body",
+                admin=_Admin(),
+            )
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_hero_over_1mb_rejected_body_allowed(self):
+        big = self.PNG + b"0" * (1024 * 1024)
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(big), purpose="hero", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+        assert "1 MB" in exc.value.detail
+
+        with patch.object(
+            ra, "store_announcement_image", return_value="https://x/b.png"
+        ):
+            resp = await ra.upload_announcement_image(
+                file=self._file(big), purpose="body", admin=_Admin()
+            )
+        assert resp["url"] == "https://x/b.png"
+
+    @pytest.mark.asyncio
+    async def test_hero_must_be_jpeg_or_png(self):
+        with pytest.raises(HTTPException) as exc:
+            await ra.upload_announcement_image(
+                file=self._file(self.GIF, "a.gif"), purpose="hero", admin=_Admin()
+            )
+        assert exc.value.status_code == 400
+        assert "JPEG" in exc.value.detail
+
+        with patch.object(
+            ra, "store_announcement_image", return_value="https://x/a.gif"
+        ):
+            resp = await ra.upload_announcement_image(
+                file=self._file(self.GIF, "a.gif"), purpose="body", admin=_Admin()
+            )
+        assert resp["url"] == "https://x/a.gif"
+
+    def test_webhook_content_accepts_https_hero(self):
+        assert ra.AnnouncementContent(image_url="https://a/b.png").image_url
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(image_url="http://a/b.png")
+
+    def test_webhook_content_accepts_https_english_hero(self):
+        assert ra.AnnouncementContent(image_url_en="https://a/b.png").image_url_en
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(image_url_en="http://a/b.png")
 
 
 class TestListAndGet:
@@ -212,6 +316,15 @@ class TestUpdate:
     @pytest.mark.parametrize("url", ["https://cdn.example.com/a.png", "", "  "])
     def test_image_url_accepts_https_or_blank(self, url):
         assert ra.ReleaseAnnouncementUpdate(image_url=url).image_url == url
+
+    @pytest.mark.parametrize("url", ["http://cdn.example.com/a.png", "https:///a.png"])
+    def test_english_image_url_must_be_https(self, url):
+        with pytest.raises(ValidationError):
+            ra.ReleaseAnnouncementUpdate(image_url_en=url)
+
+    @pytest.mark.parametrize("url", ["https://cdn.example.com/a.png", ""])
+    def test_english_image_url_accepts_https_or_blank(self, url):
+        assert ra.ReleaseAnnouncementUpdate(image_url_en=url).image_url_en == url
 
     @pytest.mark.asyncio
     async def test_published_announcement_cannot_be_edited(self, test_db_session):

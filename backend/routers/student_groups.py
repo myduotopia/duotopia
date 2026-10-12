@@ -100,7 +100,8 @@ def _get_owned_classroom(db: Session, teacher_id: int, classroom_id: int) -> Cla
         .filter(
             Classroom.id == classroom_id,
             Classroom.teacher_id == teacher_id,
-            Classroom.is_active.is_(True),
+            # #1097：停用班級老師端照常可用，只排除已刪除
+            Classroom.deleted_at.is_(None),
         )
         .first()
     )
@@ -117,7 +118,8 @@ def _get_owned_group(db: Session, teacher_id: int, group_id: int) -> StudentGrou
         .filter(
             StudentGroup.id == group_id,
             Classroom.teacher_id == teacher_id,
-            Classroom.is_active.is_(True),
+            # #1097：停用班級老師端照常可用，只排除已刪除
+            Classroom.deleted_at.is_(None),
         )
         .options(selectinload(StudentGroup.members))
         .first()

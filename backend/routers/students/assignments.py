@@ -10,11 +10,12 @@ from typing import Dict, Any, Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload, contains_eager
-from sqlalchemy import text, case, func
+from sqlalchemy import and_, case, func, or_, text
 
 from database import get_db
 from models import (
     Assignment,
+    Classroom,
     StudentAssignment,
     StudentContentProgress,
     AssignmentContent,
@@ -173,6 +174,17 @@ def _serialize_student_assignments(
     return result
 
 
+def _visible_classroom_clause():
+    """作業所屬班級須「啟用且未刪除」；沒有班級的作業（classroom_id 為 NULL）照常顯示。
+
+    搭配 ``outerjoin(Classroom, Assignment.classroom_id == Classroom.id)`` 使用（#1097）。
+    """
+    return or_(
+        Assignment.classroom_id.is_(None),
+        and_(Classroom.is_active.is_(True), Classroom.deleted_at.is_(None)),
+    )
+
+
 def _compute_status_tab_stats(
     db: Session, student_id: int, practice_mode: Optional[str]
 ) -> Dict[str, int]:
@@ -184,9 +196,11 @@ def _compute_status_tab_stats(
     stats_query = (
         db.query(StudentAssignment.status, func.count(StudentAssignment.id))
         .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
+        .outerjoin(Classroom, Assignment.classroom_id == Classroom.id)
         .filter(
             StudentAssignment.student_id == student_id,
             Assignment.is_archived.is_(False),
+            _visible_classroom_clause(),
         )
     )
     if practice_mode:
@@ -206,7 +220,7 @@ def _compute_status_tab_stats(
 
 
 @router.get("/assignments")
-async def get_student_assignments(
+def get_student_assignments(
     sort_by: Literal[
         "due_date_asc", "due_date_desc", "assigned_at_desc", "status"
     ] = Query("due_date_asc"),
@@ -246,14 +260,17 @@ async def get_student_assignments(
     """
     student_id = current_student.get("sub")
 
-    # Base query: always join Assignment to filter archived and eager-load
+    # Base query: always join Assignment to filter archived and eager-load.
+    # #1097：班級停用或已刪除 → 該班作業不出現在學生列表
     query = (
         db.query(StudentAssignment)
         .join(Assignment, StudentAssignment.assignment_id == Assignment.id)
+        .outerjoin(Classroom, Assignment.classroom_id == Classroom.id)
         .options(contains_eager(StudentAssignment.assignment))
         .filter(
             StudentAssignment.student_id == int(student_id),
             Assignment.is_archived.is_(False),
+            _visible_classroom_clause(),
         )
     )
 
@@ -750,7 +767,7 @@ async def get_assignment_activities(
 
 
 @router.post("/assignments/{assignment_id}/activities/{progress_id}/save")
-async def save_activity_progress(
+def save_activity_progress(
     assignment_id: int,
     progress_id: int,
     audio_url: Optional[str] = None,
@@ -828,7 +845,7 @@ async def save_activity_progress(
 
 
 @router.post("/assignments/{assignment_id}/submit")
-async def submit_assignment(
+def submit_assignment(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -987,7 +1004,7 @@ async def submit_assignment(
     "/assignments/{student_assignment_id}/practice-words",
     response_model=PracticeWordsResponse,
 )
-async def get_practice_words(
+def get_practice_words(
     student_assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1083,7 +1100,7 @@ async def get_practice_words(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/activities")
-async def get_vocabulary_activities(
+def get_vocabulary_activities(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1269,7 +1286,7 @@ class SaveAssessmentRequest(BaseModel):
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/save-assessment")
-async def save_vocabulary_assessment(
+def save_vocabulary_assessment(
     assignment_id: int,
     request: SaveAssessmentRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1336,7 +1353,7 @@ async def save_vocabulary_assessment(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/submit")
-async def submit_vocabulary_assignment(
+def submit_vocabulary_assignment(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1432,7 +1449,7 @@ class WordSelectionAnswerResponse(BaseModel):
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/selection/start")
-async def start_word_selection_practice(
+def start_word_selection_practice(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1770,7 +1787,7 @@ async def start_word_selection_practice(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/selection/answer")
-async def submit_word_selection_answer(
+def submit_word_selection_answer(
     assignment_id: int,
     request: WordSelectionAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1989,7 +2006,7 @@ async def submit_word_selection_answer(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/selection/proficiency")
-async def get_word_selection_proficiency(
+def get_word_selection_proficiency(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -2063,7 +2080,7 @@ async def get_word_selection_proficiency(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/selection/complete")
-async def complete_word_selection_assignment(
+def complete_word_selection_assignment(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -2388,7 +2405,7 @@ async def start_word_spelling_practice(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/spelling/answer")
-async def submit_word_spelling_answer(
+def submit_word_spelling_answer(
     assignment_id: int,
     request: WordSpellingAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -2552,7 +2569,7 @@ async def submit_word_spelling_answer(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/spelling/proficiency")
-async def get_word_spelling_proficiency(
+def get_word_spelling_proficiency(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -2613,7 +2630,7 @@ async def get_word_spelling_proficiency(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/spelling/complete")
-async def complete_word_spelling_assignment(
+def complete_word_spelling_assignment(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -2921,7 +2938,7 @@ async def start_word_cloze_practice(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/cloze/answer")
-async def submit_word_cloze_answer(
+def submit_word_cloze_answer(
     assignment_id: int,
     request: WordClozeAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -3085,7 +3102,7 @@ async def submit_word_cloze_answer(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/cloze/proficiency")
-async def get_word_cloze_proficiency(
+def get_word_cloze_proficiency(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -3146,7 +3163,7 @@ async def get_word_cloze_proficiency(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/cloze/complete")
-async def complete_word_cloze_assignment(
+def complete_word_cloze_assignment(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -3205,7 +3222,7 @@ async def complete_word_cloze_assignment(
 
 
 @router.get("/assignments/{assignment_id}/rearrangement-questions")
-async def get_rearrangement_questions(
+def get_rearrangement_questions(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -3329,7 +3346,7 @@ async def get_rearrangement_questions(
 
 
 @router.post("/assignments/{assignment_id}/rearrangement-answer")
-async def submit_rearrangement_answer(
+def submit_rearrangement_answer(
     assignment_id: int,
     request: RearrangementAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -3478,7 +3495,7 @@ async def submit_rearrangement_answer(
 
 
 @router.post("/assignments/{student_assignment_id}/rearrangement-retry")
-async def retry_rearrangement(
+def retry_rearrangement(
     student_assignment_id: int,
     request: RearrangementRetryRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -3561,7 +3578,7 @@ async def retry_rearrangement(
 
 
 @router.post("/assignments/{student_assignment_id}/rearrangement-complete")
-async def complete_rearrangement(
+def complete_rearrangement(
     student_assignment_id: int,
     request: RearrangementCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),

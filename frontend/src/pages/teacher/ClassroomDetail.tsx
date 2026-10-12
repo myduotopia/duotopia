@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StudentTable, { Student } from "@/components/StudentTable";
 import { GroupSettingsTab } from "@/components/classroom/GroupSettingsTab";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 import type { StudentGroup } from "@/lib/studentGroup";
 import { buildStudentGroupIndex } from "@/lib/studentGroup";
 import { sortStudentsBySeat } from "@/lib/studentSort";
@@ -860,8 +861,11 @@ export default function ClassroomDetail({
       if (showLoading) {
         setLoading(true);
       }
-      const classrooms =
-        (await apiClient.getTeacherClassrooms()) as ClassroomInfo[];
+      // include_inactive：停用班級老師端仍可進入詳情頁（只是不能派作業），
+      // 否則預設列表不含停用班，會被導回列表（#1097）
+      const classrooms = (await apiClient.getTeacherClassrooms({
+        include_inactive: true,
+      })) as ClassroomInfo[];
       const currentClassroom = classrooms.find((c) => c.id === Number(id));
 
       if (currentClassroom) {
@@ -1903,7 +1907,9 @@ export default function ClassroomDetail({
               </Button>
               <div className="min-w-0 flex-1">
                 <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">
-                  {isTemplateMode ? templateProgram?.name : classroom?.name}
+                  {isTemplateMode
+                    ? templateProgram?.name
+                    : classroom && formatClassroomDisplayName(t, classroom)}
                 </h2>
                 {(isTemplateMode
                   ? templateProgram?.description
@@ -3410,7 +3416,9 @@ export default function ClassroomDetail({
           fetchPrograms(); // Refresh programs after creating
         }}
         classroomId={Number(id)}
-        classroomName={classroom?.name || ""}
+        classroomName={
+          classroom ? formatClassroomDisplayName(t, classroom) : ""
+        }
       />
 
       {/* Assignment Dialog (from Assignments tab - existing) */}

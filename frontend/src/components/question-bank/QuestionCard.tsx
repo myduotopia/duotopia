@@ -1,7 +1,7 @@
 /**
  * 右欄單題卡片（Issue #1064）。
  *
- * |題幹 textarea + 麥克風|
+ * |題幹 textarea + 麥克風 + 插圖鈕|（有插圖時題幹下方顯示縮圖；題幹可空，圖或字至少一個 #1083）
  * |A 選項|B 選項|
  * |C 選項(選填)|D 選項(選填)|
  * |新增選項| → 展開 E/F
@@ -15,6 +15,8 @@
  * 重複偵測每卡各自 debounce 呼叫 similar API；結果存回 draft.similar。
  * 考點／年段／教材關聯用共用元件（ExamPointPicker / GradeRangeSlider / ProgramLessonPicker），
  * 與左側批次設定同一套。
+ * 驗證顯示：`errorMessage`（底部紅字＋紅框）由外層在老師按過儲存後才傳；考點空值的紅框
+ * 由 `showErrors` 控制（sheet 傳 saveAttempted），打開面板時不會一片紅。後端 `serverError` 一律顯示。
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -65,8 +67,26 @@ export interface QuestionCardProps {
   programs: Program[];
   /** 這張卡目前的驗證訊息（由外層算，含批內重複） */
   errorMessage: string | null;
+  /** 是否顯示必填欄位（考點）的空值紅框（預設 true；sheet 在老師按過儲存前傳 false） */
+  showErrors?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
+  /** 克漏字小題：題幹可空（只顯示編號與選項）；閱讀／單題恆 false */
+  stemOptional?: boolean;
+  /**
+   * 克漏字小題對應的空格編號（#1085）：有值時卡片標題改成「空格 n」，
+   * 並隱藏題幹文字框與題幹插圖 —— 題目就是文章裡那個空格，不另外出題幹。
+   */
+  clozeBlank?: number | null;
+  /** data-testid 前綴；題組內的小題用 `qg-<n>-q` 避免與外層單題撞名 */
+  testIdPrefix?: string;
+  /** 題組內的小題：不畫外框，只靠編號與上方淡分隔線區隔（單題流程不用） */
+  compact?: boolean;
+  /**
+   * 是否查相似／重複題（預設 true）。題組小題傳 false：後端刻意不對小題做重複偵測
+   * （同一篇文章的問法常重複），前端若照查會被 exact_duplicate 擋住無法儲存。
+   */
+  checkSimilar?: boolean;
 }
 
 function absoluteAudioUrl(url: string): string {
@@ -82,12 +102,19 @@ export default function QuestionCard({
   ttsSettings,
   programs,
   errorMessage,
+  showErrors = true,
   readOnly = false,
   disabled = false,
+  stemOptional = false,
+  clozeBlank = null,
+  testIdPrefix = "qc",
+  compact = false,
+  checkSimilar = true,
 }: QuestionCardProps) {
   const { t } = useTranslation();
   const [ttsBusy, setTtsBusy] = useState(false);
   const locked = readOnly || disabled;
+  const tid = (suffix: string) => `${testIdPrefix}-${index}-${suffix}`;
 
   const patch = (p: Partial<QuestionDraft>) => onChange({ ...draft, ...p });
 
@@ -100,7 +127,7 @@ export default function QuestionCard({
   const stemTrimmed = draft.stem.trim();
   useEffect(() => {
     if (readOnly) return;
-    if (!stemTrimmed) {
+    if (!checkSimilar || !stemTrimmed) {
       if (draft.similar) patch({ similar: null });
       return;
     }
@@ -123,7 +150,7 @@ export default function QuestionCard({
     };
     // draft 其他欄位變動不需要重查
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stemTrimmed, excludeId, readOnly]);
+  }, [stemTrimmed, excludeId, readOnly, checkSimilar]);
 
   // ---- 選項 ----
   const updateOption = (i: number, p: Partial<OptionDraft>) => {
@@ -221,23 +248,39 @@ export default function QuestionCard({
   return (
     <div
       id={`question-card-${draft.key}`}
-      className={`rounded-lg border bg-white p-4 space-y-3 ${
-        hasError ? "border-red-300" : "border-gray-200"
-      }`}
+      className={
+        compact
+          ? `space-y-3 bg-white pt-4 ${
+              hasError ? "border-l-2 border-red-300 pl-3" : ""
+            }`
+          : `rounded-lg border bg-white p-4 space-y-3 ${
+              hasError ? "border-red-300" : "border-gray-200"
+            }`
+      }
       data-testid={`question-card-${index}`}
+      data-compact={compact || undefined}
     >
       {/* 卡片標題列 */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-700">
-          {t("questionBank.form.questionN", { n: index + 1 })}
-        </span>
+        {clozeBlank === null ? (
+          <span className="text-sm font-semibold text-gray-700">
+            {t("questionBank.form.questionN", { n: index + 1 })}
+          </span>
+        ) : (
+          <span
+            className="rounded bg-sky-100 px-2 py-0.5 text-sm font-semibold text-sky-700"
+            data-testid={tid("blank-badge")}
+          >
+            {t("questionBank.group.questions.blankN", { n: clozeBlank })}
+          </span>
+        )}
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-gray-600">
             <Switch
               checked={draft.allow_multiple}
               onCheckedChange={setAllowMultiple}
               disabled={locked}
-              data-testid={`qc-${index}-allow-multiple`}
+              data-testid={tid("allow-multiple")}
             />
             {t("questionBank.form.allowMultiple")}
           </label>
@@ -248,7 +291,7 @@ export default function QuestionCard({
               disabled={disabled}
               className="text-gray-400 hover:text-red-600"
               aria-label={t("questionBank.form.removeQuestion")}
-              data-testid={`qc-${index}-remove`}
+              data-testid={tid("remove")}
             >
               <Trash2 size={16} />
             </button>
@@ -256,68 +299,94 @@ export default function QuestionCard({
         </div>
       </div>
 
-      {/* 題幹 + 麥克風 */}
-      <div className="flex gap-2 items-start">
-        <Textarea
-          value={draft.stem}
-          onChange={(e) => patch({ stem: e.target.value, serverError: null })}
-          placeholder={t("questionBank.form.stemPlaceholder")}
-          rows={2}
-          disabled={locked}
-          className="flex-1"
-          data-testid={`qc-${index}-stem`}
-        />
-        {/* 語音按鈕組（直排，樣式同單字集）：沒語音 → 只有麥克風；有語音 → 只有播放＋移除 */}
-        <div className="flex flex-col items-center gap-1 shrink-0 self-start">
-          {!draft.stem_audio_url && (
-            <button
-              type="button"
-              onClick={generateAudio}
-              disabled={locked || !stemTrimmed || ttsBusy}
-              className="p-1.5 rounded disabled:opacity-50 text-gray-600 bg-yellow-100 hover:bg-yellow-200"
-              title={t("contentEditor.tooltips.openTTSRecording")}
-              aria-label={t("questionBank.form.generateAudio")}
-              data-testid={`qc-${index}-mic`}
-            >
-              {ttsBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Mic className="h-4 w-4" />
+      {/* 題幹 + 麥克風；克漏字小題整段不渲染（題目就是文章裡的那個空格） */}
+      {clozeBlank === null && (
+        <>
+          <div className="flex gap-2 items-start">
+            <Textarea
+              value={draft.stem}
+              onChange={(e) =>
+                patch({ stem: e.target.value, serverError: null })
+              }
+              placeholder={t(
+                stemOptional
+                  ? "questionBank.form.stemOptionalPlaceholder"
+                  : "questionBank.form.stemPlaceholder",
               )}
-            </button>
+              rows={2}
+              disabled={locked}
+              className="flex-1"
+              data-testid={tid("stem")}
+            />
+            {/* 語音按鈕組（直排，樣式同單字集）：沒語音 → 只有麥克風；有語音 → 只有播放＋移除 */}
+            <div className="flex flex-col items-center gap-1 shrink-0 self-start">
+              {!draft.stem_audio_url && (
+                <button
+                  type="button"
+                  onClick={generateAudio}
+                  disabled={locked || !stemTrimmed || ttsBusy}
+                  className="p-1.5 rounded disabled:opacity-50 text-gray-600 bg-yellow-100 hover:bg-yellow-200"
+                  title={t("contentEditor.tooltips.openTTSRecording")}
+                  aria-label={t("questionBank.form.generateAudio")}
+                  data-testid={tid("mic")}
+                >
+                  {ttsBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+              {draft.stem_audio_url && (
+                <button
+                  type="button"
+                  onClick={playAudio}
+                  className="p-1.5 rounded text-green-600 hover:bg-green-100"
+                  title={t("contentEditor.tooltips.playAudio")}
+                  aria-label={t("contentEditor.tooltips.playAudio")}
+                  data-testid={tid("play")}
+                >
+                  <Play className="h-4 w-4" />
+                </button>
+              )}
+              {draft.stem_audio_url && !readOnly && (
+                <button
+                  type="button"
+                  onClick={() => patch({ stem_audio_url: null })}
+                  className="p-1.5 rounded text-red-600 hover:bg-red-100"
+                  title={t("contentEditor.tooltips.removeAudio")}
+                  aria-label={t("contentEditor.tooltips.removeAudio")}
+                  data-testid={tid("audio-remove")}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {/* 題幹插圖（#1083）：與選項圖片同一顆按鈕與上傳路徑 */}
+              <OptionImageButton
+                imageUrl={draft.image_url}
+                onChange={(url) => patch({ image_url: url, serverError: null })}
+                disabled={locked}
+                label={t("questionBank.form.stemImage")}
+                testId={tid("stem-image")}
+              />
+            </div>
+          </div>
+          {draft.image_url && (
+            <img
+              src={draft.image_url}
+              alt=""
+              className="max-h-48 rounded border border-gray-200 object-contain"
+              data-testid={tid("stem-image-preview")}
+            />
           )}
-          {draft.stem_audio_url && (
-            <button
-              type="button"
-              onClick={playAudio}
-              className="p-1.5 rounded text-green-600 hover:bg-green-100"
-              title={t("contentEditor.tooltips.playAudio")}
-              aria-label={t("contentEditor.tooltips.playAudio")}
-              data-testid={`qc-${index}-play`}
-            >
-              <Play className="h-4 w-4" />
-            </button>
-          )}
-          {draft.stem_audio_url && !readOnly && (
-            <button
-              type="button"
-              onClick={() => patch({ stem_audio_url: null })}
-              className="p-1.5 rounded text-red-600 hover:bg-red-100"
-              title={t("contentEditor.tooltips.removeAudio")}
-              aria-label={t("contentEditor.tooltips.removeAudio")}
-              data-testid={`qc-${index}-audio-remove`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
+        </>
+      )}
 
       {/* 重複／相似提示 */}
       {exact && (
         <div
           className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700"
-          data-testid={`qc-${index}-duplicate`}
+          data-testid={tid("duplicate")}
         >
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <div>
@@ -329,7 +398,7 @@ export default function QuestionCard({
       {similarList.length > 0 && (
         <div
           className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800"
-          data-testid={`qc-${index}-similar`}
+          data-testid={tid("similar")}
         >
           <div className="font-medium">
             {t("questionBank.form.similarFound")}
@@ -357,7 +426,7 @@ export default function QuestionCard({
                 aria-label={t("questionBank.form.markCorrect", {
                   index: i + 1,
                 })}
-                data-testid={`qc-${index}-correct-${i}`}
+                data-testid={tid(`correct-${i}`)}
               />
               <span className="w-4 text-xs text-gray-500">{letter(i)}</span>
               <Input
@@ -374,7 +443,7 @@ export default function QuestionCard({
                 }
                 className="h-9 flex-1 min-w-0"
                 disabled={locked}
-                data-testid={`qc-${index}-option-${i}`}
+                data-testid={tid(`option-${i}`)}
               />
               <OptionImageButton
                 imageUrl={o.image_url}
@@ -398,7 +467,7 @@ export default function QuestionCard({
             className="gap-1 text-gray-600"
             onClick={showExtra}
             disabled={disabled}
-            data-testid={`qc-${index}-add-option`}
+            data-testid={tid("add-option")}
           >
             <Plus size={14} />
             {t("questionBank.form.addOption")}
@@ -415,9 +484,9 @@ export default function QuestionCard({
           value={draft.exam_points}
           onChange={(exam_points) => patch({ exam_points })}
           disabled={locked}
-          required
+          required={showErrors}
           compact
-          data-testid={`qc-${index}-exam-points`}
+          data-testid={tid("exam-points")}
         />
       </div>
 
@@ -428,7 +497,7 @@ export default function QuestionCard({
         placeholder={t("questionBank.form.explanationPlaceholder")}
         className="h-9 text-sm"
         disabled={locked}
-        data-testid={`qc-${index}-explanation`}
+        data-testid={tid("explanation")}
       />
 
       {/* ▼ 進階設定 */}
@@ -438,7 +507,7 @@ export default function QuestionCard({
           onClick={() => patch({ advancedOpen: !draft.advancedOpen })}
           className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900"
           aria-expanded={draft.advancedOpen}
-          data-testid={`qc-${index}-advanced-toggle`}
+          data-testid={tid("advanced-toggle")}
         >
           {draft.advancedOpen ? (
             <ChevronDown size={14} />
@@ -448,7 +517,7 @@ export default function QuestionCard({
           {t("questionBank.form.advancedSettings")}
         </button>
         {draft.advancedOpen && (
-          <div className="mt-2 space-y-3" data-testid={`qc-${index}-advanced`}>
+          <div className="mt-2 space-y-3" data-testid={tid("advanced")}>
             <div className="space-y-1">
               <Label className="text-xs text-gray-600">
                 {t("questionBank.form.programLinks")}
@@ -459,7 +528,7 @@ export default function QuestionCard({
                 onChange={(program_link) => patch({ program_link })}
                 disabled={locked}
                 compact
-                data-testid={`qc-${index}-program-link`}
+                data-testid={tid("program-link")}
               />
             </div>
             <div className="space-y-1">
@@ -471,7 +540,7 @@ export default function QuestionCard({
                 onChange={(grade) => patch({ grade })}
                 disabled={locked}
                 compact
-                data-testid={`qc-${index}-grade`}
+                data-testid={tid("grade")}
               />
             </div>
           </div>
@@ -479,7 +548,7 @@ export default function QuestionCard({
       </div>
 
       {(errorMessage || draft.serverError) && (
-        <p className="text-xs text-red-600" data-testid={`qc-${index}-error`}>
+        <p className="text-xs text-red-600" data-testid={tid("error")}>
           {draft.serverError ?? errorMessage}
         </p>
       )}

@@ -27,6 +27,7 @@ from .dependencies import get_current_teacher
 from .validators import *
 from .utils import TEST_SUBSCRIPTION_WHITELIST  # parse_birthdate is defined locally
 from auth import get_password_hash
+from utils.classroom_grade import parse_grade
 
 router = APIRouter()
 
@@ -199,7 +200,11 @@ async def get_all_students(
         if classroom_student:
             classroom = classrooms_dict.get(classroom_student.classroom_id)
             if classroom:
-                classroom_info = {"id": classroom.id, "name": classroom.name}
+                classroom_info = {
+                    "id": classroom.id,
+                    "name": classroom.name,
+                    "grade": parse_grade(classroom.grade),
+                }
 
                 # Extract school_id and organization_id from classroom_schools
                 if classroom.classroom_schools:
@@ -228,6 +233,10 @@ async def get_all_students(
                 "status": "active" if student.is_active else "inactive",
                 "classroom_id": classroom_info["id"] if classroom_info else None,
                 "classroom_name": (classroom_info["name"] if classroom_info else "未分配"),
+                # 年級 1–12，前端組合班名用（#1097）
+                "classroom_grade": (
+                    classroom_info["grade"] if classroom_info else None
+                ),
                 "school_id": school_id,
                 "organization_id": organization_id,
                 "created_at": (
@@ -524,6 +533,7 @@ async def update_student(
                     Classroom.id == update_data.classroom_id,
                     Classroom.teacher_id == current_teacher.id,
                     Classroom.is_active.is_(True),
+                    Classroom.deleted_at.is_(None),
                 )
                 .first()
             )
@@ -672,62 +682,6 @@ async def reset_student_password(
         "message": "Password reset successfully",
         "default_password": default_password,
     }
-
-
-@router.get("/classrooms/{classroom_id}/students")
-async def get_classroom_students(
-    classroom_id: int,
-    current_teacher: Teacher = Depends(get_current_teacher),
-    db: Session = Depends(get_db),
-):
-    """取得班級的學生列表"""
-    # 驗證班級存在且屬於當前教師
-    classroom = (
-        db.query(Classroom)
-        .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_teacher.id,
-            Classroom.is_active.is_(True),
-        )
-        .first()
-    )
-
-    if not classroom:
-        raise HTTPException(
-            status_code=404, detail="Classroom not found or you don't have permission"
-        )
-
-    # 取得班級學生
-    students = (
-        db.query(Student)
-        .join(ClassroomStudent)
-        .filter(
-            ClassroomStudent.classroom_id == classroom_id,
-            Student.is_active.is_(True),
-            ClassroomStudent.is_active.is_(True),
-        )
-        .all()
-    )
-
-    return [
-        {
-            "id": s.id,
-            "name": s.name,
-            "email": s.email,
-            "student_number": s.student_number,
-            "birthdate": s.birthdate.isoformat() if s.birthdate else None,
-            "phone": getattr(s, "phone", ""),
-            "password_changed": s.password_changed,
-            "last_login": (s.last_login.isoformat() if s.last_login else None),
-            "status": "active" if s.is_active else "inactive",
-            "created_at": (s.created_at.isoformat() if s.created_at else None),
-            "email_verified": s.email_verified,
-            "classroom_created_at": (
-                classroom.created_at.isoformat() if classroom.created_at else None
-            ),
-        }
-        for s in students
-    ]
 
 
 @router.post("/classrooms/{classroom_id}/students/batch")
@@ -884,7 +838,9 @@ async def batch_import_students(
     teacher_classrooms = (
         db.query(Classroom)
         .filter(
-            Classroom.teacher_id == current_teacher.id, Classroom.is_active.is_(True)
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
         .all()
     )

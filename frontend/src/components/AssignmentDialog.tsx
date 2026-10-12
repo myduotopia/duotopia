@@ -92,9 +92,20 @@ import {
   type PracticeDataset,
 } from "@/lib/practiceMode";
 import { PracticeModeSettingsPanel } from "./assignment/PracticeModeSettingsPanel";
+// Issue #1092: 打字類小考評分方式（派發最後一步必選）
+import { QuizScoringMethodField } from "./assignment/QuizScoringMethodField";
+import {
+  EMPTY_QUIZ_SCORING,
+  isQuizScoringComplete,
+  isTypedQuizMode,
+  quizScoringErrorCode,
+  quizScoringPayload,
+  type QuizScoringSettings,
+} from "@/lib/quizScoring";
 import { ContentSelectCard } from "./assignment/ContentSelectCard";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
 // #854 B2-a: 派發預覽改吃單一 registry（消除手寫 ternary 鏈），各 *Preview 元件
 // 已移入 activityRegistry。
@@ -179,6 +190,7 @@ interface AssignmentDialogProps {
 interface SelectedClassroom {
   id: number;
   name: string;
+  grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   school_id: string;
   students: Student[];
   selectedStudentIds: number[];
@@ -212,6 +224,7 @@ function recalcClassroom(c: SelectedClassroom): SelectedClassroom {
 interface ClassroomOption {
   id: number;
   name: string;
+  grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   student_count: number;
   school_id?: string;
   school_name?: string;
@@ -562,6 +575,9 @@ export function AssignmentDialog({
     show_option_images: false, // 顯示選項圖片（單字選擇專用，與 show_image 互斥，Issue #631）
     show_example_sentence: false, // 顯示例句（答案挖空）（單字選擇小考／艾賓浩斯，Issue #860）
   });
+  // Issue #1092: 打字類小考評分設定（無預設，必選）；與 formData 分開以減少本檔改動
+  const [quizScoring, setQuizScoring] =
+    useState<QuizScoringSettings>(EMPTY_QUIZ_SCORING);
 
   // Issue #752: 練習模式 chip 列橫向滑動 + 箭頭按鈕（內容超寬時才顯示）
   const chipRowRef = useRef<HTMLDivElement>(null);
@@ -674,6 +690,7 @@ export function AssignmentDialog({
             recalcClassroom({
               id: classroom.id,
               name: classroom.name,
+              grade: classroom.grade,
               school_id: classroom.school_id || effectiveSchoolId || "",
               students: students || [],
               selectedStudentIds: [],
@@ -686,7 +703,7 @@ export function AssignmentDialog({
       } catch {
         toast.error(
           t("dialogs.assignmentDialog.errors.loadStudentsFailed", {
-            name: classroom.name,
+            name: formatClassroomDisplayName(t, classroom),
           }),
         );
       }
@@ -780,6 +797,7 @@ export function AssignmentDialog({
         show_option_images: false,
         show_example_sentence: false,
       });
+      setQuizScoring(EMPTY_QUIZ_SCORING);
       setCurrentStep(needsClassroomStep ? 0 : 1);
       setActiveTab(showOrgTab ? "organization" : "template");
     }
@@ -1461,6 +1479,9 @@ export function AssignmentDialog({
         show_image: formData.show_image,
         show_option_images: formData.show_option_images,
         show_example_sentence: formData.show_example_sentence, // Issue #860
+        // Issue #1092: 打字類小考才送評分設定
+        ...(isTypedQuizMode(formData.practice_mode) &&
+          quizScoringPayload(quizScoring)),
         ...(effectiveOrganizationId && {
           organization_id: effectiveOrganizationId,
         }),
@@ -1495,10 +1516,13 @@ export function AssignmentDialog({
             // Issue #673: example-sentence validation rejects the *payload*,
             // not the per-classroom config. Bubble up so the outer handler
             // shows the specific toast instead of a generic per-class fail.
-            if (isExampleSentenceRequiredError(err)) {
+            if (
+              isExampleSentenceRequiredError(err) ||
+              quizScoringErrorCode(err) // Issue #1092
+            ) {
               throw err;
             }
-            failedClassroomNames.push(classroom.name);
+            failedClassroomNames.push(formatClassroomDisplayName(t, classroom));
             console.error(
               `Failed to create assignment for ${classroom.name}:`,
               err,
@@ -1592,6 +1616,15 @@ export function AssignmentDialog({
             },
           );
         }
+      } else if (quizScoringErrorCode(error)) {
+        // Issue #1092: 後端擋下未選評分方式／未填扣分
+        toast.error(
+          t(
+            quizScoringErrorCode(error) === "QUIZ_SCORING_POINTS_REQUIRED"
+              ? "quizScoring.errors.pointsRequired"
+              : "quizScoring.errors.methodRequired",
+          ),
+        );
       } else if (
         error &&
         typeof error === "object" &&
@@ -1651,6 +1684,7 @@ export function AssignmentDialog({
       show_option_images: false,
       show_example_sentence: false,
     });
+    setQuizScoring(EMPTY_QUIZ_SCORING);
     setCartItems([]);
     setExpandedPrograms(new Set());
     setExpandedLessons(new Set());
@@ -1677,7 +1711,12 @@ export function AssignmentDialog({
         // 單班級模式：至少選一個學生（多班級模式不會進到 step 3）
         return formData.student_ids.length > 0;
       case 4:
-        return formData.title.trim().length > 0;
+        // Issue #1092: 打字類小考必須選評分方式（D/E 另需合法扣分）才能派發
+        return (
+          formData.title.trim().length > 0 &&
+          (!isTypedQuizMode(formData.practice_mode) ||
+            isQuizScoringComplete(quizScoring))
+        );
       default:
         return false;
     }
@@ -2889,7 +2928,7 @@ export function AssignmentDialog({
                               />
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">
-                                  {classroom.name}
+                                  {formatClassroomDisplayName(t, classroom)}
                                 </p>
                                 <p className="text-xs text-gray-500">
                                   {t(
@@ -3216,7 +3255,7 @@ export function AssignmentDialog({
                           value={String(idx)}
                           className="text-xs"
                         >
-                          {classroom.name}
+                          {formatClassroomDisplayName(t, classroom)}
                           <Badge
                             variant="secondary"
                             className="ml-1 text-[10px] px-1"
@@ -3482,6 +3521,26 @@ export function AssignmentDialog({
                       />
                     </div>
                   </div>
+
+                  {/* Issue #1092: 打字類小考評分方式（必選）＋即時試算 */}
+                  {isTypedQuizMode(formData.practice_mode) && (
+                    <QuizScoringMethodField
+                      value={quizScoring}
+                      onChange={setQuizScoring}
+                      practiceMode={formData.practice_mode}
+                      contentIds={cartItems.map((item) => item.contentId)}
+                      questionCount={
+                        cartItems.length > 0 &&
+                        cartItems.every((item) => item.itemsCount != null)
+                          ? cartItems.reduce(
+                              (sum, item) => sum + (item.itemsCount ?? 0),
+                              0,
+                            )
+                          : null
+                      }
+                      idPrefix="dispatch-quiz-scoring"
+                    />
+                  )}
 
                   {/* Assignment Summary */}
                   <Card className="p-3 bg-blue-50 border-blue-200">

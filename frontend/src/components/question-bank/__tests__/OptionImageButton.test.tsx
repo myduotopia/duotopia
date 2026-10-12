@@ -53,6 +53,21 @@ describe("OptionImageButton", () => {
     expect(onChange).toHaveBeenLastCalledWith(null);
   });
 
+  it("縮圖 56px 白底方框、圖片等比縮小不裁切（object-contain）", () => {
+    render(
+      <OptionImageButton
+        imageUrl="http://x/wide.png"
+        onChange={vi.fn()}
+        label="A"
+      />,
+    );
+    const thumb = screen.getByTestId("option-image-thumb");
+    expect(thumb).toHaveClass("h-14", "w-14", "bg-white");
+    const img = thumb.querySelector("img")!;
+    expect(img).toHaveClass("object-contain", "max-h-full", "max-w-full");
+    expect(img).not.toHaveClass("object-cover");
+  });
+
   it("非圖片型別或超過 2MB → 擋下不上傳", async () => {
     const onChange = vi.fn();
     // applyAccept: false — 否則 user-event 依 accept 屬性直接濾掉 .txt，驗不到元件本身的型別檢查

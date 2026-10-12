@@ -90,9 +90,11 @@ class Settings:
     LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN: Optional[str] = os.getenv(
         "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN"
     )
-    # 非 production 環境「發布 LINE」時的收件人（測試者本人），不做 broadcast。
+    # 公告審核者（單一使用者）：
+    # - 建立草稿時（staging / production）推一則「待審核」通知
+    # - 非 production 環境「發布 LINE」時只推給這個人（production 才 broadcast）
     # LINE user ID 依 provider 而不同，必須是官方帳號同一個 provider 底下的 ID
-    LINE_ANNOUNCE_TEST_USER_ID: Optional[str] = os.getenv("LINE_ANNOUNCE_TEST_USER_ID")
+    LINE_ANNOUNCE_USER_ID: Optional[str] = os.getenv("LINE_ANNOUNCE_USER_ID")
     # 更新公告的樣板圖（先用官網 OG 圖佔位，換圖不用改程式）
     RELEASE_ANNOUNCEMENT_BANNER_URL: Optional[str] = os.getenv(
         "RELEASE_ANNOUNCEMENT_BANNER_URL"

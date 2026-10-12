@@ -30,9 +30,13 @@ class Classroom(Base):
     level = Column(Enum(ProgramLevel), default=ProgramLevel.A1)
     teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=True)
     school = Column(String(255), nullable=True)  # 學校名稱（與 DB 一致，但不使用）
-    grade = Column(String(50), nullable=True)  # 年級（與 DB 一致，但不使用）
+    # 年級 1–12，存數字字串；API 進出經 utils/classroom_grade 轉為 int（#1097）
+    grade = Column(String(50), nullable=True)
     academic_year = Column(String(20), nullable=True)  # 學年度（與 DB 一致，但不使用）
     is_active = Column(Boolean, default=True)
+    # 已刪除時間（#1097）：NOT NULL ＝ 已刪除，任何地方都不出現；
+    # is_active=False 且 deleted_at IS NULL ＝ 停用（老師可見、學生不可見）
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     # 1Campus sync metadata. Populated only for classrooms imported from
     # 1Campus jasmine API. Manual Duotopia classrooms have these as NULL,

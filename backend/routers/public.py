@@ -21,6 +21,7 @@ from models import (
     School,
 )
 from services.blog_service import BlogService
+from utils.classroom_grade import parse_grade
 import logging
 import os
 
@@ -44,6 +45,7 @@ class ValidateTeacherResponse(BaseModel):
 class ClassroomResponse(BaseModel):
     id: int
     name: str
+    grade: Optional[int] = None  # 年級 1–12，學生登入選班組合班名用（#1097）
     studentCount: int
 
 
@@ -136,12 +138,17 @@ def get_teacher_classrooms(
         db.query(
             Classroom.id,
             Classroom.name,
+            Classroom.grade,
             func.count(ClassroomStudent.id).label("student_count"),
         )
         # 明確 ON：避免與下方 #793 的 ClassroomSchool join 產生條件歧義
         .outerjoin(
             ClassroomStudent, ClassroomStudent.classroom_id == Classroom.id
-        ).filter(Classroom.teacher_id == teacher.id, Classroom.is_active.is_(True))
+        ).filter(
+            Classroom.teacher_id == teacher.id,
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
+        )
     )
 
     # #793：依視圖 scope 過濾班級（軟預設）
@@ -168,13 +175,23 @@ def get_teacher_classrooms(
         )
     # 其餘（無 scope / id 不齊）：不加過濾 → 回全部
 
-    classrooms_with_count = query.group_by(Classroom.id, Classroom.name).all()
+    classrooms_with_count = query.group_by(
+        Classroom.id, Classroom.name, Classroom.grade
+    ).all()
 
     result = []
-    for classroom_id, classroom_name, student_count in classrooms_with_count:
+    for (
+        classroom_id,
+        classroom_name,
+        classroom_grade,
+        student_count,
+    ) in classrooms_with_count:
         result.append(
             ClassroomResponse(
-                id=classroom_id, name=classroom_name, studentCount=student_count or 0
+                id=classroom_id,
+                name=classroom_name,
+                grade=parse_grade(classroom_grade),
+                studentCount=student_count or 0,
             )
         )
 
@@ -187,7 +204,11 @@ def get_classroom_students(classroom_id: int, db: Session = Depends(get_db)):
     # 確認班級存在
     classroom = (
         db.query(Classroom)
-        .filter(Classroom.id == classroom_id, Classroom.is_active.is_(True))
+        .filter(
+            Classroom.id == classroom_id,
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
+        )
         .first()
     )
 

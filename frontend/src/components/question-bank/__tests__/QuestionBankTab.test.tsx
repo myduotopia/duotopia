@@ -4,7 +4,8 @@
  * 所有 render 都包 MemoryRouter（元件用 useSearchParams 存 filter／分頁）。
  *
  * 驗證：列表載入與渲染、scope 對應的 API 參數、機構 scope 沒 organizationId 不打 API、
- * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁。
+ * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁
+ * （含每頁 10 筆）、教材欄。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -13,16 +14,26 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
 import QuestionBankTab from "../QuestionBankTab";
-import type { Question, QuestionListResponse } from "@/types/questionBank";
+import { PAGE_SIZES } from "../QuestionBankPagination";
+import type {
+  Question,
+  QuestionGroupListRow,
+  QuestionListItem,
+  QuestionListResponse,
+} from "@/types/questionBank";
 
 const listQuestions = vi.fn();
 const updateQuestion = vi.fn();
 const deleteQuestion = vi.fn();
+const updateQuestionGroup = vi.fn();
+const deleteQuestionGroup = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiClient: {
     listQuestions: (...args: unknown[]) => listQuestions(...args),
     updateQuestion: (...args: unknown[]) => updateQuestion(...args),
     deleteQuestion: (...args: unknown[]) => deleteQuestion(...args),
+    updateQuestionGroup: (...args: unknown[]) => updateQuestionGroup(...args),
+    deleteQuestionGroup: (...args: unknown[]) => deleteQuestionGroup(...args),
     listSources: vi.fn().mockResolvedValue({ items: [] }),
     createSource: vi.fn(),
     listExamPoints: vi.fn().mockResolvedValue({
@@ -82,8 +93,14 @@ vi.mock("react-i18next", () => {
         "questionBank.messages.editorComingSoon": "editor soon",
         "questionBank.visibility.private": "私人",
         "questionBank.visibility.public": "公開",
+        "questionBank.list.imageOption": "(圖片)",
         "questionBank.list.selected": `selected ${opts?.count}`,
         "questionBank.list.confirmDelete": `delete ${opts?.count}?`,
+        "questionBank.list.confirmDeleteWithGroups": `delete ${opts?.count}+${opts?.groups}g?`,
+        "questionBank.groupTypes.reading": "閱讀題組",
+        "questionBank.list.deleteGroup": "刪除題組",
+        "questionBank.group.confirmDelete": "delete whole group?",
+        "common.cancel": "取消",
         "questionBank.pagination": `第 ${opts?.page} / ${opts?.totalPages} 頁`,
         "common.loading": "Loading",
       };
@@ -147,11 +164,129 @@ function renderTab(ui: React.ReactElement, initialEntries: string[] = ["/"]) {
 }
 
 function respond(
-  items: Question[],
+  items: QuestionListItem[],
   total = items.length,
 ): QuestionListResponse {
   return { items, total, page: 1, page_size: 20 };
 }
+
+function makeGroupRow(
+  overrides: Partial<QuestionGroupListRow> = {},
+): QuestionGroupListRow {
+  return {
+    kind: "group",
+    id: 101,
+    question_type: "reading",
+    stimulus_type: "passage",
+    title: "Vivaldi group",
+    preview: "Antonio Vivaldi was a violin player.",
+    question_count: 3,
+    grade_min: 7,
+    grade_max: 9,
+    visibility: "private",
+    is_platform: false,
+    teacher_id: 1,
+    organization_id: null,
+    school_id: null,
+    is_owner: true,
+    can_edit: true,
+    sources: [],
+    exam_points: [
+      {
+        id: 3,
+        code: "grammar.tense.present_perfect",
+        names: { "zh-TW": "現在完成式", en: "Present Perfect" },
+        source: "manual",
+      },
+    ],
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+describe("QuestionBankTab 題組列（#1082）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("題組列顯示標題／小題數／題型「閱讀題組」／考點聯集，點標題回呼 onSelectGroup", async () => {
+    listQuestions.mockResolvedValue(
+      respond([makeQuestion({ id: 1 }), makeGroupRow()]),
+    );
+    const onSelectGroup = vi.fn();
+    const user = userEvent.setup();
+    renderTab(<QuestionBankTab scope="mine" onSelectGroup={onSelectGroup} />);
+    const row = await screen.findByTestId("question-group-row-101");
+    expect(row).toHaveTextContent("Vivaldi group");
+    expect(row).toHaveTextContent("閱讀題組");
+    expect(row).toHaveTextContent("現在完成式");
+    await user.click(screen.getByTestId("qb-group-title-101"));
+    expect(onSelectGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 101, kind: "group" }),
+    );
+  });
+
+  it("全選含題組；批次刪除同時 DELETE 單題與題組，confirm 文案帶題組數", async () => {
+    listQuestions.mockResolvedValue(
+      respond([makeQuestion({ id: 1 }), makeGroupRow()]),
+    );
+    deleteQuestion.mockResolvedValue(undefined);
+    deleteQuestionGroup.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByTestId("question-group-row-101");
+    await user.click(screen.getByTestId("qb-check-all"));
+    expect(screen.getByTestId("qb-bulk-bar")).toHaveTextContent("selected 2");
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(screen.getByTestId("qb-bulk-delete"));
+    await waitFor(() => expect(deleteQuestionGroup).toHaveBeenCalledWith(101));
+    expect(deleteQuestion).toHaveBeenCalledWith(1);
+    expect(confirmSpy).toHaveBeenLastCalledWith("delete 1+1g?");
+    confirmSpy.mockRestore();
+  });
+
+  it("題組列快速改公開 → 自動勾選、儲存打 updateQuestionGroup({ visibility })", async () => {
+    listQuestions.mockResolvedValue(respond([makeGroupRow()]));
+    updateQuestionGroup.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByTestId("question-group-row-101");
+    // Radix Select 開啟時會對選項呼叫 scrollIntoView，jsdom 沒有
+    Element.prototype.scrollIntoView = vi.fn();
+    await user.click(screen.getByTestId("qb-group-101-visibility-display"));
+    await user.click(
+      await screen.findByTestId("qb-group-101-visibility-option-public"),
+    );
+    expect(screen.getByTestId("question-group-row-101")).toHaveAttribute(
+      "data-dirty",
+      "true",
+    );
+    await user.click(screen.getByTestId("qb-bulk-save"));
+    await waitFor(() =>
+      expect(updateQuestionGroup).toHaveBeenCalledWith(101, {
+        visibility: "public",
+      }),
+    );
+  });
+
+  it("列尾「刪除題組」開 Dialog，確認後 deleteQuestionGroup；無編輯權限不顯示", async () => {
+    listQuestions.mockResolvedValue(
+      respond([makeGroupRow(), makeGroupRow({ id: 102, can_edit: false })]),
+    );
+    deleteQuestionGroup.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByTestId("question-group-row-102");
+    expect(screen.queryByTestId("qb-group-delete-102")).toBeNull();
+    await user.click(screen.getByTestId("qb-group-delete-101"));
+    await screen.findByTestId("qb-group-delete-dialog-101");
+    expect(deleteQuestionGroup).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId("qb-group-delete-confirm-101"));
+    await waitFor(() => expect(deleteQuestionGroup).toHaveBeenCalledWith(101));
+  });
+});
 
 describe("QuestionBankTab", () => {
   beforeEach(() => {
@@ -202,7 +337,7 @@ describe("QuestionBankTab", () => {
     expect(listQuestions).not.toHaveBeenCalled();
   });
 
-  it("「新增題目」下拉只有選擇題可點，其餘 disabled；點選擇題呼叫 onCreateQuestion", async () => {
+  it("「新增題目」下拉：選擇題、閱讀與克漏字題組可點，其餘 disabled；點選呼叫 onCreateQuestion(type)", async () => {
     listQuestions.mockResolvedValue(respond([]));
     const onCreate = vi.fn();
     const user = userEvent.setup();
@@ -212,11 +347,16 @@ describe("QuestionBankTab", () => {
     await user.click(screen.getByTestId("question-bank-add"));
     const mc = await screen.findByTestId("question-bank-add-multiple_choice");
     const reading = screen.getByTestId("question-bank-add-reading");
-    expect(reading.getAttribute("data-disabled")).not.toBeNull();
+    const cloze = screen.getByTestId("question-bank-add-cloze");
+    const fillIn = screen.getByTestId("question-bank-add-fill_in");
+    expect(fillIn.getAttribute("data-disabled")).not.toBeNull();
+    // 克漏字題組已開放（#1085）
+    expect(cloze.getAttribute("data-disabled")).toBeNull();
+    expect(reading.getAttribute("data-disabled")).toBeNull();
     expect(mc.getAttribute("data-disabled")).toBeNull();
 
-    await user.click(mc);
-    expect(onCreate).toHaveBeenCalledWith("multiple_choice");
+    await user.click(cloze);
+    expect(onCreate).toHaveBeenCalledWith("cloze");
   });
 
   it("沒傳 onCreateQuestion 時點選擇題顯示提示", async () => {
@@ -277,6 +417,77 @@ describe("QuestionBankTab", () => {
       ),
     );
     expect(await screen.findByText("Q21")).toBeTruthy();
+  });
+
+  it("教材欄：單題與題組列顯示「教材名 › 單元名」，沒有關聯顯示 —", async () => {
+    const links = [
+      {
+        program_id: 5,
+        lesson_id: 9,
+        program_name: "國中會考總複習",
+        lesson_name: "Unit 3 時態",
+      },
+    ];
+    listQuestions.mockResolvedValue(
+      respond([
+        makeQuestion({ id: 1, program_links: links }),
+        makeQuestion({ id: 2, stem: "Q2", program_links: [] }),
+        makeGroupRow({ id: 101, program_links: links }),
+      ]),
+    );
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Q2");
+
+    expect(screen.getByTestId("qb-row-1-programs").textContent).toBe(
+      "國中會考總複習 › Unit 3 時態",
+    );
+    expect(screen.getByTestId("qb-row-2-programs").textContent).toBe("—");
+    expect(screen.getByTestId("qb-group-101-programs").textContent).toBe(
+      "國中會考總複習 › Unit 3 時態",
+    );
+  });
+
+  it("圖片選項（#1084）：沒有字只有圖的選項顯示「(圖片)」，排版仍是一列四格", async () => {
+    const imageOption = (i: number) => ({
+      id: i + 1,
+      order_index: i,
+      // 圖片選項在題本上沒有字：text 真的是空字串
+      text: "",
+      is_correct: i === 1,
+      audio_url: null,
+      image_url: `https://cdn/o${i}.png`,
+    });
+    listQuestions.mockResolvedValue(
+      respond([
+        makeQuestion({
+          id: 1,
+          stem: "Which picture?",
+          options: [0, 1, 2, 3].map(imageOption),
+        }),
+      ]),
+    );
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByText("Which picture?");
+
+    const grid = screen.getByTestId("qb-option-grid");
+    expect(grid.getAttribute("data-layout")).toBe("1x4");
+    expect(grid.textContent).toBe("A. (圖片)B. (圖片)C. (圖片)D. (圖片)");
+  });
+
+  it("每頁筆數支援 10：URL size=10 時以 page_size 10 查詢，選單含 10 的選項", async () => {
+    const items = Array.from({ length: 10 }, (_, i) =>
+      makeQuestion({ id: i + 1, stem: `Q${i + 1}` }),
+    );
+    listQuestions.mockResolvedValue(respond(items, 45));
+    renderTab(<QuestionBankTab scope="mine" />, ["/?size=10"]);
+    await screen.findByText("Q1");
+
+    expect(PAGE_SIZES).toContain(10);
+    expect(listQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 10 }),
+    );
+    expect(screen.getByTestId("question-bank-page-size")).toBeTruthy();
+    expect(screen.getByText("第 1 / 5 頁")).toBeTruthy();
   });
 
   it("全選／取消全選；勾選後底部動作列出現", async () => {

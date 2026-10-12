@@ -106,8 +106,7 @@ def _round_selections(n_wrong):
 
 
 class TestRetryArchivesRound:
-    @pytest.mark.asyncio
-    async def test_force_retry_archives_round_selections(self, db_session):
+    def test_force_retry_archives_round_selections(self, db_session):
         db = db_session
         student, sa, item, progress = _setup(db)
 
@@ -118,7 +117,7 @@ class TestRetryArchivesRound:
             expected_score=25.0,
             timeout=False,
         )
-        await retry_rearrangement(
+        retry_rearrangement(
             student_assignment_id=sa.id,
             request=req,
             current_student={"sub": str(student.id)},
@@ -136,8 +135,7 @@ class TestRetryArchivesRound:
         # 開新一輪：selections 清空
         assert rd["selections"] == []
 
-    @pytest.mark.asyncio
-    async def test_multiple_retries_accumulate(self, db_session):
+    def test_multiple_retries_accumulate(self, db_session):
         db = db_session
         student, sa, item, progress = _setup(db)
 
@@ -149,7 +147,7 @@ class TestRetryArchivesRound:
                 expected_score=0.0,
                 timeout=False,
             )
-            await retry_rearrangement(
+            retry_rearrangement(
                 student_assignment_id=sa.id,
                 request=req,
                 current_student={"sub": str(student.id)},
@@ -162,8 +160,7 @@ class TestRetryArchivesRound:
         assert len(rd["attempts"]) == 3
         assert all(a["ended_reason"] == "force_retry" for a in rd["attempts"])
 
-    @pytest.mark.asyncio
-    async def test_empty_selections_does_not_add_blank_attempt(self, db_session):
+    def test_empty_selections_does_not_add_blank_attempt(self, db_session):
         """完成後再重試：該輪已由 complete 封存，前端送空 selections → 不重複封存。"""
         db = db_session
         student, sa, item, progress = _setup(db)
@@ -175,7 +172,7 @@ class TestRetryArchivesRound:
             expected_score=100.0,
             timeout=False,
         )
-        await retry_rearrangement(
+        retry_rearrangement(
             student_assignment_id=sa.id,
             request=req,
             current_student={"sub": str(student.id)},
@@ -187,8 +184,7 @@ class TestRetryArchivesRound:
         assert progress.retry_count == 1  # 仍記錄重試次數
         assert rd["attempts"] == []  # 但不新增空白 attempt
 
-    @pytest.mark.asyncio
-    async def test_timeout_round_archived_with_timeout_reason(self, db_session):
+    def test_timeout_round_archived_with_timeout_reason(self, db_session):
         db = db_session
         student, sa, item, progress = _setup(db)
 
@@ -199,7 +195,7 @@ class TestRetryArchivesRound:
             expected_score=50.0,
             timeout=True,
         )
-        await retry_rearrangement(
+        retry_rearrangement(
             student_assignment_id=sa.id,
             request=req,
             current_student={"sub": str(student.id)},

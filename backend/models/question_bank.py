@@ -34,7 +34,9 @@ from database import Base
 from models.base import UUID
 
 
-# ---- 值域常數（DB 亦有 CHECK；這裡供 service / schema 驗證用） ----
+# ---- 值域常數（供 service / schema 驗證用）----
+# DB 只對 stimulus_type 等少數欄位有 CHECK；questions.question_type 沒有 DB CHECK，
+# 題型白名單由 routers/question_bank_schemas.py 的 *_CREATABLE_TYPES 把關。
 QUESTION_TYPE_MULTIPLE_CHOICE = "multiple_choice"
 QUESTION_TYPES = (
     QUESTION_TYPE_MULTIPLE_CHOICE,

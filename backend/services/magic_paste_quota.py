@@ -2,6 +2,8 @@
 魔術貼上（教材內容 AI 擷取）每月配額服務（issue #891）。
 
 規則：
+- 管理者帳號（`Teacher.is_admin`）**不受配額限制**：不計數、不扣點數。DEMO／內部測試
+  需要連續擷取很多張，正式環境也有需要這樣用的帳號（使用者定案 2026-10-04）。
 - 每位老師每個自然月有 FREE_MONTHLY_LIMIT 張免費額度（跨月自然重置）。
 - 用完免費額度後，每張改扣點數（1 張 = 10 秒，走既有 QuotaService waterfall：
   訂閱 → 點數包）。點數也不足時 QuotaService 會丟 HTTPException(402)，
@@ -10,6 +12,7 @@
 計數以 magic_paste_usage 表記錄（每位老師每個 year_month 一列）。
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
@@ -18,6 +21,8 @@ from sqlalchemy.exc import IntegrityError
 
 from models import Teacher, MagicPasteUsage
 from services.quota_service import QuotaService
+
+logger = logging.getLogger(__name__)
 
 # 每位老師每月免費張數
 FREE_MONTHLY_LIMIT = 5
@@ -28,6 +33,11 @@ UNIT_TYPE = "張"
 UNIT_COUNT = 1
 # 一張圖擷取所需的點數（秒），供前端判斷「點數是否足夠再扣一張」
 POINTS_PER_IMAGE = QuotaService.convert_unit_to_seconds(UNIT_COUNT, UNIT_TYPE)
+
+
+def is_unlimited(teacher: Teacher) -> bool:
+    """管理者帳號不受配額限制（DEMO 與內部測試用；正式環境同樣適用）。"""
+    return bool(getattr(teacher, "is_admin", False))
 
 
 def current_year_month() -> str:
@@ -92,8 +102,23 @@ def get_quota_status(
 ) -> Dict[str, Any]:
     """
     回傳目前配額狀態，供前端顯示剩餘免費張數與是否可繼續使用。
+
+    管理者帳號回 `unlimited: True`、`can_use: True`（前端顯示「不限張數」）。
     """
     ym = year_month or current_year_month()
+    if is_unlimited(teacher):
+        return {
+            "year_month": ym,
+            "unlimited": True,
+            "free_limit": FREE_MONTHLY_LIMIT,
+            "free_used": 0,
+            "free_remaining": FREE_MONTHLY_LIMIT,
+            "points_per_image": POINTS_PER_IMAGE,
+            "paid_quota_remaining": QuotaService.get_quota_info(teacher, db)[
+                "quota_remaining"
+            ],
+            "can_use": True,
+        }
     row = _get_usage(db, teacher.id, ym)
     free_used = row.count if row else 0
     free_remaining = max(0, FREE_MONTHLY_LIMIT - free_used)
@@ -103,6 +128,7 @@ def get_quota_status(
 
     return {
         "year_month": ym,
+        "unlimited": False,
         "free_limit": FREE_MONTHLY_LIMIT,
         "free_used": free_used,
         "free_remaining": free_remaining,
@@ -122,13 +148,32 @@ def consume(
     """
     消耗一張額度。優先扣免費額度，用完改扣點數。
 
+    管理者帳號（`is_unlimited`）不計數也不扣點，直接回 charged="unlimited"。
+
     Returns:
-        dict 描述本次如何計費（charged: "free" | "points"）。
+        dict 描述本次如何計費（charged: "unlimited" | "free" | "points"）。
 
     Raises:
         HTTPException(402): 免費額度用完且點數不足（由 QuotaService.deduct_quota 丟出）。
     """
     ym = year_month or current_year_month()
+    if is_unlimited(teacher):
+        # 不計數也不扣點，但保留 AI 成本可見性
+        detail = feature_detail or {}
+        logger.info(
+            "[magic-paste] admin unlimited extract teacher_id=%s extract_mode=%s "
+            "estimated_cost_usd=%s",
+            teacher.id,
+            detail.get("extract_mode"),
+            detail.get("estimated_cost_usd"),
+        )
+        return {
+            "charged": "unlimited",
+            "points_used": 0,
+            "free_used": 0,
+            "free_remaining": FREE_MONTHLY_LIMIT,
+            "year_month": ym,
+        }
     # 鎖住當月計數列，序列化同一老師的並發消耗
     row = _get_or_create_usage_locked(db, teacher.id, ym)
 

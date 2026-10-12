@@ -141,6 +141,7 @@ async def create_instant_practice(
             .filter(
                 Classroom.id == request.classroom_id,
                 Classroom.is_active.is_(True),
+                Classroom.deleted_at.is_(None),
             )
             .first()
         )

@@ -67,6 +67,7 @@
 | `/fix-review <PR-number>` | 自動分析 Claude Code Review 回饋並反覆修正，直到 PR 可以 merge。遇到需要人為判斷的項目才會提問 |
 | `/announce <#N \| release>` | 整理對外更新公告（LINE + 官網中英文章）。`#N` 寫成 issue 留言；`release` 統整後寫進 staging → main PR 描述（沒有 PR 就開）。issue 須同時有 `📣 announce` 與 `✅ tested-in-staging`。自動觸發：「開 staging → main 的 PR」、「寫更新公告」 |
 | `/fix-workflow <PR-number>` | 自動分析 CI test workflow 錯誤（backend/frontend），解析 GitHub Actions log，修復 Black、Flake8、Prettier、TypeScript、ESLint、build 等錯誤後重推 |
+| `/qb-add-type <題型名稱>` | 題庫新增題型（如聽力題組）：照 `docs/design/question-bank-question-types.md` 檢查清單，列檔案清單確認後逐步實作、每步驗證、更新對照表。自動觸發：「新增題型」、「題庫加題型」 |
 
 ### Commands (`.claude/commands/`)
 
@@ -107,6 +108,7 @@ deploy-feature <issue>
 4. **Use feature branches** - 不直接 commit 到 staging
 5. **批改頁新增作業類型** - 同路由 + `practice_mode` 分 Panel，禁止新增路由或複製 `GradingPage.tsx`。詳細步驟見 [`docs/design/grading-page-architecture.md`](./docs/design/grading-page-architecture.md)
 6. **計分類別（score_category）** - 由 `practice_mode` + `play_audio` 自動推導，唯一判定函式：[`backend/utils/score_category.py`](./backend/utils/score_category.py)。對照表與新增模式時的更新流程見 [`docs/design/score-category-mapping.md`](./docs/design/score-category-mapping.md)。請勿在前端傳 `score_category` — 後端會覆寫。
+7. **題庫新增題型** - 同一 sheet 依題型分流，禁止新增路由或複製 `QuestionSheet`／`GroupCard`／`QuestionCard`。步驟見 [`docs/design/question-bank-question-types.md`](./docs/design/question-bank-question-types.md)，或用 `/qb-add-type`
 
 ## Database Migration 鐵則
 

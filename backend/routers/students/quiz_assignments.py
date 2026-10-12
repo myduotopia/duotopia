@@ -21,10 +21,26 @@ Issue #828: introduces ``word_selection_quiz`` / ``word_spelling_quiz`` /
       stores one row per attempt.
     - Scoring: per-question deduction = 100 / total (not pre-rounded); only the
       final score rounds to 1 decimal.
+    - Issue #1092: typed quizzes (spelling / cloze) score per the assignment's
+      ``quiz_scoring_method`` (whole_question / per_word / per_word_lenient /
+      fixed_per_word / fixed_per_letter; NULL = whole_question) and
+      ``quiz_case_sensitive``. Rules live ONLY in ``utils/quiz_scoring.py``;
+      ``compute_quiz_score`` sums ``quiz_item_deduction`` per question and is
+      bit-for-bit identical to the old formula for NULL / whole_question.
+      Answer endpoints accept ``typed_words`` (one string per slot, blanks kept)
+      and store it in ``answer_data``; ``prior_answer`` is rebuilt from it so
+      blank slots stay in place. ``recompute_quiz_scores`` re-scores the first
+      completed session of every submitted student after a settings change
+      (called by the teacher PATCH; clears manual deductions, keeps status).
+      Answers still in progress are re-judged with the CURRENT settings when
+      they are scored (``compute_quiz_score`` → ``_sync_typed_correctness``),
+      so a mid-quiz case-sensitivity change never leaves a stale ``is_correct``.
+      When ``typed_words`` is sent, the stored ``typed_answer`` is derived from
+      it server-side (non-blank words joined by one space).
 """
 import random
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -39,11 +55,21 @@ from models import (
     PracticeAnswer,
     PracticeSession,
     StudentAssignment,
+    StudentItemProgress,
 )
 from utils.distractors import (
     answer_text_for_item,
     build_answer_pool,
     normalize_distractors,
+)
+from utils.quiz_scoring import (
+    TYPED_QUIZ_MODES,
+    WHOLE_QUESTION,
+    effective_method,
+    evaluate_answer,
+    evaluate_answer_data,
+    question_deduction,
+    total_score,
 )
 
 from .dependencies import get_current_student
@@ -70,12 +96,21 @@ class WordSelectionQuizAnswerRequest(_QuizAnswerBase):
     is_correct: Optional[bool] = None
 
 
-class WordSpellingQuizAnswerRequest(_QuizAnswerBase):
+class _TypedQuizAnswerBase(_QuizAnswerBase):
     typed_answer: str = Field(max_length=200)
+    # Issue #1092: 逐格答案（含空字串，保留空格位置）。有給時判分以它為準；
+    # 舊前端不送 → 退回 typed_answer 整串比對（行為不變）。
+    typed_words: Optional[List[Annotated[str, Field(max_length=200)]]] = Field(
+        default=None, max_length=50
+    )
 
 
-class WordClozeQuizAnswerRequest(_QuizAnswerBase):
-    typed_answer: str = Field(max_length=200)
+class WordSpellingQuizAnswerRequest(_TypedQuizAnswerBase):
+    pass
+
+
+class WordClozeQuizAnswerRequest(_TypedQuizAnswerBase):
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +450,88 @@ def _common_settings(assignment: Assignment) -> Dict[str, Any]:
         "show_example_sentence": bool(
             getattr(assignment, "show_example_sentence", False)
         ),
+        # Issue #1092: 打字類小考 — 前端本機對錯判斷吃大小寫開關；評分方式供顯示
+        # （NULL ＝ 舊作業 ＝ 整題計分）
+        "quiz_case_sensitive": bool(getattr(assignment, "quiz_case_sensitive", False)),
+        "quiz_scoring_method": getattr(assignment, "quiz_scoring_method", None),
     }
+
+
+def _typed_prior_answer(prior: Optional[PracticeAnswer]) -> Optional[str]:
+    """打字小考 start 回傳的 prior_answer（Issue #1092）。
+
+    有 ``typed_words`` 時以單一空白 join 還原（空格留在原位，前端 split(" ") 回格子）；
+    舊作答退回 ``typed_answer``。
+    """
+    if not prior or not prior.answer_data:
+        return None
+    typed_words = prior.answer_data.get("typed_words")
+    if isinstance(typed_words, list):
+        return " ".join(w or "" for w in typed_words)
+    return prior.answer_data.get("typed_answer")
+
+
+def _typed_answer_data(
+    mode: str, request: "_TypedQuizAnswerBase", correct_answer: str
+) -> Dict[str, Any]:
+    data: Dict[str, Any] = {
+        "type": mode,
+        "typed_answer": request.typed_answer,
+        "correct_answer": correct_answer,
+    }
+    # Issue #1092: 只有新前端送 typed_words 時才存，舊作答列形狀不變
+    if request.typed_words is not None:
+        data["typed_words"] = list(request.typed_words)
+        # typed_answer 一律由 typed_words 在後端產生（非空格以單一空白相接），
+        # 不信任 client 送的值 → 學生複盤頁與老師批改頁看到的答案內容一致
+        # （批改頁另以「＿」標出空格，複盤頁顯示相接後的文字）
+        data["typed_answer"] = " ".join(
+            w.strip() for w in request.typed_words if w and w.strip()
+        )
+    return data
+
+
+def _typed_is_correct(
+    assignment: Assignment, request: "_TypedQuizAnswerBase", correct_answer: str
+) -> bool:
+    """Issue #1092: 整題全對判定走 quiz_scoring.evaluate_answer（吃大小寫開關）。
+
+    沒送 typed_words 且不分大小寫 → 與 #828 的 strip().lower() 整串比對完全相同。
+    """
+    answer = (
+        request.typed_words if request.typed_words is not None else request.typed_answer
+    )
+    return evaluate_answer(
+        answer,
+        correct_answer,
+        bool(getattr(assignment, "quiz_case_sensitive", False)),
+    )["is_correct"]
+
+
+def _existing_typed_answers_rejudged(
+    db: Session,
+    assignment: Assignment,
+    items: List[ContentItem],
+    session: PracticeSession,
+) -> Dict[int, PracticeAnswer]:
+    """打字小考 start：先以作業目前設定重判本 session 的答案再回傳（Issue #1092）。
+
+    作答中／訂正中老師改了大小寫開關時，已存的 ``is_correct`` 會過期；前端依
+    ``prior_is_correct`` 鎖定「已答對」題，過期的 True 會讓訂正永遠交不出去。
+    這裡讓 start 自我修正並 commit（設定沒變時 ``is_correct`` 重判結果不變；
+    ``session.correct_count`` 會同步成本作業題目的去重計數）。選擇題小考不經過這裡。
+    只有真的改到值才 commit — 一般續考（設定沒變）維持唯讀。
+    """
+    existing = _existing_answers_for_session(db, session.id)
+    items_by_id = {it.id: it for it in items}
+    if _sync_typed_correctness(
+        assignment,
+        items_by_id,
+        {k: v for k, v in existing.items() if k in items_by_id},
+        session,
+    ):
+        db.commit()
+    return existing
 
 
 def _attach_question_numbers(items: List[ContentItem], builder) -> List[Dict[str, Any]]:
@@ -433,7 +549,7 @@ def _attach_question_numbers(items: List[ContentItem], builder) -> List[Dict[str
 
 
 @router.get("/assignments/{assignment_id}/quiz/status")
-async def get_quiz_live_status(
+def get_quiz_live_status(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -543,7 +659,7 @@ def _build_selection_options(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/selection_quiz/start")
-async def start_word_selection_quiz(
+def start_word_selection_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -603,7 +719,7 @@ async def start_word_selection_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/selection_quiz/answer")
-async def submit_word_selection_quiz_answer(
+def submit_word_selection_quiz_answer(
     assignment_id: int,
     request: WordSelectionQuizAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -678,7 +794,7 @@ async def submit_word_selection_quiz_answer(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/spelling_quiz/start")
-async def start_word_spelling_quiz(
+def start_word_spelling_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -694,7 +810,7 @@ async def start_word_spelling_quiz(
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
     )
-    existing = _existing_answers_for_session(db, session.id)
+    existing = _existing_typed_answers_rejudged(db, assignment, items, session)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
         prior = existing.get(item.id)
@@ -708,11 +824,7 @@ async def start_word_spelling_quiz(
             "example_sentence": item.example_sentence,
             "example_sentence_translation": item.example_sentence_translation,
             "example_sentence_audio_url": item.example_sentence_audio_url,
-            "prior_answer": (
-                prior.answer_data.get("typed_answer")
-                if prior and prior.answer_data
-                else None
-            ),
+            "prior_answer": _typed_prior_answer(prior),
             "prior_is_correct": prior.is_correct if prior else None,
         }
 
@@ -731,7 +843,7 @@ async def start_word_spelling_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/spelling_quiz/answer")
-async def submit_word_spelling_quiz_answer(
+def submit_word_spelling_quiz_answer(
     assignment_id: int,
     request: WordSpellingQuizAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -760,8 +872,9 @@ async def submit_word_spelling_quiz_answer(
         )
 
     correct_answer = item.text or ""
-    # Case-insensitive, consistent with cloze quiz (#828 review): apple == Apple.
-    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+    # 預設不分大小寫（#828 review: apple == Apple）；#1092 老師可開大小寫開關，
+    # 有 typed_words 時逐格比對。
+    is_correct = _typed_is_correct(assignment, request, correct_answer)
 
     _upsert_quiz_answer(
         db,
@@ -769,11 +882,7 @@ async def submit_word_spelling_quiz_answer(
         content_item_id=item.id,
         is_correct=is_correct,
         time_spent_seconds=request.time_spent_seconds,
-        answer_data={
-            "type": "word_spelling_quiz",
-            "typed_answer": request.typed_answer,
-            "correct_answer": correct_answer,
-        },
+        answer_data=_typed_answer_data("word_spelling_quiz", request, correct_answer),
         revised=sa.returned_at is not None,
     )
     db.commit()
@@ -927,7 +1036,7 @@ def build_cloze_quiz_payload(assignment: Assignment, db: Session) -> Dict[str, A
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/cloze_quiz/start")
-async def start_word_cloze_quiz(
+def start_word_cloze_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -943,7 +1052,7 @@ async def start_word_cloze_quiz(
     items = _load_quiz_items(
         db, assignment, assignment.shuffle_questions, seed=session.id
     )
-    existing = _existing_answers_for_session(db, session.id)
+    existing = _existing_typed_answers_rejudged(db, assignment, items, session)
 
     def builder(item: ContentItem) -> Dict[str, Any]:
         prior = existing.get(item.id)
@@ -959,11 +1068,7 @@ async def start_word_cloze_quiz(
             "cloze_answer": cloze_answer,
             "image_url": item.image_url,
             "audio_url": item.audio_url,
-            "prior_answer": (
-                prior.answer_data.get("typed_answer")
-                if prior and prior.answer_data
-                else None
-            ),
+            "prior_answer": _typed_prior_answer(prior),
             "prior_is_correct": prior.is_correct if prior else None,
         }
 
@@ -982,7 +1087,7 @@ async def start_word_cloze_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/cloze_quiz/answer")
-async def submit_word_cloze_quiz_answer(
+def submit_word_cloze_quiz_answer(
     assignment_id: int,
     request: WordClozeQuizAnswerRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1011,7 +1116,7 @@ async def submit_word_cloze_quiz_answer(
         )
 
     correct_answer = _resolve_cloze_answer(item)
-    is_correct = request.typed_answer.strip().lower() == correct_answer.strip().lower()
+    is_correct = _typed_is_correct(assignment, request, correct_answer)
 
     _upsert_quiz_answer(
         db,
@@ -1019,11 +1124,7 @@ async def submit_word_cloze_quiz_answer(
         content_item_id=item.id,
         is_correct=is_correct,
         time_spent_seconds=request.time_spent_seconds,
-        answer_data={
-            "type": "word_cloze_quiz",
-            "typed_answer": request.typed_answer,
-            "correct_answer": correct_answer,
-        },
+        answer_data=_typed_answer_data("word_cloze_quiz", request, correct_answer),
         revised=sa.returned_at is not None,
     )
     db.commit()
@@ -1052,43 +1153,252 @@ def latest_quiz_session(
     return q.order_by(PracticeSession.id.desc()).first()
 
 
+def _assignment_quiz_items(db: Session, assignment_id: int) -> List[ContentItem]:
+    """本作業全部題目（跨題組）。"""
+    return (
+        db.query(ContentItem)
+        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
+        .filter(AssignmentContent.assignment_id == assignment_id)
+        .all()
+    )
+
+
+def _typed_correct_answer(
+    practice_mode: str, item: Optional[ContentItem], ans: PracticeAnswer
+) -> str:
+    """打字小考正解：優先作答當下存的 correct_answer（學生當時被比對的那個）。"""
+    stored = (ans.answer_data or {}).get("correct_answer")
+    if stored:
+        return stored
+    if item is None:
+        return ""
+    if practice_mode == "word_cloze_quiz":
+        return _resolve_cloze_answer(item)
+    return item.text or ""
+
+
+def evaluate_typed_quiz_answer(
+    assignment: Assignment, item: Optional[ContentItem], ans: PracticeAnswer
+) -> Dict[str, Any]:
+    """Issue #1092: 以作業目前的大小寫開關重評一筆打字小考作答（quiz_scoring 單一來源）。"""
+    return evaluate_answer_data(
+        ans.answer_data,
+        _typed_correct_answer(assignment.practice_mode or "", item, ans),
+        bool(getattr(assignment, "quiz_case_sensitive", False)),
+    )
+
+
+def quiz_item_deduction(
+    assignment: Optional[Assignment],
+    per_q: float,
+    item: Optional[ContentItem],
+    ans: Optional[PracticeAnswer],
+) -> Tuple[float, Optional[Dict[str, Any]]]:
+    """單題預設扣分（Issue #1092）。回 (deduction, evaluation)。
+
+    - 未作答 → ``per_q``，evaluation 為 None。
+    - 選擇題小考 → 依已存的 ``is_correct``：對 0、錯 ``per_q``（不變）。
+    - 打字小考一律以**作業目前設定**重評（作答中途老師改大小寫開關，已存的
+      ``is_correct`` 可能過期）。整題計分（含 NULL 舊作業）：對 0、錯 ``per_q``
+      —— 舊作答（整串、不分大小寫）重評結果與當初存的完全相同，與 #1045 公式
+      逐位元相同。打字小考附 evaluation 供批改頁顯示錯字數。
+    - 打字小考 B〜E → ``quiz_scoring.question_deduction``。
+    """
+    if ans is None:
+        return per_q, None
+    mode = assignment.practice_mode if assignment is not None else None
+    if mode not in TYPED_QUIZ_MODES:
+        return (0.0 if ans.is_correct else per_q), None
+    evaluation = evaluate_typed_quiz_answer(assignment, item, ans)
+    method = effective_method(getattr(assignment, "quiz_scoring_method", None))
+    if method == WHOLE_QUESTION:
+        return (0.0 if evaluation["is_correct"] else per_q), evaluation
+    return (
+        question_deduction(
+            method,
+            getattr(assignment, "quiz_scoring_points", None),
+            per_q,
+            evaluation,
+        ),
+        evaluation,
+    )
+
+
+def _sync_typed_correctness(
+    assignment: Optional[Assignment],
+    items_by_id: Dict[int, ContentItem],
+    latest: Dict[int, PracticeAnswer],
+    session: Optional[PracticeSession],
+) -> bool:
+    """Issue #1092: 打字小考以作業目前設定重判每題最新答案的 ``is_correct`` 並寫回，
+    同步 ``session.correct_count``（統計、訂正「全對才能交」都讀這兩個值）。
+
+    作答中（IN_PROGRESS、live、訂正中的 session）老師改了大小寫開關時，作答當下
+    存的 ``is_correct`` 會過期；這裡讓「答對題數」與扣分用同一個判定。
+    選擇題小考不處理。舊作答在未改設定時重判結果不變。
+    回傳是否有任何欄位真的被改動（呼叫端據此決定要不要 commit）。
+    """
+    if assignment is None or (assignment.practice_mode or "") not in TYPED_QUIZ_MODES:
+        return False
+    changed = False
+    for item_id, ans in latest.items():
+        fresh = bool(
+            evaluate_typed_quiz_answer(assignment, items_by_id.get(item_id), ans)[
+                "is_correct"
+            ]
+        )
+        if ans.is_correct != fresh:
+            ans.is_correct = fresh
+            changed = True
+    if session is not None:
+        correct_count = sum(1 for ans in latest.values() if ans.is_correct)
+        if session.correct_count != correct_count:
+            session.correct_count = correct_count
+            changed = True
+    return changed
+
+
+def _score_latest_answers(
+    assignment: Optional[Assignment],
+    items: List[ContentItem],
+    latest: Dict[int, PracticeAnswer],
+) -> float:
+    """逐題累加預設扣分 → 總分（quiz_scoring.total_score）。無題目 → 0。"""
+    if not items:
+        return 0.0
+    per_q = 100 / len(items)
+    deductions = [
+        quiz_item_deduction(assignment, per_q, item, latest.get(item.id))[0]
+        for item in items
+    ]
+    return total_score(per_q, deductions)
+
+
 def compute_quiz_score(
     db: Session, sa: StudentAssignment, session: Optional[PracticeSession]
 ) -> Tuple[float, int, int, int]:
-    """從 session 的 practice_answers 算分。回 (score, correct, total_items, answered)。"""
-    total_items = (
-        db.query(ContentItem)
-        .join(AssignmentContent, AssignmentContent.content_id == ContentItem.content_id)
-        .filter(AssignmentContent.assignment_id == sa.assignment_id)
-        .count()
-    )
+    """從 session 的 practice_answers 算分。回 (score, correct, total_items, answered)。
+
+    計分（#1045）：每題扣分上限 = 100 / 總題數（不先捨入，只對總分 round 1）；
+    未作答扣整題；clamp 到 [0, 100]。#1092：打字小考依作業的評分方式逐題累加
+    ``quiz_item_deduction``；NULL / whole_question 與選擇題 = 100 − 錯題數 × 每題扣分，
+    與舊公式逐位元相同。回傳形狀不變。
+    #1092：打字小考先以作業目前設定重判 ``is_correct`` 並寫回（``_sync_typed_correctness``），
+    答對題數、整題計分扣分、訂正「全對才能交」都用重判後的值。不 commit。
+    """
+    items = _assignment_quiz_items(db, sa.assignment_id)
+    total_items = len(items)
     correct_count = 0
     answered = 0
+    latest: Dict[int, PracticeAnswer] = {}
+    assignment = (
+        db.query(Assignment).filter(Assignment.id == sa.assignment_id).first()
+        if total_items
+        else None
+    )
     if session is not None:
         # #1045: 每題只算最新一筆、只算本作業題目 → correct ≤ answered ≤ total。
-        item_ids = {
-            row[0]
-            for row in db.query(ContentItem.id)
-            .join(
-                AssignmentContent,
-                AssignmentContent.content_id == ContentItem.content_id,
-            )
-            .filter(AssignmentContent.assignment_id == sa.assignment_id)
-            .all()
-        }
-        latest = latest_quiz_answers_by_item(db, session.id, item_ids)
+        latest = latest_quiz_answers_by_item(db, session.id, {it.id for it in items})
+        _sync_typed_correctness(
+            assignment, {it.id: it for it in items}, latest, session
+        )
         answered = len(latest)
         correct_count = sum(1 for ans in latest.values() if ans.is_correct)
-    # 計分：每題扣分 = 100 / 總題數（#1045：不先捨入，只對總分 round 1）；
-    # 分數 = 100 − 錯誤題數 × 每題扣分。未作答視同答錯（錯誤題數 = 總題數 − 答對題數）。
-    # clamp 到 [0, 100]。
-    if total_items:
-        per_question = 100 / total_items
-        wrong_count = total_items - correct_count
-        score = round(max(0.0, min(100.0, 100.0 - wrong_count * per_question)), 1)
-    else:
-        score = 0.0
+    score = _score_latest_answers(assignment, items, latest)
     return score, correct_count, total_items, answered
+
+
+def recompute_quiz_scores(db: Session, assignment: Assignment) -> int:
+    """Issue #1092: 評分設定變更後，以新設定重算所有已交卷學生。回重算人數。
+
+    對每位「有已完成 session」的學生取**第一個**完成的 session（＝被打分、凍結的
+    原始作答，與複盤／批改頁同一筆）：
+        - 以目前大小寫開關重判每題最新答案的 ``is_correct``，同步 ``session.correct_count``
+        - 清掉本作業題目的 ``StudentItemProgress.teacher_review_score``（老師手動扣分
+          被新算法取代）
+        - 直接寫 ``sa.score``；**不經** ``finalize_quiz_submission``，不動 status／時間戳
+          （被退回訂正中的學生仍是 RETURNED）
+    另外，每位學生「還沒交卷」的 session（作答中、訂正中）也重判 ``is_correct``
+    （不寫分數），避免訂正中被鎖定的題目在新設定下變錯而卡住交卷。
+    未作答題扣整題。只處理打字小考，其他模式回 0。不 commit，由呼叫端 commit。
+    回傳值只算「已交卷、分數被重算」的人數。
+
+    查詢以整份作業批次撈（students / sessions / answers 各一次、清手動扣分一次），
+    不隨學生人數線性增加 round trip；邏輯與逐筆版的
+    ``_first_completed_quiz_session`` / ``latest_quiz_answers_by_item`` 相同。
+
+    已知競態（接受、不加鎖）：與學生 ``/complete`` 同一瞬間進行時，該生分數可能停在
+    舊設定的結果；詳見 docs/design/quiz-scoring-methods.md「重算」一節。
+    """
+    mode = assignment.practice_mode or ""
+    if mode not in TYPED_QUIZ_MODES:
+        return 0
+    items = _assignment_quiz_items(db, assignment.id)
+    items_by_id = {it.id: it for it in items}
+    item_ids = set(items_by_id)
+    sa_by_id = {
+        sa.id: sa
+        for sa in db.query(StudentAssignment).filter(
+            StudentAssignment.assignment_id == assignment.id,
+            StudentAssignment.is_active.is_(True),
+        )
+    }
+    if not sa_by_id:
+        return 0
+
+    # 每位學生：第一個完成的 session（id 最小）＋所有還沒交卷的 session
+    first_completed: Dict[int, PracticeSession] = {}
+    open_sessions: List[PracticeSession] = []
+    for s in (
+        db.query(PracticeSession)
+        .filter(
+            PracticeSession.student_assignment_id.in_(sa_by_id),
+            PracticeSession.practice_mode == mode,
+        )
+        .order_by(PracticeSession.id.asc())
+    ):
+        if s.completed_at is None:
+            open_sessions.append(s)
+        else:
+            first_completed.setdefault(s.student_assignment_id, s)
+
+    # 每個 session 每題最新一筆（依 id 升冪、後者覆蓋前者，同 latest_quiz_answers_by_item）
+    target_sessions = list(first_completed.values()) + open_sessions
+    latest_by_session: Dict[int, Dict[int, PracticeAnswer]] = {
+        s.id: {} for s in target_sessions
+    }
+    if item_ids and target_sessions:
+        for ans in (
+            db.query(PracticeAnswer)
+            .filter(
+                PracticeAnswer.practice_session_id.in_(latest_by_session),
+                PracticeAnswer.content_item_id.in_(item_ids),
+            )
+            .order_by(PracticeAnswer.id.asc())
+        ):
+            latest_by_session[ans.practice_session_id][ans.content_item_id] = ans
+
+    # 還沒交卷的 session（第一次作答中、訂正中）也用新設定重判 is_correct，
+    # 只寫 is_correct / correct_count，不寫分數、不動 status／時間戳。
+    # 否則訂正 session 裡被鎖定的「已答對」題，交卷時會被重判成錯 → 永遠卡在
+    # QUIZ_REVISION_INCOMPLETE（400 會 rollback 重判結果、該題又一直鎖住）。
+    for open_session in open_sessions:
+        _sync_typed_correctness(
+            assignment, items_by_id, latest_by_session[open_session.id], open_session
+        )
+
+    for sa_id, session in first_completed.items():
+        latest = latest_by_session[session.id]
+        _sync_typed_correctness(assignment, items_by_id, latest, session)
+        sa_by_id[sa_id].score = _score_latest_answers(assignment, items, latest)
+
+    if item_ids and first_completed:
+        db.query(StudentItemProgress).filter(
+            StudentItemProgress.student_assignment_id.in_(first_completed),
+            StudentItemProgress.content_item_id.in_(item_ids),
+            StudentItemProgress.teacher_review_score.isnot(None),
+        ).update({"teacher_review_score": None}, synchronize_session=False)
+    return len(first_completed)
 
 
 def finalize_quiz_submission(
@@ -1187,6 +1497,7 @@ def _complete_quiz(
     score, correct_count, total_items, answered = compute_quiz_score(db, sa, session)
 
     # 訂正再提交（退回後 status=RETURNED）：強制改到全對才能交，且成績以舊的為準。
+    # #1092：correct_count 已依作業目前的大小寫開關重判（compute_quiz_score）。
     if is_revision and correct_count < total_items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1217,7 +1528,7 @@ class _QuizCompleteRequest(BaseModel):
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/selection_quiz/complete")
-async def complete_word_selection_quiz(
+def complete_word_selection_quiz(
     assignment_id: int,
     request: _QuizCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1236,7 +1547,7 @@ async def complete_word_selection_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/spelling_quiz/complete")
-async def complete_word_spelling_quiz(
+def complete_word_spelling_quiz(
     assignment_id: int,
     request: _QuizCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1255,7 +1566,7 @@ async def complete_word_spelling_quiz(
 
 
 @router.post("/assignments/{assignment_id}/vocabulary/cloze_quiz/complete")
-async def complete_word_cloze_quiz(
+def complete_word_cloze_quiz(
     assignment_id: int,
     request: _QuizCompleteRequest,
     current_student: Dict[str, Any] = Depends(get_current_student),
@@ -1363,7 +1674,7 @@ def _build_review_response(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/selection_quiz/review")
-async def review_word_selection_quiz(
+def review_word_selection_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1469,7 +1780,7 @@ async def review_word_selection_quiz(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/spelling_quiz/review")
-async def review_word_spelling_quiz(
+def review_word_spelling_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),
@@ -1502,7 +1813,7 @@ async def review_word_spelling_quiz(
 
 
 @router.get("/assignments/{assignment_id}/vocabulary/cloze_quiz/review")
-async def review_word_cloze_quiz(
+def review_word_cloze_quiz(
     assignment_id: int,
     current_student: Dict[str, Any] = Depends(get_current_student),
     db: Session = Depends(get_db),

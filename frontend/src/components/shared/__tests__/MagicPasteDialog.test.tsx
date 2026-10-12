@@ -168,4 +168,71 @@ describe("MagicPasteDialog", () => {
       await screen.findByText(/magicPaste.overLimitLink/),
     ).toBeInTheDocument();
   });
+
+  it("admin quota (unlimited) shows the unlimited label", async () => {
+    mockQuota.mockResolvedValue({
+      year_month: "2026-07",
+      unlimited: true,
+      free_limit: 5,
+      free_used: 0,
+      free_remaining: 5,
+      points_per_image: 10,
+      paid_quota_remaining: 0,
+      can_use: true,
+    });
+    render(<MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />);
+    expect(
+      await screen.findByText("contentEditor.magicPaste.quotaUnlimited"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("contentEditor.magicPaste.quota"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps unlimited when the extract response omits the unlimited flag", async () => {
+    mockQuota.mockResolvedValue({
+      year_month: "2026-07",
+      unlimited: true,
+      free_limit: 5,
+      free_used: 0,
+      free_remaining: 5,
+      points_per_image: 10,
+      paid_quota_remaining: 0,
+      can_use: true,
+    });
+    mockExtract.mockResolvedValue({
+      items: [
+        {
+          text: "apple",
+          translation: "蘋果",
+          part_of_speech: "n.",
+          example_sentence: "",
+          example_sentence_translation: "",
+        },
+      ],
+      charge: { charged: "unlimited", points_used: 0, free_remaining: 5 },
+      // 舊版後端：quota 不帶 unlimited
+      quota: { free_remaining: 5, free_limit: 5, can_use: true },
+      estimated_cost_usd: 0.0001,
+      provider: "test",
+    });
+    render(<MagicPasteDialog open onClose={vi.fn()} onInsert={vi.fn()} />);
+    expect(
+      await screen.findByText("contentEditor.magicPaste.quotaUnlimited"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("magic-paste-file-input"), {
+      target: { files: [makeFile()] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /magicPaste.start/ }));
+    await waitFor(() => expect(mockExtract).toHaveBeenCalled());
+    expect(await screen.findByDisplayValue("apple")).toBeInTheDocument();
+
+    expect(
+      screen.getByText("contentEditor.magicPaste.quotaUnlimited"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("contentEditor.magicPaste.quota"),
+    ).not.toBeInTheDocument();
+  });
 });

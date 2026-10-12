@@ -17,7 +17,8 @@ import secrets
 from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -34,6 +35,13 @@ from models.release_announcement import (
     ReleaseAnnouncement,
 )
 from routers.admin import get_current_admin
+from utils.image_types import detect_image_type
+from services.announcement_images import (
+    HERO_MAX_BYTES,
+    HERO_MIME_TYPES,
+    MAX_IMAGE_BYTES,
+    store_announcement_image,
+)
 from services.line_publish_service import LinePublishService
 from services.release_announcement_service import ReleaseAnnouncementService
 
@@ -63,6 +71,17 @@ class AnnouncementContent(BaseModel):
     article_body_zh: Optional[str] = Field(None, max_length=50000)
     article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = Field(None, max_length=50000)
+    # #1100：選填主圖（LINE hero + 中文文章封面）；GitHub 貼圖網址會在建立草稿時轉存到 GCS
+    image_url: Optional[str] = Field(None, max_length=500)
+    # 選填英文文章主圖（英文介面截圖）；空白時英文文章沿用主圖
+    image_url_en: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("image_url", "image_url_en")
+    @classmethod
+    def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
+        if value and value.strip() and not value.strip().startswith("https://"):
+            raise ValueError("主圖網址必須是 https://")
+        return value
 
 
 class ReleaseWebhookRequest(BaseModel):
@@ -90,8 +109,9 @@ class ReleaseAnnouncementUpdate(BaseModel):
     article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=500)
+    image_url_en: Optional[str] = Field(None, max_length=500)
 
-    @field_validator("image_url")
+    @field_validator("image_url", "image_url_en")
     @classmethod
     def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
         # 空白代表清除圖片（service 會存成 NULL）；有值就必須是 https，
@@ -128,6 +148,7 @@ class ReleaseAnnouncementItem(BaseModel):
     article_title_en: Optional[str] = None
     article_body_en: Optional[str] = None
     image_url: Optional[str] = None
+    image_url_en: Optional[str] = None
 
     status: str
     line_status: str
@@ -175,6 +196,7 @@ def _serialize(db: Session, ann: ReleaseAnnouncement) -> ReleaseAnnouncementItem
         article_title_en=ann.article_title_en,
         article_body_en=ann.article_body_en,
         image_url=ann.image_url,
+        image_url_en=ann.image_url_en,
         status=ann.status,
         line_status=ann.line_status,
         line_error=ann.line_error,
@@ -233,12 +255,40 @@ async def create_release_announcement(
         issue_numbers=body.issue_numbers,
         content=body.content.model_dump() if body.content else None,
     )
+    if created:
+        # 推給公告審核者（失敗只記 log，不影響草稿）
+        await ReleaseAnnouncementService.notify_draft_created(announcement)
     return ReleaseWebhookResponse(
         id=announcement.id, created=created, status=announcement.status
     )
 
 
 # ============ Admin 端點 ============
+
+
+@router.post("/upload-image")
+async def upload_announcement_image(
+    file: UploadFile = File(...),
+    purpose: Literal["hero", "body"] = Query("body"),
+    admin: Teacher = Depends(get_current_admin),
+):
+    """上傳公告圖片（#1100）：主圖只收 JPEG / PNG（LINE 限制），內文圖片不限；上限 10 MB。"""
+    # 最多讀到上限 + 1 byte 就停，避免把超大檔整個載入記憶體
+    content = await file.read(MAX_IMAGE_BYTES + 1)
+    if len(content) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="圖片超過 10 MB")
+    detected = detect_image_type(content)
+    if not detected:
+        raise HTTPException(status_code=400, detail="不支援的圖片格式（JPEG / PNG / GIF / WebP）")
+    mime, ext = detected
+    if purpose == "hero" and mime not in HERO_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="主圖只能是 JPEG 或 PNG（LINE 卡片限制）")
+    if purpose == "hero" and len(content) > HERO_MAX_BYTES:
+        raise HTTPException(
+            status_code=400, detail="主圖請小於 1 MB（LINE 卡片限制），可先壓縮或改用 JPEG"
+        )
+    url = await run_in_threadpool(store_announcement_image, content, mime, ext)
+    return {"url": url}
 
 
 @router.get("", response_model=List[ReleaseAnnouncementItem])

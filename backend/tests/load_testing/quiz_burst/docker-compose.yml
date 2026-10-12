@@ -1,0 +1,8 @@
+services:
+  pg:
+    image: postgres:15
+    environment: {POSTGRES_USER: lt, POSTGRES_PASSWORD: lt, POSTGRES_DB: lt}
+    ports: ["55432:5432"]
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    ports: ["8474:8474", "55433:55433"]

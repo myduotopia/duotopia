@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import func
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from database import get_db
@@ -19,6 +19,11 @@ from models import (
     School,
     ClassroomSchool,
 )
+from routers.schemas.classroom import (
+    BatchClassroomGradeRequest,
+    BatchClassroomUpdateRequest,
+)
+from utils.classroom_grade import grade_to_storage, parse_grade
 from .dependencies import get_current_teacher
 from .validators import *
 from .utils import TEST_SUBSCRIPTION_WHITELIST, parse_birthdate
@@ -35,18 +40,27 @@ async def get_teacher_classrooms(
         None, description="School UUID (requires mode=school)"
     ),
     organization_id: Optional[str] = Query(None, description="Organization UUID"),
+    include_inactive: bool = Query(False, description="true＝含停用班級（已刪除一律排除，#1097）"),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """取得教師的所有班級"""
+    """取得教師的所有班級
 
-    # Get classrooms with students AND school/organization relationships (only active classrooms)
+    #1097：預設只回啟用且未刪除的班級（派作業、搬學生等選單用）；
+    「我的班級」頁帶 include_inactive=true 取得停用班級（回傳 is_active 供標示／篩選）。
+    已刪除的班級一律排除。
+    """
+    classroom_filters = [
+        Classroom.teacher_id == current_teacher.id,
+        Classroom.deleted_at.is_(None),
+    ]
+    if not include_inactive:
+        classroom_filters.append(Classroom.is_active.is_(True))
+
+    # Get classrooms with students AND school/organization relationships.
     classrooms = (
         db.query(Classroom)
-        .filter(
-            Classroom.teacher_id == current_teacher.id,
-            Classroom.is_active.is_(True),  # Only show active classrooms
-        )
+        .filter(*classroom_filters)
         .options(
             selectinload(Classroom.students).selectinload(ClassroomStudent.student),
             selectinload(Classroom.classroom_schools)
@@ -154,6 +168,8 @@ async def get_teacher_classrooms(
                 "name": classroom.name,
                 "description": classroom.description,
                 "level": classroom.level.value if classroom.level else "A1",
+                "grade": parse_grade(classroom.grade),
+                "is_active": bool(classroom.is_active),
                 "student_count": len(
                     [
                         cs
@@ -221,11 +237,9 @@ async def create_classroom(
     classroom = Classroom(
         name=classroom_data.name,
         description=classroom_data.description,
-        level=getattr(
-            ProgramLevel,
-            classroom_data.level.upper().replace("-", "_"),
-            ProgramLevel.A1,
-        ),
+        # level 已由 ClassroomCreate 正規化成 ProgramLevel 的 value（#1097）
+        level=ProgramLevel(classroom_data.level),
+        grade=grade_to_storage(classroom_data.grade),
         teacher_id=current_teacher.id,
         is_active=True,
     )
@@ -238,8 +252,122 @@ async def create_classroom(
         "name": classroom.name,
         "description": classroom.description,
         "level": classroom.level.value,
+        "grade": parse_grade(classroom.grade),
         "teacher_id": classroom.teacher_id,
     }
+
+
+@router.post("/classrooms/batch-grade")
+async def batch_set_classroom_grades(
+    payload: BatchClassroomGradeRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次設定個人班級年級（#1097）
+
+    全有或全無：任一班級不屬於本人（或已刪除）→ 404；
+    任一班級屬於學校 → 403；全部通過才單次 commit。
+    停用（未刪除）的班級仍出現在老師列表，所以也可調整。
+    """
+    classroom_ids = [item.classroom_id for item in payload.items]
+
+    classrooms = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id.in_(classroom_ids),
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.deleted_at.is_(None),
+        )
+        .all()
+    )
+    if len(classrooms) != len(classroom_ids):
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    school_linked = (
+        db.query(ClassroomSchool.classroom_id)
+        .filter(
+            ClassroomSchool.classroom_id.in_(classroom_ids),
+            ClassroomSchool.is_active.is_(True),
+        )
+        .first()
+    )
+    if school_linked:
+        raise HTTPException(status_code=403, detail="此班級屬於學校，請通過學校後台編輯")
+
+    classroom_map = {c.id: c for c in classrooms}
+    for item in payload.items:
+        classroom_map[item.classroom_id].grade = grade_to_storage(item.grade)
+    db.commit()
+
+    return {
+        "updated": [
+            {"id": item.classroom_id, "grade": item.grade} for item in payload.items
+        ],
+        "count": len(payload.items),
+    }
+
+
+@router.post("/classrooms/batch-update")
+async def batch_update_classrooms(
+    payload: BatchClassroomUpdateRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """批次更新個人班級的年級／等級／啟用狀態（#1097）
+
+    每筆可帶 grade、level、is_active 任意組合（至少一項）。
+    全有或全無：任一班級不屬於本人或已刪除 → 404；任一班級屬於學校 → 403。
+    停用（未刪除）的班級也會被查到，才能重新啟用。
+    """
+    classroom_ids = [item.classroom_id for item in payload.items]
+
+    classrooms = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id.in_(classroom_ids),
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.deleted_at.is_(None),
+        )
+        .all()
+    )
+    if len(classrooms) != len(classroom_ids):
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    school_linked = (
+        db.query(ClassroomSchool.classroom_id)
+        .filter(
+            ClassroomSchool.classroom_id.in_(classroom_ids),
+            ClassroomSchool.is_active.is_(True),
+        )
+        .first()
+    )
+    if school_linked:
+        raise HTTPException(status_code=403, detail="此班級屬於學校，請通過學校後台編輯")
+
+    classroom_map = {c.id: c for c in classrooms}
+    for item in payload.items:
+        classroom = classroom_map[item.classroom_id]
+        if item.grade is not None:
+            classroom.grade = grade_to_storage(item.grade)
+        if item.level is not None:
+            classroom.level = ProgramLevel(item.level)
+        if item.is_active is not None:
+            classroom.is_active = item.is_active
+
+    # commit 前組好回應，避免 commit 後屬性過期而逐列重新查詢
+    updated = []
+    for item in payload.items:
+        classroom = classroom_map[item.classroom_id]
+        updated.append(
+            {
+                "id": classroom.id,
+                "grade": parse_grade(classroom.grade),
+                "level": classroom.level.value if classroom.level else "A1",
+                "is_active": bool(classroom.is_active),
+            }
+        )
+    db.commit()
+    return {"updated": updated, "count": len(updated)}
 
 
 @router.get("/classrooms/{classroom_id}")
@@ -248,11 +376,13 @@ async def get_classroom(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """取得單一班級資料"""
+    """取得單一班級資料（停用班級可看，已刪除 → 404）"""
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id, Classroom.teacher_id == current_teacher.id
+            Classroom.id == classroom_id,
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.deleted_at.is_(None),
         )
         .first()
     )
@@ -265,6 +395,8 @@ async def get_classroom(
         "name": classroom.name,
         "description": classroom.description,
         "level": classroom.level.value if classroom.level else "A1",
+        "grade": parse_grade(classroom.grade),
+        "is_active": bool(classroom.is_active),
         "teacher_id": classroom.teacher_id,
     }
 
@@ -275,13 +407,13 @@ async def get_classroom_students(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """取得班級的學生列表"""
+    """取得班級的學生列表（停用班級仍可看，已刪除 → 404）"""
     classroom = (
         db.query(Classroom)
         .filter(
             Classroom.id == classroom_id,
             Classroom.teacher_id == current_teacher.id,
-            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),
         )
         .options(
             selectinload(Classroom.students).selectinload(ClassroomStudent.student)
@@ -323,13 +455,15 @@ async def update_classroom(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """更新班級資料"""
+    """更新班級資料（含 is_active 停用／啟用；已刪除 → 404）"""
     from utils.permissions import check_classroom_is_personal
 
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id, Classroom.teacher_id == current_teacher.id
+            Classroom.id == classroom_id,
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.deleted_at.is_(None),
         )
         .first()
     )
@@ -346,9 +480,12 @@ async def update_classroom(
     if update_data.description is not None:
         classroom.description = update_data.description
     if update_data.level is not None:
-        classroom.level = getattr(
-            ProgramLevel, update_data.level.upper().replace("-", "_"), ProgramLevel.A1
-        )
+        # 已由 ClassroomUpdate 正規化（無效值 → 422），#1097
+        classroom.level = ProgramLevel(update_data.level)
+    if update_data.grade is not None:
+        classroom.grade = grade_to_storage(update_data.grade)
+    if update_data.is_active is not None:
+        classroom.is_active = update_data.is_active
 
     db.commit()
     db.refresh(classroom)
@@ -358,6 +495,8 @@ async def update_classroom(
         "name": classroom.name,
         "description": classroom.description,
         "level": classroom.level.value,
+        "grade": parse_grade(classroom.grade),
+        "is_active": bool(classroom.is_active),
     }
 
 
@@ -367,13 +506,15 @@ async def delete_classroom(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """刪除班級"""
+    """刪除班級（soft delete：is_active=False＋deleted_at，與「停用」區分，#1097）"""
     from utils.permissions import check_classroom_is_personal
 
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id, Classroom.teacher_id == current_teacher.id
+            Classroom.id == classroom_id,
+            Classroom.teacher_id == current_teacher.id,
+            Classroom.deleted_at.is_(None),
         )
         .first()
     )
@@ -385,8 +526,9 @@ async def delete_classroom(
     if not check_classroom_is_personal(classroom.id, db):
         raise HTTPException(status_code=403, detail="此班級屬於學校，請通過學校後台刪除")
 
-    # Soft delete by setting is_active = False
+    # Soft delete：deleted_at 有值＝已刪除（停用只動 is_active）
     classroom.is_active = False
+    classroom.deleted_at = datetime.now(timezone.utc)
     db.commit()
 
     return {"message": "Classroom deleted successfully"}

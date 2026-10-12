@@ -27,6 +27,10 @@ import {
   AssignmentData,
 } from "@/types";
 import { useTranslation } from "react-i18next";
+import {
+  studentAssignmentErrorKey,
+  throwIfClassroomInactive,
+} from "@/utils/classroomInactive";
 
 export default function StudentAssignmentDetail() {
   const { t } = useTranslation();
@@ -70,6 +74,18 @@ export default function StudentAssignmentDetail() {
       );
 
       if (!foundAssignment) {
+        // 作業列表不含停用班級的作業；問一次作業內頁端點，
+        // 若回 403 classroom_inactive 就改顯示「此班級已停用」（#1097）
+        const probe = await fetch(
+          `${apiUrl}/api/students/assignments/${id}/activities`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        await throwIfClassroomInactive(probe);
         throw new Error("Assignment not found");
       }
 
@@ -172,7 +188,14 @@ export default function StudentAssignmentDetail() {
       setAssignment(assignmentDetail);
     } catch (error) {
       console.error("Failed to load assignment detail:", error);
-      toast.error(t("studentAssignmentDetail.errors.loadFailed"));
+      toast.error(
+        t(
+          studentAssignmentErrorKey(
+            error,
+            "studentAssignmentDetail.errors.loadFailed",
+          ),
+        ),
+      );
       navigate("/student/assignments");
     } finally {
       setLoading(false);

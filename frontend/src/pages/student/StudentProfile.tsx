@@ -28,6 +28,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { validateStudentPasswordStrength } from "@/utils/passwordValidation";
 import { apiClient } from "@/lib/api";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 interface StudentInfo {
   id: number;
@@ -37,6 +38,7 @@ interface StudentInfo {
   email_verified_at: string | null;
   birthday: string;
   classroom_name: string | null;
+  classroom_grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   school_name: string | null;
   created_at: string;
 }
@@ -376,8 +378,12 @@ export default function StudentProfile() {
                   {t("studentProfile.basicInfo.classroom")}
                 </label>
                 <p className="font-medium">
-                  {studentInfo.classroom_name ||
-                    t("studentProfile.basicInfo.classroomNone")}
+                  {studentInfo.classroom_name
+                    ? formatClassroomDisplayName(t, {
+                        name: studentInfo.classroom_name,
+                        grade: studentInfo.classroom_grade,
+                      })
+                    : t("studentProfile.basicInfo.classroomNone")}
                 </p>
               </div>
               <div>

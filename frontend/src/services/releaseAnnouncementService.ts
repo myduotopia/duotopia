@@ -38,7 +38,10 @@ export interface ReleaseAnnouncement {
   article_body_zh: string | null;
   article_title_en: string | null;
   article_body_en: string | null;
+  /** 主圖：LINE 卡片 hero + 中文文章封面 */
   image_url: string | null;
+  /** 英文文章封面（英文介面截圖）；null = 沿用主圖 */
+  image_url_en: string | null;
 
   status: AnnouncementStatus;
   line_status: ChannelStatus;
@@ -65,6 +68,7 @@ export type ReleaseAnnouncementUpdate = Partial<
     | "article_title_en"
     | "article_body_en"
     | "image_url"
+    | "image_url_en"
   >
 >;
 
@@ -95,6 +99,15 @@ export const releaseAnnouncementApi = {
       { channels },
       auth(token),
     ),
+  /** 上傳公告圖片（#1100）：hero = LINE 卡片主圖（只收 JPEG / PNG），body = 文章內文圖片 */
+  uploadImage: (file: File, purpose: "hero" | "body", token: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    return axios.post<{ url: string }>(`${ENDPOINT}/upload-image`, form, {
+      params: { purpose },
+      ...auth(token),
+    });
+  },
   discard: (id: number, token: string) =>
     axios.post<ReleaseAnnouncement>(
       `${ENDPOINT}/${id}/discard`,

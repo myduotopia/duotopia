@@ -7,6 +7,7 @@
 GitHub 呼叫一律透過注入的 client，測試不需要網路。
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -134,6 +135,174 @@ class TestBlock:
         new = ra.replace_block("## 變更", ra.render_block(CONTENT))
         assert new.startswith("## 變更")
         assert ra.parse_block(new)["content"] == CONTENT
+
+
+class TestBlockStatus:
+    """CI 自動化用：已經有完整區塊（例如本機 /announce 寫過）就不再自動產生"""
+
+    def test_complete_block(self):
+        status = ra.block_status(ra.render_block(CONTENT, issues=[1046]))
+        assert status == {"has_block": True, "complete": True, "issues": [1046]}
+
+    def test_incomplete_block(self):
+        body = ra.render_block({**CONTENT, "line_message_zh": ""})
+        assert ra.block_status(body)["complete"] is False
+
+    def test_no_block(self):
+        assert ra.block_status("## 本次發版內容") == {
+            "has_block": False,
+            "complete": False,
+            "issues": [],
+        }
+
+
+class TestPrBlockCommand:
+    def test_reads_pr_body_through_public_method(self, monkeypatch, capsys):
+        body = ra.render_block(CONTENT, issues=[1046])
+        monkeypatch.setattr(ra.GhCli, "_detect_repo", lambda self: "o/r")
+        monkeypatch.setattr(
+            ra.GhCli, "get_pr", lambda self, number: {"number": number, "body": body}
+        )
+        ra.main(["pr-block", "1072"])
+        out = __import__("json").loads(capsys.readouterr().out)
+        assert out == {"has_block": True, "complete": True, "issues": [1046]}
+
+
+HERO = "https://storage.googleapis.com/duotopia-audio/announcements/issue-1046/hero.png"
+
+
+class TestHeroImageField:
+    """#1100：公告區塊可帶主圖網址（選填），內文可放 markdown 圖片"""
+
+    def test_round_trip_with_hero(self):
+        content = {**CONTENT, "image_url": HERO}
+        assert ra.parse_block(ra.render_block(content))["content"] == content
+
+    def test_empty_hero_is_omitted(self):
+        """沒有主圖時欄位仍顯示（方便在 GitHub 補貼），但解析結果不含 image_url"""
+        block = ra.render_block(CONTENT)
+        assert "#### 主圖網址（選填）" in block
+        assert "image_url" not in ra.parse_block(block)["content"]
+
+    @pytest.mark.parametrize(
+        "pasted",
+        [
+            f"![主圖]({HERO})",
+            f'<img width="1200" alt="hero" src="{HERO}" />',
+            f"  {HERO}  ",
+        ],
+    )
+    def test_hero_pasted_as_markdown_or_html_becomes_url(self, pasted):
+        block = ra.render_block({**CONTENT, "image_url": "PLACEHOLDER"}).replace(
+            "PLACEHOLDER", pasted
+        )
+        assert ra.parse_block(block)["content"]["image_url"] == HERO
+
+    def test_body_images_are_kept(self):
+        body = f"說明\n\n![步驟一]({HERO})\n\n下一段"
+        content = {**CONTENT, "article_body_zh": body}
+        parsed = ra.parse_block(ra.render_block(content))["content"]
+        assert parsed["article_body_zh"] == body
+
+    def test_load_content_accepts_https_hero_only(self, tmp_path):
+        good = tmp_path / "good.json"
+        good.write_text(json.dumps({**CONTENT, "image_url": HERO}), encoding="utf-8")
+        assert ra._load_content(str(good))["image_url"] == HERO
+
+        bad = tmp_path / "bad.json"
+        bad.write_text(
+            json.dumps({**CONTENT, "image_url": "http://x/a.png"}), encoding="utf-8"
+        )
+        with pytest.raises(SystemExit, match="https"):
+            ra._load_content(str(bad))
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+JPEG = b"\xff\xd8\xff" + b"0" * 64
+
+
+class FakeRunner:
+    def __init__(self, returncode=0, stderr="", account="dev@example.com"):
+        self.calls = []
+        self.returncode = returncode
+        self.stderr = stderr
+        self.account = account
+
+    def __call__(self, args):
+        self.calls.append(args)
+        if args[:3] == ["gcloud", "config", "get-value"]:
+            return subprocess.CompletedProcess(args, 0, self.account + "\n", "")
+        return subprocess.CompletedProcess(args, self.returncode, "", self.stderr)
+
+
+class TestUploadImage:
+    def _file(self, tmp_path, data, name="shot.png"):
+        path = tmp_path / name
+        path.write_bytes(data)
+        return str(path)
+
+    def test_uploads_to_issue_folder_and_returns_public_url(self, tmp_path):
+        runner = FakeRunner()
+        url = ra.upload_image(
+            self._file(tmp_path, PNG), issue=1046, runner=runner, stamp="20261006"
+        )
+        assert url.startswith(
+            "https://storage.googleapis.com/duotopia-audio/announcements/issue-1046/"
+        )
+        assert url.endswith(".png")
+        cp = next(c for c in runner.calls if c[:3] == ["gcloud", "storage", "cp"])
+        assert cp[-1].startswith("gs://duotopia-audio/announcements/issue-1046/")
+        assert "--content-type=image/png" in cp
+
+    def test_rejects_non_image(self, tmp_path):
+        with pytest.raises(SystemExit, match="圖片"):
+            ra.upload_image(
+                self._file(tmp_path, b"not an image", "a.txt"),
+                issue=1,
+                runner=FakeRunner(),
+            )
+
+    def test_hero_must_be_jpeg_or_png(self, tmp_path):
+        gif = b"GIF89a" + b"0" * 64
+        with pytest.raises(SystemExit, match="JPEG"):
+            ra.upload_image(
+                self._file(tmp_path, gif, "a.gif"),
+                issue=1,
+                hero=True,
+                runner=FakeRunner(),
+            )
+        # 內文圖片不限 JPEG / PNG
+        assert ra.upload_image(
+            self._file(tmp_path, gif, "b.gif"), issue=1, runner=FakeRunner()
+        ).endswith(".gif")
+
+    def test_hero_over_1mb_rejected(self, tmp_path):
+        big = JPEG + b"0" * (1024 * 1024)
+        with pytest.raises(SystemExit, match="1 MB"):
+            ra.upload_image(
+                self._file(tmp_path, big, "h.jpg"),
+                issue=1,
+                hero=True,
+                runner=FakeRunner(),
+            )
+
+    def test_rejects_over_10mb(self, tmp_path):
+        big = PNG + b"0" * (10 * 1024 * 1024)
+        with pytest.raises(SystemExit, match="10 MB"):
+            ra.upload_image(self._file(tmp_path, big), issue=1, runner=FakeRunner())
+
+    def test_permission_denied_explains_how_to_get_access(self, tmp_path):
+        runner = FakeRunner(
+            returncode=1,
+            stderr="ERROR: (gcloud.storage.cp) HTTPError 403: dev@example.com does "
+            "not have storage.objects.create access to the Google Cloud Storage object.",
+        )
+        with pytest.raises(SystemExit) as exc:
+            ra.upload_image(self._file(tmp_path, JPEG, "a.jpg"), issue=1, runner=runner)
+        message = str(exc.value)
+        assert "roles/storage.objectCreator" in message
+        assert "dev@example.com" in message
+        assert "gs://duotopia-audio" in message
 
 
 class TestIssueNumbers:
@@ -437,3 +606,44 @@ class TestProductionPayload:
         # 單一 issue 的 hotfix：沒有統整區塊時可直接沿用該 issue 的留言
         assert result["content"] == CONTENT
         assert result["issue_numbers"] == "1047"
+
+
+HERO_EN = (
+    "https://storage.googleapis.com/duotopia-audio/announcements/issue-1046/hero-en.png"
+)
+
+
+class TestEnglishHeroImageField:
+    """英文文章另有主圖（英文介面截圖）：選填，空白時英文文章沿用主圖"""
+
+    def test_round_trip_with_both_heroes(self):
+        content = {**CONTENT, "image_url": HERO, "image_url_en": HERO_EN}
+        assert ra.parse_block(ra.render_block(content))["content"] == content
+
+    def test_empty_english_hero_is_omitted(self):
+        block = ra.render_block({**CONTENT, "image_url": HERO})
+        assert "#### 英文文章主圖網址（選填）" in block
+        parsed = ra.parse_block(block)["content"]
+        assert "image_url_en" not in parsed
+        assert parsed["image_url"] == HERO
+
+    def test_english_hero_pasted_as_markdown_becomes_url(self):
+        block = ra.render_block({**CONTENT, "image_url_en": "PLACEHOLDER"}).replace(
+            "PLACEHOLDER", f"![hero]({HERO_EN})"
+        )
+        assert ra.parse_block(block)["content"]["image_url_en"] == HERO_EN
+
+    def test_load_content_requires_https_english_hero(self, tmp_path):
+        good = tmp_path / "good.json"
+        good.write_text(
+            json.dumps({**CONTENT, "image_url_en": HERO_EN}), encoding="utf-8"
+        )
+        assert ra._load_content(str(good))["image_url_en"] == HERO_EN
+
+        bad = tmp_path / "bad.json"
+        bad.write_text(
+            json.dumps({**CONTENT, "image_url_en": "http://x/a.png"}),
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit, match="https"):
+            ra._load_content(str(bad))

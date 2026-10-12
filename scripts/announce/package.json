@@ -1,0 +1,12 @@
+{
+  "name": "duotopia-announce-tools",
+  "private": true,
+  "description": "更新公告截圖工具（issue #1100）：只在 /announce 需要截圖時安裝",
+  "type": "module",
+  "scripts": {
+    "screenshot": "node screenshot.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.55.0"
+  }
+}

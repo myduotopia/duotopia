@@ -3,6 +3,10 @@
 
 從上傳的圖片 / PDF 擷取單字教材內容（單字、翻譯、詞性、例句、例句翻譯），
 一次 AI 呼叫同時完成「圖片擷取」與「資訊不足時 fallback 生成」。
+題庫用的 multiple_choice（單題選擇題）與 reading_group（一份檔 → 一個閱讀題組：
+文章素材／海報座標 + 單字註解 + 小題，issue #1084）也走同一條路徑。
+reading_group 的圖片素材若有人物對話（漫畫、對話情境圖），另回逐句對話
+``stimulus.dialogue``（說話者＋台詞，命名規則見 prompt；#1083，2026-10-06）。
 
 統一走 Vertex AI（Gemini vision），原生支援圖片與 PDF。
 
@@ -12,6 +16,7 @@
 import re
 import json
 import logging
+import math
 from typing import List, Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -29,13 +34,41 @@ EXTRACT_MODE_VOCABULARY = "vocabulary"
 EXTRACT_MODE_SENTENCE = "sentence"
 # multiple_choice：題庫從考卷圖片擷取選擇題（issue #1061 / #1065）
 EXTRACT_MODE_MULTIPLE_CHOICE = "multiple_choice"
+# reading_group：一份檔（圖或 PDF）→ 一個閱讀題組（文章素材 + 小題）（issue #1084）
+EXTRACT_MODE_READING_GROUP = "reading_group"
 EXTRACT_MODES = {
     EXTRACT_MODE_VOCABULARY,
     EXTRACT_MODE_SENTENCE,
     EXTRACT_MODE_MULTIPLE_CHOICE,
+    EXTRACT_MODE_READING_GROUP,
 }
 MC_MIN_OPTIONS = 2
 MC_MAX_OPTIONS = 6
+# reading_group 的素材區域座標：Gemini 慣用 [ymin, xmin, ymax, xmax]，0–1000 正規化
+BOX_2D_MAX = 1000
+STIMULUS_KINDS = ("text", "image")
+# 克漏字空格編號上限：與 routers/question_bank_schemas.BLANK_INDEX_MAX 一致
+# （services 不 import routers，避免反向依賴）
+BLANK_INDEX_MAX = 999
+# 文章插圖的擺放方式（#1084）：beside = 與某一段並排、full = 自己佔一整行
+FIGURE_PLACEMENTS = ("beside", "full")
+FIGURE_SIDES = ("left", "right")
+# 並排時圖可以佔的寬度：對齊 layout 的 span 整數比例（1:2／1:1／2:1）與前端分隔線的
+# 吸附點（`SPLIT_SPANS`），AI 給的 width 一律吸到最近的一個，老師一碰分隔線才不會跳動
+FIGURE_WIDTHS = (1 / 3, 1 / 2, 2 / 3)
+# 一篇文章最多收幾張插圖：`services.question_bank_layout.MAX_ROWS` 是 100 列，插圖與段落
+# 各佔一列，留 30 張給插圖仍有充足餘裕（模型若誤框一堆小圖也不會把整份 layout 撐爆）
+MAX_FIGURES = 30
+# 題組標題上限：對齊 DB `question_groups.title` VARCHAR(200)
+GROUP_TITLE_MAX_CHARS = 200
+# 圖片對話逐句（#1083）：句數／說話者／台詞上限，對齊 routers/question_bank_schemas 的
+# MAX_SEGMENTS／SEGMENT_*_MAX_CHARS（說話者 = DB `question_group_segments.speaker_label` VARCHAR(50)）
+DIALOGUE_MAX_LINES = 100
+DIALOGUE_SPEAKER_MAX_CHARS = 50
+DIALOGUE_TEXT_MAX_CHARS = 2000
+# 文章插圖說明上限：對齊 `services.question_bank_layout.MAX_SHORT_TEXT_CHARS`
+# （排版驗證對 image 區塊的 caption 上限；此處先截掉，避免存檔時整份 layout 被打回）
+FIGURE_CAPTION_MAX_CHARS = 300
 
 # 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
 _PRICING_USD_PER_1M = {
@@ -127,21 +160,184 @@ class MagicPasteService:
         - "vocabulary"（單字集）：一列 = 單字 + 翻譯 + 詞性 + 例句 + 例句翻譯
         - "sentence"（例句集 / 朗讀評測）：一列 = 句子 + 翻譯
         - "multiple_choice"（題庫）：一題 = 題幹 + 選項 + （圖上有標才給）答案 + 解析
+        - "reading_group"（題庫）：整份檔 = 一個閱讀題組（文章素材 + 單字註解 + 小題）
 
         `level` 目前保留供未來使用；擷取本身不生成例句故不參考。
         """
+        if extract_mode == EXTRACT_MODE_READING_GROUP:
+            return (
+                "The uploaded file contains ONE reading-comprehension question group: "
+                "a shared stimulus (a passage, or a poster / comic / map / timetable / "
+                "advertisement) followed by several multiple-choice questions about it.\n"
+                "Return JSON of the exact shape: "
+                '{"title": "...", '
+                '"stimulus": {"kind": "text" | "image", "paragraphs": ["..."], '
+                '"text": "...", "box_2d": [ymin, xmin, ymax, xmax], "page": 1, '
+                '"blanks_renumbered": true, "framed": false, '
+                '"dialogue": [{"speaker": "...", "text": "..."}], '
+                '"figures": [{"box_2d": [ymin, xmin, ymax, xmax], '
+                '"placement": "beside" | "full", "after_paragraph": 0, '
+                '"side": "left" | "right", "width": 0.33, "caption": "..."}]}, '
+                '"glossary": [{"word": "...", "zh": "..."}], '
+                '"questions": [{"stem": "...", "blank": 1, '
+                '"stem_box_2d": [ymin, xmin, ymax, xmax], '
+                '"options": ["...", "..."], '
+                '"option_boxes": [[ymin, xmin, ymax, xmax], null], '
+                '"correct_indexes": [0], "explanation": "..."}]}\n'
+                "Rules:\n"
+                "- `title`: ALWAYS return a title. If a title is printed for the "
+                "passage, copy it exactly. Otherwise write a short English title of "
+                "your own that names what the material is about, at most 8 words, no "
+                "surrounding quotes, and NOT starting with a generic word such as "
+                '"Reading", "Passage", "Article" or "Question". For an image-based '
+                "stimulus, name it after what the picture shows and its format "
+                '(e.g. "Lantern Festival Poster", "Soccer Practice Comic", '
+                '"Taipei Zoo Map").\n'
+                '- `stimulus.kind`: "text" when the stimulus is prose (paragraphs, a '
+                'letter, an article, a dialogue). "image" when the layout itself '
+                "carries the meaning and must be shown as a picture: a poster, comic "
+                "strip, map, menu, timetable, chart, advertisement, or any block with "
+                "drawings.\n"
+                '- When kind is "text": `paragraphs` = the passage split into its '
+                "printed paragraphs, in order, text exactly as printed. You may mark "
+                "printed bold as **bold** and printed underline as __underlined__. Set "
+                '`text` to "" and omit `box_2d`.\n'
+                "- BLANKS (cloze / fill-in-the-blank passages): if the passage contains "
+                'printed answer blanks — written as "__40__", "___(40)___", "(40)", '
+                '"40.____" or similar — rewrite EVERY one of them as "{{n}}" where n '
+                "numbers the blanks 1, 2, 3 ... in reading order (the FIRST blank in the "
+                'passage is always "{{1}}", no matter which number is printed on the '
+                "paper). Use each number exactly once. Keep the surrounding words "
+                "unchanged, and do not leave any printed underscores or printed blank "
+                "numbers behind. Set `blanks_renumbered` to true when you did this, "
+                "false otherwise.\n"
+                "- `stimulus.framed`: true when the passage / stimulus area is printed "
+                "inside one box on the paper (a black or rounded border drawn around "
+                "the whole passage, as test booklets often do); false when it is not, "
+                "or when you cannot tell.\n"
+                "- `stimulus.figures`: pictures that are printed INSIDE a prose passage "
+                '(only when kind is "text"); [] when there are none. For each picture:\n'
+                "  - `box_2d` = its bounding box as [ymin, xmin, ymax, xmax] on a 0-1000 "
+                "scale relative to the page, covering the drawing / photo ONLY and no "
+                "surrounding passage text.\n"
+                '  - `placement` = "beside" when the picture is printed next to a '
+                "paragraph with the text wrapping or running alongside it in its own "
+                'column; "full" when the picture has the passage width to itself, with '
+                "text above and below it. Judge this from the printed page.\n"
+                "  - `after_paragraph` = the 0-based index of the paragraph in "
+                '`paragraphs` the picture belongs to: for "full" the paragraph it comes '
+                "AFTER (-1 for a picture printed before the first paragraph); for "
+                '"beside" the paragraph it sits NEXT TO.\n'
+                '  - `side` = "left" or "right": which side of that paragraph the '
+                'picture is printed on (only meaningful for "beside"; use "right" when '
+                "unsure).\n"
+                "  - `width` = how much of the passage width the picture takes up on the "
+                "printed page, as a decimal between 0.2 and 0.8 (e.g. a narrow portrait "
+                "picture in the margin ≈ 0.3, a picture taking half the width ≈ 0.5). "
+                "Estimate it from the printed layout; do not default to one value.\n"
+                '  - `caption` = the caption printed under the picture, or "" if none.\n'
+                '- When kind is "image": `box_2d` = the bounding box of the stimulus '
+                "area ONLY (exclude the questions and their options), as "
+                "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page. "
+                "`page` = 1-based page number the box is on (1 for a single image). "
+                "`text` = all readable text inside that area, in reading order, as one "
+                "plain string (used for search, not shown to students); when "
+                "`dialogue` is not empty, `text` holds ONLY the words that are not "
+                'spoken lines (a title, narration, captions, signs), or "" if there '
+                "are none. Set `paragraphs` to [].\n"
+                # 說話者命名規則（#1083，2026-10-06 使用者定案）：
+                # 對話文稿之後是題組對話音檔（TTS 多說話者）的唯一來源，且老師不可修改，
+                # 所以說話者要一次標清楚。比照會考／英檢聽力稿 `Man:`、`Woman:` 的慣例：
+                # - 一律不加冠詞 the（與代號 Girl A 一致，也比較像聽力稿）
+                # - 看外觀用泛稱 Girl／Boy／Woman／Man，多人一起說用複數或 Boy and girl
+                # - 同性別兩人以上加代號 A／B，否則分不出誰說哪句
+                # - 圖中有明確職業／角色用職稱（Teacher、Doctor…），比外觀泛稱好懂
+                # - 素材印有人名且能確定對應時用人名：小題會用名字提問（如 Hank、David、
+                #   Mary）；對應不確定就退回上面的規則，避免標錯人
+                '- `stimulus.dialogue` (only when kind is "image"): when people in the '
+                "picture speak — speech bubbles in a comic strip, a conversation scene, "
+                "a chat — list EVERY spoken line in reading order (panel by panel; "
+                "top-to-bottom, left-to-right inside a panel), one entry per speech "
+                'bubble / utterance, as {"speaker": "...", "text": "..."}. `text` = the '
+                "words exactly as printed, on one line. Return [] when nobody speaks "
+                "(a poster, map, menu, timetable, notice ...).\n"
+                '  Name each `speaker` WITHOUT "the" or "a" (write "Girl", never '
+                '"The girl"), and use the same name for the same person every time:\n'
+                "  1. If a person's name printed in the material (in a bubble, a "
+                "caption or the questions, e.g. Hank, David, Mary) clearly belongs to "
+                "that speaker, use the name, because the questions refer to people by "
+                "name. If you are not sure who the name belongs to, use rules 2-4.\n"
+                "  2. Otherwise, if the picture clearly shows the person's job or role, "
+                'use it: "Teacher", "Doctor", "Clerk", "Coach", ...\n'
+                '  3. Otherwise, describe by appearance: "Girl", "Boy", "Woman", "Man"; '
+                'several people speaking together: "Girls", "Boys", "Women", "Men", or '
+                '"Boy and girl" / "Boys and girls" for a mixed group.\n'
+                "  4. When two or more speakers of the same kind appear, add a letter in "
+                'order of first appearance: "Girl A", "Girl B"; "Boy A", "Boy B"; '
+                '"Woman A", "Woman B"; "Man A", "Man B".\n'
+                "- `glossary`: word-meaning pairs printed as a footnote box for the "
+                'group (e.g. "timeline 時間軸"); `zh` must be Traditional Chinese. '
+                "[] if none.\n"
+                "- `questions`: every multiple-choice question that belongs to this "
+                "group, in printed order. `stem`: the question text exactly as printed, "
+                "without the leading number. `options`: the choices in printed order "
+                f"({MC_MIN_OPTIONS}–{MC_MAX_OPTIONS}), without leading labels such as "
+                "(A) B. (C). Do NOT invent options; skip a question with fewer than "
+                f"{MC_MIN_OPTIONS} choices. `correct_indexes`: 0-based indexes ONLY if "
+                "the answer is printed (answer key, circled / ticked / bold choice); "
+                "otherwise []. Never guess. `explanation`: copy ONLY a printed "
+                'explanation; otherwise "".\n'
+                "- `questions[i].blank`: for a cloze / fill-in-the-blank passage, the "
+                "NEW number of the blank this question answers, matching the "
+                '"{{n}}" you wrote in the passage (so the question for the first blank '
+                "gets 1). This is REQUIRED for every question of a cloze paper — those "
+                "questions usually print only choices and no question text, so match "
+                "them to the blanks by their printed order. Use null when the group is "
+                "an ordinary reading-comprehension group with no blanks.\n"
+                "- `questions[i].stem_box_2d`: bounding box of a picture or diagram "
+                "printed as part of THAT question's own text (e.g. a Venn diagram above "
+                "the choices), [ymin, xmin, ymax, xmax] on the same 0-1000 scale; null "
+                "when the question has no picture of its own.\n"
+                "- `questions[i].option_boxes`: an array the SAME length as `options`. "
+                "For a choice that is a picture, put its bounding box (covering the "
+                'picture only, not the "(A)" label); for a text choice put null. Return '
+                "[] when no choice in this question is a picture. When a choice is a "
+                'picture with no words, keep its `options` entry as the empty string "" '
+                "and its box in `option_boxes` at the same position — never invent words "
+                "for a picture choice.\n"
+                "- Do NOT put the passage or the picture text into any `stem`.\n"
+                "- If the file contains no reading group at all, return "
+                '{"title": "", "stimulus": {"kind": "text", "paragraphs": [], '
+                '"text": "", "dialogue": []}, "glossary": [], "questions": []}.'
+            )
+
         if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE:
             return (
                 "Extract every multiple-choice question from the uploaded file.\n"
                 "Return JSON of the exact shape: "
-                '{"items": [{"stem": "...", "options": ["...", "..."], '
+                '{"items": [{"stem": "...", '
+                '"stem_box_2d": [ymin, xmin, ymax, xmax], '
+                '"options": ["...", "..."], '
+                '"option_boxes": [[ymin, xmin, ymax, xmax], null], '
                 '"correct_indexes": [0], "explanation": "..."}]}\n'
                 "Rules:\n"
                 "- `stem`: the question text exactly as printed. Keep blanks such as "
                 '"____" as-is. Remove the leading question number (e.g. "12." or "(3)").\n'
+                "- `stem_box_2d`: bounding box of a picture or diagram printed as part "
+                "of the question text (e.g. a still-life drawing, a Venn diagram), as "
+                "[ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the page, "
+                "covering the picture ONLY and no text; null when the question has no "
+                "picture.\n"
                 f"- `options`: the choices in printed order ({MC_MIN_OPTIONS}–{MC_MAX_OPTIONS}). "
                 "Remove leading labels such as (A) B. (C) 甲 乙. Do NOT invent options; "
                 f"if a question has fewer than {MC_MIN_OPTIONS} choices, skip it.\n"
+                "- `option_boxes`: an array the SAME length as `options`. For a choice "
+                "that is a picture, put its bounding box (covering the picture only, not "
+                'the "(A)" label); for a text choice put null. Return [] when no choice '
+                "in this question is a picture. When a choice is a picture with no "
+                'words, keep its `options` entry as the empty string "" and its box in '
+                "`option_boxes` at the same position — never invent words for a picture "
+                "choice.\n"
                 "- `correct_indexes`: 0-based indexes of the correct options ONLY if the "
                 "answer is printed in the file (an answer key, a circled/ticked choice, "
                 "bold or underlined choice). Otherwise return []. Never guess.\n"
@@ -229,11 +425,12 @@ class MagicPasteService:
         )
         provider = "vertex"
 
-        items = (
-            self._normalize_mc_items(raw)
-            if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE
-            else self._normalize_items(raw)
-        )
+        if extract_mode == EXTRACT_MODE_MULTIPLE_CHOICE:
+            items = self._normalize_mc_items(raw)
+        elif extract_mode == EXTRACT_MODE_READING_GROUP:
+            items = self._normalize_reading_group(raw)
+        else:
+            items = self._normalize_items(raw)
         cost = self._estimate_cost(model, usage)
         logger.info(
             "[magic-paste] provider=%s model=%s items=%d tokens(in/out)=%s/%s "
@@ -352,9 +549,19 @@ class MagicPasteService:
                 items.append(parsed)
         return items
 
-    @staticmethod
-    def _normalize_mc_items(raw: Any) -> List[Dict[str, Any]]:
-        """選擇題擷取結果整理：題幹空或選項 < 2 的丟掉；correct_indexes 只留合法範圍。"""
+    @classmethod
+    def _normalize_mc_items(cls, raw: Any) -> List[Dict[str, Any]]:
+        """
+        選擇題擷取結果整理（單題與題組小題共用）。
+
+        - 選項「有字 or 有座標」才留（圖片選項無字時 text 為 ""，#1084）；< 2 個就丟掉整題
+        - 題幹可以空，但必須有別的東西認得這一題：題幹圖座標，或克漏字的 `blank`
+          （克漏字小題題本上通常只印選項，#1086）
+        - `option_boxes` 與回傳的 options 等長（不是圖的位置為 None）
+        - `stem_box_2d` / `option_boxes` 內不合法的座標丟成 None（前端改由老師自己補圖）
+        - `correct_indexes` 指的是模型原始的選項位置：壓縮／截斷後重新對應成新 index，
+          被丟掉的位置直接排除（#1084）
+        """
         if isinstance(raw, dict):
             raw_items = raw.get("items", [])
         elif isinstance(raw, list):
@@ -368,23 +575,38 @@ class MagicPasteService:
                 continue
             stem = str(entry.get("stem") or "").strip()
             options_raw = entry.get("options")
-            options = (
-                [str(o or "").strip() for o in options_raw]
-                if isinstance(options_raw, list)
-                else []
-            )
-            options = [o for o in options if o][:MC_MAX_OPTIONS]
-            if not stem or len(options) < MC_MIN_OPTIONS:
+            options_raw = options_raw if isinstance(options_raw, list) else []
+            boxes_raw = entry.get("option_boxes")
+            boxes_raw = boxes_raw if isinstance(boxes_raw, list) else []
+            # 帶原始 index，壓縮掉空殼後才能把 correct_indexes 重新對應回新位置
+            pairs: List[Tuple[int, str, Optional[List[int]]]] = []
+            for i, o in enumerate(options_raw):
+                text = str(o or "").strip()
+                box = (
+                    cls._normalize_box_2d(boxes_raw[i]) if i < len(boxes_raw) else None
+                )
+                # 有字或有圖才是一個選項；兩者都沒有的位置是模型多給的空殼
+                if text or box:
+                    pairs.append((i, text, box))
+            pairs = pairs[:MC_MAX_OPTIONS]
+            kept = [p[0] for p in pairs]
+            options = [p[1] for p in pairs]
+            option_boxes = [p[2] for p in pairs]
+            stem_box = cls._normalize_box_2d(entry.get("stem_box_2d"))
+            blank = cls._normalize_blank_index(entry.get("blank"))
+            if len(options) < MC_MIN_OPTIONS:
+                continue
+            if not stem and stem_box is None and blank is None:
                 continue
             idx_raw = entry.get("correct_indexes")
+            # 指向的是「模型原本的選項位置」，要換算成壓縮／截斷後的新位置；
+            # 被丟掉（空殼或超過 MC_MAX_OPTIONS）的位置直接排除
             correct = (
                 sorted(
                     {
-                        int(i)
-                        for i in idx_raw
-                        if isinstance(i, (int, float))
-                        and not isinstance(i, bool)
-                        and 0 <= int(i) < len(options)
+                        kept.index(int(n))
+                        for n in (cls._as_finite_number(i) for i in idx_raw)
+                        if n is not None and int(n) in kept
                     }
                 )
                 if isinstance(idx_raw, list)
@@ -393,12 +615,242 @@ class MagicPasteService:
             items.append(
                 {
                     "stem": stem,
+                    "blank": blank,
+                    "stem_box_2d": stem_box,
                     "options": options,
+                    "option_boxes": option_boxes,
                     "correct_indexes": correct,
                     "explanation": str(entry.get("explanation") or "").strip(),
                 }
             )
         return items
+
+    @staticmethod
+    def _as_finite_number(raw: Any) -> Optional[float]:
+        """
+        只接受有限的數字（int／float，bool 不算）。
+
+        `json.loads` 預設吃得下 `NaN`／`Infinity`，而 `int(float("nan"))` 會丟
+        ValueError／OverflowError，所以模型亂回時一律當「沒給」處理。
+        """
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        value = float(raw)
+        return value if math.isfinite(value) else None
+
+    @classmethod
+    def _normalize_blank_index(cls, raw: Any) -> Optional[int]:
+        """克漏字空格編號：1..BLANK_INDEX_MAX 的整數；其他一律 None。"""
+        value = cls._as_finite_number(raw)
+        if value is None:
+            return None
+        n = int(value)
+        return n if 1 <= n <= BLANK_INDEX_MAX else None
+
+    @classmethod
+    def _normalize_box_2d(cls, raw: Any) -> Optional[List[int]]:
+        """[ymin, xmin, ymax, xmax]，四個 0–1000 整數且 ymin<ymax、xmin<xmax；否則 None。"""
+        if not isinstance(raw, list) or len(raw) != 4:
+            return None
+        box: List[int] = []
+        for v in raw:
+            value = cls._as_finite_number(v)
+            if value is None:
+                return None
+            n = int(round(value))
+            if n < 0 or n > BOX_2D_MAX:
+                return None
+            box.append(n)
+        ymin, xmin, ymax, xmax = box
+        if ymin >= ymax or xmin >= xmax:
+            return None
+        return box
+
+    @classmethod
+    def _normalize_figures(cls, raw: Any, paragraph_count: int) -> List[Dict[str, Any]]:
+        """
+        文章內插圖（#1084）：座標不合法就整項丟掉（沒有座標就裁不出圖）。
+
+        - `after_paragraph` 夾在 -1（第一段之前）到 paragraph_count - 1；缺值當 -1
+        - `placement`：beside（與該段並排）／full（獨占一行）；不合法當 full
+        - `side`：left／right；不合法當 right
+        - `width`：圖在版面上佔的寬度比例，**由 AI 依原卷判斷**，吸附到 1/3、1/2、2/3
+          （layout 的 span 只能是整數）；AI 沒給或不合法時用 box_2d 的寬度推算
+        - `caption` 截到 FIGURE_CAPTION_MAX_CHARS（排版驗證的短文字上限）
+        - 最多保留 MAX_FIGURES 張（插圖與段落各佔一列，不讓 layout 列數爆掉）
+        """
+        if not isinstance(raw, list):
+            return []
+        figures: List[Dict[str, Any]] = []
+        upper = paragraph_count - 1
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            box = cls._normalize_box_2d(item.get("box_2d"))
+            if box is None:
+                continue
+            after_value = cls._as_finite_number(item.get("after_paragraph"))
+            after = int(after_value) if after_value is not None else -1
+            after = max(-1, min(after, upper))
+            placement = str(item.get("placement") or "").strip().lower()
+            if placement not in FIGURE_PLACEMENTS:
+                placement = "full"
+            side = str(item.get("side") or "").strip().lower()
+            if side not in FIGURE_SIDES:
+                side = "right"
+            caption = str(item.get("caption") or "").strip()
+            figures.append(
+                {
+                    "box_2d": box,
+                    "placement": placement,
+                    "after_paragraph": after,
+                    "side": side,
+                    "width": cls._figure_width(item.get("width"), box),
+                    "caption": caption[:FIGURE_CAPTION_MAX_CHARS],
+                }
+            )
+            if len(figures) >= MAX_FIGURES:
+                break
+        return figures
+
+    @classmethod
+    def _figure_width(cls, raw: Any, box: List[int]) -> float:
+        """
+        插圖寬度比例 → 吸附到 `FIGURE_WIDTHS` 其中一個。
+
+        AI 給的 width 不在 0.1–0.9（或沒給、非有限數）時，退回用 box_2d 的寬度佔頁面比例
+        —— 單欄版面時這個值已經很接近實際佔比。
+        """
+        value = cls._as_finite_number(raw)
+        ratio = (
+            float(value)
+            if value is not None and 0.1 <= float(value) <= 0.9
+            else (box[3] - box[1]) / BOX_2D_MAX
+        )
+        return min(FIGURE_WIDTHS, key=lambda w: abs(w - ratio))
+
+    @staticmethod
+    def _normalize_dialogue(raw: Any) -> List[Dict[str, str]]:
+        """圖片對話逐句整理（#1083）：回傳 ``[{"speaker", "text"}]``，順序照 AI 給的閱讀順序。
+
+        - speaker／text 去頭尾空白，內部換行與連續空白壓成一個空白（文字版一句一行）
+        - 兩者皆非空才保留；說話者截 DIALOGUE_SPEAKER_MAX_CHARS（DB 上限）、台詞截
+          DIALOGUE_TEXT_MAX_CHARS，最多 DIALOGUE_MAX_LINES 句
+        - 說話者開頭的冠詞 "the " 去掉並首字大寫：使用者定案說話者一律不加 the
+          （"the girl" → "Girl"），prompt 已要求，這裡再保險一次
+        """
+        if not isinstance(raw, list):
+            return []
+        lines: List[Dict[str, str]] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            speaker = " ".join(str(entry.get("speaker") or "").split())
+            text = " ".join(str(entry.get("text") or "").split())
+            if speaker[:4].lower() == "the ":
+                speaker = speaker[4:].strip()
+                speaker = speaker[:1].upper() + speaker[1:]
+            if not speaker or not text:
+                continue
+            lines.append(
+                {
+                    "speaker": speaker[:DIALOGUE_SPEAKER_MAX_CHARS].strip(),
+                    "text": text[:DIALOGUE_TEXT_MAX_CHARS].strip(),
+                }
+            )
+            if len(lines) >= DIALOGUE_MAX_LINES:
+                break
+        return lines
+
+    @classmethod
+    def _normalize_reading_group(cls, raw: Any) -> List[Dict[str, Any]]:
+        """
+        閱讀題組擷取結果整理：回傳 0 或 1 個元素的 list（沿用 endpoint 的 items 形狀）。
+
+        - stimulus.kind 只接受 text / image；缺或不合法時依內容推斷（有段落→text，否則→image）
+        - box_2d 不合法就丟掉（前端改用整張圖）；page 只留正整數
+        - figures（文章內插圖）只在 kind=text 保留；座標不合法整項丟掉
+        - blanks_renumbered：模型是否把印刷空格改寫成 `{{n}}`（克漏字用，#1086）
+        - framed：原卷文章是否印在方框內（前端據此設 layout.frame）；只認布林 true 或字串
+          "true"，其他一律 false；kind=image 時一律 false（整張圖本身已是素材）
+        - dialogue（#1083）：圖中人物逐句對話，見 ``_normalize_dialogue``；kind=text 時清空
+        - title 截到 GROUP_TITLE_MAX_CHARS（DB 上限）；模型沒給時留空字串不視為錯誤
+        - glossary 兩欄皆非空才留；questions 沿用 _normalize_mc_items 規則
+        - 完全沒素材也沒小題 → []（不扣配額）
+        """
+        if not isinstance(raw, dict):
+            return []
+        stim_raw = raw.get("stimulus")
+        stim = stim_raw if isinstance(stim_raw, dict) else {}
+
+        paragraphs_raw = stim.get("paragraphs")
+        paragraphs = (
+            [str(p or "").strip() for p in paragraphs_raw]
+            if isinstance(paragraphs_raw, list)
+            else []
+        )
+        paragraphs = [p for p in paragraphs if p]
+        text = str(stim.get("text") or "").strip()
+        box = cls._normalize_box_2d(stim.get("box_2d"))
+        page_value = cls._as_finite_number(stim.get("page"))
+        page = (
+            int(page_value) if page_value is not None and int(page_value) >= 1 else None
+        )
+
+        kind = str(stim.get("kind") or "").strip().lower()
+        if kind not in STIMULUS_KINDS:
+            kind = "text" if paragraphs else "image"
+        figures = cls._normalize_figures(stim.get("figures"), len(paragraphs))
+        framed_raw = stim.get("framed")
+        framed = framed_raw is True or (
+            isinstance(framed_raw, str) and framed_raw.strip().lower() == "true"
+        )
+        dialogue = cls._normalize_dialogue(stim.get("dialogue"))
+        if kind == "text":
+            box = None
+            page = None
+            # 逐句對話只給以圖為準的素材（漫畫／對話圖）；散文裡的對話本來就在段落中
+            dialogue = []
+        else:
+            paragraphs = []
+            framed = False
+            # 整塊當圖時沒有「第幾段之後」可以掛，插圖一律併進那張圖裡
+            figures = []
+
+        glossary: List[Dict[str, str]] = []
+        glossary_raw = raw.get("glossary")
+        if isinstance(glossary_raw, list):
+            for g in glossary_raw:
+                if not isinstance(g, dict):
+                    continue
+                word = str(g.get("word") or "").strip()
+                zh = str(g.get("zh") or "").strip()
+                if word and zh:
+                    glossary.append({"word": word, "zh": zh})
+
+        questions = cls._normalize_mc_items({"items": raw.get("questions") or []})
+
+        has_stimulus = bool(paragraphs or text or box or dialogue)
+        if not has_stimulus and not questions:
+            return []
+        return [
+            {
+                "title": str(raw.get("title") or "").strip()[:GROUP_TITLE_MAX_CHARS],
+                "stimulus": {
+                    "kind": kind,
+                    "paragraphs": paragraphs,
+                    "text": text,
+                    "box_2d": box,
+                    "page": page,
+                    "figures": figures,
+                    "blanks_renumbered": bool(stim.get("blanks_renumbered")),
+                    "framed": framed,
+                    "dialogue": dialogue,
+                },
+                "glossary": glossary,
+                "questions": questions,
+            }
+        ]
 
     @staticmethod
     def _normalize_items(raw: Any) -> List[Dict[str, str]]:

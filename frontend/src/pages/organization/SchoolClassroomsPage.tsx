@@ -1,5 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { apiClient } from "@/lib/api";
+import {
+  GRADE_FILTER_ALL,
+  batchGradeErrorMessageKey,
+  isValidGrade,
+  matchesGradeFilter,
+  type GradeUpdateItem,
+} from "@/components/classroom/classroomGrade";
+import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
+import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
+import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
+import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { API_URL } from "@/config/api";
 import { logError } from "@/utils/errorLogger";
@@ -20,6 +35,7 @@ interface Classroom {
   id: string;
   name: string;
   program_level: string;
+  grade?: number | null; // 年級 1–12；null = 尚未設定（#1097）
   is_active: boolean;
   created_at: string;
   teacher_name: string | null;
@@ -48,6 +64,7 @@ interface Organization {
 }
 
 export default function SchoolClassroomsPage() {
+  const { t } = useTranslation();
   const { schoolId } = useParams<{ schoolId: string }>();
   const location = useLocation();
   const token = useTeacherAuthStore((state) => state.token);
@@ -81,6 +98,11 @@ export default function SchoolClassroomsPage() {
   const [assignmentStudents, setAssignmentStudents] = useState<
     { id: number; name: string; student_number?: string }[]
   >([]);
+  // 年級篩選／勾選／補填／批次調整（#1097）
+  const [gradeFilter, setGradeFilter] = useState<string>(GRADE_FILTER_ALL);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showAdjustGrade, setShowAdjustGrade] = useState(false);
+  const [showMissingGrade, setShowMissingGrade] = useState(false);
 
   // Guard: prevent StrictMode double-mount from triggering duplicate fetches
   const fetchedForRef = useRef<string | null>(null);
@@ -129,13 +151,19 @@ export default function SchoolClassroomsPage() {
     }
   };
 
-  const fetchClassrooms = async () => {
+  // silent：背景重新載入（批次設定年級後，#1097），不切換 loading／error，
+  // 讓提醒、篩選列、操作列與表格保持掛載只更新內容。
+  // 回傳是否載入成功，讓背景重新載入的呼叫端能提示失敗。
+  const loadClassrooms = async ({ silent = false } = {}): Promise<boolean> => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
 
       const response = await fetch(
-        `${API_URL}/api/schools/${schoolId}/classrooms`,
+        // include_inactive：停用班級也要列出（顯示「停用」徽章、可在編輯視窗重新啟用）（#1097）
+        `${API_URL}/api/schools/${schoolId}/classrooms?include_inactive=true`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -144,16 +172,28 @@ export default function SchoolClassroomsPage() {
       if (response.ok) {
         const data = await response.json();
         setClassrooms(data);
+        return true;
+      }
+      if (silent) {
+        logError(
+          "Failed to reload classrooms",
+          new Error(`HTTP ${response.status}`),
+          { schoolId },
+        );
       } else {
         setError(`載入班級列表失敗：${response.status}`);
       }
+      return false;
     } catch (error) {
       logError("Failed to fetch classrooms", error, { schoolId });
-      setError("網路連線錯誤");
+      if (!silent) setError("網路連線錯誤");
+      return false;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  const fetchClassrooms = () => loadClassrooms();
 
   const fetchTeachers = async () => {
     if (!schoolId) return;
@@ -196,8 +236,90 @@ export default function SchoolClassroomsPage() {
     setShowAssignmentDialog(true);
   };
 
+  // ---- 年級（#1097）----
+  // 本頁的建立／編輯控制項沒有額外權限條件（後端驗權限），勾選與補填比照辦理。
+  // 停用班級會被批次端點拒絕，不可勾選、不列入補填（與 ClassroomListTable 同條件）。
+  const visibleClassrooms = classrooms.filter((c) =>
+    matchesGradeFilter(c.grade, gradeFilter),
+  );
+  const selectableVisible = visibleClassrooms.filter((c) => c.is_active);
+  // 只計目前列出的勾選，篩選掉的班級不會被批次調整
+  const selectedClassrooms = selectableVisible.filter((c) =>
+    selectedIds.has(c.id),
+  );
+  const missingGradeClassrooms = classrooms.filter(
+    (c) => c.is_active && !isValidGrade(c.grade),
+  );
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      selectableVisible.forEach((c) =>
+        checked ? next.add(c.id) : next.delete(c.id),
+      );
+      return next;
+    });
+  };
+
+  // 使用者改變篩選時清空勾選
+  const handleGradeFilterChange = (value: string) => {
+    setGradeFilter(value);
+    setSelectedIds(new Set());
+  };
+
+  // 補填與升降共用批次端點；回傳 true 讓對話框關閉。
+  // 不動勾選：只有批次調整成功才清（見 handleAdjustGrades）。
+  const handleBatchSetGrades = async (
+    items: GradeUpdateItem<string>[],
+  ): Promise<boolean> => {
+    if (!schoolId) return false;
+    try {
+      const res = await apiClient.batchSetSchoolClassroomGrades(
+        schoolId,
+        items.map((i) => ({ classroom_id: Number(i.id), grade: i.grade })),
+      );
+      toast.success(
+        t("classroomGrade.messages.saveSuccess", { count: res.count }),
+      );
+      // 背景重新載入；失敗時已儲存的結果仍有效，只提示重新整理
+      void loadClassrooms({ silent: true }).then((reloaded) => {
+        if (!reloaded) toast.error(t("classroomGrade.messages.reloadFailed"));
+      });
+      return true;
+    } catch (error) {
+      logError("Failed to batch set classroom grades", error, { schoolId });
+      // 403 → 權限專屬提示，其餘 → 一般失敗（對應見 batchGradeErrorMessageKey）
+      toast.error(t(batchGradeErrorMessageKey(error)));
+      return false;
+    }
+  };
+
+  // 批次調整成功：先關對話框再清勾選（對話框關閉期間沿用原清單，不會閃出空狀態）
+  const handleAdjustGrades = async (
+    items: GradeUpdateItem<string>[],
+  ): Promise<boolean> => {
+    const ok = await handleBatchSetGrades(items);
+    if (ok) {
+      setShowAdjustGrade(false);
+      setSelectedIds(new Set());
+    }
+    return ok;
+  };
+
   return (
-    <div className="space-y-6">
+    // 浮動操作列出現時預留底部空間，最後一列不被擋住（#1097）
+    <div
+      className={`space-y-6 ${selectedClassrooms.length > 0 ? "pb-24" : ""}`}
+    >
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
@@ -235,12 +357,28 @@ export default function SchoolClassroomsPage() {
         </Button>
       </div>
 
+      {/* 尚未設定年級提醒（#1097） */}
+      {!loading && !error && (
+        <MissingGradeBanner
+          count={missingGradeClassrooms.length}
+          onAction={() => setShowMissingGrade(true)}
+        />
+      )}
+
       {/* Classrooms Table */}
       <Card>
         <CardHeader>
           <CardTitle>班級列表</CardTitle>
         </CardHeader>
         <CardContent>
+          {!loading && !error && classrooms.length > 0 && (
+            <div className="mb-4">
+              <GradeFilterSelect
+                value={gradeFilter}
+                onChange={handleGradeFilterChange}
+              />
+            </div>
+          )}
           {loading ? (
             <LoadingSpinner />
           ) : error ? (
@@ -253,17 +391,38 @@ export default function SchoolClassroomsPage() {
                 點擊「建立班級」按鈕來建立新的班級
               </p>
             </div>
+          ) : visibleClassrooms.length === 0 ? (
+            <p className="text-center py-8 text-gray-500">
+              {t("classroomGrade.filter.noMatch")}
+            </p>
           ) : (
             <ClassroomListTable
-              classrooms={classrooms}
+              classrooms={visibleClassrooms}
               onEdit={handleEdit}
               onAssignTeacher={handleAssignTeacher}
               onViewStudents={handleViewStudents}
               onAssignHomework={handleAssignHomework}
+              selectedIds={selectedIds}
+              onToggle={toggleSelected}
+              onToggleAll={toggleSelectAllVisible}
             />
           )}
         </CardContent>
       </Card>
+
+      {/* 年級批次調整浮動操作列（#1097） */}
+      <GradeBulkBar
+        selectedCount={selectedClassrooms.length}
+        actions={[
+          {
+            key: "adjust-grade",
+            label: t("classroomGrade.adjust.button"),
+            icon: <GraduationCap className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowAdjustGrade(true),
+          },
+        ]}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
       {/* Create Classroom Dialog */}
       <CreateClassroomDialog
@@ -280,6 +439,20 @@ export default function SchoolClassroomsPage() {
         onOpenChange={setShowEditDialog}
         classroom={editingClassroom}
         onSuccess={fetchClassrooms}
+      />
+
+      {/* 年級補填／批次調整（#1097） */}
+      <MissingGradeDialog
+        open={showMissingGrade}
+        onOpenChange={setShowMissingGrade}
+        classrooms={missingGradeClassrooms}
+        onSave={handleBatchSetGrades}
+      />
+      <AdjustGradeDialog
+        open={showAdjustGrade}
+        onOpenChange={setShowAdjustGrade}
+        classrooms={selectedClassrooms}
+        onConfirm={handleAdjustGrades}
       />
 
       {/* Assign Teacher Dialog */}

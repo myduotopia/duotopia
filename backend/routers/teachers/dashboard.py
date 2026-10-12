@@ -20,6 +20,7 @@ from models import (
     ClassroomSchool,
 )
 from services.quota_service import QuotaService
+from utils.classroom_grade import parse_grade
 from .dependencies import get_current_teacher
 from .validators import *
 from .utils import parse_birthdate  # TEST_SUBSCRIPTION_WHITELIST is defined locally
@@ -105,7 +106,8 @@ async def get_teacher_dashboard(
         db.query(Classroom)
         .filter(
             Classroom.teacher_id == current_teacher.id,
-            Classroom.is_active.is_(True),  # Filter out soft-deleted classrooms
+            Classroom.is_active.is_(True),
+            Classroom.deleted_at.is_(None),  # Filter out soft-deleted classrooms
         )
         .options(
             selectinload(Classroom.students).selectinload(ClassroomStudent.student),
@@ -212,6 +214,7 @@ async def get_teacher_dashboard(
                 name=classroom.name,
                 description=classroom.description,
                 student_count=student_count,
+                grade=parse_grade(classroom.grade),
                 school_id=school_id,
                 school_name=school_name,
                 organization_id=organization_id,

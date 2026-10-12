@@ -50,7 +50,9 @@ push staging / main
 ## 安全防呆
 
 - **只有 `ENVIRONMENT=production` 才 broadcast**；其他環境改 `push` 給
-  `LINE_ANNOUNCE_TEST_USER_ID`，標題加 `[STAGING]` 前綴，避免測試訊息轟炸真實好友。
+  `LINE_ANNOUNCE_USER_ID`（公告審核者），標題加 `[STAGING]` 前綴，避免測試訊息轟炸真實好友。
+- 新草稿建立時（staging / production）推一則「待審核」文字通知給 `LINE_ANNOUNCE_USER_ID`
+  （只推審核者，不 broadcast；未設定或失敗只記 log，不影響草稿；每則消耗 1 則訊息量）。
 - 發 LINE 只用官方帳號專用的 `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN`，**不與 CI 通知 bot 共用**，
   避免 broadcast 到錯的帳號；未設定時發 LINE 會失敗並顯示「尚未設定官方帳號」。
 - Webhook 需 `X-Release-Secret`（`secrets.compare_digest` 比對）；
@@ -68,8 +70,8 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 |------|------|------|
 | `RELEASE_WEBHOOK_SECRET` | GitHub secret | CI ↔ backend webhook 驗證 |
 | `LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN` | GitHub secret | 官方帳號 Messaging API token |
-| `LINE_ANNOUNCE_TEST_USER_ID` | GitHub secret | 非 production 的 LINE 測試收件人 |
-| `RELEASE_ANNOUNCEMENT_BANNER_URL` | GitHub repo variable（選填） | 公告樣板圖，未設定時用官網現有圖片佔位 |
+| `LINE_ANNOUNCE_USER_ID` | GitHub secret | 公告審核者：草稿待審核通知 + 非 production 發布的收件人 |
+| `RELEASE_ANNOUNCEMENT_BANNER_URL` | GitHub repo variable（選填） | 公告樣板圖，未設定時用 `release-announcement-banner.png`（1200×780，LINE hero 20:13） |
 
 各值怎麼取得、用個人或官方帳號，見
 [`RELEASE_ANNOUNCEMENT_SETUP.md`](../integrations/RELEASE_ANNOUNCEMENT_SETUP.md)。
@@ -101,6 +103,41 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 - `儲存草稿` 只送出有改動的欄位；`捨棄` 從待辦清單移除
 - 有未儲存的修改時：「發布」會先儲存再發布（按鈕顯示「儲存並發布」），「併入這一則」停用
 - 圖片網址必須是 `https://` 開頭的完整網址（前後端一致），清空則不帶圖
+
+## 自動產生（PR4）
+
+| Workflow | 觸發 | 做什麼 |
+|----------|------|--------|
+| `announce-issue.yml` → `_announce-issue-shared.yml` | 人工加上 `📣 announce` / `✅ tested-in-staging` | 兩個標籤齊了、還沒有留言 → Claude Code 產生 → issue 留言 → LINE 通知 |
+| `automation-auto-approve.yml`（`announce` job） | 「測試通過」留言（bot 加標籤不會觸發 workflow，故直接串接） | 同上 |
+| `announce-release.yml` | staging → main PR opened / reopened、workflow_dispatch | 統整 → PR 描述 → LINE 通知 |
+
+- **防 prompt injection（repo 公開）**：Claude Code（`claude-code-action`，`--model claude-opus-5-5`）在獨立的
+  `generate` job，只拿唯讀 `GITHUB_TOKEN`、拿不到 `RELEASE_PAT` / LINE token，產出只以 JSON artifact 傳出；
+  `publish` job 重新 checkout，執行 repo 內原始腳本、以欄位白名單 / 字串型別驗證 JSON 後，
+  才用 `RELEASE_PAT`（myduotopia，OWNER）寫入，留言才會被視為團隊成員內容
+- LINE 通知統一走 `scripts/ci/line_push.sh`：失敗不讓 job 失敗，但留下 `::warning::`
+- 本機版本優先：開始前與寫入前都檢查一次，已有留言 / 完整區塊就不覆蓋
+- 通知走 CI bot（`LINE_CHANNEL_ACCESS_TOKEN` → `LINE_USER_ID`），與 Release PR 通知相同
+
+## 公告圖片（#1100）
+
+- 公告區塊新增選填欄位 `#### 主圖網址（選填）`（`image_url`）；內文可放 markdown 圖片。
+  空白時解析結果不含 `image_url`（舊格式相容）；在 GitHub 直接貼圖產生的 `![](url)` /
+  `<img src>` 會自動取出網址
+- `/announce #N`：`scripts/announce/screenshot.mjs`（Playwright，Demo 教師登入 per-issue preview）
+  截圖 → `release_announcement.py upload-image` 用本機 gcloud 上傳 → 寫進留言；
+  `/announce release` 沿用，不重新截圖
+- 後端 `services/announcement_images.py`：只信任 `storage.googleapis.com/<bucket>/`；
+  GitHub user-attachments 在建立草稿時轉存（只允許 GitHub 圖片網域，redirect 逐跳檢查、10 MB 上限、
+  magic bytes 驗證）；主圖限 JPEG / PNG、1 MB；失敗不擋草稿
+- 後台：`POST /api/admin/release-announcements/upload-image?purpose=hero|body`，
+  編輯頁「上傳主圖」「插入圖片」（插在游標位置）
+- 預設主圖 `frontend/public/release-announcement-banner.png`（1200×780）
+- 英文文章主圖：`release_announcements.image_url_en`（migration `20261012_1000`，nullable、無回填）。
+  公告區塊選填欄位 `#### 英文文章主圖網址（選填）`；發布官網時英文文章的 cover / og 用
+  `image_url_en`，NULL 時沿用 `image_url`；LINE 卡片只用 `image_url`。
+  截圖工具 `--lang zh-TW|en` 切換介面語言，中英文章（主圖與內文圖）各用對應語言的截圖
 
 ## /announce 與公告區塊（PR3）
 

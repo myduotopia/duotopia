@@ -7,6 +7,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
+from urllib.parse import quote, unquote
 
 from models import BlogPost
 from models.blog import BlogCategory, BlogPostCategory
@@ -75,7 +76,7 @@ def _settings(monkeypatch):
     monkeypatch.setattr(
         mod.settings, "RELEASE_ANNOUNCEMENT_BANNER_URL", "https://cdn/banner.png"
     )
-    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_TEST_USER_ID", "Utest123")
+    monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_USER_ID", "Utest123")
 
 
 class TestParseReleaseTitle:
@@ -160,6 +161,87 @@ class TestCreateDraft:
         # release 標題解析仍照做（變更類型、issue 編號）
         assert ann.change_type == "feature"
         assert ann.issue_numbers == "860"
+
+    @pytest.mark.asyncio
+    async def test_prewritten_hero_image_replaces_banner(self, test_db_session):
+        """#1100：/announce 帶來的主圖取代預設圖，GitHub 圖片會先轉存"""
+        hero = "https://storage.googleapis.com/duotopia-audio/announcements/i/h.png"
+        written = {
+            **AI_RESULT,
+            "image_url": "https://github.com/user-attachments/assets/x",
+        }
+        rehosted = {**AI_RESULT, "image_url": hero}
+        with patch(
+            "services.release_announcement_service.rehost_content_images",
+            new=AsyncMock(return_value=(rehosted, [])),
+        ) as rehost:
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=written,
+            )
+        assert rehost.await_count == 1
+        assert ann.image_url == hero
+
+    @pytest.mark.asyncio
+    async def test_github_hero_rehosted_end_to_end(self, test_db_session):
+        """不 mock rehost：GitHub 主圖實際走下載 → 儲存 → 寫入草稿"""
+        png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+        stored = "https://storage.googleapis.com/duotopia-audio/announcements/s/h.png"
+        written = {
+            **AI_RESULT,
+            "image_url": "https://github.com/user-attachments/assets/abc",
+        }
+        with patch(
+            "services.announcement_images.fetch_github_image",
+            new=AsyncMock(return_value=(png, "image/png", "png")),
+        ), patch(
+            "services.announcement_images.store_announcement_image",
+            return_value=stored,
+        ):
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="gh-hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=written,
+            )
+        assert ann.image_url == stored
+
+    @pytest.mark.asyncio
+    async def test_prewritten_english_hero_is_saved(self, test_db_session):
+        """英文文章主圖（英文介面截圖）跟著 /announce 內容存進草稿"""
+        hero = "https://storage.googleapis.com/duotopia-audio/announcements/i/h.jpg"
+        hero_en = (
+            "https://storage.googleapis.com/duotopia-audio/announcements/i/h-en.jpg"
+        )
+        written = {**AI_RESULT, "image_url": hero, "image_url_en": hero_en}
+        ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+            test_db_session,
+            environment="staging",
+            source_ref="hero-en-sha",
+            release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+            content=written,
+        )
+        assert ann.image_url == hero
+        assert ann.image_url_en == hero_en
+
+    @pytest.mark.asyncio
+    async def test_prewritten_without_hero_keeps_banner(self, test_db_session):
+        with patch(
+            "services.release_announcement_service.rehost_content_images",
+            new=AsyncMock(return_value=(dict(AI_RESULT), [])),
+        ):
+            ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+                test_db_session,
+                environment="staging",
+                source_ref="no-hero-sha",
+                release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+                content=dict(AI_RESULT),
+            )
+        assert ann.image_url == "https://cdn/banner.png"
 
     @pytest.mark.asyncio
     async def test_incomplete_prewritten_content_falls_back_to_ai(
@@ -257,6 +339,22 @@ class TestUpdateAndMerge:
         assert updated.image_url is None
 
     @pytest.mark.asyncio
+    async def test_update_draft_sets_and_clears_english_image(self, test_db_session):
+        db = test_db_session
+        ann = await _make_draft(db, source_ref="edit-img-en")
+        url = "https://cdn.example.com/en.png"
+
+        updated = ReleaseAnnouncementService.update_draft(
+            db, ann, {"image_url_en": url}
+        )
+        assert updated.image_url_en == url
+
+        updated = ReleaseAnnouncementService.update_draft(
+            db, ann, {"image_url_en": " "}
+        )
+        assert updated.image_url_en is None
+
+    @pytest.mark.asyncio
     async def test_merge_appends_unpublished_drafts_and_marks_them(
         self, test_db_session
     ):
@@ -315,6 +413,32 @@ class TestUpdateAndMerge:
 
 class TestPublishWebsite:
     @pytest.mark.asyncio
+    async def test_english_post_uses_english_hero(self, test_db_session):
+        """中文文章用主圖、英文文章用英文介面的主圖（封面與分享縮圖）"""
+        db = test_db_session
+        ann = await _make_draft(db, source_ref="web-en-hero")
+        ann.image_url = "https://cdn/zh.jpg"
+        ann.image_url_en = "https://cdn/en.jpg"
+        db.commit()
+
+        result = await ReleaseAnnouncementService.publish(
+            db, ann, channels=["website"], admin_id=None
+        )
+
+        zh = (
+            db.query(BlogPost)
+            .filter(BlogPost.id == result.published_blog_post_id)
+            .one()
+        )
+        en = (
+            db.query(BlogPost)
+            .filter(BlogPost.id == result.published_blog_post_en_id)
+            .one()
+        )
+        assert (zh.cover_image_url, zh.og_image_url) == ("https://cdn/zh.jpg",) * 2
+        assert (en.cover_image_url, en.og_image_url) == ("https://cdn/en.jpg",) * 2
+
+    @pytest.mark.asyncio
     async def test_creates_linked_bilingual_published_posts(self, test_db_session):
         db = test_db_session
         ann = await _make_draft(db, source_ref="web-sha")
@@ -343,6 +467,9 @@ class TestPublishWebsite:
         assert zh.title == AI_RESULT["article_title_zh"]
         assert en.title == AI_RESULT["article_title_en"]
         assert zh.cover_image_url == "https://cdn/banner.png"
+        # 沒有英文文章主圖 → 英文文章沿用主圖
+        assert en.cover_image_url == "https://cdn/banner.png"
+        assert en.og_image_url == "https://cdn/banner.png"
 
         category = (
             db.query(BlogCategory)
@@ -371,6 +498,110 @@ class TestPublishWebsite:
         assert db.query(BlogPost).count() == 2
 
 
+class TestNotifyDraftCreated:
+    """建立草稿時推一則通知給 LINE_ANNOUNCE_USER_ID（staging / production 都會）"""
+
+    @pytest.fixture(autouse=True)
+    def _line_configured(self, monkeypatch):
+        from services import release_announcement_service as mod
+
+        monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", "TOKEN")
+        monkeypatch.setattr(mod.settings, "LINE_ANNOUNCE_USER_ID", "Ureviewer")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    async def test_pushes_review_notice_to_announce_user(
+        self, test_db_session, environment
+    ):
+        ann = await _make_draft(
+            test_db_session, environment=environment, source_ref=f"n-{environment}"
+        )
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(return_value="REQ"),
+        ) as push:
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is True
+        to, messages = push.await_args.args
+        assert to == "Ureviewer"
+        text = messages[0]["text"]
+        assert environment in text
+        assert AI_RESULT["article_title_zh"] in text
+        assert "https://duotopia.co/admin" in text
+        assert "#860" in text
+
+    @pytest.mark.asyncio
+    async def test_production_notice_is_a_push_not_broadcast(self, test_db_session):
+        """正式版的『通知』只給審核者；對粉絲 broadcast 只在後台按發布時"""
+        ann = await _make_draft(test_db_session, source_ref="n-prod-push")
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(return_value="REQ"),
+        ) as push, patch(
+            "services.release_announcement_service.LinePublishService.broadcast",
+            new=AsyncMock(),
+        ) as broadcast:
+            await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert push.await_count == 1
+        assert broadcast.await_count == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "missing", ["LINE_ANNOUNCE_CHANNEL_ACCESS_TOKEN", "LINE_ANNOUNCE_USER_ID"]
+    )
+    async def test_skips_when_not_configured(
+        self, test_db_session, monkeypatch, missing
+    ):
+        from services import release_announcement_service as mod
+
+        monkeypatch.setattr(mod.settings, missing, None)
+        ann = await _make_draft(test_db_session, source_ref=f"n-skip-{missing}")
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(),
+        ) as push:
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is False
+        assert push.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_missing_frontend_url_still_notifies_without_link(
+        self, test_db_session, monkeypatch
+    ):
+        """FRONTEND_URL 未設定不能讓 webhook 500（草稿已建立、CI 重跑也不會再通知）"""
+        from services import release_announcement_service as mod
+
+        ann = await _make_draft(test_db_session, source_ref="n-no-url")
+        monkeypatch.setattr(mod.settings, "FRONTEND_URL", None)
+        ann.issue_numbers = "860,,"
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(return_value="REQ"),
+        ) as push:
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is True
+        text = push.await_args.args[1][0]["text"]
+        assert "/admin" not in text
+        assert "Issue：#860" in text
+        assert "#、" not in text and not text.rstrip().endswith("#")
+
+    @pytest.mark.asyncio
+    async def test_line_failure_does_not_raise(self, test_db_session):
+        """通知失敗不能讓草稿建立失敗"""
+        ann = await _make_draft(test_db_session, source_ref="n-fail")
+        with patch(
+            "services.release_announcement_service.LinePublishService.push",
+            new=AsyncMock(side_effect=LinePublishError("quota exceeded", 429)),
+        ):
+            sent = await ReleaseAnnouncementService.notify_draft_created(ann)
+
+        assert sent is False
+
+
 class TestPublishLine:
     @pytest.mark.asyncio
     async def test_production_broadcasts(self, test_db_session):
@@ -391,6 +622,25 @@ class TestPublishLine:
         messages = broadcast.await_args[0][0]
         assert messages[0]["type"] == "flex"
         assert AI_RESULT["line_message_zh"] in str(messages[0])
+
+    @pytest.mark.asyncio
+    async def test_line_card_uses_main_image_not_english_one(self, test_db_session):
+        """LINE 卡片中文在前，hero 只用主圖；英文文章主圖不進卡片"""
+        db = test_db_session
+        ann = await _make_draft(db, source_ref="line-hero-sha")
+        ann.image_url = "https://cdn/zh.jpg"
+        ann.image_url_en = "https://cdn/en.jpg"
+        db.commit()
+
+        with patch(
+            "services.release_announcement_service.LinePublishService.broadcast",
+            new=AsyncMock(return_value="REQ-H"),
+        ) as broadcast:
+            await ReleaseAnnouncementService.publish(db, ann, channels=["line"])
+
+        card = str(broadcast.await_args[0][0])
+        assert "https://cdn/zh.jpg" in card
+        assert "https://cdn/en.jpg" not in card
 
     @pytest.mark.asyncio
     async def test_non_production_pushes_to_test_user_with_prefix(
@@ -472,7 +722,12 @@ class TestPublishBothChannels:
             .filter(BlogPost.id == result.published_blog_post_id)
             .one()
         )
-        assert f"https://duotopia.co/blog/{zh.slug}" in str(broadcast.await_args[0][0])
+        flex = broadcast.await_args[0][0][0]
+        uri = flex["contents"]["footer"]["contents"][0]["action"]["uri"]
+        # LINE 只接受 percent-encoded 的 ASCII URI；中文 slug 未編碼會被拒（Invalid action URI）
+        assert uri.isascii()
+        assert uri == f"https://duotopia.co/blog/{quote(zh.slug, safe='-')}"
+        assert unquote(uri) == f"https://duotopia.co/blog/{zh.slug}"
 
     @pytest.mark.asyncio
     async def test_rejects_unknown_channel(self, test_db_session):

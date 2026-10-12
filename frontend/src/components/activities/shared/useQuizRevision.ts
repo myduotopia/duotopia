@@ -9,6 +9,11 @@
  *
  * 後端 _complete_quiz 對 RETURNED 進入時會再把關一次（未全對回 400），
  * 前端 gating 只是即時體驗。
+ *
+ * #1092：老師改評分設定（如改成區分大小寫）後，本機鎖定的「已答對」題可能被後端
+ * 重判成錯 → /complete 回 400 QUIZ_REVISION_INCOMPLETE（isRevisionIncompleteError）。
+ * 打字小考元件此時重新呼叫 start，用 priorCorrectFromStart / priorTypedFromStart
+ * 更新鎖定狀態（本機已輸入的答案優先保留），並提示學生修改後再交卷。
  */
 import { useCallback, useState } from "react";
 
@@ -72,4 +77,50 @@ export function nextUnresolvedIndex(
     if (correctByItem[words[i].content_item_id] !== true) return i;
   }
   return -1;
+}
+
+/** start 回傳的每題前次作答（訂正模式用來鎖定已答對題、帶回原答案）。 */
+export interface QuizPriorWord {
+  content_item_id: number;
+  prior_answer?: string | null;
+  prior_is_correct?: boolean | null;
+}
+
+/** 從 start 的 words 取出每題對錯（鎖定依據）。後端未判過的題不放（＝未解決）。 */
+export function priorCorrectFromStart(
+  words: QuizPriorWord[],
+): Record<number, boolean | null> {
+  const correct: Record<number, boolean | null> = {};
+  words.forEach((w) => {
+    if (w.prior_is_correct != null)
+      correct[w.content_item_id] = w.prior_is_correct;
+  });
+  return correct;
+}
+
+/**
+ * 從 start 的 words 取出每題前次答案，再以本機已輸入的值覆蓋（本機值優先，
+ * 重新載入時不會把學生這次打的答案蓋掉）。初次載入時 local 為空。
+ */
+export function priorTypedFromStart(
+  words: QuizPriorWord[],
+  local: Record<number, string> = {},
+): Record<number, string> {
+  const typed: Record<number, string> = {};
+  words.forEach((w) => {
+    if (w.prior_answer != null) typed[w.content_item_id] = w.prior_answer;
+  });
+  return { ...typed, ...local };
+}
+
+/**
+ * #1092：訂正交卷被後端擋下（400 QUIZ_REVISION_INCOMPLETE）。
+ * 典型情境：學生開著訂正頁時老師改了評分設定（如改成區分大小寫），本機鎖定為
+ * 「已答對」的題目被後端重判成錯；呼叫端應重新呼叫 start 取得最新 prior_is_correct。
+ */
+export function isRevisionIncompleteError(err: unknown): boolean {
+  return (
+    (err as { detail?: { code?: string } })?.detail?.code ===
+    "QUIZ_REVISION_INCOMPLETE"
+  );
 }

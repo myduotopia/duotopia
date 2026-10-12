@@ -18,6 +18,10 @@
  *     focusFirst 由父元件的 VK 觸發，作用在當前 focused slot 上。
  *   - revealAnswer（#867）：艾賓浩斯答錯且老師開「答錯顯示答案」時，以紅色
  *     placeholder 在每個 slot 顯示正解；學生一打字該 slot placeholder 即消失。
+ *   - #1092 格子定位：value 仍是單一字串，但以「單一空白」split / join，只去尾端
+ *     空白 —— 填在第幾格就是第幾格（第 1 格空白時 value 以空白開頭），不再前擠。
+ *     切格 / 合併與送給小考 API 的逐格答案（typed_words）皆在 lib/quizScoring.ts
+ *     （splitAnswerSlots / joinAnswerSlots / toTypedWords）。
  */
 
 import {
@@ -32,6 +36,10 @@ import {
 import { Loader2, Send } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import {
+  joinAnswerSlots as joinSlots,
+  splitAnswerSlots as splitSlots,
+} from "@/lib/quizScoring";
 import { cn } from "@/lib/utils";
 
 const ALLOWED_CHAR = /[a-zA-Z\-' .,?!]/;
@@ -101,11 +109,11 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
     const slotWords = useMemo(() => slotsFor(expectedAnswer), [expectedAnswer]);
     const multi = slotWords.length > 1;
 
-    const currentSlots = useMemo(() => {
-      const parts = (value || "").split(/\s+/);
-      while (parts.length < slotWords.length) parts.push("");
-      return parts.slice(0, slotWords.length);
-    }, [value, slotWords.length]);
+    // #1092：以單一空白切格，空格留在原位（不再把後面的字往前擠）
+    const currentSlots = useMemo(
+      () => splitSlots(value, slotWords.length),
+      [value, slotWords.length],
+    );
 
     const refs = useRef<Array<HTMLInputElement | null>>([]);
     const [focusedIdx, setFocusedIdx] = useState(0);
@@ -129,7 +137,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
         const cleaned = sanitize(next);
         const newSlots = currentSlots.slice();
         newSlots[idx] = cleaned;
-        onChange(newSlots.join(" ").trim());
+        onChange(joinSlots(newSlots));
       },
       [currentSlots, onChange],
     );
@@ -175,7 +183,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
           if (!cleaned) return;
           const newSlots = currentSlots.slice();
           newSlots[target] = (newSlots[target] || "") + cleaned;
-          onChange(newSlots.join(" ").trim());
+          onChange(joinSlots(newSlots));
         },
         backspace: () => {
           const target = Math.max(
@@ -189,7 +197,7 @@ const QuizAnswerInput = forwardRef<QuizAnswerInputHandle, Props>(
             refs.current[target - 1]?.focus();
             return;
           }
-          onChange(newSlots.join(" ").trim());
+          onChange(joinSlots(newSlots));
         },
         submit: () => {
           if (onSubmit && !submitting && !disabled) onSubmit();

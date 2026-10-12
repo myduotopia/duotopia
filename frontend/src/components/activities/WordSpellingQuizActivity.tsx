@@ -24,6 +24,13 @@
  * #1045 階段 4c：回饋對齊艾賓浩斯練習版 — 答對輸入格綠＋星星動畫（不翻卡）；答錯輸入格直接顯示
  * 紅色正解並鎖定、不播動畫。提交計分用判斷當下的原始作答（previewOriginalTyped），答錯仍算錯。
  * 作答卡片不再有內部卷軸（移除 max-h 與 overflow-y-auto），內容撐開、由瀏覽器外層捲動。
+ *
+ * #1092：輸入格填在第幾格就是第幾格（作答值只去尾端空白，開頭空白＝第 1 格沒填）；
+ * 送出時另附 typed_words（逐格、空格為 ""，長度＝正解單字數），後端以它判分。
+ * 本機對錯判斷（老師預覽）改用 lib/quizScoring.evaluateAnswer 並吃 quiz_case_sensitive。
+ * 訂正交卷回 400 QUIZ_REVISION_INCOMPLETE（老師改了評分設定，鎖定的已答對題被重判成錯）→
+ * 重新呼叫 start 更新鎖定狀態（本機已輸入的答案保留）、游標跳到第一題要改的題目並提示；
+ * 每次失敗只重抓一次、不自動再交卷。
  */
 
 import {
@@ -47,6 +54,7 @@ import { withDemoOverrides } from "@/lib/demoOverrides";
 import { useQuizNavSlot } from "@/contexts/QuizNavSlotContext";
 import { useInputDeviceMode } from "@/hooks/useInputDeviceMode";
 import { createAnswerPersistTracker } from "./shared/quizAnswerPersist";
+import { evaluateAnswer, toTypedWords, trimSlotsEnd } from "@/lib/quizScoring";
 import { useShortLandscape } from "./shared/useShortLandscape";
 import { cn } from "@/lib/utils";
 import CountdownRing from "./shared/CountdownRing";
@@ -69,6 +77,9 @@ import {
   allCorrect,
   firstUnresolvedIndex,
   nextUnresolvedIndex,
+  priorCorrectFromStart,
+  priorTypedFromStart,
+  isRevisionIncompleteError,
 } from "./shared/useQuizRevision";
 
 interface QuizWord {
@@ -98,6 +109,8 @@ interface StartResponse {
   time_remaining_seconds?: number | null;
   // Issue #830: 退回後為 "RETURNED" → 進入訂正模式
   status?: string | null;
+  // Issue #1092: 大小寫開關（本機對錯判斷用；正式判分以後端為準）
+  quiz_case_sensitive?: boolean;
 }
 
 interface Props {
@@ -179,6 +192,7 @@ export default function WordSpellingQuizActivity({
     show_image: true,
     play_audio: false,
     show_answer: false,
+    quiz_case_sensitive: false,
   });
   // Issue #828: 整卷限時 — initialRemaining 給 useQuizTimer，timerTotal 給 CountdownRing 動畫
   const [initialRemaining, setInitialRemaining] = useState<number | null>(null);
@@ -231,6 +245,7 @@ export default function WordSpellingQuizActivity({
         show_image: previewSettings?.show_image ?? true,
         play_audio: previewSettings?.play_audio ?? false,
         show_answer: previewSettings?.show_answer ?? false,
+        quiz_case_sensitive: previewSettings?.quiz_case_sensitive ?? false,
       });
       setLoading(false);
       return;
@@ -256,6 +271,7 @@ export default function WordSpellingQuizActivity({
             show_image: demo.show_image,
             play_audio: demo.play_audio,
             show_answer: demo.show_answer,
+            quiz_case_sensitive: !!demo.quiz_case_sensitive,
           });
           setInitialRemaining(null);
           setTimerTotal(demo.quiz_time_limit_seconds ?? null);
@@ -267,15 +283,8 @@ export default function WordSpellingQuizActivity({
         if (cancelled) return;
         setWords(data.words);
         setSessionId(data.session_id);
-        const initialTyped: Record<number, string> = {};
-        const initialCorrect: Record<number, boolean | null> = {};
-        data.words.forEach((w) => {
-          if (w.prior_answer != null)
-            initialTyped[w.content_item_id] = w.prior_answer;
-          if (w.prior_is_correct != null)
-            initialCorrect[w.content_item_id] = w.prior_is_correct;
-        });
-        setTypedByItem(initialTyped);
+        const initialCorrect = priorCorrectFromStart(data.words);
+        setTypedByItem(priorTypedFromStart(data.words));
         setCorrectByItem(initialCorrect);
         setQuizStatus(data.status ?? null);
         // 訂正模式（退回後 RETURNED）：游標直接停在第一題錯題（略過已答對題）
@@ -288,6 +297,7 @@ export default function WordSpellingQuizActivity({
           show_image: data.show_image,
           play_audio: data.play_audio,
           show_answer: data.show_answer,
+          quiz_case_sensitive: !!data.quiz_case_sensitive,
         });
         const remaining =
           data.time_remaining_seconds == null
@@ -347,12 +357,16 @@ export default function WordSpellingQuizActivity({
         return { ok: true, skipped: true };
       const trimmed = typed.trim();
       if (!trimmed) return { ok: true, skipped: true };
+      // #1092: 逐格答案（空格留位），後端以它判分
+      const expected =
+        words.find((w) => w.content_item_id === itemId)?.text ?? trimmed;
       try {
         const data = (await apiClient.post(
           `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/answer`,
           {
             content_item_id: itemId,
             typed_answer: trimmed,
+            typed_words: toTypedWords(typed, expected),
             time_spent_seconds: 0,
             session_id: sessionId,
           },
@@ -365,7 +379,7 @@ export default function WordSpellingQuizActivity({
         return { ok: false };
       }
     },
-    [assignmentId, isDemoMode, isLivePreview, sessionId, recordResult],
+    [assignmentId, isDemoMode, isLivePreview, sessionId, recordResult, words],
   );
 
   // 學生切題 / 提交時用。失敗會 toast，並回傳 false 讓 caller 決定重試。
@@ -396,7 +410,8 @@ export default function WordSpellingQuizActivity({
     const typed = typedByItem[itemId] || "";
     if (!typed.trim()) return true;
     setSubmittingAnswer(true);
-    const res = await getPersistTracker().save(itemId, typed.trim());
+    // #1092: 只去尾端空白，開頭空白＝第 1 格沒填，要保留格子位置
+    const res = await getPersistTracker().save(itemId, trimSlotsEnd(typed));
     setSubmittingAnswer(false);
     if (!res.ok) {
       toast.error(
@@ -415,6 +430,35 @@ export default function WordSpellingQuizActivity({
     [currentIndex, persistAnswer, words.length],
   );
 
+  // #1092：訂正交卷被擋（QUIZ_REVISION_INCOMPLETE，通常是老師改了評分設定、鎖定的
+  // 「已答對」題被後端重判成錯）→ 重新呼叫 start 取最新對錯，解鎖變錯的題目；
+  // 本機已輸入的答案保留。每次交卷失敗只重抓一次、不自動再交卷（不會循環）。
+  const reloadRevisionState = useCallback(async () => {
+    try {
+      const data = (await apiClient.get(
+        `/api/students/assignments/${assignmentId}/vocabulary/spelling_quiz/start`,
+      )) as StartResponse;
+      const freshCorrect = priorCorrectFromStart(data.words);
+      setSessionId(data.session_id);
+      setQuizStatus(data.status ?? null);
+      setCorrectByItem(freshCorrect);
+      setTypedByItem((prev) => priorTypedFromStart(data.words, prev));
+      const firstWrong = firstUnresolvedIndex(words, freshCorrect);
+      if (firstWrong < 0) {
+        // 重抓後仍全對（非評分設定造成）→ 一般失敗提示
+        toast.error(t("wordSpelling.toast.submitFailed") || "Submit failed");
+        return;
+      }
+      setCurrentIndex(firstWrong);
+      toast.warning(
+        t("wordQuiz.revision.settingsChanged") ||
+          "老師調整了評分方式，有題目需要再修正，請修改後再交卷。",
+      );
+    } catch {
+      toast.error(t("wordSpelling.toast.submitFailed") || "Submit failed");
+    }
+  }, [assignmentId, t, words]);
+
   const handleSubmitAll = useCallback(async () => {
     if (isLivePreview) {
       // #1045 階段 4：考前說明 → 不組複盤資料，不揭示分數/對錯/正解
@@ -423,16 +467,21 @@ export default function WordSpellingQuizActivity({
         return;
       }
       // #861 D: 預覽提交 → 前端用目前打字作答組複盤，重用學生端 QuizReviewView。
-      const norm = (s: string | null | undefined) =>
-        (s ?? "").trim().toLowerCase();
       const reviewWords: SpellingReviewWord[] = words.map((w) => {
         // #1045 階段 4c：已對答案的題用判斷當下的原始作答（答錯後輸入格已改為正解）
-        const typed = (
+        const rawTyped =
           previewOriginalTyped[w.content_item_id] ??
           typedByItem[w.content_item_id] ??
-          ""
-        ).trim();
-        const isCorrect = !!typed && norm(typed) === norm(w.text);
+          "";
+        const typed = rawTyped.trim();
+        // #1092: 逐格比對、吃大小寫開關（與後端同規則）
+        const isCorrect =
+          !!typed &&
+          evaluateAnswer(
+            toTypedWords(rawTyped, w.text),
+            w.text,
+            settings.quiz_case_sensitive,
+          ).isCorrect;
         return {
           content_item_id: w.content_item_id,
           question_number: w.question_number,
@@ -488,7 +537,12 @@ export default function WordSpellingQuizActivity({
       );
       toast.success(t("wordSpelling.toast.completed") || "Quiz submitted");
       onComplete?.();
-    } catch {
+    } catch (err: unknown) {
+      if (isRevisionIncompleteError(err)) {
+        completingRef.current = false;
+        await reloadRevisionState();
+        return;
+      }
       toast.error(t("wordSpelling.toast.submitFailed") || "Submit failed");
       completingRef.current = false; // 讓使用者再點一次「提交」
     } finally {
@@ -499,6 +553,7 @@ export default function WordSpellingQuizActivity({
     previewOriginalTyped,
     assignmentId,
     isDemoMode,
+    reloadRevisionState,
     isLivePreview,
     onComplete,
     persistAnswer,
@@ -506,6 +561,7 @@ export default function WordSpellingQuizActivity({
     t,
     words,
     typedByItem,
+    settings.quiz_case_sensitive,
   ]);
 
   // Issue #830 訂正模式：送出當題答案 →
@@ -514,8 +570,8 @@ export default function WordSpellingQuizActivity({
   const handleRevisionCheck = useCallback(async () => {
     if (!currentWord) return;
     const itemId = currentWord.content_item_id;
-    const typed = (typedByItem[itemId] || "").trim();
-    if (!typed) return;
+    const typed = trimSlotsEnd(typedByItem[itemId] || "");
+    if (!typed.trim()) return;
     setSubmittingAnswer(true);
     const res = await persistItemAnswer(itemId, typed);
     setSubmittingAnswer(false);
@@ -543,10 +599,15 @@ export default function WordSpellingQuizActivity({
     if (!currentWord) return;
     const itemId = currentWord.content_item_id;
     if (previewResultByItem[itemId] !== undefined) return;
-    const typed = (typedByItem[itemId] || "").trim();
-    if (!typed) return;
-    const isCorrect =
-      typed.toLowerCase() === (currentWord.text || "").trim().toLowerCase();
+    const typed = trimSlotsEnd(typedByItem[itemId] || "");
+    if (!typed.trim()) return;
+    // #1092: 逐格比對、吃大小寫開關（與後端同規則）
+    const expected = currentWord.text || "";
+    const isCorrect = evaluateAnswer(
+      toTypedWords(typed, expected),
+      expected,
+      settings.quiz_case_sensitive,
+    ).isCorrect;
     setPreviewOriginalTyped((m) => ({ ...m, [itemId]: typed }));
     setPreviewResultByItem((m) => ({ ...m, [itemId]: isCorrect }));
     if (isCorrect) {
@@ -554,9 +615,18 @@ export default function WordSpellingQuizActivity({
       setPreviewOverlayOpen(true);
     } else {
       // #1045 階段 4c：答錯 → 輸入格直接顯示紅色正解並鎖定，不播動畫
-      setTypedByItem((m) => ({ ...m, [itemId]: currentWord.text || "" }));
+      // #1092: 正解先正規化空白（單一空白分隔），髒資料的連續／開頭空白才不會錯格
+      setTypedByItem((m) => ({
+        ...m,
+        [itemId]: (currentWord.text || "").trim().split(/\s+/).join(" "),
+      }));
     }
-  }, [currentWord, previewResultByItem, typedByItem]);
+  }, [
+    currentWord,
+    previewResultByItem,
+    typedByItem,
+    settings.quiz_case_sensitive,
+  ]);
 
   const answeredCount = useMemo(
     () =>
@@ -619,8 +689,9 @@ export default function WordSpellingQuizActivity({
     )
       return;
     const itemId = currentWord.content_item_id;
-    const val = (typedByItem[itemId] || "").trim();
-    if (!val) return;
+    // #1092: 只去尾端空白（保留空格位置），與 persistAnswer 同一份值
+    const val = trimSlotsEnd(typedByItem[itemId] || "");
+    if (!val.trim()) return;
     if (getPersistTracker().isSavedOrPending(itemId, val)) return;
     const handle = setTimeout(() => {
       void getPersistTracker().save(itemId, val);

@@ -1,0 +1,31 @@
+name: Announce Issue
+
+# issue #804 — 人工加上「📣 announce」或「✅ tested-in-staging」標籤時，
+# 若兩個標籤都齊了就自動產生公告留言（詳見 _announce-issue-shared.yml）。
+#
+# 注意：issues 事件只會執行 default branch（main）上的 workflow，
+# 這個檔案要合併進 main 之後才會開始生效。
+# bot 加的標籤不會觸發 workflow：「測試通過」留言流程由 automation-auto-approve.yml 直接呼叫。
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  id-token: write # claude-code-action exchanges OIDC token for app token
+
+jobs:
+  announce:
+    if: >-
+      github.event.label.name == '📣 announce' ||
+      github.event.label.name == '✅ tested-in-staging'
+    concurrency:
+      group: announce-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/_announce-issue-shared.yml
+    with:
+      issue_number: ${{ github.event.issue.number }}
+    secrets: inherit

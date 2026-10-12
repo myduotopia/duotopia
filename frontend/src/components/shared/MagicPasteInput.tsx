@@ -7,6 +7,8 @@
  * - 手機：由 MagicPasteDialog 包在 Dialog 裡
  *
  * 只負責「擷取 + 預覽 + 回傳」；插入後的翻譯/例句/語音補洞由呼叫端處理。
+ *
+ * 配額：管理者（`is_admin`）帳號顯示「不限張數」；擷取回應未帶 `unlimited` 時沿用前次判定。
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -30,10 +32,12 @@ export interface MagicPasteItem {
  * - sentence  ：例句集 / 朗讀評測 → 一列 = 句子 + 翻譯
  */
 // multiple_choice：題庫從考卷圖片擷取題目與選項（#1065）
+// reading_group：一份檔 → 一個閱讀題組（文章素材／海報座標 + 註解 + 小題）（#1084）
 export type MagicPasteExtractMode =
   | "vocabulary"
   | "sentence"
-  | "multiple_choice";
+  | "multiple_choice"
+  | "reading_group";
 
 /** multiple_choice 模式的擷取結果（題庫用；不預覽，直接插到右側題目卡） */
 export interface MagicPasteMcItem {
@@ -42,19 +46,87 @@ export interface MagicPasteMcItem {
   /** 圖上有標答案才會有值；否則 [] */
   correct_indexes: number[];
   explanation: string;
+  /**
+   * 克漏字小題對應的空格編號（文章已被 AI 重編成 `{{n}}`）；非克漏字為 null（#1086）。
+   * 舊回應（後端未更新）可能沒有這些欄位，前端一律當 null／[] 處理。
+   */
+  blank?: number | null;
+  /** 題幹附圖座標（文氏圖、靜物圖…）；沒有為 null（#1084） */
+  stem_box_2d?: number[] | null;
+  /** 與 options 等長的選項圖座標；不是圖的位置為 null，整題沒圖片選項為 [] */
+  option_boxes?: (number[] | null)[];
+}
+
+/** reading_group 模式的擷取結果：整份檔 = 一個閱讀題組（與後端 _normalize_reading_group 對應） */
+export interface MagicPasteGroupResult {
+  title: string;
+  stimulus: {
+    /** text = 散文段落；image = 海報／漫畫／地圖，整塊當圖 */
+    kind: "text" | "image";
+    paragraphs: string[];
+    /** image 時：圖內文字（文字版用，不顯示給學生） */
+    text: string;
+    /** image 時：素材區域 [ymin, xmin, ymax, xmax]，0–1000 正規化；AI 給不出就 null */
+    box_2d: number[] | null;
+    /** 多頁檔時座標所在頁（1 起算）；單張圖為 1 或 null */
+    page: number | null;
+    /**
+     * kind=text 時：文章內插圖的座標與插入位置（#1084）。
+     * `after_paragraph` 為 `paragraphs` 的 0-based 索引，-1 = 第一段之前。
+     */
+    figures?: {
+      box_2d: number[];
+      /** beside = 與該段並排（AI 依原卷判斷）、full = 自己佔一整行 */
+      placement?: "beside" | "full";
+      after_paragraph: number;
+      /** 並排時圖在那一段的哪一側 */
+      side?: "left" | "right";
+      /** 圖佔的寬度比例，後端已吸附到 1/3、1/2、2/3 */
+      width?: number;
+      caption: string;
+    }[];
+    /** AI 是否已把印刷空格（`__40__`…）改寫成 `{{n}}`（克漏字，#1086） */
+    blanks_renumbered?: boolean;
+    /** 原卷文章是否印在方框內（kind=image 時後端一律 false）→ layout.frame（#1084） */
+    framed?: boolean;
+    /**
+     * kind=image 且圖中人物有說話（漫畫、對話圖）時的逐句對話，閱讀順序；沒有對話為 []。
+     * 說話者不加 the：Girl／Boy A／Teacher／人名…（#1083）。有對話時 `text` 只剩非對話文字。
+     */
+    dialogue?: { speaker: string; text: string }[];
+  };
+  glossary: { word: string; zh: string }[];
+  questions: MagicPasteMcItem[];
 }
 
 interface QuotaState {
   free_remaining: number;
   free_limit: number;
   can_use: boolean;
+  /** 管理者帳號不受張數限制（後端 `is_admin`）：顯示「不限張數」 */
+  unlimited?: boolean;
 }
 
 interface MagicPasteInputProps {
   /** vocabulary / sentence 模式：老師在預覽勾選後插入 */
   onInsert?: (items: MagicPasteItem[]) => void;
-  /** multiple_choice 模式：擷取完直接回呼，不經預覽 */
-  onInsertQuestions?: (items: MagicPasteMcItem[]) => void;
+  /**
+   * multiple_choice 模式：擷取完直接回呼，不經預覽。
+   * 連同原始檔一起交出去（呼叫端用 stem_box_2d／option_boxes 裁題幹圖與選項圖）；
+   * 回呼可以是 async（裁圖／上傳期間本元件維持 loading）
+   */
+  onInsertQuestions?: (
+    items: MagicPasteMcItem[],
+    file: File,
+  ) => void | Promise<void>;
+  /**
+   * reading_group 模式：擷取完直接回呼（不經預覽），連同原始檔一起交出去，
+   * 呼叫端用 box_2d 裁圖上傳；回呼可以是 async（裁圖／上傳期間本元件維持 loading）
+   */
+  onInsertGroup?: (
+    result: MagicPasteGroupResult,
+    file: File,
+  ) => void | Promise<void>;
   /** CEFR 程度（僅 vocabulary 模式參考） */
   level?: string;
   /** 擷取模式，預設 vocabulary（單字集） */
@@ -78,6 +150,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 export default function MagicPasteInput({
   onInsert,
   onInsertQuestions,
+  onInsertGroup,
   level = "A1",
   extractMode = "vocabulary",
   onAfterInsert,
@@ -88,6 +161,7 @@ export default function MagicPasteInput({
   const { t } = useTranslation();
   const isSentenceMode = extractMode === "sentence";
   const isMcMode = extractMode === "multiple_choice";
+  const isGroupMode = extractMode === "reading_group";
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<MagicPasteItem[]>([]);
@@ -153,11 +227,13 @@ export default function MagicPasteInput({
       toast.error(validationError);
       return;
     }
+    // 擷取完會 setFile(null)，先把原檔留住給 reading_group 回呼裁圖用
+    const picked = file;
     setLoading(true);
     setOverLimit(false);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", picked);
       formData.append("level", level);
       formData.append("extract_mode", extractMode);
       const result = await apiClient.magicPasteExtract(formData);
@@ -165,14 +241,30 @@ export default function MagicPasteInput({
         free_limit: prev?.free_limit ?? result.quota.free_limit,
         free_remaining: result.quota.free_remaining,
         can_use: result.quota.can_use,
+        // 後端沒回（舊版）時沿用前一次的判定，不要把「不限」退回有限
+        unlimited: result.quota.unlimited ?? prev?.unlimited,
       }));
+      if (isGroupMode) {
+        // 題組：不預覽；整份檔 = 一個題組，交給呼叫端裁圖／組草稿
+        const groups = result.items as unknown as MagicPasteGroupResult[];
+        if (!groups.length) {
+          toast.error(t("contentEditor.magicPaste.noGroupExtracted"));
+        } else {
+          await onInsertGroup?.(groups[0], picked);
+        }
+        setFile(null);
+        setItems([]);
+        setSelected({});
+        onAfterInsert?.();
+        return;
+      }
       if (isMcMode) {
         // 題庫：不預覽，擷取完直接插到右側題目卡
         const questions = result.items as unknown as MagicPasteMcItem[];
         if (!questions.length) {
           toast.error(t("contentEditor.magicPaste.noQuestionExtracted"));
         } else {
-          onInsertQuestions?.(questions);
+          await onInsertQuestions?.(questions, picked);
           toast.success(
             t("contentEditor.magicPaste.insertedNQuestions", {
               count: questions.length,
@@ -231,10 +323,12 @@ export default function MagicPasteInput({
       {/* 配額提示 */}
       {quota && (
         <p className="text-xs text-gray-500">
-          {t("contentEditor.magicPaste.quota", {
-            remaining: quota.free_remaining,
-            limit: quota.free_limit,
-          })}
+          {quota.unlimited
+            ? t("contentEditor.magicPaste.quotaUnlimited")
+            : t("contentEditor.magicPaste.quota", {
+                remaining: quota.free_remaining,
+                limit: quota.free_limit,
+              })}
         </p>
       )}
 

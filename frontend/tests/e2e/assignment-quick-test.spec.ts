@@ -56,7 +56,7 @@ test.describe('Assignment Dashboard Quick Test', () => {
 
       // 7. Test View Assignment Details
       console.log('7️⃣ Testing View Assignment Details...');
-      const viewDetailsButtons = page.locator('button:has-text("查看詳情")');
+      const viewDetailsButtons = page.locator('button:has-text("作業設定")');
       const detailsCount = await viewDetailsButtons.count();
       console.log(`   Found ${detailsCount} assignments`);
 

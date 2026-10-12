@@ -95,15 +95,12 @@
   },
   "assignmentDetail": {
     "sheet": {
-      "viewTitle": "作業詳情",
-      "editTitle": "編輯作業",
-      "editButton": "編輯",
+      "viewTitle": "作業設定",
       "titleLabel": "作業標題",
       "instructionsLabel": "作業說明",
       "dueDateLabel": "截止日期",
       "studentProgress": "學生完成狀況",
       "noStudents": "尚無學生資料",
-      "save": "儲存變更",
       "contentTitle": "作業單元內容",
       "questionCount": "題目數量：",
       "itemCount": "題",
@@ -111,6 +108,10 @@
       "averageScore": "平均分數",
       "startDateLabel": "開始日期",
       "lockedSettingHint": "已有學生開始作答，無法變更此設定",
+      "saving": "儲存中…",
+      "saved": "已儲存",
+      "saveFailed": "儲存失敗",
+      "liveQuizOpenHint": "小考進行中，請先收卷才能關閉即時小考",
       "gridView": "格狀檢視",
       "listView": "列表檢視",
       "tabAll": "全部",
@@ -147,6 +148,7 @@
       "updateSuccess": "作業資訊已更新",
       "updateError": "儲存失敗",
       "startDateAfterDueDate": "開始日期不可晚於截止日期",
+      "invalidDate": "日期還沒填完整，已還原為原本的日期",
       "notFound": "找不到作業資料",
       "loadError": "無法載入作業詳情",
       "titleRequired": "請輸入作業標題",
@@ -1067,7 +1069,8 @@
   "studentAssignmentList": {
     "loading": "載入中...",
     "errors": {
-      "loadFailed": "無法載入作業列表"
+      "loadFailed": "無法載入作業列表",
+      "classroomInactive": "此班級已停用"
     },
     "flowStatus": {
       "title": "作業進度流程",
@@ -3048,7 +3051,7 @@
       "createProgram": "建立課程",
       "assignNewHomework": "指派新作業",
       "batchArchive": "批次封存",
-      "viewDetails": "查看詳情",
+      "viewDetails": "作業設定",
       "editContent": "編輯內容",
       "previewDemo": "預覽",
       "requestRevisionBatch": "要求訂正",
@@ -3485,7 +3488,7 @@
       "programCount": "課程數",
       "createdAt": "建立時間",
       "actions": "操作",
-      "grade": "級別",
+      "grade": "年級",
       "school": "所屬學校"
     },
     "messages": {
@@ -4728,6 +4731,7 @@
       "extractFailed": "AI 擷取失敗，請稍後再試",
       "selectAtLeastOne": "請至少勾選一個項目",
       "quota": "本月免費剩餘 {{remaining}} / {{limit}} 張，超額以點數計費",
+      "quotaUnlimited": "管理者帳號：不限張數",
       "cancel": "取消",
       "pickFile": "選擇圖片或 PDF（一次一張）",
       "autoFillHint": "擷取後依上方「AI 翻譯 / 語音 / 例句」設定，在插入時自動補齊缺少的欄位。",
@@ -4749,6 +4753,11 @@
       "dialogDescVocab": "上傳一張圖片或 PDF，AI 會自動擷取單字、翻譯與例句，預覽確認後再插入。",
       "noQuestionExtracted": "沒有擷取到選擇題，請換一張更清楚的圖片",
       "insertedNQuestions": "已擷取 {{count}} 題，已放入右側",
+      "noGroupExtracted": "沒有擷取到題組內容，請換一張更清楚的圖片或 PDF",
+      "insertedGroup": "已擷取題組（{{count}} 小題），已放入右側",
+      "croppedImageUploadFailed": "有 {{count}} 張圖片上傳失敗，請在卡片上手動補圖",
+      "groupImageFallbackWhole": "AI 沒抓到素材區域，先放整張圖，你可以在排版裡換圖",
+      "groupImageNeedsUpload": "PDF 無法在此裁圖：文字與空格已擷取，圖片（素材圖、插圖、題幹圖、選項圖）請手動補上",
       "pasteHint": "或按 Ctrl+V 貼上截圖／PDF"
     },
     "batchTabs": {
@@ -5281,6 +5290,80 @@
       "total": "總分"
     }
   },
+  "quizScoring": {
+    "title": "評分方式",
+    "required": "（必選）",
+    "placeholder": "請選擇評分方式",
+    "methods": {
+      "whole_question": {
+        "label": "整題計分",
+        "desc": "這題只要有一個地方錯，就不給分（原本的計分方式）。"
+      },
+      "per_word": {
+        "label": "依單字比例",
+        "desc": "錯幾個單字就扣幾份。例如答案有 3 個單字、錯 1 個，就扣這題分數的三分之一。"
+      },
+      "per_word_lenient": {
+        "label": "依單字比例＋拼字寬鬆",
+        "desc": "和「依單字比例」一樣，但只差 1 個字母（多打、少打或打錯一個）的單字，只扣一半。"
+      },
+      "fixed_per_word": {
+        "label": "每錯一個單字扣固定分數",
+        "desc": "每錯一個單字扣您設定的分數，最多扣到這題的配分為止。"
+      },
+      "fixed_per_letter": {
+        "label": "每錯一個字母扣固定分數",
+        "desc": "每多打、少打或打錯一個字母，扣您設定的分數，最多扣到這題的配分為止。"
+      }
+    },
+    "pointsPerWord": "每錯一個單字扣",
+    "pointsPerLetter": "每錯一個字母扣",
+    "pointsUnit": "分",
+    "pointsInvalid": "請填 0.1 到 100 之間的分數，最多一位小數（例如 0.5、2）。",
+    "pointsHint": "可填 0.1 到 100，最多一位小數。",
+    "caseSensitive": "區分大小寫",
+    "caseSensitiveDesc": "開啟後，Apple 和 apple 會被當成不同的答案（預設不區分）。",
+    "perQuestion": "每題配分 {{points}} 分（共 {{count}} 題）",
+    "preview": {
+      "title": "扣分試算：以「{{answer}}」這題為例",
+      "builtinNote": "（範例題目）",
+      "noCount": "還不知道這份小考有幾題，暫時無法算出分數。",
+      "singleWordHint": "這次的答案都只有一個單字，「整題計分」和「依單字比例」算出來會一樣。",
+      "colAnswer": "學生的答案",
+      "colDeduction": "扣分",
+      "colScore": "這題得分",
+      "colReason": "說明",
+      "unansweredCell": "（沒作答）"
+    },
+    "reason": {
+      "allCorrect": "全對",
+      "unanswered": "沒作答，整題扣分",
+      "wholeQuestion": "有錯，整題扣分",
+      "full": "扣到這題的配分上限",
+      "words": "{{total}} 個單字錯 {{wrong}} 個",
+      "wordsLenient": "{{total}} 個單字錯 {{wrong}} 個（只差 1 個字母的扣一半）",
+      "letters": "差 {{count}} 個字母"
+    },
+    "grading": {
+      "methodPrefix": "評分方式：",
+      "pointsPerWord": "（每錯一個單字扣 {{points}} 分）",
+      "pointsPerLetter": "（每錯一個字母扣 {{points}} 分）",
+      "caseSensitiveSuffix": " · 區分大小寫",
+      "partialReason": "{{reason}}，預設扣 {{points}} 分"
+    },
+    "errors": {
+      "methodRequired": "請先選擇小考的評分方式",
+      "pointsRequired": "請填每錯一個單字或字母要扣幾分"
+    },
+    "confirm": {
+      "title": "要用新的評分方式重算成績嗎？",
+      "description": "已交卷的 {{count}} 位學生，成績會依新的評分方式重新計算；您之前手動修改過的扣分和總分，會被新的結果取代。",
+      "descriptionUnknownCount": "已交卷學生的成績會依新的評分方式重新計算；您之前手動修改過的扣分和總分，會被新的結果取代。",
+      "confirm": "確定重算",
+      "cancel": "取消"
+    },
+    "recomputed": "已儲存，並依新的評分方式重算 {{count}} 位學生的成績"
+  },
   "wordQuiz": {
     "questionNav": "題號",
     "questionLabel": "第 {{current}} / {{total}} 題",
@@ -5308,7 +5391,8 @@
     },
     "revision": {
       "hint": "訂正模式：答錯會顯示正解，全部改對才能提交",
-      "correctAnswer": "正解：{{answer}}"
+      "correctAnswer": "正解：{{answer}}",
+      "settingsChanged": "老師調整了評分方式，有題目需要再修正，請修改後再交卷。"
     }
   },
   "wordSpelling": {
@@ -5948,10 +6032,11 @@
     "columns": {
       "stem": "題目",
       "type": "題型",
-      "grade": "適合年級",
+      "grade": "年級",
       "examPoints": "考點",
       "visibility": "公開",
-      "sources": "考題來源"
+      "sources": "考題來源",
+      "programs": "教材"
     },
     "visibility": {
       "private": "私人",
@@ -5981,7 +6066,10 @@
       "deleteFailed": "刪除失敗",
       "createdCount": "已新增 {{count}} 題",
       "partiallySaved": "已新增 {{saved}} 題，{{failed}} 題失敗，請修正後再儲存",
-      "bulkSaved": "已更新 {{updated}} 題、新增 {{created}} 題"
+      "bulkSaved": "已更新 {{updated}} 題、新增 {{created}} 題",
+      "groupCreated": "題組已新增",
+      "groupUpdated": "題組已更新",
+      "groupDeleted": "題組已刪除"
     },
     "form": {
       "titleCreate": "新增選擇題",
@@ -6013,7 +6101,7 @@
       "removeLink": "移除關聯",
       "confirmDelete": "確定要刪除這題嗎？已派發的考卷不受影響。",
       "errors": {
-        "stemRequired": "請輸入題目",
+        "stemRequired": "請輸入題目或加上插圖",
         "duplicate": "題目與既有題目重複",
         "minOptions": "至少填 {{min}} 個選項",
         "noCorrect": "請勾選正確答案",
@@ -6022,7 +6110,13 @@
         "duplicateInBatch": "本批內有相同題目",
         "atQuestion": "第 {{n}} 題：{{message}}",
         "examPointRequired": "請選擇考點",
-        "visibilityRequired": "請選擇是否公開分享考題"
+        "visibilityRequired": "請選擇是否公開分享考題",
+        "groupNeedsQuestions": "題組至少要有一個小題",
+        "groupNeedsContent": "題組需要文章、圖片或排版內容",
+        "layoutIncomplete": "排版裡有尚未填完的區塊（空白文字、沒有圖片或對話缺內容）",
+        "clozeNeedsBlank": "克漏字題組的文章需要至少一個空格",
+        "clozeBlankMismatch": "空格與小題沒有一一對應（請檢查缺少、多餘或重複的空格編號）",
+        "clozeDuplicateBlank": "文章裡的空格 {{n}} 出現了兩次"
       },
       "batchHint": "本次 {{count}} 題（最多 {{max}} 題），左側設定套用到全部",
       "questionN": "第 {{n}} 題",
@@ -6032,6 +6126,7 @@
       "optionRequiredPlaceholder": "{{letter}} 選項",
       "optionOptionalPlaceholder": "{{letter}} 選項（選填）",
       "optionImage": "{{letter}} 選項圖片",
+      "stemImage": "題目插圖",
       "removeImage": "移除圖片",
       "explanationPlaceholder": "解析（選填）",
       "generateAudio": "生成題目語音",
@@ -6052,6 +6147,7 @@
         "needStem": "右側先輸入題目",
         "upload": "PDF／圖片上傳",
         "uploadHint": "上傳考卷圖片，AI 擷取題目與選項",
+        "uploadHintGroup": "上傳整份題組（圖片或 PDF）：AI 會擷取文章或海報、單字註解與小題，填進右側",
         "aiTitle": "AI 協助",
         "aiApplied": "已填入 {{applied}} 題，略過 {{skipped}} 題（已設定或無法判斷）",
         "aiNothingToSend": "右側還沒有可分析的題目（需要題幹與至少 2 個選項）",
@@ -6082,11 +6178,14 @@
       },
       "audioGenerated": "語音已生成",
       "audioPlayFailed": "無法播放語音（{{code}}）",
-      "titleBulkEdit": "批次編輯 {{count}} 題"
+      "titleBulkEdit": "批次編輯 {{count}} 題",
+      "stemOptionalPlaceholder": "題幹（克漏字可留空）"
     },
     "list": {
       "selectAll": "全選／取消全選",
       "selectRow": "選取此題",
+      "imageOption": "(圖片)",
+      "groupQuestionCount": "{{count}} 小題",
       "selected": "已選 {{count}} 題",
       "dirty": "{{count}} 題有未儲存的修改",
       "save": "儲存",
@@ -6108,10 +6207,259 @@
       "examPointClear": "清除考點篩選",
       "bulkEdit": "編輯",
       "bulkEditTypeMismatch": "題型不同的題目無法一起編輯",
-      "bulkEditNoPermission": "勾選的題目沒有編輯權限"
+      "bulkEditNoPermission": "勾選的題目沒有編輯權限",
+      "deleteGroup": "刪除題組",
+      "confirmDeleteWithGroups": "確定刪除 {{count}} 題與 {{groups}} 個題組（含所有小題）？已派發的考卷不受影響。",
+      "groupDeleted": "題組已刪除",
+      "groupDeleteFailed": "刪除題組失敗"
+    },
+    "group": {
+      "titleCreate": "新增{{type}}",
+      "titleEdit": "編輯{{type}}",
+      "titlePlaceholder": "題組標題（選填，列表顯示用）",
+      "titleAi": "AI 標題",
+      "titleAiEmpty": "請先貼上文章或新增小題",
+      "loading": "載入題組中…",
+      "loadFailed": "載入題組失敗",
+      "confirmDelete": "確定要刪除整個題組（含所有小題）嗎？已派發的考卷不受影響。",
+      "layout": {
+        "title": "主圖文排版",
+        "frame": "框線",
+        "frameRow": "加外框",
+        "frameAll": "整篇加外框",
+        "unframe": "移除外框",
+        "resizeColumns": "拖曳調整欄寬（1/3、1/2、2/3）",
+        "addBlock": "新增區塊",
+        "insertHere": "在這裡插入",
+        "removeBlock": "刪除區塊",
+        "dragBlock": "拖曳區塊（放到別的區塊左右可並排）",
+        "block": {
+          "heading": "標題",
+          "paragraph": "段落",
+          "image": "圖片",
+          "dialogue": "對話"
+        },
+        "bold": "粗體",
+        "underline": "底線",
+        "doubleUnderline": "雙底線",
+        "insertBlank": "插入空格",
+        "blankLimit": "空格編號 1–999 已經全部用完",
+        "headingPlaceholder": "標題文字",
+        "paragraphPlaceholder": "段落內容（**粗體**、__底線__）",
+        "imageUpload": "上傳圖片",
+        "imageReplace": "點擊更換圖片",
+        "imageAlt": "替代文字",
+        "imageCaption": "圖說",
+        "imageSize": {
+          "small": "小",
+          "medium": "中",
+          "large": "大",
+          "original": "原始"
+        },
+        "imageFrame": "框線",
+        "alignLeft": "靠左",
+        "alignCenter": "置中",
+        "alignRight": "靠右",
+        "dialogueSpeaker": "說話者",
+        "dialogueText": "內容",
+        "addLine": "新增一行",
+        "removeLine": "刪除這行",
+        "preview": "預覽",
+        "previewHint": "學生看到的畫面；切換電腦／手機寬度",
+        "previewDesktop": "電腦",
+        "previewMobile": "手機",
+        "empty": "還沒有內容：「新增區塊」開始寫，或上傳整張圖片（海報／漫畫／地圖）",
+        "uploadWholeImage": "上傳圖片"
+      },
+      "preview": {
+        "questionsTitle": "小題",
+        "textViewNotice": "文字版（學生作答時不會看到）"
+      },
+      "glossary": {
+        "title": "單字註解",
+        "placeholder": "timeline 時間軸\ncompose 作曲"
+      },
+      "passage": {
+        "tabLayout": "排版",
+        "tabText": "文字版",
+        "hint": "不顯示給學生；供搜尋與 AI 考點分析。預設由排版產生，可直接修改。",
+        "placeholder": "海報、漫畫等圖片題組：把圖中的文字貼在這裡",
+        "regenerate": "重新產生",
+        "edited": "已手動修改",
+        "emptyReverts": "留空儲存後會回到由排版自動產生的文字",
+        "dialogueReadonly": "對話文稿由 AI 從圖片整理，會用來產生音檔，無法修改"
+      },
+      "extract": {
+        "overwriteTitle": "覆蓋目前的題組內容？",
+        "overwriteDesc": "右側題組已經有內容，擷取結果會取代標題、排版、文字版、單字註解與全部小題。",
+        "overwriteConfirm": "覆蓋"
+      },
+      "questions": {
+        "title": "小題（{{count}}）",
+        "add": "新增小題",
+        "empty": "還沒有小題",
+        "drag": "拖曳排序",
+        "blankN": "空格 {{n}}",
+        "blankMissing": "找不到空格 {{n}}",
+        "blankUnassigned": "未指定空格",
+        "reinsertBlank": "重新插入到文末",
+        "removeBlank": "刪除小題",
+        "appendBlank": "在文末插入空格",
+        "renumber": "依閱讀順序重新編號"
+      },
+      "render": {
+        "zoomImage": "放大圖片"
+      }
+    },
+    "groupTypes": {
+      "reading": "閱讀題組",
+      "cloze": "克漏字題組"
     }
   },
   "orgMaterials": {
     "title": "機構教材"
+  },
+  "classroomGrade": {
+    "gradeLabel": "{{grade}} 年級",
+    "unset": "未設定",
+    "displayName": "{{grade}}年{{name}}班",
+    "selectPlaceholder": "請選擇年級",
+    "required": "請選擇年級",
+    "filter": {
+      "label": "年級篩選",
+      "all": "所有年級",
+      "unset": "未設定年級",
+      "noMatch": "沒有符合年級篩選的班級"
+    },
+    "selection": {
+      "selectedCount": "已選 {{count}} 個班級",
+      "selectAll": "全選目前列出的班級",
+      "selectRow": "選取 {{name}}",
+      "clear": "取消選取"
+    },
+    "banner": {
+      "message": "有 {{count}} 個班級尚未設定年級",
+      "action": "立即設定"
+    },
+    "missingDialog": {
+      "title": "設定班級年級",
+      "description": "為尚未設定年級的班級選擇年級。沒有選擇的班級會維持未設定。",
+      "rowLabel": "{{name}} 的年級",
+      "save": "儲存（{{count}}）"
+    },
+    "adjust": {
+      "button": "調整年級",
+      "title": "調整年級",
+      "description": "選擇升一級或降一級，確認每班調整前後的年級後套用。班級名稱不會變更。",
+      "up": "升一級",
+      "down": "降一級",
+      "changesTitle": "將調整 {{count}} 個班級",
+      "skippedTitle": "略過 {{count}} 個班級",
+      "nothingToChange": "沒有可以調整的班級",
+      "reason": {
+        "max": "已是 {{grade}} 年級，無法再升",
+        "min": "已是 {{grade}} 年級，無法再降",
+        "unset": "尚未設定年級"
+      },
+      "confirm": "套用（{{count}}）"
+    },
+    "messages": {
+      "saveSuccess": "已更新 {{count}} 個班級的年級",
+      "saveFailed": "更新年級失敗，請稍後再試",
+      "forbidden": "您沒有權限調整此學校的班級年級",
+      "reloadFailed": "已儲存，但清單重新載入失敗，請重新整理頁面"
+    },
+    "limitExceeded": "一次最多調整 {{max}} 個班級，請用年級篩選分批處理",
+    "missing": {
+      "limitExceeded": "一次最多儲存 {{max}} 個班級，請先儲存一部分再繼續"
+    },
+    "status": {
+      "column": "狀態",
+      "active": "啟用",
+      "inactive": "停用",
+      "switchDisable": "停用",
+      "switchEnable": "啟用",
+      "switchDisableAria": "停用此班級",
+      "switchEnableAria": "啟用此班級",
+      "filterLabel": "狀態篩選",
+      "filterAll": "所有狀態",
+      "activated": "已啟用「{{name}}」",
+      "deactivated": "已停用「{{name}}」",
+      "updateFailed": "更新班級狀態失敗，請稍後再試",
+      "dispatchDisabled": "班級已停用，無法派發作業"
+    },
+    "inline": {
+      "unsavedConfirm": "尚未儲存的修改將會遺失，確定要離開？",
+      "saveSuccess": "已更新班級「{{name}}」"
+    },
+    "level": {
+      "button": "調整等級",
+      "title": "調整等級",
+      "description": "選擇目標等級，確認每班調整前後的等級後套用。班級名稱不會變更。",
+      "targetLabel": "目標等級",
+      "targetPlaceholder": "請選擇等級",
+      "changesTitle": "將調整 {{count}} 個班級",
+      "skippedTitle": "略過 {{count}} 個班級",
+      "alreadyAtTarget": "已是 {{level}}",
+      "nothingToChange": "所選班級都已是此等級",
+      "confirm": "套用（{{count}}）",
+      "saveSuccess": "已更新 {{count}} 個班級的等級",
+      "saveFailed": "更新等級失敗，請稍後再試"
+    },
+    "bulk": {
+      "deactivate": "停用",
+      "activate": "啟用",
+      "deactivateTitle": "停用 {{count}} 個班級？",
+      "deactivateDescription": "停用後，學生將看不到這些班級，也無法再對這些班級派發作業。班級資料會保留，可隨時重新啟用。",
+      "activateTitle": "啟用 {{count}} 個班級？",
+      "activateDescription": "啟用後，學生可以再次看到這些班級，也可以對這些班級派發作業。",
+      "deactivated": "已停用 {{count}} 個班級",
+      "activated": "已啟用 {{count}} 個班級",
+      "switchDisableAria": "停用選取的班級",
+      "switchEnableAria": "啟用選取的班級"
+    },
+    "sort": {
+      "gradeAsc": "年級 低→高",
+      "gradeDesc": "年級 高→低",
+      "levelAsc": "等級 低→高",
+      "levelDesc": "等級 高→低",
+      "studentCountAsc": "學生數 少→多"
+    }
+  },
+  "schoolClassrooms": {
+    "labels": {
+      "level": "語言程度",
+      "teacher": "導師",
+      "studentCount": "學生數量",
+      "status": "狀態",
+      "activeToggle": "啟用班級"
+    },
+    "status": {
+      "active": "啟用",
+      "inactive": "停用"
+    },
+    "buttons": {
+      "assignTeacher": "指派導師",
+      "dispatch": "派發",
+      "creating": "建立中...",
+      "saving": "儲存中..."
+    },
+    "placeholders": {
+      "name": "例如：一年級 A 班",
+      "level": "選擇程度"
+    },
+    "dialogs": {
+      "createTitle": "建立新班級",
+      "createDescription": "為 {{school}} 建立一個新的班級",
+      "schoolFallback": "學校",
+      "editDescription": "更新 {{name}} 的資訊"
+    },
+    "messages": {
+      "nameTooLong": "班級名稱不能超過 100 個字元",
+      "schoolIdMissing": "找不到學校 ID",
+      "createSuccess": "班級建立成功",
+      "createFailed": "建立班級失敗，請稍後再試",
+      "updateSuccess": "班級更新成功"
+    }
   }
 }

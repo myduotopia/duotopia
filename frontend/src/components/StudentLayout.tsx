@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { ClassroomSwitcher } from "@/components/ClassroomSwitcher";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 import {
   BookOpen,
   Home,
@@ -161,8 +162,12 @@ export default function StudentLayout() {
                   {user?.name || t("studentLayout.userInfo.defaultStudent")}
                 </p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  {user?.classroom_name ||
-                    t("studentLayout.userInfo.defaultClass")}
+                  {user?.classroom_name
+                    ? formatClassroomDisplayName(t, {
+                        name: user.classroom_name,
+                        grade: user.classroom_grade,
+                      })
+                    : t("studentLayout.userInfo.defaultClass")}
                 </p>
               </div>
             </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,8 +67,24 @@ export default function StudentAssignmentList() {
     return key ? t(key) : mode || "—";
   };
   const navigate = useNavigate();
+  const location = useLocation();
   const { token, user } = useStudentAuthStore();
   const [searchParams] = useSearchParams();
+
+  // 從作業頁導回時帶來的提示（例如「此班級已停用」，#1097）：
+  // 來源頁卸載時會清掉 toast，所以在這裡掛載後顯示一次，並清掉 state 避免重新整理／返回時重複
+  const noticeShownRef = useRef(false);
+  useEffect(() => {
+    const noticeKey = (location.state as { noticeKey?: unknown } | null)
+      ?.noticeKey;
+    if (typeof noticeKey !== "string" || noticeShownRef.current) return;
+    noticeShownRef.current = true;
+    toast.error(t(noticeKey));
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: null,
+    });
+  }, [location.state, location.pathname, location.search, navigate, t]);
 
   const [assignments, setAssignments] = useState<StudentAssignmentCard[]>([]);
   const [loading, setLoading] = useState(true);

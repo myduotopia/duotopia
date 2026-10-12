@@ -922,7 +922,8 @@
   "studentAssignmentList": {
     "loading": "Loading...",
     "errors": {
-      "loadFailed": "Unable to load assignment list"
+      "loadFailed": "Unable to load assignment list",
+      "classroomInactive": "This class has been deactivated"
     },
     "flowStatus": {
       "title": "Assignment Progress Flow",
@@ -2906,7 +2907,7 @@
       "createProgram": "Create Program",
       "assignNewHomework": "Assign New Homework",
       "batchArchive": "Batch Archive",
-      "viewDetails": "Edit",
+      "viewDetails": "Assignment settings",
       "previewDemo": "Preview",
       "requestRevisionBatch": "Revise",
       "gradeHub": "Grade",
@@ -3241,6 +3242,8 @@
       "updateSuccess": "Assignment information updated",
       "updateFailed": "Update failed, please try again later",
       "startDateAfterDueDate": "Start date cannot be after due date",
+      "invalidDate": "The date is incomplete, so it was reverted",
+      "updateError": "Save failed",
       "assignSuccess": "Successfully assigned to student",
       "assignFailed": "Assignment failed, please try again later",
       "unassignSuccess": "Unassigned student \"{{name}}\"",
@@ -3301,15 +3304,12 @@
       "editContent": "Edit Assignment Content"
     },
     "sheet": {
-      "viewTitle": "Assignment Details",
-      "editTitle": "Edit Assignment",
-      "editButton": "Edit",
+      "viewTitle": "Assignment settings",
       "titleLabel": "Title",
       "instructionsLabel": "Instructions",
       "dueDateLabel": "Due Date",
       "studentProgress": "Student Progress",
       "noStudents": "No student data",
-      "save": "Save Changes",
       "contentTitle": "Assignment Content Units",
       "questionCount": "Questions: ",
       "itemCount": "items",
@@ -3317,6 +3317,10 @@
       "averageScore": "Average Score",
       "startDateLabel": "Start Date",
       "lockedSettingHint": "Students have started this assignment. This setting cannot be changed.",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveFailed": "Save failed",
+      "liveQuizOpenHint": "The live quiz is in progress. Collect it before turning off live mode.",
       "gridView": "Grid View",
       "listView": "List View",
       "tabAll": "All",
@@ -4715,6 +4719,7 @@
       "extractFailed": "AI extraction failed. Please try again later.",
       "selectAtLeastOne": "Please select at least one item.",
       "quota": "{{remaining}} / {{limit}} free left this month; overage billed with points.",
+      "quotaUnlimited": "Admin account: unlimited extractions",
       "cancel": "Cancel",
       "pickFile": "Choose an image or PDF (one at a time)",
       "autoFillHint": "After extraction, missing fields are auto-filled on insert per the AI translate / audio / example settings above.",
@@ -4736,6 +4741,11 @@
       "dialogDescVocab": "Upload an image or PDF; AI extracts words, translations, and examples for you to review before inserting.",
       "noQuestionExtracted": "No multiple-choice questions found. Try a clearer image.",
       "insertedNQuestions": "Extracted {{count}} question(s) into the editor",
+      "noGroupExtracted": "No question group found. Try a clearer image or PDF.",
+      "insertedGroup": "Extracted the group ({{count}} sub-questions) into the editor",
+      "croppedImageUploadFailed": "{{count}} image(s) failed to upload. Please add them by hand on the card.",
+      "groupImageFallbackWhole": "AI could not locate the stimulus area; the whole image was used. Replace it in the layout if needed.",
+      "groupImageNeedsUpload": "Images cannot be cropped from a PDF here. The text and blanks were extracted; please add the pictures (stimulus, figures, question and option images) by hand.",
       "pasteHint": "or press Ctrl+V to paste a screenshot / PDF"
     },
     "batchTabs": {
@@ -5253,6 +5263,80 @@
       "total": "Total"
     }
   },
+  "quizScoring": {
+    "title": "Scoring method",
+    "required": "(required)",
+    "placeholder": "Choose a scoring method",
+    "methods": {
+      "whole_question": {
+        "label": "Whole question",
+        "desc": "Any mistake in a question loses the whole question (the original method)."
+      },
+      "per_word": {
+        "label": "By word",
+        "desc": "Lose a share for each wrong word. E.g. 1 wrong word out of 3 loses one third of the question."
+      },
+      "per_word_lenient": {
+        "label": "By word, lenient spelling",
+        "desc": "Same as \"By word\", but a word that is off by just 1 letter (extra, missing or wrong) loses only half."
+      },
+      "fixed_per_word": {
+        "label": "Fixed points per wrong word",
+        "desc": "Each wrong word loses the points you set, up to the question's full points."
+      },
+      "fixed_per_letter": {
+        "label": "Fixed points per wrong letter",
+        "desc": "Each extra, missing or wrong letter loses the points you set, up to the question's full points."
+      }
+    },
+    "pointsPerWord": "Each wrong word loses",
+    "pointsPerLetter": "Each wrong letter loses",
+    "pointsUnit": "points",
+    "pointsInvalid": "Enter a number from 0.1 to 100 with at most one decimal place (e.g. 0.5 or 2).",
+    "pointsHint": "From 0.1 to 100, at most one decimal place.",
+    "caseSensitive": "Case-sensitive",
+    "caseSensitiveDesc": "When on, Apple and apple count as different answers (off by default).",
+    "perQuestion": "Each question is worth {{points}} points ({{count}} questions)",
+    "preview": {
+      "title": "Example: the answer \"{{answer}}\"",
+      "builtinNote": "(sample answer)",
+      "noCount": "The number of questions isn't known yet, so points can't be shown.",
+      "singleWordHint": "Every answer here is a single word, so \"Whole question\" and \"By word\" give the same result.",
+      "colAnswer": "Student answer",
+      "colDeduction": "Deduction",
+      "colScore": "Question score",
+      "colReason": "Why",
+      "unansweredCell": "(no answer)"
+    },
+    "reason": {
+      "allCorrect": "All correct",
+      "unanswered": "No answer, whole question lost",
+      "wholeQuestion": "Has a mistake, whole question lost",
+      "full": "Capped at the question's points",
+      "words": "{{wrong}} of {{total}} words wrong",
+      "wordsLenient": "{{wrong}} of {{total}} words wrong (1-letter slips lose half)",
+      "letters": "{{count}} letter(s) off"
+    },
+    "grading": {
+      "methodPrefix": "Scoring method: ",
+      "pointsPerWord": " ({{points}} points per wrong word)",
+      "pointsPerLetter": " ({{points}} points per wrong letter)",
+      "caseSensitiveSuffix": " · Case-sensitive",
+      "partialReason": "{{reason}}; default deduction {{points}}"
+    },
+    "errors": {
+      "methodRequired": "Please choose a scoring method for the quiz",
+      "pointsRequired": "Please enter how many points each wrong word or letter loses"
+    },
+    "confirm": {
+      "title": "Recalculate scores with the new method?",
+      "description": "Scores for the {{count}} student(s) who have submitted will be recalculated with the new scoring method. Any deductions or totals you changed by hand will be replaced.",
+      "descriptionUnknownCount": "Scores for students who have submitted will be recalculated with the new scoring method. Any deductions or totals you changed by hand will be replaced.",
+      "confirm": "Recalculate",
+      "cancel": "Cancel"
+    },
+    "recomputed": "Saved. Recalculated scores for {{count}} student(s) with the new method"
+  },
   "wordQuiz": {
     "questionNav": "Q",
     "questionLabel": "Question {{current}} / {{total}}",
@@ -5280,7 +5364,8 @@
     },
     "revision": {
       "hint": "Revision mode: wrong answers reveal the correct answer; fix them all to submit.",
-      "correctAnswer": "Answer: {{answer}}"
+      "correctAnswer": "Answer: {{answer}}",
+      "settingsChanged": "Your teacher changed how this quiz is scored, so some answers need fixing. Please correct them and submit again."
     }
   },
   "wordSpelling": {
@@ -5907,7 +5992,8 @@
       "grade": "Grade",
       "examPoints": "Exam Points",
       "visibility": "Visibility",
-      "sources": "Source"
+      "sources": "Source",
+      "programs": "Materials"
     },
     "visibility": {
       "private": "Private",
@@ -5937,7 +6023,10 @@
       "deleteFailed": "Failed to delete",
       "createdCount": "{{count}} question(s) created",
       "partiallySaved": "{{saved}} created, {{failed}} failed — fix and save again",
-      "bulkSaved": "Updated {{updated}}, created {{created}}"
+      "bulkSaved": "Updated {{updated}}, created {{created}}",
+      "groupCreated": "Group created",
+      "groupUpdated": "Group updated",
+      "groupDeleted": "Group deleted"
     },
     "form": {
       "titleCreate": "New Multiple-Choice Question",
@@ -5969,7 +6058,7 @@
       "removeLink": "Remove link",
       "confirmDelete": "Delete this question? Assigned papers are not affected.",
       "errors": {
-        "stemRequired": "Question is required",
+        "stemRequired": "Enter the question or add an image",
         "duplicate": "Duplicate of an existing question",
         "minOptions": "At least {{min}} options",
         "noCorrect": "Tick a correct answer",
@@ -5978,7 +6067,13 @@
         "duplicateInBatch": "Duplicate question within this batch",
         "atQuestion": "Question {{n}}: {{message}}",
         "examPointRequired": "Pick at least one exam point",
-        "visibilityRequired": "Choose whether to share the questions"
+        "visibilityRequired": "Choose whether to share the questions",
+        "groupNeedsQuestions": "A group needs at least one question",
+        "groupNeedsContent": "A group needs a passage, an image or a layout",
+        "layoutIncomplete": "The layout has unfinished blocks (empty text, an image without a file, or a dialogue line missing content)",
+        "clozeNeedsBlank": "A cloze group needs at least one blank in the passage",
+        "clozeBlankMismatch": "Blanks and questions do not match (check for missing, extra or duplicate blank numbers)",
+        "clozeDuplicateBlank": "Blank {{n}} appears twice in the passage"
       },
       "batchHint": "{{count}} question(s) this time (max {{max}}); settings on the left apply to all",
       "questionN": "Question {{n}}",
@@ -5988,6 +6083,7 @@
       "optionRequiredPlaceholder": "Option {{letter}}",
       "optionOptionalPlaceholder": "Option {{letter}} (optional)",
       "optionImage": "Option {{letter}} image",
+      "stemImage": "Question image",
       "removeImage": "Remove image",
       "explanationPlaceholder": "Explanation (optional)",
       "generateAudio": "Generate question audio",
@@ -6008,6 +6104,7 @@
         "needStem": "Enter a question on the right first",
         "upload": "PDF / image upload",
         "uploadHint": "Upload an exam page and let AI extract the questions and options",
+        "uploadHintGroup": "Upload the whole group (image or PDF): AI extracts the passage or poster, glossary and sub-questions into the editor",
         "aiTitle": "AI assist",
         "aiApplied": "Filled {{applied}} question(s), skipped {{skipped}} (already set or undecidable)",
         "aiNothingToSend": "No question on the right is ready (needs a stem and at least 2 options)",
@@ -6038,11 +6135,14 @@
       },
       "audioGenerated": "Audio generated",
       "audioPlayFailed": "Cannot play audio ({{code}})",
-      "titleBulkEdit": "Bulk edit {{count}} questions"
+      "titleBulkEdit": "Bulk edit {{count}} questions",
+      "stemOptionalPlaceholder": "Stem (optional for cloze)"
     },
     "list": {
       "selectAll": "Select / deselect all",
       "selectRow": "Select this question",
+      "imageOption": "(image)",
+      "groupQuestionCount": "{{count}} questions",
       "selected": "{{count}} selected",
       "dirty": "{{count}} with unsaved changes",
       "save": "Save",
@@ -6064,10 +6164,259 @@
       "examPointClear": "Clear exam point filter",
       "bulkEdit": "Edit",
       "bulkEditTypeMismatch": "Questions of different types can't be edited together",
-      "bulkEditNoPermission": "No permission to edit the selected questions"
+      "bulkEditNoPermission": "No permission to edit the selected questions",
+      "deleteGroup": "Delete group",
+      "confirmDeleteWithGroups": "Delete {{count}} question(s) and {{groups}} group(s) (all sub-questions)? Assigned papers are not affected.",
+      "groupDeleted": "Group deleted",
+      "groupDeleteFailed": "Failed to delete the group"
+    },
+    "group": {
+      "titleCreate": "New {{type}}",
+      "titleEdit": "Edit {{type}}",
+      "titlePlaceholder": "Group title (optional, shown in the list)",
+      "titleAi": "AI title",
+      "titleAiEmpty": "Add a passage or a question first",
+      "loading": "Loading group…",
+      "loadFailed": "Failed to load the group",
+      "confirmDelete": "Delete the whole group (all sub-questions)? Assigned papers are not affected.",
+      "layout": {
+        "title": "Passage layout",
+        "frame": "Border",
+        "frameRow": "Add border",
+        "frameAll": "Frame whole passage",
+        "unframe": "Remove border",
+        "resizeColumns": "Drag to resize columns (1/3, 1/2, 2/3)",
+        "addBlock": "Add block",
+        "insertHere": "Insert here",
+        "removeBlock": "Remove block",
+        "dragBlock": "Drag block (drop beside another to place side by side)",
+        "block": {
+          "heading": "Heading",
+          "paragraph": "Paragraph",
+          "image": "Image",
+          "dialogue": "Dialogue"
+        },
+        "bold": "Bold",
+        "underline": "Underline",
+        "doubleUnderline": "Double underline",
+        "insertBlank": "Insert blank",
+        "blankLimit": "All blank numbers (1–999) are in use",
+        "headingPlaceholder": "Heading text",
+        "paragraphPlaceholder": "Paragraph (**bold**, __underline__)",
+        "imageUpload": "Upload image",
+        "imageReplace": "Click to replace image",
+        "imageAlt": "Alt text",
+        "imageCaption": "Caption",
+        "imageSize": {
+          "small": "Small",
+          "medium": "Medium",
+          "large": "Large",
+          "original": "Original"
+        },
+        "imageFrame": "Border",
+        "alignLeft": "Left",
+        "alignCenter": "Center",
+        "alignRight": "Right",
+        "dialogueSpeaker": "Speaker",
+        "dialogueText": "Line",
+        "addLine": "Add line",
+        "removeLine": "Remove line",
+        "preview": "Preview",
+        "previewHint": "What students will see; switch between desktop and mobile width",
+        "previewDesktop": "Desktop",
+        "previewMobile": "Mobile",
+        "empty": "Nothing yet — “Add block” to start writing, or upload a whole image (poster / comic / map)",
+        "uploadWholeImage": "Upload image"
+      },
+      "preview": {
+        "questionsTitle": "Questions",
+        "textViewNotice": "Text version (students won't see this)"
+      },
+      "glossary": {
+        "title": "Glossary",
+        "placeholder": "timeline 時間軸\ncompose 作曲"
+      },
+      "passage": {
+        "tabLayout": "Layout",
+        "tabText": "Text version",
+        "hint": "Hidden from students; used for search and AI analysis. Generated from the layout by default and editable.",
+        "placeholder": "Poster / comic groups: paste the text from the image here",
+        "regenerate": "Regenerate",
+        "edited": "Edited manually",
+        "emptyReverts": "Leaving this empty restores the text generated from the layout",
+        "dialogueReadonly": "Dialogue transcript extracted by AI from the picture; used to generate audio and can't be edited."
+      },
+      "extract": {
+        "overwriteTitle": "Replace the current group content?",
+        "overwriteDesc": "This group already has content. The extracted result will replace the title, layout, text version, glossary and all sub-questions.",
+        "overwriteConfirm": "Replace"
+      },
+      "questions": {
+        "title": "Sub-questions ({{count}})",
+        "add": "Add sub-question",
+        "empty": "No sub-questions yet",
+        "drag": "Drag to reorder",
+        "blankN": "Blank {{n}}",
+        "blankMissing": "Blank {{n}} is not in the passage",
+        "blankUnassigned": "No blank assigned",
+        "reinsertBlank": "Re-insert at the end",
+        "removeBlank": "Delete sub-question",
+        "appendBlank": "Insert a blank at the end",
+        "renumber": "Renumber in reading order"
+      },
+      "render": {
+        "zoomImage": "Zoom image"
+      }
+    },
+    "groupTypes": {
+      "reading": "Reading group",
+      "cloze": "Cloze group"
     }
   },
   "orgMaterials": {
     "title": "Organization Materials"
+  },
+  "classroomGrade": {
+    "gradeLabel": "Grade {{grade}}",
+    "unset": "Not set",
+    "displayName": "Grade {{grade}} Class {{name}}",
+    "selectPlaceholder": "Select a grade",
+    "required": "Please select a grade",
+    "filter": {
+      "label": "Filter by grade",
+      "all": "All Grades",
+      "unset": "Grade not set",
+      "noMatch": "No classrooms match this grade filter"
+    },
+    "selection": {
+      "selectedCount": "{{count}} classroom(s) selected",
+      "selectAll": "Select all listed classrooms",
+      "selectRow": "Select {{name}}",
+      "clear": "Clear selection"
+    },
+    "banner": {
+      "message": "{{count}} classroom(s) have no grade set",
+      "action": "Set now"
+    },
+    "missingDialog": {
+      "title": "Set classroom grades",
+      "description": "Choose a grade for each classroom without one. Classrooms you leave blank stay unset.",
+      "rowLabel": "Grade for {{name}}",
+      "save": "Save ({{count}})"
+    },
+    "adjust": {
+      "button": "Adjust grade",
+      "title": "Adjust grade",
+      "description": "Choose to move up or down one grade, check each classroom's before and after, then apply. Classroom names are not changed.",
+      "up": "Up one grade",
+      "down": "Down one grade",
+      "changesTitle": "{{count}} classroom(s) will change",
+      "skippedTitle": "{{count}} classroom(s) skipped",
+      "nothingToChange": "No classrooms can be adjusted",
+      "reason": {
+        "max": "Already Grade {{grade}}, cannot go up",
+        "min": "Already Grade {{grade}}, cannot go down",
+        "unset": "Grade not set"
+      },
+      "confirm": "Apply ({{count}})"
+    },
+    "messages": {
+      "saveSuccess": "Updated grade for {{count}} classroom(s)",
+      "saveFailed": "Failed to update grades. Please try again.",
+      "forbidden": "You don't have permission to adjust classroom grades in this school",
+      "reloadFailed": "Saved, but the list could not be reloaded. Please refresh the page."
+    },
+    "limitExceeded": "You can adjust up to {{max}} classrooms at a time. Use the grade filter to work in batches.",
+    "missing": {
+      "limitExceeded": "You can save at most {{max}} classes at a time. Save some first, then continue."
+    },
+    "status": {
+      "column": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "switchDisable": "Disable",
+      "switchEnable": "Enable",
+      "switchDisableAria": "Disable this classroom",
+      "switchEnableAria": "Enable this classroom",
+      "filterLabel": "Filter by status",
+      "filterAll": "All statuses",
+      "activated": "Activated {{name}}",
+      "deactivated": "Deactivated {{name}}",
+      "updateFailed": "Failed to update the classroom status. Please try again later.",
+      "dispatchDisabled": "This classroom is inactive, so assignments can't be dispatched"
+    },
+    "inline": {
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "saveSuccess": "Updated {{name}}"
+    },
+    "level": {
+      "button": "Adjust level",
+      "title": "Adjust level",
+      "description": "Choose a target level, review each classroom's change, then apply. Classroom names are not changed.",
+      "targetLabel": "Target level",
+      "targetPlaceholder": "Select a level",
+      "changesTitle": "{{count}} classroom(s) will change",
+      "skippedTitle": "{{count}} classroom(s) skipped",
+      "alreadyAtTarget": "Already {{level}}",
+      "nothingToChange": "All selected classrooms are already at this level",
+      "confirm": "Apply ({{count}})",
+      "saveSuccess": "Updated the level of {{count}} classroom(s)",
+      "saveFailed": "Failed to update levels. Please try again later."
+    },
+    "bulk": {
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "deactivateTitle": "Deactivate {{count}} classroom(s)?",
+      "deactivateDescription": "Students will no longer see these classrooms, and you won't be able to dispatch assignments to them. Classroom data is kept and you can reactivate them at any time.",
+      "activateTitle": "Activate {{count}} classroom(s)?",
+      "activateDescription": "Students will see these classrooms again, and you can dispatch assignments to them.",
+      "deactivated": "Deactivated {{count}} classroom(s)",
+      "activated": "Activated {{count}} classroom(s)",
+      "switchDisableAria": "Disable selected classrooms",
+      "switchEnableAria": "Enable selected classrooms"
+    },
+    "sort": {
+      "gradeAsc": "Grade low→high",
+      "gradeDesc": "Grade high→low",
+      "levelAsc": "Level low→high",
+      "levelDesc": "Level high→low",
+      "studentCountAsc": "Fewest Students"
+    }
+  },
+  "schoolClassrooms": {
+    "labels": {
+      "level": "Language Level",
+      "teacher": "Homeroom Teacher",
+      "studentCount": "Students",
+      "status": "Status",
+      "activeToggle": "Classroom active"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "buttons": {
+      "assignTeacher": "Assign teacher",
+      "dispatch": "Assign",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "placeholders": {
+      "name": "e.g. Grade 1 Class A",
+      "level": "Select level"
+    },
+    "dialogs": {
+      "createTitle": "Create Classroom",
+      "createDescription": "Create a new classroom for {{school}}",
+      "schoolFallback": "the school",
+      "editDescription": "Update details for {{name}}"
+    },
+    "messages": {
+      "nameTooLong": "Classroom name cannot exceed 100 characters",
+      "schoolIdMissing": "School ID not found",
+      "createSuccess": "Classroom created",
+      "createFailed": "Failed to create classroom. Please try again later.",
+      "updateSuccess": "Classroom updated"
+    }
   }
 }

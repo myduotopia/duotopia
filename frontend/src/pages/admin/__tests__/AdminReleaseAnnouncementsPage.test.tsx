@@ -12,6 +12,7 @@ vi.mock("@/services/releaseAnnouncementService", () => ({
     merge: vi.fn(),
     publish: vi.fn(),
     discard: vi.fn(),
+    uploadImage: vi.fn(),
   },
 }));
 
@@ -42,6 +43,7 @@ const draft = (
   article_title_en: "New: word choice questions",
   article_body_en: "Teachers can now assign word choice questions.",
   image_url: "https://cdn/banner.png",
+  image_url_en: null,
   status: "draft",
   line_status: "pending",
   line_error: null,
@@ -63,6 +65,7 @@ const mockApi = releaseAnnouncementApi as unknown as {
   merge: ReturnType<typeof vi.fn>;
   publish: ReturnType<typeof vi.fn>;
   discard: ReturnType<typeof vi.fn>;
+  uploadImage: ReturnType<typeof vi.fn>;
 };
 
 const renderPage = () =>
@@ -309,6 +312,127 @@ describe("AdminReleaseAnnouncementsPage (issue #804)", () => {
       expect(screen.getByRole("button", { name: /發布/ })).toBeDisabled();
     },
   );
+
+  it("上傳主圖後自動填入圖片網址並更新卡片預覽（#1100）", async () => {
+    const url =
+      "https://storage.googleapis.com/duotopia-audio/announcements/h.png";
+    mockApi.uploadImage.mockResolvedValue({ data: { url } });
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    const file = new File(["png"], "hero.png", { type: "image/png" });
+    fireEvent.change(screen.getByTestId("upload-hero-input"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("公告圖片網址")).toHaveValue(url),
+    );
+    expect(mockApi.uploadImage).toHaveBeenCalledWith(
+      file,
+      "hero",
+      "test-token",
+    );
+    expect(
+      screen.getByTestId("line-flex-preview").querySelector("img"),
+    ).toHaveAttribute("src", url);
+  });
+
+  it("上傳英文文章主圖後填入英文主圖網址並送出儲存", async () => {
+    const url =
+      "https://storage.googleapis.com/duotopia-audio/announcements/h-en.png";
+    mockApi.uploadImage.mockResolvedValue({ data: { url } });
+    mockApi.update.mockResolvedValue({ data: draft({ image_url_en: url }) });
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    const file = new File(["png"], "hero-en.png", { type: "image/png" });
+    fireEvent.change(screen.getByTestId("upload-hero-en-input"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("英文文章主圖網址")).toHaveValue(url),
+    );
+    expect(mockApi.uploadImage).toHaveBeenCalledWith(
+      file,
+      "hero",
+      "test-token",
+    );
+    // LINE 卡片仍用主圖
+    expect(
+      screen.getByTestId("line-flex-preview").querySelector("img"),
+    ).toHaveAttribute("src", "https://cdn/banner.png");
+
+    fireEvent.click(screen.getByRole("button", { name: /儲存草稿/ }));
+    await waitFor(() =>
+      expect(mockApi.update).toHaveBeenCalledWith(
+        1,
+        { image_url_en: url },
+        "test-token",
+      ),
+    );
+  });
+
+  it("英文文章主圖網址無效時不能發布", async () => {
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+    fireEvent.change(screen.getByLabelText("英文文章主圖網址"), {
+      target: { value: "http://cdn/en.png" },
+    });
+    expect(screen.getByRole("button", { name: /發布/ })).toBeDisabled();
+  });
+
+  it("內文插入圖片時在游標位置插入 markdown 圖片（#1100）", async () => {
+    const url =
+      "https://storage.googleapis.com/duotopia-audio/announcements/b.png";
+    mockApi.uploadImage.mockResolvedValue({ data: { url } });
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    const body = screen.getByLabelText(
+      "文章內文（中文）",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(body, { target: { value: "第一段第二段" } });
+    body.setSelectionRange(3, 3);
+    fireEvent.select(body);
+
+    const file = new File(["png"], "step.png", { type: "image/png" });
+    fireEvent.change(screen.getByTestId("insert-image-article_body_zh"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(body).toHaveValue(`第一段\n\n![圖片](${url})\n\n第二段`),
+    );
+    expect(mockApi.uploadImage).toHaveBeenCalledWith(
+      file,
+      "body",
+      "test-token",
+    );
+  });
+
+  it("上傳失敗時顯示錯誤且不改動內容（#1100）", async () => {
+    mockApi.uploadImage.mockRejectedValue({
+      response: { data: { detail: "主圖只能是 JPEG 或 PNG（LINE 卡片限制）" } },
+    });
+    const { toast } = await import("sonner");
+    renderPage();
+    await screen.findByTestId("line-flex-preview");
+
+    fireEvent.change(screen.getByTestId("upload-hero-input"), {
+      target: { files: [new File(["gif"], "a.gif", { type: "image/gif" })] },
+    });
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "主圖只能是 JPEG 或 PNG（LINE 卡片限制）",
+      ),
+    );
+    expect(screen.getByLabelText("公告圖片網址")).toHaveValue(
+      "https://cdn/banner.png",
+    );
+  });
 
   it("已發布的通道顯示狀態並不再重複勾選", async () => {
     mockApi.list.mockResolvedValue({

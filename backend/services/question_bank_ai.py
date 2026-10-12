@@ -41,9 +41,17 @@ logger = logging.getLogger(__name__)
 MAX_QUESTIONS_PER_CALL = 20
 MAX_STEM_CHARS = 2000
 MAX_OPTION_CHARS = 500
+# 題組小題附帶的主圖文純文字（#1082）；太長截斷，模型只需要上下文
+MAX_PASSAGE_CHARS = 6000
 MAX_OPTIONS = 6
 MIN_OPTIONS = 2
 MAX_EXPLANATION_CHARS = 400
+# 題組標題（#1084）：對齊 DB `question_groups.title` VARCHAR(200)
+MAX_TITLE_CHARS = 200
+TITLE_MAX_WORDS = 8
+# 產標題時最多參考幾條小題題幹
+MAX_TITLE_STEMS = 20
+MAX_TITLE_STEM_CHARS = 200
 
 
 class QuestionBankAIError(ValueError):
@@ -59,6 +67,8 @@ class QuestionInput:
     key: str
     stem: str
     options: list[str]
+    # 題組小題：主圖文的純文字；單題為 None
+    passage: Optional[str] = None
 
 
 @dataclass
@@ -96,6 +106,7 @@ def normalize_inputs(raw_items: list[dict]) -> list[QuestionInput]:
             for o in (entry.get("options") or [])
         ]
         options = [o for o in options if o][:MAX_OPTIONS]
+        passage = str(entry.get("passage") or "").strip()[:MAX_PASSAGE_CHARS] or None
         if not key or key in seen:
             raise QuestionBankAIError("題目 key 缺少或重複")
         if not stem:
@@ -103,15 +114,28 @@ def normalize_inputs(raw_items: list[dict]) -> list[QuestionInput]:
         if len(options) < MIN_OPTIONS:
             raise QuestionBankAIError(f"題目 {key} 選項不足")
         seen.add(key)
-        out.append(QuestionInput(key=key, stem=stem, options=options))
+        out.append(QuestionInput(key=key, stem=stem, options=options, passage=passage))
     return out
 
 
 def _questions_block(items: list[QuestionInput]) -> str:
-    return json.dumps(
-        [{"key": q.key, "stem": q.stem, "options": q.options} for q in items],
-        ensure_ascii=False,
-    )
+    """題目 JSON；題組小題多帶 `passage`（主圖文純文字），模型要先讀它再作答／標考點。"""
+    rows = []
+    for q in items:
+        row: dict = {"key": q.key, "stem": q.stem, "options": q.options}
+        if q.passage:
+            row["passage"] = q.passage
+        rows.append(row)
+    return json.dumps(rows, ensure_ascii=False)
+
+
+PASSAGE_RULE = (
+    "- Some questions carry a `passage` (the reading text they belong to). "
+    "Read the passage first; the stem refers to it.\n"
+    # 克漏字（#1085）：passage 內的 (n)____ 就是空格，stem 會是 "Fill in blank (n)."
+    "- In a cloze passage, `(n)____` marks blank number n. A stem like "
+    '"Fill in blank (3)." asks which option belongs in `(3)____`.\n'
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -140,7 +164,30 @@ def build_answer_prompt(items: list[QuestionInput]) -> str:
         "characters, explain why the answer is correct (and briefly why the "
         "main distractor is wrong). Do not restate the question.\n"
         "- Do not add, remove or reorder options.\n"
+        f"{PASSAGE_RULE}"
         f"Questions:\n{_questions_block(items)}"
+    )
+
+
+def build_title_prompt(passage: str, stems: list[str]) -> str:
+    """題組標題（#1084）：規則與魔術貼上擷取的 `title` 一致（≤ 8 字英文短標題）。"""
+    body = ""
+    if passage:
+        body += f"Passage:\n{passage}\n"
+    if stems:
+        body += "Questions:\n" + json.dumps(stems, ensure_ascii=False) + "\n"
+    return (
+        "Write a title for the reading material below, for a teacher's question "
+        "bank listing.\n"
+        'Return JSON of the exact shape: {"title": "..."}\n'
+        "Rules:\n"
+        "- If the material itself prints a title, copy it exactly.\n"
+        f"- Otherwise write a short English title of at most {TITLE_MAX_WORDS} "
+        "words that names what the material is about.\n"
+        "- No surrounding quotes. Do NOT start with a generic word such as "
+        '"Reading", "Passage", "Article" or "Question".\n'
+        "- If only questions are given, title the topic they are about.\n"
+        f"{body}"
     )
 
 
@@ -165,6 +212,7 @@ def build_analyze_prompt(items: list[QuestionInput], exam_points: list[dict]) ->
         f"- `grade_min` / `grade_max`: integers {GRADE_MIN}–{GRADE_MAX} "
         "(Taiwan K-12: 1–6 elementary, 7–9 junior high, 10–12 senior high), "
         "grade_min <= grade_max.\n"
+        f"{PASSAGE_RULE}"
         f"Catalog (code, names):\n{catalog}\n"
         f"Questions:\n{_questions_block(items)}"
     )
@@ -240,6 +288,21 @@ class QuestionBankAIService:
             len(skipped),
         )
         return results, skipped
+
+    # ---- AI 題組標題（#1084）----
+    async def suggest_title(self, passage: str, stems: list[str]) -> str:
+        """回一個題組標題；模型沒給可用字串時丟 QuestionBankAIOutputError。"""
+        raw = await self.generate(build_title_prompt(passage, stems), max_tokens=200)
+        title = ""
+        if isinstance(raw, dict):
+            title = str(raw.get("title") or "").strip()
+        elif isinstance(raw, str):
+            title = raw.strip()
+        title = title.strip("\"'").strip()[:MAX_TITLE_CHARS]
+        if not title:
+            raise QuestionBankAIOutputError("AI 沒有回傳標題")
+        logger.info("[qb-ai] title: %r", title)
+        return title
 
     # ---- AI 考點分析 ----
     async def analyze(

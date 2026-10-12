@@ -22,6 +22,7 @@ import {
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 
 export interface Student {
   id: number;
@@ -34,6 +35,7 @@ export interface Student {
   status?: string;
   classroom_id?: number;
   classroom_name?: string;
+  classroom_grade?: number | null; // 年級 1–12；顯示時組合班名（#1097）
   phone?: string;
   enrollment_date?: string;
 }
@@ -45,7 +47,7 @@ interface StudentDialogsProps {
   onSave: (student: Student) => void | Promise<void>;
   onDelete: (studentId: number) => void | Promise<void>;
   onSwitchToEdit?: () => void;
-  classrooms?: Array<{ id: number; name: string }>;
+  classrooms?: Array<{ id: number; name: string; grade?: number | null }>;
 }
 
 export function StudentDialogs({
@@ -445,7 +447,12 @@ export function StudentDialogs({
                       {t("studentDialogs.view.fields.classroom")}
                     </p>
                     <p className="text-sm font-medium">
-                      {student.classroom_name || "-"}
+                      {student.classroom_name
+                        ? formatClassroomDisplayName(t, {
+                            name: student.classroom_name,
+                            grade: student.classroom_grade,
+                          })
+                        : "-"}
                     </p>
                   </div>
                 </div>
@@ -653,7 +660,7 @@ export function StudentDialogs({
                   </option>
                   {classrooms.map((classroom) => (
                     <option key={classroom.id} value={classroom.id}>
-                      {classroom.name}
+                      {formatClassroomDisplayName(t, classroom)}
                     </option>
                   ))}
                 </select>
@@ -744,7 +751,10 @@ export function StudentDialogs({
               {student.classroom_name && (
                 <p className="text-sm text-gray-500">
                   {t("studentDialogs.delete.classroom", {
-                    classroom: student.classroom_name,
+                    classroom: formatClassroomDisplayName(t, {
+                      name: student.classroom_name,
+                      grade: student.classroom_grade,
+                    }),
                   })}
                 </p>
               )}

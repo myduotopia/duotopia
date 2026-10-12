@@ -189,6 +189,26 @@ export default function AdminReleaseAnnouncementsPage() {
     }
   };
 
+  /** 上傳公告圖片，成功回傳網址；失敗顯示後端訊息並回傳 null（#1100） */
+  const handleUploadImage = async (
+    file: File,
+    purpose: "hero" | "body",
+  ): Promise<string | null> => {
+    try {
+      const res = await releaseAnnouncementApi.uploadImage(
+        file,
+        purpose,
+        token,
+      );
+      return res.data.url;
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })
+        ?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "圖片上傳失敗");
+      return null;
+    }
+  };
+
   const handleDiscard = async () => {
     if (!selected) return;
     if (!window.confirm("確定要捨棄這則更新公告嗎？")) return;
@@ -273,6 +293,7 @@ export default function AdminReleaseAnnouncementsPage() {
                 onPublish={handlePublish}
                 onMerge={handleMerge}
                 onDiscard={handleDiscard}
+                onUploadImage={handleUploadImage}
               />
             )}
           </div>

@@ -14,6 +14,7 @@ from models import (
     AssignmentStatus,
 )
 from auth import get_current_user
+from .dependencies import ensure_assignment_classroom_visible
 
 router = APIRouter()
 
@@ -57,6 +58,9 @@ async def upload_student_recording(
         )
         if not assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
+
+        # 作業 id 在 form 裡，router 層級守門管不到，這裡自行檢查（#1097）
+        ensure_assignment_classroom_visible(db, assignment_id, student_id)
 
         # 直接用 content_item_id 查詢
         content_item = (

@@ -4,7 +4,10 @@ import { useTeacherAuthStore } from "./teacherAuthStore";
 
 export interface ClassroomInfo {
   id: number;
+  /** 原始班級名稱；畫面顯示用 formatClassroomDisplayName 組合年級（#1097） */
   name: string;
+  /** 年級 1–12；null = 未設定（#1097） */
+  grade?: number | null;
   teacher_name?: string | null;
   student_id?: number;
   school_id?: string;
@@ -19,7 +22,10 @@ export interface StudentUser {
   email: string;
   student_number: string;
   classroom_id: number;
+  /** 原始班級名稱（不存組合後的字串，切換語言時才能重算）；顯示用 formatClassroomDisplayName */
   classroom_name?: string;
+  /** 目前班級年級 1–12；null = 未設定（#1097） */
+  classroom_grade?: number | null;
   teacher_name?: string;
   school_id?: string;
   school_name?: string;
@@ -79,6 +85,7 @@ export const useStudentAuthStore = create<StudentAuthState>()(
                 ...state.user,
                 classroom_id: classroom.id,
                 classroom_name: classroom.name,
+                classroom_grade: classroom.grade ?? null,
                 teacher_name: classroom.teacher_name || undefined,
                 school_id: classroom.school_id,
                 school_name: classroom.school_name,

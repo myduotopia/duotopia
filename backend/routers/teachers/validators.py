@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import date
 
+from models.question_bank import GRADE_MAX, GRADE_MIN
+from routers.schemas.classroom import normalize_program_level
+
 
 class TeacherProfile(BaseModel):
     id: int
@@ -39,6 +42,7 @@ class ClassroomSummary(BaseModel):
     name: str
     description: Optional[str]
     student_count: int
+    grade: Optional[int] = None  # 年級 1–12（#1097）
     school_id: Optional[str] = None
     school_name: Optional[str] = None
     organization_id: Optional[str] = None
@@ -117,12 +121,28 @@ class ClassroomCreate(BaseModel):
     name: str
     description: Optional[str] = None
     level: str = "A1"
+    grade: int = Field(..., ge=GRADE_MIN, le=GRADE_MAX)  # 年級 1–12（必填，#1097）
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        # preA / PRE_A / a1 … 正規化成 ProgramLevel value；無效值 → 422（#1097）
+        return normalize_program_level(v)
 
 
 class ClassroomUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     level: Optional[str] = None
+    grade: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
+    is_active: Optional[bool] = None  # 停用／啟用（#1097）
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return normalize_program_level(v)
 
 
 class StudentCreate(BaseModel):

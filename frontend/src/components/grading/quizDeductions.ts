@@ -2,10 +2,14 @@
  * quizDeductions — 小考批改頁每題扣分計算（#1045）
  *
  * 公式與後端 `compute_quiz_score`（backend/routers/students/quiz_assignments.py）一致：
- *   - 單題扣分 = 100 / 題數（不先捨入）
+ *   - 單題扣分上限 = 100 / 題數（不先捨入）
  *   - 答對預設扣 0、答錯（含未作答）預設扣單題分
  *   - 總分 = round1(max(0, 100 − Σ扣分))，只在總分捨入到一位小數
  * 老師已存的扣分（deduction）優先於預設值。
+ *
+ * #1092：打字類小考依作業的評分方式可能只扣部分分數 —— 預設值一律用後端回的
+ * `default_deduction`（後端 utils/quiz_scoring.py 為唯一判定來源）；舊回應沒有
+ * 這個欄位時才退回「答對 0／答錯單題分」。
  */
 
 /** 四捨五入到一位小數，並把 -0 正規化成 0。 */
@@ -28,6 +32,18 @@ export interface DeductionSource {
   content_item_id?: number;
   is_correct?: boolean;
   deduction?: number | null;
+  /** #1092 後端依評分方式算出的預設扣分 */
+  default_deduction?: number | null;
+}
+
+/** #1092 單題預設扣分：優先用後端的 default_deduction，否則答對 0／答錯單題分。 */
+export function itemDefaultDeduction(
+  item: DeductionSource,
+  total: number,
+): number {
+  return item.default_deduction != null
+    ? item.default_deduction
+    : defaultDeduction(item.is_correct === true, total);
 }
 
 /**
@@ -44,7 +60,7 @@ export function initialDeductions(
   const result: Record<number, number> = {};
   for (const item of items) {
     if (item.content_item_id == null) continue;
-    const fallback = defaultDeduction(item.is_correct === true, total);
+    const fallback = itemDefaultDeduction(item, total);
     result[item.content_item_id] =
       item.deduction != null && Math.abs(item.deduction - fallback) >= 0.005
         ? item.deduction
