@@ -232,10 +232,9 @@ export default function ReleaseAnnouncementEditor({
       !(channel === "line" ? linePublished : websitePublished),
   );
 
-  const imageUrlValid =
-    isValidImageUrl(form.image_url) && isValidImageUrl(form.image_url_en);
   const heroUrlValid = isValidImageUrl(form.image_url);
   const heroEnUrlValid = isValidImageUrl(form.image_url_en);
+  const imageUrlValid = heroUrlValid && heroEnUrlValid;
   const hasUnsaved = Object.keys(dirtyUpdate).length > 0;
 
   return (

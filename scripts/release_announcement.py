@@ -523,7 +523,7 @@ def _load_content(path: str) -> Dict[str, str]:
     for field in OPTIONAL_FIELDS:
         image_url = (data.get(field) or "").strip()
         if image_url and not image_url.startswith("https://"):
-            raise SystemExit(f"{field}（主圖）必須是 https:// 開頭的網址")
+            raise SystemExit(f"{field}（圖片網址）必須是 https:// 開頭的網址")
     if not is_complete(data):
         raise SystemExit(f"content 缺少必要欄位：{REQUIRED_FIELDS}")
     return data

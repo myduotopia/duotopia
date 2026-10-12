@@ -80,8 +80,9 @@ class ReleaseAnnouncement(Base):
     article_title_en = Column(String(200), nullable=True)
     article_body_en = Column(Text, nullable=True)
 
-    # 主圖：LINE 卡片 hero + 中文文章封面；英文文章沒有自己的主圖時也沿用
+    # 主圖：LINE 卡片 hero + 中文文章封面（英文文章的退路）
     image_url = Column(String(500), nullable=True)
+
     # 英文文章的封面／分享縮圖（英文介面截圖）；NULL = 沿用 image_url
     image_url_en = Column(String(500), nullable=True)
 

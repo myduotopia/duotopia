@@ -624,6 +624,25 @@ class TestPublishLine:
         assert AI_RESULT["line_message_zh"] in str(messages[0])
 
     @pytest.mark.asyncio
+    async def test_line_card_uses_main_image_not_english_one(self, test_db_session):
+        """LINE 卡片中文在前，hero 只用主圖；英文文章主圖不進卡片"""
+        db = test_db_session
+        ann = await _make_draft(db, source_ref="line-hero-sha")
+        ann.image_url = "https://cdn/zh.jpg"
+        ann.image_url_en = "https://cdn/en.jpg"
+        db.commit()
+
+        with patch(
+            "services.release_announcement_service.LinePublishService.broadcast",
+            new=AsyncMock(return_value="REQ-H"),
+        ) as broadcast:
+            await ReleaseAnnouncementService.publish(db, ann, channels=["line"])
+
+        card = str(broadcast.await_args[0][0])
+        assert "https://cdn/zh.jpg" in card
+        assert "https://cdn/en.jpg" not in card
+
+    @pytest.mark.asyncio
     async def test_non_production_pushes_to_test_user_with_prefix(
         self, test_db_session, monkeypatch
     ):
