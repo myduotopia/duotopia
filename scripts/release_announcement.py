@@ -33,9 +33,12 @@ BLOCK_END = "<!-- release-announcement:end -->"
 _ISSUES_RE = re.compile(r"<!-- release-announcement:issues ([\d,\s]*) -->")
 
 # 欄位 ↔ 區塊內的小標題（順序即區塊內的顯示順序）
-# image_url（#1100）是選填的主圖：LINE 卡片 hero + 官網封面；空白時解析結果不含此欄位
+# image_url（#1100）是選填的主圖：LINE 卡片 hero + 中文文章封面；
+# image_url_en 是選填的英文文章主圖（英文介面截圖），空白時英文文章沿用主圖。
+# 圖片欄位空白時解析結果不含該欄位
 FIELDS: List[Tuple[str, str]] = [
     ("image_url", "主圖網址（選填）"),
+    ("image_url_en", "英文文章主圖網址（選填）"),
     ("line_message_zh", "LINE 文案（中文）"),
     ("line_message_en", "LINE 文案（英文）"),
     ("article_title_zh", "官網標題（中文）"),
@@ -45,7 +48,7 @@ FIELDS: List[Tuple[str, str]] = [
 ]
 # 與後端 AI 草稿的驗證一致：中文 LINE 文案與中文標題是必要欄位
 REQUIRED_FIELDS = ("line_message_zh", "article_title_zh")
-OPTIONAL_FIELDS = ("image_url",)
+OPTIONAL_FIELDS = ("image_url", "image_url_en")
 
 # 公告圖片存放處（#1100）：所有環境共用的公開 bucket，staging / production 草稿可用同一網址
 IMAGE_BUCKET = "duotopia-audio"
@@ -158,10 +161,10 @@ def parse_block(text: Optional[str]) -> Optional[Dict[str, Any]]:
         elif current:
             buffer.append(line)
     flush()
-    image_url = _extract_image_url(content.get("image_url", ""))
-    content.pop("image_url", None)
-    if image_url:
-        content["image_url"] = image_url
+    for field in OPTIONAL_FIELDS:
+        image_url = _extract_image_url(content.pop(field, ""))
+        if image_url:
+            content[field] = image_url
     return {"content": content, "issues": issues}
 
 
@@ -517,9 +520,10 @@ def _load_content(path: str) -> Dict[str, str]:
     )
     if wrong_type:
         raise SystemExit(f"content 欄位必須是字串或 null：{wrong_type}")
-    image_url = (data.get("image_url") or "").strip()
-    if image_url and not image_url.startswith("https://"):
-        raise SystemExit("image_url（主圖）必須是 https:// 開頭的網址")
+    for field in OPTIONAL_FIELDS:
+        image_url = (data.get(field) or "").strip()
+        if image_url and not image_url.startswith("https://"):
+            raise SystemExit(f"{field}（圖片網址）必須是 https:// 開頭的網址")
     if not is_complete(data):
         raise SystemExit(f"content 缺少必要欄位：{REQUIRED_FIELDS}")
     return data
@@ -702,7 +706,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_upload_image)
 
     p = sub.add_parser("render", help="預覽公告區塊（不寫入 GitHub）")
-    p.add_argument("--content", required=True, help="六個欄位的 JSON 檔")
+    p.add_argument("--content", required=True, help="公告內容的 JSON 檔")
     p.add_argument("--issues", help="統整版涵蓋的 issue，逗號分隔")
     p.set_defaults(func=cmd_render)
 

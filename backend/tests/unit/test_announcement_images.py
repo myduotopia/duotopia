@@ -290,3 +290,40 @@ class TestRehostContentImages:
         # 內文圖片轉存失敗時保留原網址（至少在 GitHub 公開 repo 上看得到）
         assert result["article_body_zh"] == f"![a]({GH})"
         assert len(warnings) == 2
+
+
+class TestRehostEnglishHero:
+    """英文文章主圖（image_url_en）與主圖同一套規則；不合格時移除（英文文章沿用主圖）"""
+
+    @pytest.mark.asyncio
+    async def test_trusted_kept_github_rehosted_untrusted_dropped(self):
+        fetch, store, _ = TestRehostContentImages._fakes()
+        kept, _ = await ai.rehost_content_images(
+            {"image_url_en": TRUSTED}, fetch=fetch, store=store
+        )
+        assert kept["image_url_en"] == TRUSTED
+
+        rehosted, warnings = await ai.rehost_content_images(
+            {"image_url_en": GH}, fetch=fetch, store=store
+        )
+        assert rehosted["image_url_en"].startswith(
+            "https://storage.googleapis.com/duotopia-audio/"
+        )
+        assert warnings == []
+
+        dropped, warnings = await ai.rehost_content_images(
+            {"image_url_en": "https://evil.example.com/a.png"}, fetch=fetch, store=store
+        )
+        assert "image_url_en" not in dropped
+        assert any("英文" in w for w in warnings)
+
+    @pytest.mark.asyncio
+    async def test_english_hero_must_be_jpeg_or_png(self):
+        fetch, store, _ = TestRehostContentImages._fakes(
+            data=GIF, mime="image/gif", ext="gif"
+        )
+        result, warnings = await ai.rehost_content_images(
+            {"image_url_en": GH}, fetch=fetch, store=store
+        )
+        assert "image_url_en" not in result
+        assert any("JPEG" in w for w in warnings)

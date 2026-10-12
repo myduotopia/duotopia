@@ -71,10 +71,12 @@ class AnnouncementContent(BaseModel):
     article_body_zh: Optional[str] = Field(None, max_length=50000)
     article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = Field(None, max_length=50000)
-    # #1100：選填主圖（LINE hero + 官網封面）；GitHub 貼圖網址會在建立草稿時轉存到 GCS
+    # #1100：選填主圖（LINE hero + 中文文章封面）；GitHub 貼圖網址會在建立草稿時轉存到 GCS
     image_url: Optional[str] = Field(None, max_length=500)
+    # 選填英文文章主圖（英文介面截圖）；空白時英文文章沿用主圖
+    image_url_en: Optional[str] = Field(None, max_length=500)
 
-    @field_validator("image_url")
+    @field_validator("image_url", "image_url_en")
     @classmethod
     def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
         if value and value.strip() and not value.strip().startswith("https://"):
@@ -107,8 +109,9 @@ class ReleaseAnnouncementUpdate(BaseModel):
     article_title_en: Optional[str] = Field(None, max_length=200)
     article_body_en: Optional[str] = None
     image_url: Optional[str] = Field(None, max_length=500)
+    image_url_en: Optional[str] = Field(None, max_length=500)
 
-    @field_validator("image_url")
+    @field_validator("image_url", "image_url_en")
     @classmethod
     def _image_url_https(cls, value: Optional[str]) -> Optional[str]:
         # 空白代表清除圖片（service 會存成 NULL）；有值就必須是 https，
@@ -145,6 +148,7 @@ class ReleaseAnnouncementItem(BaseModel):
     article_title_en: Optional[str] = None
     article_body_en: Optional[str] = None
     image_url: Optional[str] = None
+    image_url_en: Optional[str] = None
 
     status: str
     line_status: str
@@ -192,6 +196,7 @@ def _serialize(db: Session, ann: ReleaseAnnouncement) -> ReleaseAnnouncementItem
         article_title_en=ann.article_title_en,
         article_body_en=ann.article_body_en,
         image_url=ann.image_url,
+        image_url_en=ann.image_url_en,
         status=ann.status,
         line_status=ann.line_status,
         line_error=ann.line_error,

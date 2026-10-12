@@ -606,3 +606,44 @@ class TestProductionPayload:
         # 單一 issue 的 hotfix：沒有統整區塊時可直接沿用該 issue 的留言
         assert result["content"] == CONTENT
         assert result["issue_numbers"] == "1047"
+
+
+HERO_EN = (
+    "https://storage.googleapis.com/duotopia-audio/announcements/issue-1046/hero-en.png"
+)
+
+
+class TestEnglishHeroImageField:
+    """英文文章另有主圖（英文介面截圖）：選填，空白時英文文章沿用主圖"""
+
+    def test_round_trip_with_both_heroes(self):
+        content = {**CONTENT, "image_url": HERO, "image_url_en": HERO_EN}
+        assert ra.parse_block(ra.render_block(content))["content"] == content
+
+    def test_empty_english_hero_is_omitted(self):
+        block = ra.render_block({**CONTENT, "image_url": HERO})
+        assert "#### 英文文章主圖網址（選填）" in block
+        parsed = ra.parse_block(block)["content"]
+        assert "image_url_en" not in parsed
+        assert parsed["image_url"] == HERO
+
+    def test_english_hero_pasted_as_markdown_becomes_url(self):
+        block = ra.render_block({**CONTENT, "image_url_en": "PLACEHOLDER"}).replace(
+            "PLACEHOLDER", f"![hero]({HERO_EN})"
+        )
+        assert ra.parse_block(block)["content"]["image_url_en"] == HERO_EN
+
+    def test_load_content_requires_https_english_hero(self, tmp_path):
+        good = tmp_path / "good.json"
+        good.write_text(
+            json.dumps({**CONTENT, "image_url_en": HERO_EN}), encoding="utf-8"
+        )
+        assert ra._load_content(str(good))["image_url_en"] == HERO_EN
+
+        bad = tmp_path / "bad.json"
+        bad.write_text(
+            json.dumps({**CONTENT, "image_url_en": "http://x/a.png"}),
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit, match="https"):
+            ra._load_content(str(bad))

@@ -238,6 +238,11 @@ class TestImageUpload:
         with pytest.raises(ValidationError):
             ra.AnnouncementContent(image_url="http://a/b.png")
 
+    def test_webhook_content_accepts_https_english_hero(self):
+        assert ra.AnnouncementContent(image_url_en="https://a/b.png").image_url_en
+        with pytest.raises(ValidationError):
+            ra.AnnouncementContent(image_url_en="http://a/b.png")
+
 
 class TestListAndGet:
     @pytest.mark.asyncio
@@ -311,6 +316,15 @@ class TestUpdate:
     @pytest.mark.parametrize("url", ["https://cdn.example.com/a.png", "", "  "])
     def test_image_url_accepts_https_or_blank(self, url):
         assert ra.ReleaseAnnouncementUpdate(image_url=url).image_url == url
+
+    @pytest.mark.parametrize("url", ["http://cdn.example.com/a.png", "https:///a.png"])
+    def test_english_image_url_must_be_https(self, url):
+        with pytest.raises(ValidationError):
+            ra.ReleaseAnnouncementUpdate(image_url_en=url)
+
+    @pytest.mark.parametrize("url", ["https://cdn.example.com/a.png", ""])
+    def test_english_image_url_accepts_https_or_blank(self, url):
+        assert ra.ReleaseAnnouncementUpdate(image_url_en=url).image_url_en == url
 
     @pytest.mark.asyncio
     async def test_published_announcement_cannot_be_edited(self, test_db_session):

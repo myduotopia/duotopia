@@ -59,8 +59,11 @@ CONTENT_FIELDS = (
     "article_body_en",
 )
 
+# 圖片網址欄位：image_url = LINE hero + 中文文章封面；image_url_en = 英文文章封面（空白沿用主圖）
+IMAGE_FIELDS = ("image_url", "image_url_en")
+
 # 可編輯的草稿欄位（後台 PATCH 白名單）
-EDITABLE_FIELDS = CONTENT_FIELDS + ("image_url",)
+EDITABLE_FIELDS = CONTENT_FIELDS + IMAGE_FIELDS
 
 # 併入舊草稿時各欄位的接合方式
 _MERGE_FIELDS = (
@@ -230,14 +233,18 @@ class ReleaseAnnouncementService:
             return existing, False
 
         parsed = cls.parse_release_title(release_title)
-        hero_image = None
+        hero_image = hero_image_en = None
         prewritten = cls._prewritten_content(content)
         if prewritten is not None:
             # #1100：主圖與內文裡的 GitHub 圖片轉存到 GCS（失敗不擋草稿，主圖改用預設圖）
             images, _warnings = await rehost_content_images(
-                {**prewritten, "image_url": (content or {}).get("image_url")}
+                {
+                    **prewritten,
+                    **{field: (content or {}).get(field) for field in IMAGE_FIELDS},
+                }
             )
             hero_image = images.pop("image_url", None)
+            hero_image_en = images.pop("image_url_en", None)
             content, generation_error = images, None
         else:
             content, generation_error = await cls._generate_content(
@@ -253,6 +260,7 @@ class ReleaseAnnouncementService:
             release_title=release_title,
             change_type=parsed["change_type"],
             image_url=hero_image or settings.RELEASE_ANNOUNCEMENT_BANNER_URL,
+            image_url_en=hero_image_en,
             status=STATUS_DRAFT,
             line_status=CHANNEL_PENDING,
             website_status=CHANNEL_PENDING,
@@ -330,8 +338,9 @@ class ReleaseAnnouncementService:
         for field in EDITABLE_FIELDS:
             if field in data and data[field] is not None:
                 value = data[field]
-                # 清空圖片網址 → 存成 NULL，官網封面與 LINE hero 都不帶圖
-                if field == "image_url":
+                # 清空圖片網址 → 存成 NULL：主圖清空則 LINE hero 與官網封面都不帶圖；
+                # 英文文章主圖清空則英文文章沿用主圖
+                if field in IMAGE_FIELDS:
                     value = value.strip() or None
                 setattr(announcement, field, value)
         db.commit()
@@ -433,6 +442,8 @@ class ReleaseAnnouncementService:
         )
 
         en_post = None
+        # 英文文章用英文介面的主圖；沒有就沿用主圖
+        en_image = announcement.image_url_en or announcement.image_url
         if announcement.article_title_en:
             en_post = BlogService.create_post(
                 db,
@@ -440,8 +451,8 @@ class ReleaseAnnouncementService:
                     "title": announcement.article_title_en,
                     "summary": (announcement.article_body_en or "")[:200] or None,
                     "content": announcement.article_body_en,
-                    "cover_image_url": announcement.image_url,
-                    "og_image_url": announcement.image_url,
+                    "cover_image_url": en_image,
+                    "og_image_url": en_image,
                     "is_published": True,
                     "locale": "en",
                     "linked_post_id": zh_post.id,

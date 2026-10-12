@@ -134,6 +134,10 @@ LINE 官方帳號免費方案每月 200 則，**broadcast 一次消耗「好友�
 - 後台：`POST /api/admin/release-announcements/upload-image?purpose=hero|body`，
   編輯頁「上傳主圖」「插入圖片」（插在游標位置）
 - 預設主圖 `frontend/public/release-announcement-banner.png`（1200×780）
+- 英文文章主圖：`release_announcements.image_url_en`（migration `20261012_1000`，nullable、無回填）。
+  公告區塊選填欄位 `#### 英文文章主圖網址（選填）`；發布官網時英文文章的 cover / og 用
+  `image_url_en`，NULL 時沿用 `image_url`；LINE 卡片只用 `image_url`。
+  截圖工具 `--lang zh-TW|en` 切換介面語言，中英文章（主圖與內文圖）各用對應語言的截圖
 
 ## /announce 與公告區塊（PR3）
 
