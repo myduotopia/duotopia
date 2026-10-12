@@ -129,7 +129,8 @@ async function main() {
     const hero = Boolean(args.hero);
     const context = await browser.newContext({
       viewport: hero ? HERO : PAGE,
-      deviceScaleFactor: 1.5,
+      // 主圖固定輸出 1200×780（LINE 卡片 hero，檔案小）；內文圖 1.5 倍較清晰
+      deviceScaleFactor: hero ? 1 : 1.5,
       locale: LANGS[lang],
     });
     // 截圖畫面保持乾淨：不跳「操作手冊」、收合右側教學工具列（只存在這個瀏覽器的 localStorage）

@@ -102,6 +102,7 @@ const FIELDS = [
   "article_title_en",
   "article_body_en",
   "image_url",
+  "image_url_en",
 ] as const;
 
 type FormState = Record<(typeof FIELDS)[number], string>;
@@ -189,11 +190,15 @@ export default function ReleaseAnnouncementEditor({
   const setField = (field: (typeof FIELDS)[number], value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const uploadHero = async (file: File) => {
+  // 主圖與英文文章主圖都走 hero（JPEG / PNG、1 MB 以內）
+  const uploadHero = async (
+    field: "image_url" | "image_url_en",
+    file: File,
+  ) => {
     setUploading(true);
     try {
       const url = await onUploadImage(file, "hero");
-      if (url) setField("image_url", url);
+      if (url) setField(field, url);
     } finally {
       setUploading(false);
     }
@@ -227,7 +232,10 @@ export default function ReleaseAnnouncementEditor({
       !(channel === "line" ? linePublished : websitePublished),
   );
 
-  const imageUrlValid = isValidImageUrl(form.image_url);
+  const imageUrlValid =
+    isValidImageUrl(form.image_url) && isValidImageUrl(form.image_url_en);
+  const heroUrlValid = isValidImageUrl(form.image_url);
+  const heroEnUrlValid = isValidImageUrl(form.image_url_en);
   const hasUnsaved = Object.keys(dirtyUpdate).length > 0;
 
   return (
@@ -292,7 +300,7 @@ export default function ReleaseAnnouncementEditor({
                 <Input
                   id="image_url"
                   value={form.image_url}
-                  aria-invalid={!imageUrlValid}
+                  aria-invalid={!heroUrlValid}
                   onChange={(e) => setField("image_url", e.target.value)}
                 />
                 <ImagePickButton
@@ -301,14 +309,15 @@ export default function ReleaseAnnouncementEditor({
                   label="上傳主圖"
                   icon={<Upload className="mr-1 h-4 w-4" />}
                   disabled={busy || uploading}
-                  onPick={uploadHero}
+                  onPick={(file) => uploadHero("image_url", file)}
                 />
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                LINE 卡片主圖與官網封面：JPEG / PNG、小於 1 MB，建議
-                1200×780（20:13）
+                LINE
+                卡片主圖與中文文章封面（英文文章沒有自己的主圖時也用這張）：JPEG
+                / PNG、小於 1 MB，建議 1200×780（20:13）
               </p>
-              {!imageUrlValid && (
+              {!heroUrlValid && (
                 <p className="mt-1 text-xs text-red-600">
                   圖片網址必須是 https:// 開頭的完整網址
                 </p>
@@ -325,7 +334,7 @@ export default function ReleaseAnnouncementEditor({
               bodyZh={form.line_message_zh}
               titleEn={form.article_title_en}
               bodyEn={form.line_message_en}
-              imageUrl={imageUrlValid && form.image_url ? form.image_url : null}
+              imageUrl={heroUrlValid && form.image_url ? form.image_url : null}
               linkUrl={announcement.published_blog_url}
             />
           </div>
@@ -429,6 +438,40 @@ export default function ReleaseAnnouncementEditor({
                 value={form.article_body_en}
                 onChange={(e) => setField("article_body_en", e.target.value)}
               />
+            </div>
+            <div>
+              <label
+                htmlFor="image_url_en"
+                className="mb-1 block text-sm font-medium"
+              >
+                英文文章主圖網址
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="image_url_en"
+                  value={form.image_url_en}
+                  placeholder="空白時沿用主圖"
+                  aria-invalid={!heroEnUrlValid}
+                  onChange={(e) => setField("image_url_en", e.target.value)}
+                />
+                <ImagePickButton
+                  testId="upload-hero-en-input"
+                  accept="image/png,image/jpeg"
+                  label="上傳英文主圖"
+                  icon={<Upload className="mr-1 h-4 w-4" />}
+                  disabled={busy || uploading}
+                  onPick={(file) => uploadHero("image_url_en", file)}
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                英文文章封面與分享縮圖，請用英文介面的截圖；JPEG / PNG、小於 1
+                MB
+              </p>
+              {!heroEnUrlValid && (
+                <p className="mt-1 text-xs text-red-600">
+                  圖片網址必須是 https:// 開頭的完整網址
+                </p>
+              )}
             </div>
           </div>
         </div>

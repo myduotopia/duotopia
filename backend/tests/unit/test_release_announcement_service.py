@@ -211,6 +211,24 @@ class TestCreateDraft:
         assert ann.image_url == stored
 
     @pytest.mark.asyncio
+    async def test_prewritten_english_hero_is_saved(self, test_db_session):
+        """英文文章主圖（英文介面截圖）跟著 /announce 內容存進草稿"""
+        hero = "https://storage.googleapis.com/duotopia-audio/announcements/i/h.jpg"
+        hero_en = (
+            "https://storage.googleapis.com/duotopia-audio/announcements/i/h-en.jpg"
+        )
+        written = {**AI_RESULT, "image_url": hero, "image_url_en": hero_en}
+        ann, _ = await ReleaseAnnouncementService.create_draft_from_release(
+            test_db_session,
+            environment="staging",
+            source_ref="hero-en-sha",
+            release_title="Release: [Feature]: 單字選擇 (Fixes #860)",
+            content=written,
+        )
+        assert ann.image_url == hero
+        assert ann.image_url_en == hero_en
+
+    @pytest.mark.asyncio
     async def test_prewritten_without_hero_keeps_banner(self, test_db_session):
         with patch(
             "services.release_announcement_service.rehost_content_images",
@@ -321,6 +339,22 @@ class TestUpdateAndMerge:
         assert updated.image_url is None
 
     @pytest.mark.asyncio
+    async def test_update_draft_sets_and_clears_english_image(self, test_db_session):
+        db = test_db_session
+        ann = await _make_draft(db, source_ref="edit-img-en")
+        url = "https://cdn.example.com/en.png"
+
+        updated = ReleaseAnnouncementService.update_draft(
+            db, ann, {"image_url_en": url}
+        )
+        assert updated.image_url_en == url
+
+        updated = ReleaseAnnouncementService.update_draft(
+            db, ann, {"image_url_en": " "}
+        )
+        assert updated.image_url_en is None
+
+    @pytest.mark.asyncio
     async def test_merge_appends_unpublished_drafts_and_marks_them(
         self, test_db_session
     ):
@@ -379,6 +413,32 @@ class TestUpdateAndMerge:
 
 class TestPublishWebsite:
     @pytest.mark.asyncio
+    async def test_english_post_uses_english_hero(self, test_db_session):
+        """中文文章用主圖、英文文章用英文介面的主圖（封面與分享縮圖）"""
+        db = test_db_session
+        ann = await _make_draft(db, source_ref="web-en-hero")
+        ann.image_url = "https://cdn/zh.jpg"
+        ann.image_url_en = "https://cdn/en.jpg"
+        db.commit()
+
+        result = await ReleaseAnnouncementService.publish(
+            db, ann, channels=["website"], admin_id=None
+        )
+
+        zh = (
+            db.query(BlogPost)
+            .filter(BlogPost.id == result.published_blog_post_id)
+            .one()
+        )
+        en = (
+            db.query(BlogPost)
+            .filter(BlogPost.id == result.published_blog_post_en_id)
+            .one()
+        )
+        assert (zh.cover_image_url, zh.og_image_url) == ("https://cdn/zh.jpg",) * 2
+        assert (en.cover_image_url, en.og_image_url) == ("https://cdn/en.jpg",) * 2
+
+    @pytest.mark.asyncio
     async def test_creates_linked_bilingual_published_posts(self, test_db_session):
         db = test_db_session
         ann = await _make_draft(db, source_ref="web-sha")
@@ -407,6 +467,9 @@ class TestPublishWebsite:
         assert zh.title == AI_RESULT["article_title_zh"]
         assert en.title == AI_RESULT["article_title_en"]
         assert zh.cover_image_url == "https://cdn/banner.png"
+        # 沒有英文文章主圖 → 英文文章沿用主圖
+        assert en.cover_image_url == "https://cdn/banner.png"
+        assert en.og_image_url == "https://cdn/banner.png"
 
         category = (
             db.query(BlogCategory)

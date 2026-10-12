@@ -28,6 +28,11 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 # LINE Flex hero：JPEG / PNG；檔案大小保守限制 1 MB（新舊文件 1 MB / 10 MB 不一致，取嚴格者）
 HERO_MAX_BYTES = 1024 * 1024
 HERO_MIME_TYPES = ("image/jpeg", "image/png")
+# （欄位, 警告用名稱, 不合格時的退路）
+_HERO_FIELDS = (
+    ("image_url", "主圖", "改用預設圖"),
+    ("image_url_en", "英文文章主圖", "英文文章改用主圖"),
+)
 # 每則草稿最多轉存幾張 GitHub 圖片（轉存在 webhook request 內進行，避免逾時）
 MAX_REHOST_IMAGES = 10
 _MAX_REDIRECTS = 3
@@ -158,24 +163,28 @@ async def rehost_content_images(
             cache[url] = (stored_url, mime, len(data))
         return cache[url]
 
-    hero = (result.get("image_url") or "").strip()
-    result.pop("image_url", None)
-    if hero:
+    # 主圖（LINE hero + 中文文章封面）與英文文章主圖同一套規則；不合格就移除欄位，
+    # 主圖退回預設圖、英文文章主圖退回沿用主圖
+    for field, label, fallback in _HERO_FIELDS:
+        hero = (result.get(field) or "").strip()
+        result.pop(field, None)
+        if not hero:
+            continue
         if is_trusted_image_url(hero):
-            result["image_url"] = hero
+            result[field] = hero
         elif is_github_image_url(hero):
             try:
                 stored_url, mime, size = await rehost(hero)
                 if mime not in HERO_MIME_TYPES:
-                    warnings.append(f"主圖只能是 JPEG / PNG（目前 {mime}），改用預設圖")
+                    warnings.append(f"{label}只能是 JPEG / PNG（目前 {mime}），{fallback}")
                 elif size > HERO_MAX_BYTES:
-                    warnings.append("主圖超過 1 MB（LINE 限制），改用預設圖")
+                    warnings.append(f"{label}超過 1 MB（LINE 限制），{fallback}")
                 else:
-                    result["image_url"] = stored_url
+                    result[field] = stored_url
             except AnnouncementImageError as exc:
-                warnings.append(f"主圖轉存失敗，改用預設圖：{exc}")
+                warnings.append(f"{label}轉存失敗，{fallback}：{exc}")
         else:
-            warnings.append(f"主圖網址不是本站圖片，改用預設圖：{hero}")
+            warnings.append(f"{label}網址不是本站圖片，{fallback}：{hero}")
 
     for field in _BODY_FIELDS:
         body = result.get(field)
