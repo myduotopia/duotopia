@@ -96,6 +96,7 @@
 - 現況：`frontend/src` 有 227 處 6 位 hex（37 個檔案），以及 40 處 `bg-[#xxxxxx]` 這類任意值 class（10 個檔案）。
 - 集中在遊戲畫面（`components/activities/tug-of-war/`）、畫布與列印（`components/activities/shared/PrintPdfSheet.tsx`）、行銷頁（`pages/Home.tsx`、`pages/PricingPage.tsx`）。
 - 新寫的畫面用 Tailwind 色名或語意 class，不要再寫死 hex。
+- **由 ESLint 擋**（`frontend/eslint.config.js` 的 `no-restricted-syntax`）：`bg-[#xxxxxx]` 這類任意值 class，以及 `style` 裡的 hex。上面這些既有檔案列在同一份設定的白名單（19 檔），只減不增：改掉某檔的 hex 後就從白名單移除。畫布、圖表等寫在 JS 常數裡的 hex 不在檢查範圍。
 
 ### 2.7 待決定
 
@@ -289,6 +290,8 @@
 
 目前沒有。
 
+登記淘汰中元件時，同步在 `frontend/eslint.config.js` 加 `no-restricted-imports`，禁止新的程式再 import 它。
+
 ---
 
 ## 7. 變更規則
@@ -297,3 +300,7 @@
 - 產品負責人說「這個以後都要長這樣」時，就把它登記為標準元件。
 - 新增跨功能元件時，在第 6 節加一行。
 - 「待決定」的項目定案後，把結果寫進對應小節，並從「待決定」移除。
+- 本文件有三份衍生檔案，改到相關內容時要同步：
+  - `.claude/rules/frontend-ui.md`：精簡版，Claude 碰到前端檔案時自動載入。
+  - 根目錄 `REVIEW.md`：審查清單，由 `CLAUDE.md` 匯入，CI 審查不讀其他檔案也看得到。標準元件名稱清單、標準色系、「待決定」色系都在這裡。
+  - `frontend/eslint.config.js`：寫死 hex 的檢查與白名單。
