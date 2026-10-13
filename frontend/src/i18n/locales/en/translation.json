@@ -6149,6 +6149,7 @@
       "selected": "{{count}} selected",
       "dirty": "{{count}} with unsaved changes",
       "save": "Save",
+      "nothingToSave": "No changes to save",
       "delete": "Delete",
       "dispatch": "Assign",
       "confirmDelete": "Delete {{count}} question(s)? Assigned papers are not affected.",

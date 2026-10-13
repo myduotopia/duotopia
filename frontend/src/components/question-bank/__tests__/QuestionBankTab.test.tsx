@@ -7,7 +7,8 @@
  * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁
  * （含每頁 10 筆）、教材欄。
  * 底部批次操作列為共用 BulkActionBar（#1116）：膠囊用 `bulk-action-bar` 找，
- * 各按鈕沿用 `qb-bulk-save`／`qb-bulk-edit`／`qb-bulk-delete` 等 testId。
+ * 各按鈕沿用 `qb-bulk-save`／`qb-bulk-edit`／`qb-bulk-delete` 等 testId；
+ * 沒有修改時儲存停用且 title 說明原因（nothingToSave）。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -504,6 +505,12 @@ describe("QuestionBankTab", () => {
     await user.click(screen.getByTestId("qb-check-all"));
     expect(screen.getByTestId("bulk-action-bar").textContent).toContain(
       "selected 2",
+    );
+    // 沒有修改 → 儲存停用，title 說明原因
+    const saveBtn = screen.getByTestId("qb-bulk-save") as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    expect(saveBtn.getAttribute("title")).toBe(
+      "questionBank.list.nothingToSave",
     );
     await user.click(screen.getByTestId("qb-check-all"));
     expect(screen.queryByTestId("bulk-action-bar")).toBeNull();

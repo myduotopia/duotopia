@@ -10,7 +10,7 @@
  * - 考點／考題來源／公開三欄直接改（與編輯面板同一組元件）；一列改了就自動勾選並淡黃底
  * - 有勾選 → 底部浮現標準批次操作列 BulkActionBar（components/shared，#1116），深藍膠囊：
  *   計數＝勾選的單題＋題組，旁邊琥珀色小字「N 題有未儲存的修改」；按鈕層級（ui-style-guide 第 3 節）：
- *   儲存＝主要（只送改過的列，處理中轉圈）、批次編輯＝次要（不能用時 title 說明原因）、
+ *   儲存＝主要（只送改過的列，處理中轉圈；沒有修改而停用時 title「沒有要儲存的修改」）、批次編輯＝次要（不能用時 title 說明原因）、
  *   派發＝次要（未接上時停用＋「即將推出」小標）、刪除＝危險（勾選的列，先 confirm）。
  *   列表底部預留 pb-24，最後一列不被擋住
  * - 有未儲存修改時換頁／搜尋前 confirm
@@ -628,6 +628,10 @@ export default function QuestionBankTab({
             icon: <Save className="h-4 w-4" aria-hidden="true" />,
             onClick: handleSave,
             disabled: dirtyCount === 0,
+            // 忙碌中（例如刪除進行中）不顯示「沒有修改」的原因
+            disabledReason: bulkBusy
+              ? undefined
+              : t("questionBank.list.nothingToSave"),
             loading: bulkBusy,
             testId: "qb-bulk-save",
           },

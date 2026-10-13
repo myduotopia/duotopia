@@ -6192,6 +6192,7 @@
       "selected": "已選 {{count}} 題",
       "dirty": "{{count}} 題有未儲存的修改",
       "save": "儲存",
+      "nothingToSave": "沒有要儲存的修改",
       "delete": "刪除",
       "dispatch": "派發",
       "confirmDelete": "確定刪除 {{count}} 題？已派發的考卷不受影響。",
