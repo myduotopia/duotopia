@@ -97,6 +97,7 @@
 - 集中在遊戲畫面（`components/activities/tug-of-war/`）、畫布與列印（`components/activities/shared/PrintPdfSheet.tsx`）、行銷頁（`pages/Home.tsx`、`pages/PricingPage.tsx`）。
 - 新寫的畫面用 Tailwind 色名或語意 class，不要再寫死 hex。
 - **由 ESLint 擋**（`frontend/eslint.config.js` 的 `no-restricted-syntax`）：`bg-[#xxxxxx]` 這類任意值 class，以及 `style` 裡的 hex。上面這些既有檔案列在同一份設定的白名單（19 檔），只減不增：改掉某檔的 hex 後就從白名單移除。畫布、圖表等寫在 JS 常數裡的 hex 不在檢查範圍。
+- ESLint 的寫死色碼檢查只抓 Tailwind 任意值 `-[#...]` 和 `style` 裡的 hex；SVG／圖表的 `fill`、`stroke` 屬性不在檢查範圍，仍應優先用 token／`currentColor`。
 
 ### 2.7 待決定
 
@@ -120,12 +121,14 @@
 
 ## 3. 按鈕層級
 
-| 層級 | 一般淺色畫面 | 深藍膠囊上（例如批次操作列） |
-|---|---|---|
-| 主要 | 藍底白字 | 一般：半透明白底白字（不分主次） |
-| 次要 | 白底灰框 | （同上） |
-| 危險（例如刪除） | 紅底白字或紅字 | 同一般樣式，紅色圖示＋左側細分隔線，放在最右邊 |
-| 停用 | 半透明；需要時說明原因（見規則 3） | 同左 |
+| 層級 | 一般淺色畫面 |
+|---|---|
+| 主要 | 藍底白字 |
+| 次要 | 白底灰框 |
+| 危險（例如刪除） | 紅底白字或紅字 |
+| 停用 | 半透明；需要時說明原因（見規則 3） |
+
+深藍膠囊（例如批次操作列 `BulkActionBar`，不分主次）：一般＝半透明白底白字（`bg-white/15`，hover `bg-white/25`，無外框）；危險＝同一般樣式＋紅色圖示（`text-red-200`）＋前面一條細分隔線，放在動作的最後一個（✕ 取消選取之前）；停用＝半透明，需要時說明原因（見規則 3）。
 
 出處：
 - **淺色・主要**：`frontend/src/components/ui/button.tsx` 預設 variant → `bg-blue-600 text-white hover:bg-blue-700`。
@@ -135,7 +138,7 @@
 - **淺色・停用**：`button.tsx` 共用 `disabled:opacity-50`；說明原因的寫法例如 `frontend/src/components/shared/BulkActionBar.tsx` 動作的 `disabledReason`（停用時當 title）與 `disabledBadge`（「即將推出」小標），題庫列表的批次編輯、派發鈕在用。
 - **深色・一般**：`frontend/src/components/shared/BulkActionBar.tsx` 的 `BUTTON_CLASS` → `rounded-full bg-white/15 text-white font-medium hover:bg-white/25`，無外框（2026-10-13 定案，#1116 實作）。批次操作列的動作都常用、地位相同，沒有明確的下一步，所以不分主次。
 - **深色・停用**：同檔 `disabled:opacity-60 disabled:cursor-not-allowed`。
-- **深色・危險**：同檔動作設 `variant: "danger"` → 按鈕樣式與一般相同，只有圖示用 `text-red-200`，元件自動在前面加細分隔線（`h-5 w-px bg-white/30`）；danger 必須給圖示，沒給時文字改用同一紅色。呼叫端把它放在動作最後（2026-10-13 定案，#1116 實作；題庫列表的刪除鈕）。按下仍先跳確認視窗。
+- **深色・危險**：同檔動作設 `variant: "danger"` → 按鈕樣式與一般相同，只有圖示用 `text-red-200`，元件自動在前面加細分隔線（`h-5 w-px bg-white/30`）；danger 必須給圖示，沒給時文字改用同一紅色。呼叫端把它放在動作的最後一個（✕ 取消選取之前）（2026-10-13 定案，#1116 實作；題庫列表的刪除鈕）。按下仍先跳確認視窗。
 
 三條規則：
 1. 有明確下一步（例如表單送出、對話框確認）時，那一步用主按鈕，其餘用次要；沒有明確下一步的並列操作（例如批次操作列）一律同一樣式。
