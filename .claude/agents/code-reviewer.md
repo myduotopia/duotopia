@@ -49,6 +49,19 @@ You are a senior code reviewer specializing in security, performance, and best p
 - [ ] Test coverage adequate
 - [ ] **File size limits respected** (see File Size Check below)
 
+### Phase 4.5: UI 規範（前端改動才做）
+依據 `docs/design/ui-style-guide.md`（索引見 `docs/design/README.md`）。
+- [ ] **重複元件**：新增的元件是否和「共用元件目錄」（第 6 節）裡的元件重複或高度相似？有標準元件卻另做一份、或複製後改，列為問題，建議改用或擴充（加 prop）標準元件。
+- [ ] **顏色**：只抓兩種情況：
+  - 新寫死的 hex 色碼（例如 `#2563eb`、`bg-[#xxxxxx]`）。
+  - 規範沒列到的顏色系列（標準為 gray、blue、green、amber、red，以及第 2.5 節分類色對照表）。
+  - 「待決定」小節（第 2.7 節）裡的顏色在定案前**不算問題**，不要報。
+- [ ] **按鈕層級**（第 3 節）三條規則：
+  1. 一個操作列最多一個主按鈕，用在最常做的動作。
+  2. 危險動作（例如刪除）永遠不當主按鈕。
+  3. 停用的按鈕一定要說明原因（tooltip、`title` 或旁邊小字）。
+- [ ] 改了標準元件的外觀或用法：是否已同步更新共用元件目錄？（外觀改動需產品負責人同意，提醒確認）
+
 ### Phase 5: Documentation
 - [ ] Code comments for complex logic
 - [ ] API documentation updated
