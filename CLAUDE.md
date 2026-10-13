@@ -110,7 +110,7 @@ deploy-feature <issue>
 5. **批改頁新增作業類型** - 同路由 + `practice_mode` 分 Panel，禁止新增路由或複製 `GradingPage.tsx`。詳細步驟見 [`docs/design/grading-page-architecture.md`](./docs/design/grading-page-architecture.md)
 6. **計分類別（score_category）** - 由 `practice_mode` + `play_audio` 自動推導，唯一判定函式：[`backend/utils/score_category.py`](./backend/utils/score_category.py)。對照表與新增模式時的更新流程見 [`docs/design/score-category-mapping.md`](./docs/design/score-category-mapping.md)。請勿在前端傳 `score_category` — 後端會覆寫。
 7. **題庫新增題型** - 同一 sheet 依題型分流，禁止新增路由或複製 `QuestionSheet`／`GroupCard`／`QuestionCard`。步驟見 [`docs/design/question-bank-question-types.md`](./docs/design/question-bank-question-types.md)，或用 `/qb-add-type`
-8. **UI 規範與標準元件** - 做任何畫面或新功能前，先查 [`docs/design/README.md`](./docs/design/README.md)。UI 照 [`docs/design/ui-style-guide.md`](./docs/design/ui-style-guide.md)（含按鈕層級）。有標準元件就必須用；不合用時擴充它，不准另做一份。要改標準元件的外觀，先問使用者。CI 上的 Claude 審查會讀本檔，這條同時適用於 CI 審查
+8. **UI 規範與標準元件** - 做任何畫面或新功能前，先查 [`docs/design/README.md`](./docs/design/README.md)。UI 照 [`docs/design/ui-style-guide.md`](./docs/design/ui-style-guide.md)（含按鈕層級）。有標準元件就必須用；不合用時擴充它，不准另做一份。要改標準元件的外觀，先問使用者。審查顏色時只抓寫死的色碼與規範沒列到的色系，規範「待決定」小節的顏色定案前不算違規。CI 上的 Claude 審查會讀本檔，這條同時適用於 CI 審查
 
 ## Database Migration 鐵則
 

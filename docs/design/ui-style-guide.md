@@ -83,11 +83,11 @@
 
 ### 2.5 分類色（不是狀態）
 
-有些顏色用來區分「種類」，不代表好壞。這類顏色集中寫在對照表裡，畫面從對照表取，不要各自寫：
+有些顏色用來區分「種類」，不代表好壞。目前分類色集中在下列對照表：
 
 | 用途 | 對照表 | 用到的色系 |
 |---|---|---|
-| 練習模式 | `frontend/src/lib/practiceMode.ts` | blue、green、orange、purple、indigo、emerald、amber、pink |
+| 練習模式 | `frontend/src/lib/practiceMode.ts` | blue、green、orange、purple、indigo、emerald、amber、pink、rose |
 | 學生分組 | `frontend/src/lib/studentGroup.ts`（後端 `backend/models/student_group.py` 同步） | amber、rose、sky、emerald、violet、slate |
 | 選擇題選項 4 色循環 | `frontend/src/components/activities/shared/WordSelectionOptionButton.tsx` | 藍、紫、琥珀、青 |
 
@@ -129,7 +129,7 @@
 出處：
 - **淺色・主要**：`frontend/src/components/ui/button.tsx` 預設 variant → `bg-blue-600 text-white hover:bg-blue-700`。
 - **淺色・次要**：同檔 `variant="outline"` → `border border-gray-300 bg-white text-gray-700 hover:bg-gray-50`。全站 `variant="outline"` 417 次，是最常用的按鈕。
-- **淺色・危險（紅底）**：同檔 `variant="destructive"` → `bg-red-600 text-white hover:bg-red-700`（45 次／37 檔，例如 `components/organization/ConfirmDialog.tsx` 的 `variant="destructive"`）。
+- **淺色・危險（紅底）**：同檔 `variant="destructive"` → `bg-red-600 text-white hover:bg-red-700`（45 次／37 檔，例如 `components/organization/ConfirmDialog.tsx` 透過 `variant` prop 傳 `"destructive"`）。
 - **淺色・危險（紅字）**：外框按鈕加紅字，例如 `frontend/src/components/question-bank/QuestionBulkBar.tsx` 刪除鈕 `text-red-600 hover:text-red-700`、`frontend/src/components/activities/shared/WordActivityCard.tsx` 的 `text-red-600 border-red-300 hover:bg-red-50`。
 - **淺色・停用**：`button.tsx` 共用 `disabled:opacity-50`；說明原因的寫法例如 `QuestionBulkBar.tsx` 批次編輯鈕的 `title={editDisabledReason}`、派發鈕旁的「即將推出」小字。
 - **深色・主要**：`frontend/src/components/classroom/GradeBulkBar.tsx` 的 `PRIMARY_BUTTON` → `rounded-full bg-white text-blue-700 font-bold hover:bg-blue-50`。
@@ -140,7 +140,7 @@
 三條規則：
 1. 一個操作列最多一個主按鈕，用在最常做的動作。
 2. 危險動作永遠不當主按鈕。
-3. 停用的按鈕一定要說明原因（tooltip 或旁邊小字）。
+3. 因權限、條件或功能未開放而停用的按鈕，一定要說明原因（tooltip 或旁邊小字）。處理中（busy）的暫時停用、表單驗證未通過的送出鈕不在此限。
 
 ---
 
@@ -168,7 +168,7 @@
 
 ## 5. 版面規則
 
-- **卡片型內容的圖片固定在頂部。** 換題時視線不用重新對焦。手機版由上到下是：圖、音檔、句子、翻譯、評測；桌機版圖在左、文字在右。出處：產品負責人定案（issue #1116 規範）。
+- **卡片型內容的圖片固定在頂部。** 換題時視線不用重新對焦。手機版由上到下是：圖、音檔、句子、翻譯、評測；桌機版圖在左、文字在右。出處：產品負責人定案（錄音卡改版設計）。
 - **底部浮動操作列要避開側欄，列表底部要留空間。** 浮動列從側欄右緣開始（`left: sidebarWidth`），列表底部留 `pb-24`，最後一列才不會被擋住。出處：`frontend/src/components/classroom/GradeBulkBar.tsx` 頂部說明；`pages/teacher/TeacherClassrooms.tsx`、`pages/organization/SchoolClassroomsPage.tsx` 的 `pb-24`。
 - **小螢幕（≤480px）操作列縮小間距，次要按鈕只留圖示。** 出處：`GradeBulkBar.tsx` 的 `max-[480px]:` class。
 - **手機版編輯面板滿版。** 出處：`frontend/src/index.css` 的 `.editor-panel`（#580）。
@@ -272,14 +272,9 @@
 
 | 元件 | 路徑 | 什麼情況用 |
 |---|---|---|
-| **批次操作列** GradeBulkBar | `frontend/src/components/classroom/GradeBulkBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」與機構班級管理 |
+| **批次操作列** GradeBulkBar | `frontend/src/components/classroom/GradeBulkBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」與機構班級管理。班級頁按鈕層級由 #1116 第二段修正 |
 | AssignmentDialog | `frontend/src/components/AssignmentDialog.tsx` | 派發作業對話框 |
-| ContentTypeDialog | `frontend/src/components/ContentTypeDialog.tsx` | 新增內容時選內容類型 |
 | ProgramVisibilitySelector | `frontend/src/components/ProgramVisibilitySelector.tsx` | 教材公開設定 |
-| ReadingAssessmentPanel | `frontend/src/components/ReadingAssessmentPanel.tsx` | 例句朗讀內容編輯面板 |
-| ScenarioDialogueEditorSheet | `frontend/src/components/ScenarioDialogueEditorSheet.tsx` | 情境對話編輯面板外框 |
-| VocabularySetPanel | `frontend/src/components/VocabularySetPanel.tsx` | 單字集內容編輯面板 |
-| SentenceMakingActivity | `frontend/src/components/activities/SentenceMakingActivity.tsx` | 造句練習 |
 | AdjustGradeDialog | `frontend/src/components/classroom/AdjustGradeDialog.tsx` | 班級批次升／降一個年級 |
 | GradeFilterSelect | `frontend/src/components/classroom/GradeFilterSelect.tsx` | 班級清單的年級篩選 |
 | GradeSelect | `frontend/src/components/classroom/GradeSelect.tsx` | 班級表單的年級下拉 |
@@ -289,7 +284,7 @@
 | ConfirmDialog | `frontend/src/components/organization/ConfirmDialog.tsx` | 確認對話框（可設危險樣式） |
 | OneCampusBindSection | `frontend/src/components/settings/OneCampusBindSection.tsx` | 1Campus 綁定與信箱驗證狀態 |
 | StudentLoginQRShare | `frontend/src/components/teacher/StudentLoginQRShare.tsx` | 分享學生登入 QR code |
-| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。目前只有題庫用，預先登記給其他功能重用 |
+| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。目前只有題庫用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出 |
 
 ### 6.5 淘汰中
 

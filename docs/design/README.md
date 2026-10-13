@@ -16,6 +16,14 @@
 | [`question-bank-schema.md`](./question-bank-schema.md) | 題庫資料表設計與定案 |
 | [`preview-architecture.md`](./preview-architecture.md) | 派發預覽直接用學生端 Activity 元件；改 Activity 要驗證預覽 |
 | [`quiz-scoring-methods.md`](./quiz-scoring-methods.md) | 打字類小考的評分方式（依單字／字母比例扣分、大小寫） |
+| [`question-bank-layout-samples/`](./question-bank-layout-samples/README.md) | 題型驗收樣本：題庫題組 layout 的 JSON 樣本（`question-bank-question-types.md` 引用） |
+
+## 規劃中
+
+還在規劃階段，尚未定案為標準的文件。
+
+| 文件 | 用途 |
+|---|---|
 | [`public-demo-modes-spec.md`](./public-demo-modes-spec.md) | 公開 Demo 頁（`/demo/:id`）各練習模式的規格 |
 
 ## 單次設計紀錄與參考資料
@@ -29,4 +37,3 @@
 | [`issue-862-plan-a-ui-decouple.md`](./issue-862-plan-a-ui-decouple.md) | #862 方案 A：只切 UI／Workspace |
 | [`issue-862-plan-b-backend-restructure.md`](./issue-862-plan-b-backend-restructure.md) | #862 方案 B：後端全面重構 |
 | [`teacher-tutorial-video-script.md`](./teacher-tutorial-video-script.md) | 老師操作教學影片的分鏡腳本 |
-| [`question-bank-layout-samples/`](./question-bank-layout-samples/README.md) | 題庫題組 layout 的 JSON 驗收樣本（`question-bank-question-types.md` 引用） |
