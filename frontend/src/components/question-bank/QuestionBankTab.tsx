@@ -10,8 +10,9 @@
  * - 考點／考題來源／公開三欄直接改（與編輯面板同一組元件）；一列改了就自動勾選並淡黃底
  * - 有勾選 → 底部浮現標準批次操作列 BulkActionBar（components/shared，#1116），深藍膠囊：
  *   計數＝勾選的單題＋題組，旁邊琥珀色小字「N 題有未儲存的修改」；按鈕層級（ui-style-guide 第 3 節）：
- *   儲存＝主要（只送改過的列，處理中轉圈；沒有修改而停用時 title「沒有要儲存的修改」）、批次編輯＝次要（不能用時 title 說明原因）、
- *   派發＝次要（未接上時停用＋「即將推出」小標）、刪除＝危險（勾選的列，先 confirm）。
+ *   四顆按鈕同一樣式、不分主次——儲存（只送改過的列，處理中轉圈；沒有修改而停用時 title「沒有要儲存的修改」）、
+ *   批次編輯（不能用時 title 說明原因）、派發（未接上時停用＋「即將推出」小標）、
+ *   刪除＝danger（放最後；紅色垃圾桶圖示＋前方分隔線；勾選的列，先 confirm）。
  *   列表底部預留 pb-24，最後一列不被擋住
  * - 有未儲存修改時換頁／搜尋前 confirm
  * 工具列：搜尋（題幹＋來源）、題型下拉、考點多選（OR，`ep=1,2`）、只看自己的、每頁筆數；
@@ -639,7 +640,6 @@ export default function QuestionBankTab({
             key: "edit",
             label: t("questionBank.list.bulkEdit"),
             icon: <Pencil className="h-4 w-4" aria-hidden="true" />,
-            variant: "ghost",
             onClick: () => {
               if (!canBulkEdit || !onBulkEdit) return;
               if (!confirmDiscard()) return;
@@ -653,7 +653,6 @@ export default function QuestionBankTab({
             key: "dispatch",
             label: t("questionBank.list.dispatch"),
             icon: <Send className="h-4 w-4" aria-hidden="true" />,
-            variant: "ghost",
             onClick: () =>
               onDispatch?.(questionItems.filter((q) => checked.has(q.id))),
             disabled: !onDispatch,

@@ -1,9 +1,10 @@
 /**
  * BulkActionBar 測試（#1097 建立，#1116 搬到 shared 並擴充）。
  *
- * 驗證：未勾選不渲染、計數句子與放大數字、sidebar 偏移、動作順序與點擊、ghost 小螢幕文字、
- * 單一動作停用、busy 全停用、開關動作；#1116 擴充的計數附註、停用原因／小標、danger 樣式、
- * loading 轉圈、開關 testId 與取消選取 test id。
+ * 驗證：未勾選不渲染、計數句子與放大數字、sidebar 偏移、動作順序與點擊、小螢幕只留圖示／短文字、
+ * 單一動作停用、busy 全停用、開關動作；#1116 擴充的計數附註、停用原因／小標、
+ * danger（與一般按鈕同 class、紅色圖示、前方分隔線；只有 danger 時不加分隔線）、
+ * 一般按鈕的 aria-label、loading 轉圈、開關 testId 與取消選取 test id。
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -89,7 +90,6 @@ describe("BulkActionBar", () => {
             key: "deactivate",
             label: "停用",
             onClick: onDeactivate,
-            variant: "ghost",
           },
         ]}
         onClear={onClear}
@@ -109,7 +109,7 @@ describe("BulkActionBar", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the full label as the accessible name of ghost actions and hides the text on small screens when an icon is given", () => {
+  it("keeps the full label as the accessible name of every action and hides the text on small screens when an icon is given", () => {
     render(
       <BulkActionBar
         selectedCount={2}
@@ -119,7 +119,6 @@ describe("BulkActionBar", () => {
             key: "deactivate",
             label: "停用",
             onClick: vi.fn(),
-            variant: "ghost",
             icon: <svg data-testid="off-icon" aria-hidden="true" />,
           },
           {
@@ -127,7 +126,6 @@ describe("BulkActionBar", () => {
             label: "重新啟用班級",
             shortLabel: "啟用",
             onClick: vi.fn(),
-            variant: "ghost",
           },
         ]}
         onClear={vi.fn()}
@@ -305,7 +303,6 @@ describe("BulkActionBar", () => {
             key: "dispatch",
             label: "派發",
             onClick: vi.fn(),
-            variant: "ghost",
             disabled: true,
             disabledReason: "即將推出",
             disabledBadge: "即將推出",
@@ -330,7 +327,6 @@ describe("BulkActionBar", () => {
             key: "dispatch",
             label: "派發",
             onClick: vi.fn(),
-            variant: "ghost",
             disabledReason: "即將推出",
             disabledBadge: "即將推出",
             testId: "dispatch",
@@ -345,8 +341,49 @@ describe("BulkActionBar", () => {
     expect(enabled).toHaveTextContent(/^派發$/);
   });
 
-  it("renders the danger variant with a translucent red outline", () => {
+  it("renders the danger action like a regular one with a red icon after a separator", () => {
     const onDelete = vi.fn();
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 題"
+        actions={[
+          {
+            key: "save",
+            label: "儲存",
+            onClick: vi.fn(),
+            testId: "save",
+          },
+          {
+            key: "delete",
+            label: "刪除",
+            onClick: onDelete,
+            variant: "danger",
+            icon: <svg data-testid="trash-icon" aria-hidden="true" />,
+            testId: "delete",
+          },
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const save = screen.getByTestId("save");
+    const del = screen.getByTestId("delete");
+    // Same button style as a regular action
+    expect(del.className).toBe(save.className);
+    expect(del).toHaveClass("bg-white/15", "text-white");
+    // Only the icon is red
+    expect(screen.getByTestId("trash-icon").parentElement).toHaveClass(
+      "text-red-200",
+    );
+    // A thin separator sits right before the danger action
+    expect(del.previousElementSibling).toHaveAttribute("role", "separator");
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+    fireEvent.click(del);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not add a separator when the danger action is the only action", () => {
     render(
       <BulkActionBar
         selectedCount={2}
@@ -355,8 +392,9 @@ describe("BulkActionBar", () => {
           {
             key: "delete",
             label: "刪除",
-            onClick: onDelete,
+            onClick: vi.fn(),
             variant: "danger",
+            icon: <svg data-testid="trash-icon" aria-hidden="true" />,
             testId: "delete",
           },
         ]}
@@ -364,11 +402,28 @@ describe("BulkActionBar", () => {
       />,
     );
 
-    const del = screen.getByTestId("delete");
-    expect(del).toHaveClass("text-red-200", "ring-red-300/60");
-    expect(del).not.toHaveClass("bg-white");
-    fireEvent.click(del);
-    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("delete")).toBeInTheDocument();
+    expect(screen.queryByRole("separator")).toBeNull();
+  });
+
+  it("gives a regular action an accessible name and hides its text on small screens", () => {
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 個班級"
+        actions={[
+          adjustAction(vi.fn(), {
+            icon: <svg data-testid="grade-icon" aria-hidden="true" />,
+          }),
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const adjust = screen.getByRole("button", { name: "調整年級" });
+    expect(adjust).toHaveAttribute("aria-label", "調整年級");
+    expect(adjust).toHaveAttribute("title", "調整年級");
+    expect(screen.getByText("調整年級")).toHaveClass("max-[480px]:hidden");
   });
 
   it("shows a spinner and blocks clicks while an action is loading", () => {

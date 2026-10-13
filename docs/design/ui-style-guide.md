@@ -4,7 +4,7 @@
 > 影響：所有前端畫面。做任何畫面或新功能前先看這份；標準文件總索引見 [`README.md`](./README.md)。
 
 這份文件寫的是**現況**。每一條都從程式碼實際用法整理，並附出處檔案。
-唯一新定的是「按鈕層級」深色欄的危險樣式（產品負責人 2026-10-13 定案）。
+新定的只有「按鈕層級」：規則 1（沒有明確下一步的並列操作一律同一樣式）與深色欄的樣式（一般按鈕不分主次、危險用紅色圖示加分隔線），產品負責人 2026-10-13 定案。
 
 統計方式：在 `frontend/src` 用 grep 數 Tailwind class，排除測試檔（`__tests__/`、`*.test.*`）與 `dark:` 變體。數字是 2026-10-13 的快照，只用來判斷「哪一種最常用」。
 
@@ -121,9 +121,9 @@
 
 | 層級 | 一般淺色畫面 | 深藍膠囊上（例如批次操作列） |
 |---|---|---|
-| 主要 | 藍底白字 | 白底深藍字 |
-| 次要 | 白底灰框 | 透明底白框白字 |
-| 危險（例如刪除） | 紅底白字或紅字 | 透明底、淡紅框加淡紅字 |
+| 主要 | 藍底白字 | 一般：半透明白底白字（不分主次） |
+| 次要 | 白底灰框 | （同上） |
+| 危險（例如刪除） | 紅底白字或紅字 | 同一般樣式，紅色圖示＋左側細分隔線，放在最右邊 |
 | 停用 | 半透明；需要時說明原因（見規則 3） | 同左 |
 
 出處：
@@ -132,13 +132,12 @@
 - **淺色・危險（紅底）**：同檔 `variant="destructive"` → `bg-red-600 text-white hover:bg-red-700`（45 次／37 檔，例如 `components/organization/ConfirmDialog.tsx` 透過 `variant` prop 傳 `"destructive"`）。
 - **淺色・危險（紅字）**：外框按鈕加紅字，例如 `frontend/src/components/activities/shared/WordActivityCard.tsx` 的 `text-red-600 border-red-300 hover:bg-red-50`。
 - **淺色・停用**：`button.tsx` 共用 `disabled:opacity-50`；說明原因的寫法例如 `frontend/src/components/shared/BulkActionBar.tsx` 動作的 `disabledReason`（停用時當 title）與 `disabledBadge`（「即將推出」小標），題庫列表的批次編輯、派發鈕在用。
-- **深色・主要**：`frontend/src/components/shared/BulkActionBar.tsx` 的 `PRIMARY_BUTTON` → `rounded-full bg-white text-blue-700 font-bold hover:bg-blue-50`。
-- **深色・次要**：同檔 `GHOST_BUTTON` → `rounded-full text-white ring-1 ring-inset ring-white/40 hover:bg-white/10`。
+- **深色・一般**：`frontend/src/components/shared/BulkActionBar.tsx` 的 `BUTTON_CLASS` → `rounded-full bg-white/15 text-white font-medium hover:bg-white/25`，無外框（2026-10-13 定案，#1116 實作）。批次操作列的動作都常用、地位相同，沒有明確的下一步，所以不分主次。
 - **深色・停用**：同檔 `disabled:opacity-60 disabled:cursor-not-allowed`。
-- **深色・危險**：同檔 `DANGER_BUTTON` → `rounded-full text-red-200 ring-1 ring-inset ring-red-300/60 hover:bg-red-500/20`（2026-10-13 新定，#1116 實作；題庫列表的刪除鈕）。
+- **深色・危險**：同檔動作設 `variant: "danger"` → 按鈕樣式與一般相同，只有圖示用 `text-red-200`，元件自動在前面加細分隔線（`h-5 w-px bg-white/30`）；danger 必須給圖示，沒給時文字改用同一紅色。呼叫端把它放在動作最後（2026-10-13 定案，#1116 實作；題庫列表的刪除鈕）。按下仍先跳確認視窗。
 
 三條規則：
-1. 一個操作列最多一個主按鈕，用在最常做的動作。
+1. 有明確下一步（例如表單送出、對話框確認）時，那一步用主按鈕，其餘用次要；沒有明確下一步的並列操作（例如批次操作列）一律同一樣式。
 2. 危險動作永遠不當主按鈕。
 3. 因權限、條件或功能未開放而停用的按鈕，一定要說明原因（tooltip 或旁邊小字）。處理中（busy）的暫時停用、表單驗證未通過的送出鈕不在此限。
 
@@ -170,7 +169,7 @@
 
 - **卡片型內容的圖片固定在頂部。** 換題時視線不用重新對焦。手機版由上到下是：圖、音檔、句子、翻譯、評測；桌機版圖在左、文字在右。出處：產品負責人定案（錄音卡改版設計）。
 - **底部浮動操作列要避開側欄，列表底部要留空間。** 浮動列從側欄右緣開始（`left: sidebarWidth`），列表底部留 `pb-24`，最後一列才不會被擋住。出處：`frontend/src/components/shared/BulkActionBar.tsx` 頂部說明；`pages/teacher/TeacherClassrooms.tsx`、`pages/organization/SchoolClassroomsPage.tsx`、`components/question-bank/QuestionBankTab.tsx` 的 `pb-24`。
-- **小螢幕（≤480px）操作列縮小間距，次要按鈕只留圖示。** 出處：`BulkActionBar.tsx` 的 `max-[480px]:` class。
+- **小螢幕（≤480px）操作列縮小間距，所有按鈕只留圖示**（沒有圖示的改用短文字），完整文字留在 `aria-label`／`title`。 出處：`BulkActionBar.tsx` 的 `max-[480px]:` class。
 - **手機版編輯面板滿版。** 出處：`frontend/src/index.css` 的 `.editor-panel`（#580）。
 - **批改頁新增作業類型：同一個路由，依 `practice_mode` 換 Panel。** 出處：[`grading-page-architecture.md`](./grading-page-architecture.md)。
 - **題庫新增題型：同一個 sheet 依題型分流。** 出處：[`question-bank-question-types.md`](./question-bank-question-types.md)。
@@ -222,7 +221,7 @@
 | BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速） |
 | BatchWorkPanel | `frontend/src/components/shared/BatchWorkPanel.tsx` | 桌面版左側批次工作區（組合貼上、翻譯、語音） |
 | BatchSettingCard | `frontend/src/components/shared/batch/BatchSettingCard.tsx` | 左側批次工作區的卡片外框 |
-| **批次操作列** BulkActionBar | `frontend/src/components/shared/BulkActionBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」、機構班級管理、題庫列表。呼叫端傳完整計數句子（`countLabel`）與動作；動作可設 `variant`（primary／ghost／danger）、`disabledReason`、`disabledBadge`、`loading`、`testId`，計數旁可加 `countNote` 附註 |
+| **批次操作列** BulkActionBar | `frontend/src/components/shared/BulkActionBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」、機構班級管理、題庫列表。呼叫端傳完整計數句子（`countLabel`）與動作；動作可設 `variant: "danger"`（不寫＝一般，膠囊上不分主次）、`disabledReason`、`disabledBadge`、`loading`、`testId`，計數旁可加 `countNote` 附註 |
 | CreatableCombobox | `frontend/src/components/shared/CreatableCombobox.tsx` | 可搜尋、可新增的下拉 |
 | ExamPointPicker | `frontend/src/components/shared/ExamPointPicker.tsx` | 選考點 |
 | GradeRangeSlider | `frontend/src/components/shared/GradeRangeSlider.tsx` | 年段 1–12 兩點拉桿 |

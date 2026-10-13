@@ -3,7 +3,8 @@
  *
  * 班級清單＋年級篩選、建立／編輯班級、指派老師、學生側欄、派發作業、年級補填提醒。
  * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116），
- * 只有「調整年級」一個主要按鈕。按鈕層級見 docs/design/ui-style-guide.md 第 3 節。
+ * 只有「調整年級」一顆按鈕（半透明白底，與其他批次操作列同一樣式）。按鈕層級見
+ * docs/design/ui-style-guide.md 第 3 節。
  */
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
