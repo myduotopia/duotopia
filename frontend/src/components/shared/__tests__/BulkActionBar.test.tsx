@@ -1,18 +1,24 @@
+/**
+ * BulkActionBar 測試（#1097 建立，#1116 搬到 shared 並擴充）。
+ *
+ * 驗證：未勾選不渲染、計數句子與放大數字、sidebar 偏移、動作順序與點擊、ghost 小螢幕文字、
+ * 單一動作停用、busy 全停用、開關動作；#1116 擴充的計數附註、停用原因／小標、danger 樣式、
+ * loading 轉圈、開關 testId 與取消選取 test id。
+ */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import {
-  GradeBulkBar,
-  type GradeBulkAction,
-  type GradeBulkButtonAction,
-  type GradeBulkSwitchAction,
-} from "../GradeBulkBar";
+  BulkActionBar,
+  type BulkAction,
+  type BulkButtonAction,
+  type BulkSwitchAction,
+} from "../BulkActionBar";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       const translations: Record<string, string> = {
-        "classroomGrade.selection.selectedCount": "已選 {{count}} 個班級",
-        "classroomGrade.selection.clear": "取消選取",
+        "common.selection.clear": "取消選取",
       };
       const template = translations[key];
       if (!template) return key;
@@ -30,19 +36,20 @@ vi.mock("@/contexts/SidebarContext", () => ({
 
 const adjustAction = (
   onClick = vi.fn(),
-  extra: Partial<GradeBulkButtonAction> = {},
-): GradeBulkAction => ({
+  extra: Partial<BulkButtonAction> = {},
+): BulkAction => ({
   key: "adjust-grade",
   label: "調整年級",
   onClick,
   ...extra,
 });
 
-describe("GradeBulkBar", () => {
+describe("BulkActionBar", () => {
   it("renders nothing when nothing is selected", () => {
     const { container } = render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={0}
+        countLabel="已選 0 個班級"
         actions={[adjustAction()]}
         onClear={vi.fn()}
       />,
@@ -52,8 +59,9 @@ describe("GradeBulkBar", () => {
 
   it("shows the selected count and offsets by the sidebar width", () => {
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={12}
+        countLabel="已選 12 個班級"
         actions={[adjustAction()]}
         onClear={vi.fn()}
       />,
@@ -61,7 +69,7 @@ describe("GradeBulkBar", () => {
 
     const toolbar = screen.getByRole("toolbar", { name: "已選 12 個班級" });
     expect(toolbar).toHaveTextContent("已選 12 個班級");
-    expect(toolbar).toHaveAttribute("data-testid", "grade-bulk-bar");
+    expect(toolbar).toHaveAttribute("data-testid", "bulk-action-bar");
     // The count is emphasised separately
     expect(screen.getByText("12")).toHaveClass("tabular-nums");
     expect(toolbar.parentElement).toHaveStyle({ left: "256px" });
@@ -72,8 +80,9 @@ describe("GradeBulkBar", () => {
     const onDeactivate = vi.fn();
     const onClear = vi.fn();
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[
           adjustAction(onAdjust),
           {
@@ -102,8 +111,9 @@ describe("GradeBulkBar", () => {
 
   it("keeps the full label as the accessible name of ghost actions and hides the text on small screens when an icon is given", () => {
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[
           {
             key: "deactivate",
@@ -140,8 +150,9 @@ describe("GradeBulkBar", () => {
   it("disables a single action when it is marked disabled", () => {
     const onActivate = vi.fn();
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[
           adjustAction(),
           {
@@ -166,8 +177,9 @@ describe("GradeBulkBar", () => {
     const onAdjust = vi.fn();
     const onClear = vi.fn();
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[adjustAction(onAdjust)]}
         onClear={onClear}
         busy
@@ -185,8 +197,8 @@ describe("GradeBulkBar", () => {
   });
 
   const statusSwitch = (
-    extra: Partial<GradeBulkSwitchAction> = {},
-  ): GradeBulkSwitchAction => ({
+    extra: Partial<BulkSwitchAction> = {},
+  ): BulkSwitchAction => ({
     key: "status",
     kind: "switch",
     checked: true,
@@ -199,8 +211,9 @@ describe("GradeBulkBar", () => {
   it("renders a switch action with its label inside the track and toggles to the opposite state", () => {
     const onToggle = vi.fn();
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[adjustAction(), statusSwitch({ onToggle })]}
         onClear={vi.fn()}
       />,
@@ -223,8 +236,9 @@ describe("GradeBulkBar", () => {
   it("renders an unchecked switch action on a translucent track", () => {
     const onToggle = vi.fn();
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[
           statusSwitch({
             checked: false,
@@ -248,8 +262,9 @@ describe("GradeBulkBar", () => {
   it("disables the switch action while busy", () => {
     const onToggle = vi.fn();
     render(
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={2}
+        countLabel="已選 2 個班級"
         actions={[statusSwitch({ onToggle })]}
         onClear={vi.fn()}
         busy
@@ -260,5 +275,144 @@ describe("GradeBulkBar", () => {
     expect(toggle).toBeDisabled();
     fireEvent.click(toggle);
     expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("shows the count note next to the count", () => {
+    render(
+      <BulkActionBar
+        selectedCount={5}
+        countLabel="已選 5 題"
+        countNote="2 題有未儲存的修改"
+        actions={[adjustAction()]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const toolbar = screen.getByRole("toolbar", { name: "已選 5 題" });
+    expect(toolbar).toHaveTextContent("已選 5 題2 題有未儲存的修改");
+    expect(screen.getByText("2 題有未儲存的修改")).toHaveClass(
+      "text-amber-200",
+    );
+  });
+
+  it("explains a disabled action with a tooltip and a badge, only while disabled", () => {
+    const { rerender } = render(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 題"
+        actions={[
+          {
+            key: "dispatch",
+            label: "派發",
+            onClick: vi.fn(),
+            variant: "ghost",
+            disabled: true,
+            disabledReason: "即將推出",
+            disabledBadge: "即將推出",
+            testId: "dispatch",
+          },
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const dispatch = screen.getByTestId("dispatch");
+    expect(dispatch).toBeDisabled();
+    expect(dispatch).toHaveAttribute("title", "即將推出");
+    expect(dispatch).toHaveTextContent("派發即將推出");
+
+    rerender(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 題"
+        actions={[
+          {
+            key: "dispatch",
+            label: "派發",
+            onClick: vi.fn(),
+            variant: "ghost",
+            disabledReason: "即將推出",
+            disabledBadge: "即將推出",
+            testId: "dispatch",
+          },
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+    const enabled = screen.getByTestId("dispatch");
+    expect(enabled).not.toBeDisabled();
+    expect(enabled).toHaveAttribute("title", "派發");
+    expect(enabled).toHaveTextContent(/^派發$/);
+  });
+
+  it("renders the danger variant with a translucent red outline", () => {
+    const onDelete = vi.fn();
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 題"
+        actions={[
+          {
+            key: "delete",
+            label: "刪除",
+            onClick: onDelete,
+            variant: "danger",
+            testId: "delete",
+          },
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const del = screen.getByTestId("delete");
+    expect(del).toHaveClass("text-red-200", "ring-red-300/60");
+    expect(del).not.toHaveClass("bg-white");
+    fireEvent.click(del);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a spinner and blocks clicks while an action is loading", () => {
+    const onSave = vi.fn();
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 題"
+        actions={[
+          {
+            key: "save",
+            label: "儲存",
+            onClick: onSave,
+            icon: <svg data-testid="save-icon" aria-hidden="true" />,
+            loading: true,
+            testId: "save",
+          },
+        ]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    const save = screen.getByTestId("save");
+    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute("aria-busy", "true");
+    expect(save.querySelector(".animate-spin")).not.toBeNull();
+    expect(screen.queryByTestId("save-icon")).toBeNull();
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("puts the test id of a switch action on a wrapper", () => {
+    render(
+      <BulkActionBar
+        selectedCount={2}
+        countLabel="已選 2 個班級"
+        actions={[statusSwitch({ testId: "status-switch" })]}
+        onClear={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("status-switch")).toContainElement(
+      screen.getByRole("switch", { name: "停用選取的班級" }),
+    );
+    expect(screen.getByTestId("bulk-action-bar-clear")).toBeInTheDocument();
   });
 });

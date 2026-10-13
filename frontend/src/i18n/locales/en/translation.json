@@ -53,6 +53,9 @@
   },
   "common": {
     "orderOption": "No. {{number}}",
+    "selection": {
+      "clear": "Clear selection"
+    },
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -6148,7 +6151,6 @@
       "save": "Save",
       "delete": "Delete",
       "dispatch": "Assign",
-      "clearSelection": "Clear selection",
       "confirmDelete": "Delete {{count}} question(s)? Assigned papers are not affected.",
       "saved": "Saved {{count}} question(s)",
       "saveFailed": "{{count}} question(s) failed to save",
@@ -6291,8 +6293,7 @@
     "selection": {
       "selectedCount": "{{count}} classroom(s) selected",
       "selectAll": "Select all listed classrooms",
-      "selectRow": "Select {{name}}",
-      "clear": "Clear selection"
+      "selectRow": "Select {{name}}"
     },
     "banner": {
       "message": "{{count}} classroom(s) have no grade set",

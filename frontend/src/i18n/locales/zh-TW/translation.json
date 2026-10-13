@@ -53,6 +53,9 @@
   },
   "common": {
     "orderOption": "第 {{number}} 號",
+    "selection": {
+      "clear": "取消選取"
+    },
     "save": "儲存",
     "cancel": "取消",
     "confirm": "確認",
@@ -6191,7 +6194,6 @@
       "save": "儲存",
       "delete": "刪除",
       "dispatch": "派發",
-      "clearSelection": "取消選取",
       "confirmDelete": "確定刪除 {{count}} 題？已派發的考卷不受影響。",
       "saved": "已儲存 {{count}} 題",
       "saveFailed": "{{count}} 題儲存失敗，請再試一次",
@@ -6334,8 +6336,7 @@
     "selection": {
       "selectedCount": "已選 {{count}} 個班級",
       "selectAll": "全選目前列出的班級",
-      "selectRow": "選取 {{name}}",
-      "clear": "取消選取"
+      "selectRow": "選取 {{name}}"
     },
     "banner": {
       "message": "有 {{count}} 個班級尚未設定年級",

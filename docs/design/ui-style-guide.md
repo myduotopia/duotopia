@@ -75,7 +75,7 @@
 | 錯誤、刪除 | `red` | `bg-red-50 border-red-200 text-red-600` | `bg-red-100 text-red-800` | `text-red-600` | `red-*` 634 次／164 檔；`text-red-600` 210 次；框內字 `text-red-600` 44 次 |
 
 出處範例：
-- 警示：`frontend/src/components/classroom/AdjustGradeDialog.tsx`、`frontend/src/components/question-bank/QuestionBulkBar.tsx`（「N 筆未儲存」`text-amber-700`）。
+- 警示：`frontend/src/components/classroom/AdjustGradeDialog.tsx`、`frontend/src/components/shared/BulkActionBar.tsx`（深藍膠囊上的「N 題有未儲存的修改」附註用 `text-amber-200`）。
 - 成功／錯誤：`frontend/src/components/activities/shared/QuizOptionChip.tsx`（正解綠框綠底、錯誤紅）。
 - 資訊：`frontend/src/components/AssignmentDialog.tsx`。
 
@@ -124,18 +124,18 @@
 | 主要 | 藍底白字 | 白底深藍字 |
 | 次要 | 白底灰框 | 透明底白框白字 |
 | 危險（例如刪除） | 紅底白字或紅字 | 透明底、淡紅框加淡紅字 |
-| 停用 | 半透明，滑鼠移上去說明原因 | 同左 |
+| 停用 | 半透明；需要時說明原因（見規則 3） | 同左 |
 
 出處：
 - **淺色・主要**：`frontend/src/components/ui/button.tsx` 預設 variant → `bg-blue-600 text-white hover:bg-blue-700`。
 - **淺色・次要**：同檔 `variant="outline"` → `border border-gray-300 bg-white text-gray-700 hover:bg-gray-50`。全站 `variant="outline"` 417 次，是最常用的按鈕。
 - **淺色・危險（紅底）**：同檔 `variant="destructive"` → `bg-red-600 text-white hover:bg-red-700`（45 次／37 檔，例如 `components/organization/ConfirmDialog.tsx` 透過 `variant` prop 傳 `"destructive"`）。
-- **淺色・危險（紅字）**：外框按鈕加紅字，例如 `frontend/src/components/question-bank/QuestionBulkBar.tsx` 刪除鈕 `text-red-600 hover:text-red-700`、`frontend/src/components/activities/shared/WordActivityCard.tsx` 的 `text-red-600 border-red-300 hover:bg-red-50`。
-- **淺色・停用**：`button.tsx` 共用 `disabled:opacity-50`；說明原因的寫法例如 `QuestionBulkBar.tsx` 批次編輯鈕的 `title={editDisabledReason}`、派發鈕旁的「即將推出」小字。
-- **深色・主要**：`frontend/src/components/classroom/GradeBulkBar.tsx` 的 `PRIMARY_BUTTON` → `rounded-full bg-white text-blue-700 font-bold hover:bg-blue-50`。
+- **淺色・危險（紅字）**：外框按鈕加紅字，例如 `frontend/src/components/activities/shared/WordActivityCard.tsx` 的 `text-red-600 border-red-300 hover:bg-red-50`。
+- **淺色・停用**：`button.tsx` 共用 `disabled:opacity-50`；說明原因的寫法例如 `frontend/src/components/shared/BulkActionBar.tsx` 動作的 `disabledReason`（停用時當 title）與 `disabledBadge`（「即將推出」小標），題庫列表的批次編輯、派發鈕在用。
+- **深色・主要**：`frontend/src/components/shared/BulkActionBar.tsx` 的 `PRIMARY_BUTTON` → `rounded-full bg-white text-blue-700 font-bold hover:bg-blue-50`。
 - **深色・次要**：同檔 `GHOST_BUTTON` → `rounded-full text-white ring-1 ring-inset ring-white/40 hover:bg-white/10`。
 - **深色・停用**：同檔 `disabled:opacity-60 disabled:cursor-not-allowed`。
-- **深色・危險**：新定（2026-10-13），程式尚未實作，第二段做進批次操作列。
+- **深色・危險**：同檔 `DANGER_BUTTON` → `rounded-full text-red-200 ring-1 ring-inset ring-red-300/60 hover:bg-red-500/20`（2026-10-13 新定，#1116 實作；題庫列表的刪除鈕）。
 
 三條規則：
 1. 一個操作列最多一個主按鈕，用在最常做的動作。
@@ -157,7 +157,7 @@
 ### 圓角
 - `--radius: 0.5rem`（`index.css`），等於 Tailwind `rounded-lg`。
 - 次數：`rounded` 431、`rounded-lg` 423、`rounded-full` 361、`rounded-md` 219。
-- 一般按鈕 `rounded-md`（`components/ui/button.tsx`）；膠囊列與膠囊按鈕 `rounded-full`（`components/classroom/GradeBulkBar.tsx`）。
+- 一般按鈕 `rounded-md`（`components/ui/button.tsx`）；膠囊列與膠囊按鈕 `rounded-full`（`components/shared/BulkActionBar.tsx`）。
 
 ### 間距
 - 元素間距：`gap-2` 最常用（741 次），其次 `space-y-2`（297）、`gap-1`（241）、`gap-3`（218）、`space-y-4`（203）。
@@ -169,8 +169,8 @@
 ## 5. 版面規則
 
 - **卡片型內容的圖片固定在頂部。** 換題時視線不用重新對焦。手機版由上到下是：圖、音檔、句子、翻譯、評測；桌機版圖在左、文字在右。出處：產品負責人定案（錄音卡改版設計）。
-- **底部浮動操作列要避開側欄，列表底部要留空間。** 浮動列從側欄右緣開始（`left: sidebarWidth`），列表底部留 `pb-24`，最後一列才不會被擋住。出處：`frontend/src/components/classroom/GradeBulkBar.tsx` 頂部說明；`pages/teacher/TeacherClassrooms.tsx`、`pages/organization/SchoolClassroomsPage.tsx` 的 `pb-24`。
-- **小螢幕（≤480px）操作列縮小間距，次要按鈕只留圖示。** 出處：`GradeBulkBar.tsx` 的 `max-[480px]:` class。
+- **底部浮動操作列要避開側欄，列表底部要留空間。** 浮動列從側欄右緣開始（`left: sidebarWidth`），列表底部留 `pb-24`，最後一列才不會被擋住。出處：`frontend/src/components/shared/BulkActionBar.tsx` 頂部說明；`pages/teacher/TeacherClassrooms.tsx`、`pages/organization/SchoolClassroomsPage.tsx`、`components/question-bank/QuestionBankTab.tsx` 的 `pb-24`。
+- **小螢幕（≤480px）操作列縮小間距，次要按鈕只留圖示。** 出處：`BulkActionBar.tsx` 的 `max-[480px]:` class。
 - **手機版編輯面板滿版。** 出處：`frontend/src/index.css` 的 `.editor-panel`（#580）。
 - **批改頁新增作業類型：同一個路由，依 `practice_mode` 換 Panel。** 出處：[`grading-page-architecture.md`](./grading-page-architecture.md)。
 - **題庫新增題型：同一個 sheet 依題型分流。** 出處：[`question-bank-question-types.md`](./question-bank-question-types.md)。
@@ -222,6 +222,7 @@
 | BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速） |
 | BatchWorkPanel | `frontend/src/components/shared/BatchWorkPanel.tsx` | 桌面版左側批次工作區（組合貼上、翻譯、語音） |
 | BatchSettingCard | `frontend/src/components/shared/batch/BatchSettingCard.tsx` | 左側批次工作區的卡片外框 |
+| **批次操作列** BulkActionBar | `frontend/src/components/shared/BulkActionBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」、機構班級管理、題庫列表。呼叫端傳完整計數句子（`countLabel`）與動作；動作可設 `variant`（primary／ghost／danger）、`disabledReason`、`disabledBadge`、`loading`、`testId`，計數旁可加 `countNote` 附註 |
 | CreatableCombobox | `frontend/src/components/shared/CreatableCombobox.tsx` | 可搜尋、可新增的下拉 |
 | ExamPointPicker | `frontend/src/components/shared/ExamPointPicker.tsx` | 選考點 |
 | GradeRangeSlider | `frontend/src/components/shared/GradeRangeSlider.tsx` | 年段 1–12 兩點拉桿 |
@@ -272,7 +273,6 @@
 
 | 元件 | 路徑 | 什麼情況用 |
 |---|---|---|
-| **批次操作列** GradeBulkBar | `frontend/src/components/classroom/GradeBulkBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」與機構班級管理。班級頁按鈕層級由 #1116 第二段修正 |
 | AssignmentDialog | `frontend/src/components/AssignmentDialog.tsx` | 派發作業對話框 |
 | ProgramVisibilitySelector | `frontend/src/components/ProgramVisibilitySelector.tsx` | 教材公開設定 |
 | AdjustGradeDialog | `frontend/src/components/classroom/AdjustGradeDialog.tsx` | 班級批次升／降一個年級 |
@@ -288,9 +288,7 @@
 
 ### 6.5 淘汰中
 
-| 元件 | 路徑 | 說明 |
-|---|---|---|
-| QuestionBulkBar | `frontend/src/components/question-bank/QuestionBulkBar.tsx` | 題庫列表舊版批次操作列（白色滿版橫條）。#1116 第二段改用標準批次操作列後刪除。新功能不要再用 |
+目前沒有。
 
 ---
 
