@@ -1,3 +1,11 @@
+/**
+ * 機構後台：學校班級管理頁。
+ *
+ * 班級清單＋年級篩選、建立／編輯班級、指派老師、學生側欄、派發作業、年級補填提醒。
+ * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116），
+ * 只有「調整年級」一顆按鈕（半透明白底，與其他批次操作列同一樣式）。按鈕層級見
+ * docs/design/ui-style-guide.md 第 3 節。
+ */
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -14,7 +22,7 @@ import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
 import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
-import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
+import { BulkActionBar } from "@/components/shared/BulkActionBar";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { API_URL } from "@/config/api";
 import { logError } from "@/utils/errorLogger";
@@ -411,8 +419,11 @@ export default function SchoolClassroomsPage() {
       </Card>
 
       {/* 年級批次調整浮動操作列（#1097） */}
-      <GradeBulkBar
+      <BulkActionBar
         selectedCount={selectedClassrooms.length}
+        countLabel={t("classroomGrade.selection.selectedCount", {
+          count: selectedClassrooms.length,
+        })}
         actions={[
           {
             key: "adjust-grade",

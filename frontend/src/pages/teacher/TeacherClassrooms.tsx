@@ -1,3 +1,11 @@
+/**
+ * 「我的班級」頁（老師後台）。
+ *
+ * 班級清單（桌機表格、手機卡片）＋等級／年級／狀態篩選與搜尋、排序、建立班級、列內直接編輯（編輯中不顯示批次操作列）。
+ * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116）：
+ * 「調整年級」「調整等級」同一樣式（半透明白底、不分主次）、停用／啟用為開關；
+ * 浮動列出現時列表底部預留 pb-24。按鈕層級見 docs/design/ui-style-guide.md 第 3 節。
+ */
 import React, {
   useState,
   useEffect,
@@ -67,7 +75,7 @@ import {
   AdjustLevelDialog,
   type LevelUpdateItem,
 } from "@/components/classroom/AdjustLevelDialog";
-import { GradeBulkBar } from "@/components/classroom/GradeBulkBar";
+import { BulkActionBar } from "@/components/shared/BulkActionBar";
 import { LevelBadge } from "@/components/classroom/LevelBadge";
 import {
   ClassroomDraftForm,
@@ -839,9 +847,12 @@ export default function TeacherClassrooms() {
         </div>
       </div>
 
-      {/* Bulk Actions Bar — 年級／等級＋停用／啟用開關（#1097），底部置中浮動膠囊 */}
-      <GradeBulkBar
+      {/* Bulk Actions Bar — 年級／等級（同一樣式）＋停用／啟用開關（#1097、#1116），底部置中浮動膠囊 */}
+      <BulkActionBar
         selectedCount={isEditingAny ? 0 : selectedClassrooms.length}
+        countLabel={t("classroomGrade.selection.selectedCount", {
+          count: selectedClassrooms.length,
+        })}
         busy={statusActions.bulkBusy}
         actions={[
           {

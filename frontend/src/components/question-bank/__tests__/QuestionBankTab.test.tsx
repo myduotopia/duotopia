@@ -6,6 +6,9 @@
  * 驗證：列表載入與渲染、scope 對應的 API 參數、機構 scope 沒 organizationId 不打 API、
  * 「新增題目 ▽」下拉只有選擇題可點、搜尋 debounce 後帶 q 重查、空狀態、分頁
  * （含每頁 10 筆）、教材欄。
+ * 底部批次操作列為共用 BulkActionBar（#1116）：膠囊用 `bulk-action-bar` 找，
+ * 各按鈕沿用 `qb-bulk-save`／`qb-bulk-edit`／`qb-bulk-delete` 等 testId；
+ * 沒有修改時儲存停用且 title 說明原因（nothingToSave）。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -237,7 +240,9 @@ describe("QuestionBankTab 題組列（#1082）", () => {
     renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByTestId("question-group-row-101");
     await user.click(screen.getByTestId("qb-check-all"));
-    expect(screen.getByTestId("qb-bulk-bar")).toHaveTextContent("selected 2");
+    expect(screen.getByTestId("bulk-action-bar")).toHaveTextContent(
+      "selected 2",
+    );
 
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     await user.click(screen.getByTestId("qb-bulk-delete"));
@@ -310,7 +315,7 @@ describe("QuestionBankTab", () => {
     expect(screen.queryByTestId("qb-row-1-visibility")).toBeNull();
     expect(screen.getByTestId("qb-row-1-sources-trigger")).toBeTruthy();
     expect(screen.getByTestId("qb-check-1")).toBeTruthy();
-    expect(screen.queryByTestId("qb-bulk-bar")).toBeNull();
+    expect(screen.queryByTestId("bulk-action-bar")).toBeNull();
     expect(listQuestions).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "mine", page: 1, page_size: 20 }),
     );
@@ -498,13 +503,19 @@ describe("QuestionBankTab", () => {
     renderTab(<QuestionBankTab scope="mine" />);
     await screen.findByText("Q2");
     await user.click(screen.getByTestId("qb-check-all"));
-    expect(screen.getByTestId("qb-bulk-bar").textContent).toContain(
+    expect(screen.getByTestId("bulk-action-bar").textContent).toContain(
       "selected 2",
     );
+    // 沒有修改 → 儲存停用，title 說明原因
+    const saveBtn = screen.getByTestId("qb-bulk-save") as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    expect(saveBtn.getAttribute("title")).toBe(
+      "questionBank.list.nothingToSave",
+    );
     await user.click(screen.getByTestId("qb-check-all"));
-    expect(screen.queryByTestId("qb-bulk-bar")).toBeNull();
+    expect(screen.queryByTestId("bulk-action-bar")).toBeNull();
     await user.click(screen.getByTestId("qb-check-2"));
-    expect(screen.getByTestId("qb-bulk-bar").textContent).toContain(
+    expect(screen.getByTestId("bulk-action-bar").textContent).toContain(
       "selected 1",
     );
   });
@@ -564,7 +575,7 @@ describe("QuestionBankTab", () => {
     expect(
       screen.getByTestId("question-row-2").getAttribute("data-dirty"),
     ).toBeNull();
-    expect(screen.getByTestId("qb-bulk-bar")).toBeTruthy();
+    expect(screen.getByTestId("bulk-action-bar")).toBeTruthy();
 
     await user.click(screen.getByTestId("qb-bulk-save"));
     await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));

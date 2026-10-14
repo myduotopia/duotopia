@@ -8,8 +8,12 @@
  * 列表可快速編輯（使用者定案）：
  * - 欄位：☑ | 題目 | 題型 | 年級 | 考點 | 考題來源 | 公開；表頭 ☑ = 全選／取消全選
  * - 考點／考題來源／公開三欄直接改（與編輯面板同一組元件）；一列改了就自動勾選並淡黃底
- * - 有勾選 → 底部浮現 QuestionBulkBar：儲存（只送改過的列）、刪除（勾選的列，先 confirm）、
- *   派發（先顯示、待派發流程接上）
+ * - 有勾選 → 底部浮現標準批次操作列 BulkActionBar（components/shared，#1116），深藍膠囊：
+ *   計數＝勾選的單題＋題組，旁邊琥珀色小字「N 題有未儲存的修改」；按鈕層級（ui-style-guide 第 3 節）：
+ *   四顆按鈕同一樣式、不分主次——儲存（只送改過的列，處理中轉圈；沒有修改而停用時 title「沒有要儲存的修改」）、
+ *   批次編輯（不能用時 title 說明原因）、派發（未接上時停用＋「即將推出」小標）、
+ *   刪除＝danger（放最後；紅色垃圾桶圖示＋前方分隔線；勾選的列，先 confirm）。
+ *   列表底部預留 pb-24，最後一列不被擋住
  * - 有未儲存修改時換頁／搜尋前 confirm
  * 工具列：搜尋（題幹＋來源）、題型下拉、考點多選（OR，`ep=1,2`）、只看自己的、每頁筆數；
  * 全部存 URL query。考點目錄 mount 時抓一次，重整後用 id 對回名稱。
@@ -26,6 +30,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
+import { Pencil, Save, Send, Trash2 } from "lucide-react";
 
 import { apiClient } from "@/lib/api";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,7 +43,7 @@ import {
   type QuestionType,
   type QuestionVisibility,
 } from "@/types/questionBank";
-import QuestionBulkBar from "./QuestionBulkBar";
+import { BulkActionBar } from "@/components/shared/BulkActionBar";
 import QuestionBankToolbar, { TYPE_FILTERS } from "./QuestionBankToolbar";
 import QuestionBankPagination, {
   DEFAULT_PAGE_SIZE,
@@ -330,6 +335,20 @@ export default function QuestionBankTab({
     checkedItems.every(
       (q) => q.question_type === checkedItems[0].question_type,
     );
+  // 計數 = 勾選的單題＋題組
+  const selectedCount = checked.size + checkedGroups.size;
+  // 批次編輯：只對單題、題型全相同、至少一題可編輯，且頁面有接 onBulkEdit
+  const canBulkEdit =
+    !!onBulkEdit &&
+    checkedSameType &&
+    checkedGroups.size === 0 &&
+    editableChecked.length > 0;
+  const editDisabledReason =
+    !checkedSameType || checkedGroups.size > 0
+      ? t("questionBank.list.bulkEditTypeMismatch")
+      : editableChecked.length === 0
+        ? t("questionBank.list.bulkEditNoPermission")
+        : undefined;
 
   const handleSave = async () => {
     const ids = Object.keys(edits).map(Number);
@@ -460,7 +479,7 @@ export default function QuestionBankTab({
   };
 
   return (
-    <div className="space-y-4 pb-20" data-testid="question-bank-tab">
+    <div className="space-y-4 pb-24" data-testid="question-bank-tab">
       <QuestionBankToolbar
         scope={scope}
         canCreate={canCreate}
@@ -595,34 +614,61 @@ export default function QuestionBankTab({
         }}
       />
 
-      <QuestionBulkBar
-        selectedCount={checked.size + checkedGroups.size}
-        dirtyCount={dirtyCount}
-        onSave={handleSave}
-        onDelete={handleDelete}
-        onDispatch={
-          onDispatch
-            ? () => onDispatch(questionItems.filter((q) => checked.has(q.id)))
+      <BulkActionBar
+        selectedCount={selectedCount}
+        countLabel={t("questionBank.list.selected", { count: selectedCount })}
+        countNote={
+          dirtyCount > 0
+            ? t("questionBank.list.dirty", { count: dirtyCount })
             : undefined
         }
-        onEdit={
-          onBulkEdit &&
-          checkedSameType &&
-          checkedGroups.size === 0 &&
-          editableChecked.length > 0
-            ? () => {
-                if (!confirmDiscard()) return;
-                onBulkEdit(editableChecked);
-              }
-            : undefined
-        }
-        editDisabledReason={
-          !checkedSameType || checkedGroups.size > 0
-            ? t("questionBank.list.bulkEditTypeMismatch")
-            : editableChecked.length === 0
-              ? t("questionBank.list.bulkEditNoPermission")
-              : undefined
-        }
+        actions={[
+          {
+            key: "save",
+            label: t("questionBank.list.save"),
+            icon: <Save className="h-4 w-4" aria-hidden="true" />,
+            onClick: handleSave,
+            disabled: dirtyCount === 0,
+            // 忙碌中（例如刪除進行中）不顯示「沒有修改」的原因
+            disabledReason: bulkBusy
+              ? undefined
+              : t("questionBank.list.nothingToSave"),
+            loading: bulkBusy,
+            testId: "qb-bulk-save",
+          },
+          {
+            key: "edit",
+            label: t("questionBank.list.bulkEdit"),
+            icon: <Pencil className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => {
+              if (!canBulkEdit || !onBulkEdit) return;
+              if (!confirmDiscard()) return;
+              onBulkEdit(editableChecked);
+            },
+            disabled: !canBulkEdit,
+            disabledReason: editDisabledReason,
+            testId: "qb-bulk-edit",
+          },
+          {
+            key: "dispatch",
+            label: t("questionBank.list.dispatch"),
+            icon: <Send className="h-4 w-4" aria-hidden="true" />,
+            onClick: () =>
+              onDispatch?.(questionItems.filter((q) => checked.has(q.id))),
+            disabled: !onDispatch,
+            disabledReason: t("questionBank.comingSoon"),
+            disabledBadge: t("questionBank.comingSoon"),
+            testId: "qb-bulk-dispatch",
+          },
+          {
+            key: "delete",
+            label: t("questionBank.list.delete"),
+            icon: <Trash2 className="h-4 w-4" aria-hidden="true" />,
+            variant: "danger",
+            onClick: handleDelete,
+            testId: "qb-bulk-delete",
+          },
+        ]}
         onClear={() => {
           if (!confirmDiscard()) return;
           clearSelection();
