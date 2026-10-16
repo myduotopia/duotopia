@@ -421,6 +421,93 @@ class TestErrorKindsAreDistinguished:
         assert (graded["progress"].ai_analysis_count or 0) == 0
 
 
+class TestDoubleClickOnlyPaysOnce:
+    """雙擊只能打一次 AI（Issue #1025 / PR #1036 review）。
+
+    第一版的修法是把額度改成「先扣再打」，但本機 review 證明那只擋得住上限邊界：
+    計數還在 0/3 時兩個並發請求都滿足 `count < 3`，兩個都會打 Gemini。
+    改用「正在進行中」的鎖之後，從計數 0 開始就擋得住。
+    """
+
+    def test_a_second_claim_arriving_mid_ai_is_refused(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """第一個請求還在打 AI 的那一刻，第二個搶鎖必須失敗。
+
+        不用巢狀 HTTP 請求模擬 —— TestClient 重入會共用同一個 session，測到的是
+        那個限制而不是我們的鎖。改成在 AI 呼叫中途直接再搶一次鎖，那正是第二個請求
+        會做的第一件事。
+        """
+        from services import scenario_grading_claim as claim_mod
+
+        seen = {}
+
+        async def grade(*args, **kwargs):
+            # 此刻第一個請求已經持有鎖
+            seen["outcome"], seen["count"] = claim_mod.claim(
+                db_session, graded["progress"]
+            )
+            return AI_RESULT
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=grade),
+        ):
+            first = test_client.post(_url(graded), headers=graded["headers"])
+
+        assert first.status_code == 200, first.text
+        # 計數還在 1/3（遠離上限）也要擋住 —— 這是第一版修法漏掉的那一半
+        assert seen["outcome"] == claim_mod.CLAIM_IN_PROGRESS
+        assert seen["count"] == 1
+
+    def test_in_progress_is_409_not_429(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """額度沒用完時回 429 會誤導老師以為這題不能再按了。"""
+        from services import scenario_grading_claim as claim_mod
+
+        claim_mod.claim(db_session, graded["progress"])
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ) as mock:
+            resp = test_client.post(
+                _url(graded), headers=graded["headers"], params={"force": "true"}
+            )
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "SCENARIO_GRADING_IN_PROGRESS"
+        assert mock.await_count == 0
+
+    def test_the_lock_is_released_after_a_successful_run(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """沒放鎖的話那一題會卡到逾時為止 —— 老師按了也沒反應。"""
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ):
+            test_client.post(_url(graded), headers=graded["headers"])
+
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].scenario_grading_started_at is None
+
+    def test_the_lock_is_released_after_a_failure(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        from services.scenario_grading_ai import ScenarioGradingError
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=ScenarioGradingError("沒有辨識出任何內容")),
+        ):
+            test_client.post(_url(graded), headers=graded["headers"])
+
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].scenario_grading_started_at is None
+
+
 class TestQuotaIsReservedBeforeCallingAI:
     """雙擊不該打兩次 AI（Issue #1025 / PR #1036 review 指出的競態）。
 

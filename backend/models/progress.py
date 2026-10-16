@@ -149,6 +149,13 @@ class StudentItemProgress(Base):
     # Word selection activity fields (單字選擇專用)
     word_selection_data = Column(JSONB)  # 單字選擇累計統計與答題歷史
 
+    # Issue #1025: 情境對話 AI 評分「正在進行中」的標記。
+    # 光靠 ai_analysis_count 的上限擋不住雙擊 —— 計數還在 0/3 時兩個並發請求都滿足
+    # `count < 3`，兩個都會打 Gemini。這一欄讓「同一題同時只有一個分析在跑」
+    # （唯一判定在 services/scenario_grading_claim.py）。
+    # NULL = 沒人在跑；超過 STALE_AFTER_SECONDS 的值視為失效（程序被殺掉沒放鎖）。
+    scenario_grading_started_at = Column(DateTime(timezone=True))
+
     # Scenario dialogue AI grading suggestion (情境對話專用, #1035)
     # 逐字稿 + 四面向分數 + 回饋。刻意不寫進上面的 accuracy/fluency/pronunciation —
     # 那四欄是 Azure 發音評測語意，作業層報告會直接讀 accuracy_score。

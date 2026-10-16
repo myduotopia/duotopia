@@ -53,11 +53,10 @@ from .detail import (
     _quiz_scoring_settings,
     _SPEAKING_SCORE_MODES,
 )
+from services import scenario_grading_claim as scenario_claim
 from services.analysis_quota import (
     MAX_AI_ANALYSIS_ATTEMPTS,
     check_can_analyze,
-    refund_analysis_attempt,
-    reserve_analysis_attempt,
     reset_analysis_count_for_assignment,
     reset_analysis_count_for_assignments,
 )
@@ -2435,25 +2434,37 @@ async def scenario_ai_grade(
         content.scenario_settings if content else None,
     )
 
-    # Issue #1025（PR #1036 review 指出的競態）：**先佔位再打 AI**。
+    # Issue #1025（PR #1036 review 指出的競態）：**同一題同時只能有一個分析在跑**。
     #
-    # 原本是 check_can_analyze → 打 AI → increment_analysis_count。中間那段 Gemini
-    # 呼叫要好幾秒，老師雙擊（或開兩個分頁）時兩個請求會雙雙通過閘門：持久化的計數
-    # 因為 UPDATE 是原子的所以仍正確，但**兩次 AI 都已經打出去了**，等於多付一次錢。
-    # 改成先搶名額，搶不到直接回 429，一次呼叫都不浪費。
-    if not reserve_analysis_attempt(item_progress, db):
-        db.commit()
+    # 原本是 check_can_analyze → 打 AI → increment_analysis_count，中間那段 Gemini
+    # 呼叫要好幾秒，老師雙擊（或開兩個分頁）時兩個請求會雙雙通過閘門，兩次 AI 都打
+    # 出去了。把額度改成「先扣再打」只擋得住**上限邊界**那一下 —— 計數還在 0/3 時
+    # 兩個請求都滿足 count < 3，照樣兩個都打（#1025 本機 review 指出）。
+    #
+    # 所以要擋的是「在進行中」而不是計數上限，用 scenario_grading_started_at 當鎖。
+    outcome, current_count = scenario_claim.claim(db, item_progress)
+    if outcome == scenario_claim.CLAIM_QUOTA_EXHAUSTED:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "code": "AI_ANALYSIS_QUOTA_EXCEEDED",
                 "message": "AI analysis quota exhausted for this item.",
-                "ai_analysis_count": item_progress.ai_analysis_count,
+                "ai_analysis_count": current_count,
                 "ai_analysis_remaining": 0,
                 "max_attempts": MAX_AI_ANALYSIS_ATTEMPTS,
             },
         )
-    db.commit()
+    if outcome == scenario_claim.CLAIM_IN_PROGRESS:
+        # 409 而不是 429：額度沒用完，只是這一題正在跑。老師等一下就有結果，
+        # 叫他「額度用完了」是錯的訊息。
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SCENARIO_GRADING_IN_PROGRESS",
+                "message": "這一題的 AI 評分正在進行中，請稍等結果。",
+                "ai_analysis_count": current_count,
+            },
+        )
 
     from services.scenario_grading_ai import (
         ScenarioGradingError,
@@ -2508,7 +2519,6 @@ async def scenario_ai_grade(
         delivered = True
         return _scenario_suggestion_view(stored, False)
     finally:
-        # 沒把建議交到老師手上就把名額還回去（模型失敗、資料有問題、中途取消都算）
-        if not delivered:
-            refund_analysis_attempt(item_progress, db)
-            db.commit()
+        # 一定要放鎖，否則這一題會卡住到 STALE_AFTER_SECONDS 逾時為止。
+        # 沒把建議交到老師手上就連額度一起還回去（模型失敗、資料有問題、中途取消）。
+        scenario_claim.release(db, item_progress, refund=not delivered)

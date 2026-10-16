@@ -237,3 +237,34 @@ def test_text_and_image_pools_are_independent(
         "/api/teachers/scenario-dialogue/image-quota", headers=auth_headers_teacher
     ).json()
     assert image_quota["used"] == 0
+
+
+def test_refunded_failure_is_logged_as_not_consumed(
+    test_client, auth_headers_teacher, monkeypatch, caplog
+):
+    """log 要印退款**後**的用量。
+
+    這些 log 是日後用來校準 FREE_MONTHLY_LIMIT 的依據（服務模組的說明就是這樣寫的）。
+    印退款前的值會讓每個失敗都被記成一次消耗，校準出來的數字會偏高。
+    """
+    import logging
+
+    async def boom(self, **kwargs):
+        raise RuntimeError("boom")
+
+    from services import scenario_dialogue_ai as mod
+
+    monkeypatch.setattr(mod.ScenarioDialogueAIService, "generate_article", boom)
+
+    with caplog.at_level(logging.INFO):
+        test_client.post(ARTICLE_URL, headers=auth_headers_teacher, json=ARTICLE_BODY)
+
+    quota_logs = [
+        r.getMessage()
+        for r in caplog.records
+        if "scenario_text_quota" in r.getMessage()
+    ]
+    assert quota_logs, "沒有配額 log"
+    assert "delivered=False" in quota_logs[-1]
+    # 退款後是 0，不是 1
+    assert "used=0/" in quota_logs[-1]

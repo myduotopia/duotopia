@@ -90,68 +90,6 @@ def increment_analysis_count(progress: StudentItemProgress, db: Session) -> int:
     return int(progress.ai_analysis_count)
 
 
-def reserve_analysis_attempt(progress: StudentItemProgress, db: Session) -> bool:
-    """**先佔位**一次 AI 分析額度，回傳是否成功佔到（issue #1025 / PR #1036 review）。
-
-    與 :func:`increment_analysis_count` 用同一個原子 UPDATE，差別只在回傳值：
-    這支告訴呼叫端「我有沒有搶到名額」，所以可以在**打 AI 之前**呼叫。
-
-    ## 為什麼需要它
-
-    原本的用法是 ``check_can_analyze`` → 打 AI → ``increment_analysis_count``。
-    中間那段 AI 呼叫可能跑好幾秒，兩個並發請求會**雙雙通過**閘門：持久化的計數因為
-    那個 ``UPDATE ... WHERE count < MAX`` 是原子的所以仍正確，但**兩次 AI 都已經打出
-    去了**，等於多付一次錢（PR #1036 review 指出）。
-
-    改成先 reserve 再打 AI，搶不到就直接回 429，一次呼叫都不浪費。失敗時用
-    :func:`refund_analysis_attempt` 還回去 —— 老師沒拿到結果就不該被算一次。
-
-    ``check_can_analyze`` 仍要照呼叫：它擋的是「老師已經批過這一題」（403），
-    那是另一回事，與額度無關。
-    """
-    rows = (
-        db.query(StudentItemProgress)
-        .filter(
-            StudentItemProgress.id == progress.id,
-            StudentItemProgress.ai_analysis_count < MAX_AI_ANALYSIS_ATTEMPTS,
-        )
-        .update(
-            {
-                StudentItemProgress.ai_analysis_count: (
-                    StudentItemProgress.ai_analysis_count + 1
-                )
-            },
-            synchronize_session="fetch",
-        )
-    )
-    if rows == 0:
-        # 搶輸了：在我們的閘門檢查與這個 UPDATE 之間，另一個並發請求已經把計數推到
-        # 上限。把上限反映到記憶體物件上，回應裡看到的才是真的。
-        progress.ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
-        return False
-    return True
-
-
-def refund_analysis_attempt(progress: StudentItemProgress, db: Session) -> int:
-    """把先前佔位的一次還回去，回傳還完之後的計數。
-
-    用在「佔位成功但 AI 沒給出可用結果」。不會扣到負數 —— 就算例外處理路徑重入，
-    最多也只是回到 0。呼叫端 commit。
-    """
-    db.query(StudentItemProgress).filter(
-        StudentItemProgress.id == progress.id,
-        StudentItemProgress.ai_analysis_count > 0,
-    ).update(
-        {
-            StudentItemProgress.ai_analysis_count: (
-                StudentItemProgress.ai_analysis_count - 1
-            )
-        },
-        synchronize_session="fetch",
-    )
-    return int(progress.ai_analysis_count or 0)
-
-
 def reset_analysis_count_for_assignment(student_assignment_id: int, db: Session) -> int:
     """Zero ai_analysis_count for every item of a single student assignment.
 

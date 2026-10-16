@@ -164,14 +164,17 @@ async def _with_text_quota(
     finally:
         # 沒把東西交到老師手上就退款（參數錯、模型沒產出、中途取消都算）——
         # 扣他一次只會讓他不敢再試（比照 magic_paste 擷取到 0 項不扣額的決策）
+        final = charge
         if not delivered:
-            stq.refund(db, teacher, year_month=charge["year_month"])
+            final = stq.refund(db, teacher, year_month=charge["year_month"])
+        # 印**退款後**的值。印 charge["used"] 的話，退掉的失敗會被記成已消耗，
+        # 而這些 log 正是日後用來校準 FREE_MONTHLY_LIMIT 的依據（本機 review 指出）。
         logger.info(
             "scenario_text_quota | %s | delivered=%s | used=%s/%s",
             endpoint,
             delivered,
-            charge["used"],
-            charge["limit"],
+            final["used"],
+            final["limit"],
         )
 
 
@@ -182,7 +185,12 @@ def text_quota(
 ):
     """本月情境對話文字 AI 的剩餘次數（Issue #1025）。
 
-    供前端在面板上顯示「本月還剩 N 次」，讓老師不會填完一半設定才被 402 擋下。
+    **目前前端沒有呼叫它** —— 每次產題都是直接送出，額度用完由後端回 402，面板跳
+    「本月次數已用完，填好的內容都還在，可以改用手動輸入」。這支是給「面板上顯示
+    本月還剩 N 次」預留的查詢面，先做好並有測試涵蓋（同 `/image-quota` 的狀態）。
+
+    之所以沒一起做顯示：那會動到面板的版面，而 #1044 正在改同一個檔案的字級與圖片
+    欄位，兩張單互相衝突。等 #1044 合併後再補。
     """
     return stq.get_quota_status(db, current_teacher)
 
