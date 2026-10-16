@@ -401,7 +401,17 @@ function ScenarioImageSlot({
           </div>
         </>
       ) : (
-        /* 兩個入口並列：自己傳，或讓 AI 生。框只有 104px，所以用文字列而非圖示 */
+        /* 兩個入口並列：自己傳，或讓 AI 生。框只有 104px，所以用文字列而非圖示。
+         *
+         * #1044 把字級從 10px 提到 12px，這一格是**唯一**字變大又寬度固定的地方
+         * （其餘放大的字都在 flex / w-full 容器裡，會重排不會溢出）。可用寬度是
+         * 104 - 2×6（p-1.5）= 92px，實測四種標籤都塞得下：
+         *   上傳圖片 48 + 圖示 14 + gap 4 = 66px
+         *   Upload   40 + 圖示 14 + gap 4 = 58px
+         *   即將推出 48（停用狀態不放圖示）
+         *   Coming soon 約 74px
+         * 新增語系或改這兩個標籤時請重算 —— 超過 92px 會被 overflow-hidden 切掉。
+         */
         <div className="w-full h-full flex flex-col items-stretch justify-center gap-1 p-1.5">
           <button
             type="button"

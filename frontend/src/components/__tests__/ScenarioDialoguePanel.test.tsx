@@ -44,18 +44,19 @@ const fakeQuestion = (n: number) => ({
  * 開啟時生圖邏輯必須照常運作（那段程式碼沒有被刪，日後要開回來）。
  * 元件是在 render 時才讀這個屬性，所以改屬性就會生效。
  */
-const mockFlags = vi.hoisted(() => ({
-  ASSIGNMENTS: true,
-  ONE_CAMPUS_LOGIN: true,
-  GOOGLE_LOGIN: true,
-  SCENARIO_IMAGE_GENERATION: false,
-}));
+// 空物件，由下面的 factory 用真的旗標填滿 —— 保持同一個 reference 才能靠改屬性切換
+const mockFlags = vi.hoisted(() => ({}) as Record<string, boolean>);
 
-vi.mock("@/config/featureFlags", () => ({
-  FEATURE_FLAGS: mockFlags,
-  ENABLE_GROUP_BUY: true,
-  ENABLE_SCENARIO_DIALOGUE: true,
-}));
+vi.mock("@/config/featureFlags", async (importOriginal) => {
+  // 從真檔案繼承，只覆蓋這張單關心的那一個旗標。
+  // 自己抄一份清單的話，真檔案新增旗標時 mock 會靜靜少一個，而元件讀到 undefined
+  // 不會報錯、只會行為怪掉（review 指出）。
+  const actual = await importOriginal<typeof import("@/config/featureFlags")>();
+  Object.assign(mockFlags, actual.FEATURE_FLAGS, {
+    SCENARIO_IMAGE_GENERATION: false,
+  });
+  return { ...actual, FEATURE_FLAGS: mockFlags };
+});
 
 vi.mock("@/lib/api", () => ({
   apiClient: {
@@ -1227,8 +1228,12 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
  * 實測發現生圖品質與流程還要調整，團隊決定先把「出內容 → 出作業 → 學生作答」整條
  * 主線做完整，之後再回頭修。這段期間入口關著，但要關得讓老師看得懂。
  *
- * 最重要的一條是**點下去要有回饋**：原生 disabled 的按鈕不派發 click，提示就變死碼，
- * 老師只會覺得按鈕壞了（#1033 修過一次同樣的坑，別再踩）。
+ * 最重要的一條是**原因要看得見，不必點才知道**：按鈕文字直接寫「即將推出」，
+ * title 補完整說明（ui-style-guide §3 規則 3 與 BulkActionBar 的 disabledBadge
+ * 就是這個慣例）。
+ *
+ * 原因既然不藏在 click 後面，就沒有 #1033 那個坑 —— 那次的問題是「唯一的說明被原生
+ * disabled 吃掉」，不是「不能用原生 disabled」。所以這裡用原生 disabled 是對的。
  */
 describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
   const gotoList = () => fireEvent.click(screen.getByText(K.skip));
@@ -1270,6 +1275,10 @@ describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
   it("停用狀態不會打生圖 API", () => {
     renderPanel();
     gotoList();
+
+    // 先釘住「它真的是停用的」—— 否則下面那句 click 在原生 disabled 的按鈕上
+    // 本來就不會派發事件，斷言會**不管實作對不對都通過**（review 指出的空驗）
+    expect(generateButton()).toBeDisabled();
 
     fireEvent.click(generateButton());
 
