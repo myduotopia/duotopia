@@ -55,15 +55,11 @@ MODEL = settings.VERTEX_AI_FLASH_MODEL
 # 逐字稿 + 四個面向 + 回饋，抓寬一點避免截斷
 MAX_OUTPUT_TOKENS = 2048
 
-# 粗略單價（美元／百萬 token，僅供觀測）。音檔輸入也計在 input tokens。
-#
-# gemini-3.5-flash 官方定價 $1.50 / $9.00（global endpoint）；我們跑在
-# asia-northeast1（非 global）要 +10% → $1.65 / $9.90。Issue #1119 查證於
-# 2026-10-16：https://cloud.google.com/vertex-ai/generative-ai/pricing
-#
-# ⚠️ 這張表以模型名為 key，換模型但忘了加價格會讓成本統計靜默變 0。
-# 迴歸測試：tests/unit/test_issue_1119_model_migration.py
-_PRICING_USD_PER_1M = {MODEL: {"input": 1.65, "output": 9.90}}
+# 音檔輸入也計在 input tokens。
+# 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
+# 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
+# 會讓成本統計靜默變 0 —— 迴歸測試 tests/unit/test_issue_1119_model_migration.py
+_PRICING_USD_PER_1M = settings.VERTEX_AI_PRICING_USD_PER_1M
 
 _GCS_HOST = "storage.googleapis.com"
 

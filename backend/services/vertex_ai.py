@@ -57,8 +57,17 @@ class VertexAIService:
                 self._initialized = True
                 logger.info(
                     f"Vertex AI initialized: project={self.project_id}, "
-                    f"location={self.location}"
+                    f"location={self.location}, flash={FLASH_MODEL}, "
+                    f"pro={PRO_MODEL}"
                 )
+                if PRO_MODEL == FLASH_MODEL:
+                    # 讓看 billing-analysis 品質的人不必翻 config 就知道
+                    # model_type="pro" 其實沒有換到更強的模型（PR #1122 review 第 2 點）
+                    logger.info(
+                        "Vertex AI: pro 與 flash 同為 %s —— model_type='pro' "
+                        "不會換到更強的模型（asia-northeast1 無 Gemini 3.x pro）",
+                        PRO_MODEL,
+                    )
             except Exception as e:
                 logger.error(f"Failed to initialize Vertex AI: {e}")
                 raise
@@ -71,8 +80,6 @@ class VertexAIService:
         """
         取得 GenerativeModel 實例
 
-        model_type:
-        - "flash": settings.VERTEX_AI_FLASH_MODEL
         model_type:
         - "flash": settings.VERTEX_AI_FLASH_MODEL
         - "pro": settings.VERTEX_AI_PRO_MODEL（預設與 flash 相同，

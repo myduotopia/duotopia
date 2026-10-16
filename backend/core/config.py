@@ -153,6 +153,21 @@ class Settings:
     VERTEX_AI_FLASH_MODEL: str = os.getenv("VERTEX_AI_FLASH_MODEL", "gemini-3.5-flash")
     VERTEX_AI_PRO_MODEL: str = os.getenv("VERTEX_AI_PRO_MODEL", "gemini-3.5-flash")
 
+    # 模型單價（美元／百萬 token，僅供成本觀測，非計費用途）。
+    #
+    # 放在這裡而不是各服務各寫一份：模型 ID 之前就是散在 4 個檔案才會在
+    # 2.5 退役時沒人發現，價格表同樣會各自飄（PR #1122 review 第 6 點）。
+    #
+    # gemini-3.5-flash 官方 $1.50 / $9.00（global endpoint），我們跑在
+    # asia-northeast1（非 global）要 +10% → $1.65 / $9.90。
+    # 2026-10-16 查證：https://cloud.google.com/vertex-ai/generative-ai/pricing
+    #
+    # ⚠️ 以模型名為 key —— 換模型但忘了加價格，成本統計會靜默變 0。
+    # 迴歸測試：tests/unit/test_issue_1119_model_migration.py
+    VERTEX_AI_PRICING_USD_PER_1M: dict = {
+        "gemini-3.5-flash": {"input": 1.65, "output": 9.90},
+    }
+
     # TapPay Configuration
     TAPPAY_ENV: Literal["sandbox", "production"] = os.getenv("TAPPAY_ENV", "sandbox")
 

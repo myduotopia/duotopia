@@ -190,9 +190,9 @@ class TestThinkingBudgetActuallyApplied:
         with patch("services.vertex_ai.logger") as mock_logger:
             # 不可以往外丟例外（會把整個生成請求弄掛）
             VertexAIService._set_thinking_budget(BrokenConfig(), 0)
-            assert mock_logger.warning.called, (
-                "hack 失敗時必須留下 warning —— 否則 thinking 默默開著，" "重現 #874 卻沒人查得到原因"
-            )
+            assert (
+                mock_logger.warning.called
+            ), "hack 失敗時必須留下 warning —— 否則 thinking 默默開著，重現 #874 卻沒人查得到原因"
 
 
 @pytest.mark.unit
