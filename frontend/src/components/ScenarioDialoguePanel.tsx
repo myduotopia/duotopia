@@ -1323,6 +1323,12 @@ const ScenarioDialoguePanel = forwardRef<
    * - 其他 → 稍後再試
    */
   const generateRowImage = async (id: string) => {
+    // #1044: 旗標關閉時這裡也擋一次。目前唯一的呼叫端是圖片欄位的按鈕，而那顆按鈕
+    // 已經是停用狀態，所以這一行現在不會被走到 —— 但「只靠 UI 藏起來」是會漏的：
+    // 哪天多一個入口（批次生圖之類）忘了查旗標，就會真的打 Imagen。
+    // 白名單的教訓同 #1030：預設要安全，開放是明確的動作（review R3 第 1 點）。
+    if (!FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION) return;
+
     const row = rows.find((r) => r.id === id);
     if (!row) return;
 

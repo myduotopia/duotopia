@@ -1385,3 +1385,43 @@ describe("ScenarioDialoguePanel 字級收斂回 Tailwind 級距（#1044）", () 
     expect(tooSmallIn(container)).toEqual([]);
   });
 });
+
+/**
+ * 圖片欄位的標籤寬度預算（Issue #1044）
+ *
+ * 圖框固定 `w-[104px]` 且 `overflow-hidden`，扣掉 `p-1.5` 兩側只剩 92px。字級從 10px
+ * 提到 12px 之後，標籤再長一點就會被切掉 —— 而 jsdom 量不到版面，`whitespace-nowrap`
+ * 的測試也偵測不到溢出。
+ *
+ * 所以把那個預算從「註解裡的一行字」變成**會紅的測試**：新增語系或改標籤時會直接
+ * 在這裡被攔下來，而不是等到有人回報畫面被切掉（review R3 第 3 點）。
+ */
+describe("ScenarioDialoguePanel 圖框標籤寬度預算（#1044）", () => {
+  // text-xs（12px）下的粗略字寬：CJK 約等於字級，拉丁字母約一半多一點
+  const estimateWidth = (text: string) =>
+    [...text].reduce((sum, ch) => sum + (/[　-鿿＀-￯]/.test(ch) ? 12 : 6.7), 0);
+
+  const SLOT_WIDTH = 104;
+  const PADDING = 6 * 2; // p-1.5 兩側
+  const ICON_AND_GAP = 14 + 4; // h-3.5 圖示 + gap-1
+  const BUDGET = SLOT_WIDTH - PADDING;
+
+  const locales = ["zh-TW", "en"] as const;
+
+  it.each(locales)("%s 的「上傳」標籤（含圖示）塞得進 92px", async (locale) => {
+    const dict = await import(`@/i18n/locales/${locale}/translation.json`);
+    const label = dict.default.scenarioDialogue.buttons.uploadImage;
+
+    expect(estimateWidth(label) + ICON_AND_GAP).toBeLessThanOrEqual(BUDGET);
+  });
+
+  it.each(locales)(
+    "%s 的「即將推出」標籤（無圖示）塞得進 92px",
+    async (locale) => {
+      const dict = await import(`@/i18n/locales/${locale}/translation.json`);
+      const label = dict.default.scenarioDialogue.buttons.comingSoon;
+
+      expect(estimateWidth(label)).toBeLessThanOrEqual(BUDGET);
+    },
+  );
+});
