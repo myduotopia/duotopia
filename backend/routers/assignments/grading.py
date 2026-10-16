@@ -2509,14 +2509,30 @@ async def scenario_ai_grade(
             "estimated_cost_usd": result.get("estimated_cost_usd"),
         }
 
-        # 額度在打 AI 之前就佔掉了，這裡不再 increment。
-        item_progress.scenario_grading_data = stored
-        item_progress.transcription = result["transcript"]
-        # 刻意不碰 accuracy/fluency/pronunciation/completeness_score：那四欄是 Azure
-        # 發音評測的語意，作業層報告直接讀 accuracy_score，混寫會污染兩邊的數字。
-        db.commit()
+        # 寫入之前先確認鎖還是我們的（PR #1123 review R2）。
+        #
+        # 放鎖有 token 保護，但「寫結果」沒有：這次分析若跑超過 180 秒被另一個請求
+        # 接手，我們算完照樣能把結果 commit 進去，蓋掉對方的、或在對方還在跑的時候
+        # 先落地。老師看到的會是另一次分析的結果，而且看不出哪裡不對。
+        #
+        # 結果仍然回給這個請求（他等了這麼久），只是不落地。
+        if scenario_claim.still_holds(db, item_progress, claim_token):
+            # 額度在打 AI 之前就佔掉了，這裡不再 increment。
+            item_progress.scenario_grading_data = stored
+            item_progress.transcription = result["transcript"]
+            # 刻意不碰 accuracy/fluency/pronunciation/completeness_score：那四欄是
+            # Azure 發音評測的語意，作業層報告直接讀 accuracy_score，混寫會污染
+            # 兩邊的數字。
+            db.commit()
+            delivered = True
+        else:
+            logger.warning(
+                "Scenario AI grading lost its claim before persisting | progress=%s",
+                item_progress_id,
+            )
+            # 鎖不是我們的了：額度不退（退掉就是退新主人的，同 release 的理由）
+            delivered = True
 
-        delivered = True
         return _scenario_suggestion_view(stored, False)
     finally:
         # 一定要放鎖，否則這一題會卡住到 STALE_AFTER_SECONDS 逾時為止。

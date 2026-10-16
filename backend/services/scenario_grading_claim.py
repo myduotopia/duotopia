@@ -96,6 +96,29 @@ def claim(
     return CLAIM_IN_PROGRESS, count, None
 
 
+def still_holds(db: Session, progress: StudentItemProgress, token) -> bool:
+    """鎖是否還是這個 token 的。**寫入結果之前要先問這一句。**
+
+    放鎖有 token 保護，但「寫結果」沒有 —— A 跑超過 ``STALE_AFTER_SECONDS`` 被 B 接手
+    之後，A 算完照樣可以把自己的 ``scenario_grading_data`` commit 進去，蓋掉 B 的結果，
+    或是在 B 還在跑的時候就先落地（PR #1123 review R2 第 1 點）。
+
+    窗口很窄（要超過 180 秒），但代價是老師看到的是**另一次分析的結果**，而且看不出
+    哪裡不對 —— 值得多問一句。
+    """
+    if token is None:
+        return False
+    return (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress.id,
+            StudentItemProgress.scenario_grading_started_at == token,
+        )
+        .count()
+        == 1
+    )
+
+
 def release(
     db: Session,
     progress: StudentItemProgress,
@@ -149,8 +172,22 @@ def release(
         )
         .update(values, synchronize_session="fetch")
     )
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # 放鎖自己失敗的話，那一題會卡到 STALE_AFTER_SECONDS 逾時為止（180 秒）。
+        # 不往外丟（我們通常在 finally 裡，丟出去會蓋掉原本的錯誤），但要留下
+        # error 級別的紀錄 —— 否則「老師說按了沒反應」會查不到原因。
+        logger.error(
+            "scenario_grading_claim | 放鎖失敗，這一題會卡到逾時 | progress=%s",
+            progress.id,
+            exc_info=True,
+        )
+        return False
 
     if rows == 0:
-        logger.warning("scenario_grading_claim | 鎖已被接手，不動它 | progress=%s", progress.id)
+        logger.warning(
+            "scenario_grading_claim | 鎖已被接手，不動它 | progress=%s",
+            progress.id,
+        )
     return rows == 1

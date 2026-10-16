@@ -271,3 +271,35 @@ class TestReleaseSurvivesAFailedSession:
         db_session.refresh(progress)
         assert progress.scenario_grading_started_at is None
         assert progress.ai_analysis_count == 0
+
+
+class TestStillHolds:
+    """寫入結果之前要先確認鎖還是自己的（PR #1123 review R2 第 1 點）。
+
+    放鎖有 token 保護，但「寫結果」沒有 —— 逾時被接手之後，原本那個算完照樣能把
+    結果 commit 進去蓋掉新主人的。
+    """
+
+    def test_true_while_we_hold_it(self, db_session, progress):
+        _, _, token = claim_mod.claim(db_session, progress)
+        assert claim_mod.still_holds(db_session, progress, token) is True
+
+    def test_false_after_being_taken_over(self, db_session, progress):
+        _, _, token_a = claim_mod.claim(db_session, progress)
+        progress.scenario_grading_started_at = datetime.now(timezone.utc) - timedelta(
+            seconds=claim_mod.STALE_AFTER_SECONDS + 10
+        )
+        db_session.commit()
+        claim_mod.claim(db_session, progress)
+
+        assert claim_mod.still_holds(db_session, progress, token_a) is False
+
+    def test_false_after_release(self, db_session, progress):
+        _, _, token = claim_mod.claim(db_session, progress)
+        claim_mod.release(db_session, progress, token, refund=False)
+
+        assert claim_mod.still_holds(db_session, progress, token) is False
+
+    def test_false_without_a_token(self, db_session, progress):
+        claim_mod.claim(db_session, progress)
+        assert claim_mod.still_holds(db_session, progress, None) is False

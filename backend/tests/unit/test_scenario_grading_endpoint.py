@@ -588,3 +588,37 @@ class TestQuotaIsReservedBeforeCallingAI:
 
         db_session.refresh(graded["progress"])
         assert graded["progress"].ai_analysis_count == 1
+
+
+class TestLostClaimDoesNotOverwrite:
+    """逾時被接手後，原本那次分析不該把結果落地（PR #1123 review R2 第 1 點）。"""
+
+    def test_result_is_returned_but_not_persisted_when_the_claim_was_lost(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from services import scenario_grading_claim as claim_mod
+
+        async def grade(*args, **kwargs):
+            # 模擬「這次跑太久被接手」：把鎖做舊，再讓另一個請求搶走
+            graded["progress"].scenario_grading_started_at = datetime.now(
+                timezone.utc
+            ) - timedelta(seconds=claim_mod.STALE_AFTER_SECONDS + 10)
+            db_session.commit()
+            claim_mod.claim(db_session, graded["progress"])
+            return AI_RESULT
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=grade),
+        ):
+            resp = test_client.post(_url(graded), headers=graded["headers"])
+
+        # 等了這麼久的這個請求還是拿得到結果
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["transcript"] == AI_RESULT["transcript"]
+
+        # 但沒有蓋掉新主人的 —— 資料庫裡仍是空的（新主人還在跑）
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].scenario_grading_data is None
