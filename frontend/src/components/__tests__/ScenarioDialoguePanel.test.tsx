@@ -1397,9 +1397,17 @@ describe("ScenarioDialoguePanel 字級收斂回 Tailwind 級距（#1044）", () 
  * 在這裡被攔下來，而不是等到有人回報畫面被切掉（review R3 第 3 點）。
  */
 describe("ScenarioDialoguePanel 圖框標籤寬度預算（#1044）", () => {
-  // text-xs（12px）下的粗略字寬：CJK 約等於字級，拉丁字母約一半多一點
+  // text-xs（12px）下的粗略字寬：CJK 約等於字級，拉丁字母約一半多一點。
+  //
+  // 用 charCodeAt 判斷而不是字元類別的正規表示式 —— 那種寫法要嵌 U+3000（全角空格）
+  // 之類的碼點，會被 eslint 的 no-irregular-whitespace 擋下來（而且那個錯誤訊息
+  // 完全看不出跟寬度估算有關）。
+  const CJK_START = 0x2e80;
   const estimateWidth = (text: string) =>
-    [...text].reduce((sum, ch) => sum + (/[　-鿿＀-￯]/.test(ch) ? 12 : 6.7), 0);
+    [...text].reduce(
+      (sum, ch) => sum + ((ch.codePointAt(0) ?? 0) >= CJK_START ? 12 : 6.7),
+      0,
+    );
 
   const SLOT_WIDTH = 104;
   const PADDING = 6 * 2; // p-1.5 兩側
