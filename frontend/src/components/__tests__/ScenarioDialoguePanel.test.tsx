@@ -1182,3 +1182,69 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
     );
   });
 });
+
+/**
+ * 文字 AI 額度用完的提示（Issue #1025）
+ *
+ * 402 要與一般失敗分開講。老師可能已經填好半份設定，給他一句「稍後再試」等於叫他
+ * 白等 —— 這個月不會再成功。所以要明講額度用完、下個月重置、現在改用手動輸入。
+ */
+describe("ScenarioDialoguePanel 文字 AI 額度用完（#1025）", () => {
+  const QUOTA_ERROR = new Error('402 {"error":"SCENARIO_TEXT_QUOTA_EXCEEDED"}');
+
+  beforeEach(() => {
+    mockToastError.mockClear();
+  });
+
+  it("產題撞到額度 → 講額度，不是「稍後再試」", async () => {
+    generateScenarioQuestions.mockRejectedValue(QUOTA_ERROR);
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.textQuotaExceeded",
+    );
+  });
+
+  it("生成情境文章撞到額度 → 同一句提示", async () => {
+    // 生成情境文章在「AI 產生」那個 tab，而且訓練目標是必填（#1021）
+    generateScenarioArticle.mockRejectedValue(QUOTA_ERROR);
+    renderPanel();
+    switchTab(K.tabAi);
+    type(K.goalPlaceholder, "交通工具與問路");
+    await runGenerate(K.generateScenario);
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.textQuotaExceeded",
+    );
+  });
+
+  it("其他失敗仍然是一般的「產生失敗」，不會誤報成額度問題", async () => {
+    generateScenarioQuestions.mockRejectedValue(new Error("500 boom"));
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.generateFailed",
+    );
+  });
+
+  it("撞到額度之後，老師填過的設定不會被清掉", async () => {
+    // 這是「改用手動輸入」這句話成立的前提 —— 設定被清掉的話等於前功盡棄
+    generateScenarioQuestions.mockRejectedValue(QUOTA_ERROR);
+    renderPanel();
+    fillRequiredForGenerate();
+    const scenarioBox = screen.getByPlaceholderText(K.scenarioPlaceholder);
+    const filled = (scenarioBox as HTMLTextAreaElement).value;
+    expect(filled).not.toBe("");
+
+    await runGenerate(K.generate);
+
+    // 設定還在，「改用手動輸入」這句話才站得住腳
+    expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+      filled,
+    );
+  });
+});

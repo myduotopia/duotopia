@@ -422,6 +422,26 @@ function ScenarioImageSlot({
   );
 }
 
+/**
+ * 文字 AI 的失敗提示（Issue #1025）。
+ *
+ * 402（本月額度用完）要與一般失敗分開講：老師可能已經填好半份設定，
+ * 給他一句「稍後再試」等於叫他白等 —— 這個月不會再成功。所以明講額度用完、
+ * 下個月自動重置、現在可以改用手動輸入（面板上填過的東西都還在）。
+ *
+ * 三個呼叫點（產題、重產單題、生成情境文章／擷取）共用這一份。
+ */
+function textAiErrorKey(error: unknown): string {
+  const message = String((error as Error)?.message ?? "");
+  if (
+    message.includes("402") ||
+    message.includes("SCENARIO_TEXT_QUOTA_EXCEEDED")
+  ) {
+    return "scenarioDialogue.messages.textQuotaExceeded";
+  }
+  return "scenarioDialogue.messages.generateFailed";
+}
+
 interface RowProps {
   row: ScenarioDialogueRow;
   index: number;
@@ -1116,7 +1136,7 @@ const ScenarioDialoguePanel = forwardRef<
       if (advance) setStep(2);
     } catch (error) {
       console.error("Failed to generate scenario questions:", error);
-      toast.error(t("scenarioDialogue.messages.generateFailed"));
+      toast.error(t(textAiErrorKey(error)));
     } finally {
       setIsGenerating(false);
     }
@@ -1173,7 +1193,7 @@ const ScenarioDialoguePanel = forwardRef<
       );
     } catch (error) {
       console.error("Failed to regenerate scenario question:", error);
-      toast.error(t("scenarioDialogue.messages.generateFailed"));
+      toast.error(t(textAiErrorKey(error)));
     } finally {
       setRegeneratingId(null);
     }
@@ -1220,7 +1240,7 @@ const ScenarioDialoguePanel = forwardRef<
       }
     } catch (error) {
       console.error("Failed to generate scenario content:", error);
-      toast.error(t("scenarioDialogue.messages.generateFailed"));
+      toast.error(t(textAiErrorKey(error)));
     } finally {
       setIsGeneratingScenario(false);
     }

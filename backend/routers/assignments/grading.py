@@ -10,7 +10,7 @@ import logging
 from collections import defaultdict
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_
 from sqlalchemy.orm.attributes import flag_modified
@@ -54,8 +54,10 @@ from .detail import (
     _SPEAKING_SCORE_MODES,
 )
 from services.analysis_quota import (
+    MAX_AI_ANALYSIS_ATTEMPTS,
     check_can_analyze,
-    increment_analysis_count,
+    refund_analysis_attempt,
+    reserve_analysis_attempt,
     reset_analysis_count_for_assignment,
     reset_analysis_count_for_assignments,
 )
@@ -2415,6 +2417,7 @@ async def scenario_ai_grade(
         return _scenario_suggestion_view(item_progress.scenario_grading_data, True)
 
     # 與學生端重新分析共用同一個每題上限：同一段錄音的 AI 呼叫是同一種資源。
+    # check_can_analyze 擋的是「老師已經批過這一題」（403），與額度無關，仍要照查。
     check_can_analyze(item_progress)
 
     content_item = (
@@ -2432,12 +2435,36 @@ async def scenario_ai_grade(
         content.scenario_settings if content else None,
     )
 
+    # Issue #1025（PR #1036 review 指出的競態）：**先佔位再打 AI**。
+    #
+    # 原本是 check_can_analyze → 打 AI → increment_analysis_count。中間那段 Gemini
+    # 呼叫要好幾秒，老師雙擊（或開兩個分頁）時兩個請求會雙雙通過閘門：持久化的計數
+    # 因為 UPDATE 是原子的所以仍正確，但**兩次 AI 都已經打出去了**，等於多付一次錢。
+    # 改成先搶名額，搶不到直接回 429，一次呼叫都不浪費。
+    if not reserve_analysis_attempt(item_progress, db):
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "AI_ANALYSIS_QUOTA_EXCEEDED",
+                "message": "AI analysis quota exhausted for this item.",
+                "ai_analysis_count": item_progress.ai_analysis_count,
+                "ai_analysis_remaining": 0,
+                "max_attempts": MAX_AI_ANALYSIS_ATTEMPTS,
+            },
+        )
+    db.commit()
+
     from services.scenario_grading_ai import (
         ScenarioGradingError,
         ScenarioGradingInputError,
         get_scenario_grading_service,
     )
 
+    # 佔位之後一律用 try/finally 退款，不是在每個 except 各退一次：老師在 Gemini
+    # 跑到一半關掉分頁時丟的是 asyncio.CancelledError，它是 BaseException，
+    # `except Exception` 接不到，那個名額就永遠回不來（同 PR #1027 review R2）。
+    delivered = False
     try:
         result = await get_scenario_grading_service().grade(
             item_progress.recording_url, criteria
@@ -2458,24 +2485,30 @@ async def scenario_ai_grade(
         raise HTTPException(
             status_code=502, detail="AI grading failed, please try again later"
         )
+    else:
+        stored = {
+            "transcript": result["transcript"],
+            "scores": result["scores"],
+            "overall": result["overall"],
+            "feedback": result["feedback"],
+            "suggested_pass": result["suggested_pass"],
+            "graded_at": datetime.now(timezone.utc).isoformat(),
+            # 觀測用，不回給前端
+            "usage": result.get("usage"),
+            "estimated_cost_usd": result.get("estimated_cost_usd"),
+        }
 
-    stored = {
-        "transcript": result["transcript"],
-        "scores": result["scores"],
-        "overall": result["overall"],
-        "feedback": result["feedback"],
-        "suggested_pass": result["suggested_pass"],
-        "graded_at": datetime.now(timezone.utc).isoformat(),
-        # 觀測用，不回給前端
-        "usage": result.get("usage"),
-        "estimated_cost_usd": result.get("estimated_cost_usd"),
-    }
+        # 額度在打 AI 之前就佔掉了，這裡不再 increment。
+        item_progress.scenario_grading_data = stored
+        item_progress.transcription = result["transcript"]
+        # 刻意不碰 accuracy/fluency/pronunciation/completeness_score：那四欄是 Azure
+        # 發音評測的語意，作業層報告直接讀 accuracy_score，混寫會污染兩邊的數字。
+        db.commit()
 
-    increment_analysis_count(item_progress, db)
-    item_progress.scenario_grading_data = stored
-    item_progress.transcription = result["transcript"]
-    # 刻意不碰 accuracy/fluency/pronunciation/completeness_score：那四欄是 Azure
-    # 發音評測的語意，作業層報告直接讀 accuracy_score，混寫會污染兩邊的數字。
-    db.commit()
-
-    return _scenario_suggestion_view(stored, False)
+        delivered = True
+        return _scenario_suggestion_view(stored, False)
+    finally:
+        # 沒把建議交到老師手上就把名額還回去（模型失敗、資料有問題、中途取消都算）
+        if not delivered:
+            refund_analysis_attempt(item_progress, db)
+            db.commit()

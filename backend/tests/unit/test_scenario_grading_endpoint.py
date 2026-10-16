@@ -419,3 +419,85 @@ class TestErrorKindsAreDistinguished:
         # 資料問題不該扣掉老師的 AI 額度
         db_session.refresh(graded["progress"])
         assert (graded["progress"].ai_analysis_count or 0) == 0
+
+
+class TestQuotaIsReservedBeforeCallingAI:
+    """雙擊不該打兩次 AI（Issue #1025 / PR #1036 review 指出的競態）。
+
+    原本是 `check_can_analyze` → 打 AI → `increment_analysis_count`。中間那段 Gemini
+    呼叫要好幾秒，老師雙擊（或開兩個分頁）時兩個請求會**雙雙通過閘門**：持久化的計數
+    因為 UPDATE 是原子的所以仍正確，但**兩次 AI 都已經打出去了**，等於多付一次錢。
+
+    改成先搶名額再打 AI。這幾條驗的是「額度在 AI 之前就扣掉」這個順序。
+    """
+
+    def test_quota_is_already_consumed_when_the_model_is_called(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """AI 被呼叫的那一刻，計數必須已經 +1 —— 這就是「先佔位」的定義。"""
+        seen = {}
+
+        async def grade(*args, **kwargs):
+            db_session.refresh(graded["progress"])
+            seen["count_during_call"] = graded["progress"].ai_analysis_count
+            return AI_RESULT
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=grade),
+        ):
+            resp = test_client.post(_url(graded), headers=graded["headers"])
+
+        assert resp.status_code == 200, resp.text
+        assert seen["count_during_call"] == 1
+
+    def test_exhausted_quota_never_reaches_the_model(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """搶不到名額要在打 AI 之前就回 429，一次呼叫都不浪費。"""
+        from services.analysis_quota import MAX_AI_ANALYSIS_ATTEMPTS
+
+        graded["progress"].ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
+        db_session.commit()
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ) as mock:
+            resp = test_client.post(
+                _url(graded), headers=graded["headers"], params={"force": "true"}
+            )
+
+        assert resp.status_code == 429
+        assert mock.await_count == 0
+
+    def test_a_failed_call_returns_the_slot(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """佔位成功但模型失敗 —— 名額要還回去，老師沒拿到東西。"""
+        from services.scenario_grading_ai import ScenarioGradingError
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=ScenarioGradingError("沒有辨識出任何內容")),
+        ):
+            assert (
+                test_client.post(_url(graded), headers=graded["headers"]).status_code
+                == 502
+            )
+
+        db_session.refresh(graded["progress"])
+        assert (graded["progress"].ai_analysis_count or 0) == 0
+
+    def test_successful_call_counts_exactly_once(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """佔位 + 不再 increment —— 搬成「先佔位」時最容易留下重複計數。"""
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ):
+            test_client.post(_url(graded), headers=graded["headers"])
+
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].ai_analysis_count == 1
