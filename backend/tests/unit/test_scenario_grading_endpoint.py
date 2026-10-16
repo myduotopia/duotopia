@@ -419,3 +419,206 @@ class TestErrorKindsAreDistinguished:
         # 資料問題不該扣掉老師的 AI 額度
         db_session.refresh(graded["progress"])
         assert (graded["progress"].ai_analysis_count or 0) == 0
+
+
+class TestDoubleClickOnlyPaysOnce:
+    """雙擊只能打一次 AI（Issue #1025 / PR #1036 review）。
+
+    第一版的修法是把額度改成「先扣再打」，但本機 review 證明那只擋得住上限邊界：
+    計數還在 0/3 時兩個並發請求都滿足 `count < 3`，兩個都會打 Gemini。
+    改用「正在進行中」的鎖之後，從計數 0 開始就擋得住。
+    """
+
+    def test_a_second_claim_arriving_mid_ai_is_refused(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """第一個請求還在打 AI 的那一刻，第二個搶鎖必須失敗。
+
+        不用巢狀 HTTP 請求模擬 —— TestClient 重入會共用同一個 session，測到的是
+        那個限制而不是我們的鎖。改成在 AI 呼叫中途直接再搶一次鎖，那正是第二個請求
+        會做的第一件事。
+        """
+        from services import scenario_grading_claim as claim_mod
+
+        seen = {}
+
+        async def grade(*args, **kwargs):
+            # 此刻第一個請求已經持有鎖
+            seen["outcome"], seen["count"], _ = claim_mod.claim(
+                db_session, graded["progress"]
+            )
+            return AI_RESULT
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=grade),
+        ):
+            first = test_client.post(_url(graded), headers=graded["headers"])
+
+        assert first.status_code == 200, first.text
+        # 計數還在 1/3（遠離上限）也要擋住 —— 這是第一版修法漏掉的那一半
+        assert seen["outcome"] == claim_mod.CLAIM_IN_PROGRESS
+        assert seen["count"] == 1
+
+    def test_in_progress_is_409_not_429(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """額度沒用完時回 429 會誤導老師以為這題不能再按了。"""
+        from services import scenario_grading_claim as claim_mod
+
+        claim_mod.claim(db_session, graded["progress"])
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ) as mock:
+            resp = test_client.post(
+                _url(graded), headers=graded["headers"], params={"force": "true"}
+            )
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "SCENARIO_GRADING_IN_PROGRESS"
+        assert mock.await_count == 0
+
+    def test_the_lock_is_released_after_a_successful_run(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """沒放鎖的話那一題會卡到逾時為止 —— 老師按了也沒反應。"""
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ):
+            test_client.post(_url(graded), headers=graded["headers"])
+
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].scenario_grading_started_at is None
+
+    def test_the_lock_is_released_after_a_failure(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        from services.scenario_grading_ai import ScenarioGradingError
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=ScenarioGradingError("沒有辨識出任何內容")),
+        ):
+            test_client.post(_url(graded), headers=graded["headers"])
+
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].scenario_grading_started_at is None
+
+
+class TestQuotaIsReservedBeforeCallingAI:
+    """雙擊不該打兩次 AI（Issue #1025 / PR #1036 review 指出的競態）。
+
+    原本是 `check_can_analyze` → 打 AI → `increment_analysis_count`。中間那段 Gemini
+    呼叫要好幾秒，老師雙擊（或開兩個分頁）時兩個請求會**雙雙通過閘門**：持久化的計數
+    因為 UPDATE 是原子的所以仍正確，但**兩次 AI 都已經打出去了**，等於多付一次錢。
+
+    改成先搶名額再打 AI。這幾條驗的是「額度在 AI 之前就扣掉」這個順序。
+    """
+
+    def test_quota_is_already_consumed_when_the_model_is_called(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """AI 被呼叫的那一刻，計數必須已經 +1 —— 這就是「先佔位」的定義。"""
+        seen = {}
+
+        async def grade(*args, **kwargs):
+            db_session.refresh(graded["progress"])
+            seen["count_during_call"] = graded["progress"].ai_analysis_count
+            return AI_RESULT
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=grade),
+        ):
+            resp = test_client.post(_url(graded), headers=graded["headers"])
+
+        assert resp.status_code == 200, resp.text
+        assert seen["count_during_call"] == 1
+
+    def test_exhausted_quota_never_reaches_the_model(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """搶不到名額要在打 AI 之前就回 429，一次呼叫都不浪費。"""
+        from services.analysis_quota import MAX_AI_ANALYSIS_ATTEMPTS
+
+        graded["progress"].ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
+        db_session.commit()
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ) as mock:
+            resp = test_client.post(
+                _url(graded), headers=graded["headers"], params={"force": "true"}
+            )
+
+        assert resp.status_code == 429
+        assert mock.await_count == 0
+
+    def test_a_failed_call_returns_the_slot(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """佔位成功但模型失敗 —— 名額要還回去，老師沒拿到東西。"""
+        from services.scenario_grading_ai import ScenarioGradingError
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=ScenarioGradingError("沒有辨識出任何內容")),
+        ):
+            assert (
+                test_client.post(_url(graded), headers=graded["headers"]).status_code
+                == 502
+            )
+
+        db_session.refresh(graded["progress"])
+        assert (graded["progress"].ai_analysis_count or 0) == 0
+
+    def test_successful_call_counts_exactly_once(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        """佔位 + 不再 increment —— 搬成「先佔位」時最容易留下重複計數。"""
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(return_value=AI_RESULT),
+        ):
+            test_client.post(_url(graded), headers=graded["headers"])
+
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].ai_analysis_count == 1
+
+
+class TestLostClaimDoesNotOverwrite:
+    """逾時被接手後，原本那次分析不該把結果落地（PR #1123 review R2 第 1 點）。"""
+
+    def test_result_is_returned_but_not_persisted_when_the_claim_was_lost(
+        self, test_client: TestClient, db_session: Session, graded
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from services import scenario_grading_claim as claim_mod
+
+        async def grade(*args, **kwargs):
+            # 模擬「這次跑太久被接手」：把鎖做舊，再讓另一個請求搶走
+            graded["progress"].scenario_grading_started_at = datetime.now(
+                timezone.utc
+            ) - timedelta(seconds=claim_mod.STALE_AFTER_SECONDS + 10)
+            db_session.commit()
+            claim_mod.claim(db_session, graded["progress"])
+            return AI_RESULT
+
+        with patch(
+            "services.scenario_grading_ai.ScenarioGradingService.grade",
+            new=AsyncMock(side_effect=grade),
+        ):
+            resp = test_client.post(_url(graded), headers=graded["headers"])
+
+        # 等了這麼久的這個請求還是拿得到結果
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["transcript"] == AI_RESULT["transcript"]
+
+        # 但沒有蓋掉新主人的 —— 資料庫裡仍是空的（新主人還在跑）
+        db_session.refresh(graded["progress"])
+        assert graded["progress"].scenario_grading_data is None
