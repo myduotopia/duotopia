@@ -166,7 +166,13 @@ async def _with_text_quota(
         # 扣他一次只會讓他不敢再試（比照 magic_paste 擷取到 0 項不扣額的決策）
         final = charge
         if not delivered:
-            final = stq.refund(db, teacher, year_month=charge["year_month"])
+            try:
+                final = stq.refund(db, teacher, year_month=charge["year_month"])
+            except Exception:
+                # finally 裡再丟例外會**取代**原本要回給老師的那個錯誤（含 HTTP 狀態
+                # 碼），老師會看到一個莫名的 500。退款失敗頂多是少退一次額度，
+                # 不該把真正的原因吃掉（PR #1123 review 4）。
+                logger.exception("scenario_text_quota | 退款失敗，額度少退一次 | %s", endpoint)
         # 印**退款後**的值。印 charge["used"] 的話，退掉的失敗會被記成已消耗，
         # 而這些 log 正是日後用來校準 FREE_MONTHLY_LIMIT 的依據（本機 review 指出）。
         logger.info(

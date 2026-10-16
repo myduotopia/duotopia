@@ -2442,7 +2442,7 @@ async def scenario_ai_grade(
     # 兩個請求都滿足 count < 3，照樣兩個都打（#1025 本機 review 指出）。
     #
     # 所以要擋的是「在進行中」而不是計數上限，用 scenario_grading_started_at 當鎖。
-    outcome, current_count = scenario_claim.claim(db, item_progress)
+    outcome, current_count, claim_token = scenario_claim.claim(db, item_progress)
     if outcome == scenario_claim.CLAIM_QUOTA_EXHAUSTED:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -2521,4 +2521,4 @@ async def scenario_ai_grade(
     finally:
         # 一定要放鎖，否則這一題會卡住到 STALE_AFTER_SECONDS 逾時為止。
         # 沒把建議交到老師手上就連額度一起還回去（模型失敗、資料有問題、中途取消）。
-        scenario_claim.release(db, item_progress, refund=not delivered)
+        scenario_claim.release(db, item_progress, claim_token, refund=not delivered)

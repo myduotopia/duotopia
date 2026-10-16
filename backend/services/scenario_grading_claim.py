@@ -25,7 +25,7 @@ PostgreSQL 專屬語法，測試跑在 SQLite 上。
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -48,11 +48,16 @@ CLAIM_IN_PROGRESS = "in_progress"
 CLAIM_QUOTA_EXHAUSTED = "quota_exhausted"
 
 
-def claim(db: Session, progress: StudentItemProgress) -> Tuple[str, int]:
-    """搶下這一題的評分權，回傳 ``(結果, 目前計數)``。
+def claim(
+    db: Session, progress: StudentItemProgress
+) -> Tuple[str, int, Optional[datetime]]:
+    """搶下這一題的評分權，回傳 ``(結果, 目前計數, 鎖的 token)``。
 
-    ``CLAIM_OK`` 代表額度已扣、鎖已拿到，呼叫端可以打 AI，結束後**務必**呼叫
-    :func:`release`。另兩種結果代表沒搶到，額度沒有被扣。
+    ``CLAIM_OK`` 代表額度已扣、鎖已拿到，呼叫端可以打 AI，結束後**務必**把那個
+    token 交給 :func:`release`。另兩種結果代表沒搶到，額度沒有被扣，token 是 None。
+
+    token 就是寫進 ``scenario_grading_started_at`` 的時間戳 —— release 用它確認
+    「鎖還是我的」才動手，否則逾時被接手之後會去清掉別人的鎖（PR #1123 review）。
     """
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(seconds=STALE_AFTER_SECONDS)
@@ -80,41 +85,72 @@ def claim(db: Session, progress: StudentItemProgress) -> Tuple[str, int]:
     db.commit()
 
     if rows == 1:
-        return CLAIM_OK, int(progress.ai_analysis_count or 0)
+        return CLAIM_OK, int(progress.ai_analysis_count or 0), now
 
     # 沒搶到：回頭看是「額度用完」還是「有人在跑」。重讀一次而不是信記憶體裡的值 ——
     # 搶輸的時候那個值可能是舊的。
     db.refresh(progress)
     count = int(progress.ai_analysis_count or 0)
     if count >= MAX_AI_ANALYSIS_ATTEMPTS:
-        return CLAIM_QUOTA_EXHAUSTED, count
-    return CLAIM_IN_PROGRESS, count
+        return CLAIM_QUOTA_EXHAUSTED, count, None
+    return CLAIM_IN_PROGRESS, count, None
 
 
-def release(db: Session, progress: StudentItemProgress, refund: bool) -> None:
-    """放掉鎖。``refund=True`` 時連同把扣掉的那一次還回去。
+def release(
+    db: Session,
+    progress: StudentItemProgress,
+    token: Optional[datetime],
+    refund: bool,
+) -> bool:
+    """放掉鎖，回傳是否真的放到。``refund=True`` 時連同把扣掉的那一次還回去。
 
     一定要在 ``finally`` 裡呼叫：老師中途關掉分頁時 Starlette 丟的是
     ``asyncio.CancelledError``（BaseException），``except Exception`` 接不到，
     鎖與額度都會留在那裡（同 PR #1027 review R2 的理由）。
+
+    ## 為什麼要帶 token
+
+    只比對 id 就無條件清掉 ``started_at`` 的話，**會清掉別人的鎖**：A 跑超過
+    ``STALE_AFTER_SECONDS`` 被 B 接手，A 回來時把 B 的鎖清掉、還把 B 的那一次額度
+    退掉，於是第三個請求在 B 還在跑的時候又進來了（PR #1123 review 2、3）。
+
+    帶 token 之後，A 的 UPDATE 匹配不到列（``started_at`` 已經是 B 寫的值），
+    什麼都不動。**代價是 A 自己扣掉的那一次不會退** —— 單一計數器分不出哪個 +1
+    是誰的，退掉就會變成退 B 的。A 跑超過 180 秒本來就是異常，算它一次比誤退
+    別人的安全。
+
+    ## db.rollback()
+
+    開頭先 rollback：呼叫端的 ``db.commit()`` 可能已經失敗（連線斷掉之類），
+    session 會停在失敗狀態，這裡再下查詢會丟 ``PendingRollbackError``，把原本的
+    錯誤蓋掉、而且鎖要卡到逾時才會放（PR #1123 review 1）。
+    rollback 不會丟掉 claim 寫的東西 —— 那個 commit 早就完成了。
     """
-    values = {StudentItemProgress.scenario_grading_started_at: None}
-    query = db.query(StudentItemProgress).filter(StudentItemProgress.id == progress.id)
+    db.rollback()
+
+    if token is None:
+        # 沒搶到鎖的人不該放鎖
+        return False
+
+    values: dict = {StudentItemProgress.scenario_grading_started_at: None}
     if refund:
-        # 不會扣成負數：就算例外路徑重入也只是回到 0
-        query.filter(StudentItemProgress.ai_analysis_count > 0).update(
-            {
-                StudentItemProgress.ai_analysis_count: (
-                    StudentItemProgress.ai_analysis_count - 1
-                ),
-                **values,
-            },
-            synchronize_session="fetch",
+        # token 還對得上就代表 claim 的 +1 還在（release 一個 claim 只會成功一次），
+        # 所以這裡直接 -1 不需要再防負數：重複呼叫時 token 已被清成 NULL，
+        # 第二次就匹配不到列了。
+        values[StudentItemProgress.ai_analysis_count] = (
+            StudentItemProgress.ai_analysis_count - 1
         )
-        # 計數已經是 0 時上面那句不會匹配到列，鎖還是要放掉
-        db.query(StudentItemProgress).filter(
-            StudentItemProgress.id == progress.id
-        ).update(values, synchronize_session="fetch")
-    else:
-        query.update(values, synchronize_session="fetch")
+
+    rows = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress.id,
+            StudentItemProgress.scenario_grading_started_at == token,
+        )
+        .update(values, synchronize_session="fetch")
+    )
     db.commit()
+
+    if rows == 0:
+        logger.warning("scenario_grading_claim | 鎖已被接手，不動它 | progress=%s", progress.id)
+    return rows == 1

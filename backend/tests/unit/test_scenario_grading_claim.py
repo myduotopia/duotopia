@@ -97,8 +97,8 @@ class TestOnlyOneClaimAtATime:
         """
         assert progress.ai_analysis_count in (0, None)
 
-        first, _ = claim_mod.claim(db_session, progress)
-        second, count = claim_mod.claim(db_session, progress)
+        first, _, _token = claim_mod.claim(db_session, progress)
+        second, count, _token = claim_mod.claim(db_session, progress)
 
         assert first == claim_mod.CLAIM_OK
         assert second == claim_mod.CLAIM_IN_PROGRESS
@@ -106,16 +106,16 @@ class TestOnlyOneClaimAtATime:
         assert count == 1
 
     def test_release_lets_the_next_one_in(self, db_session, progress):
-        claim_mod.claim(db_session, progress)
-        claim_mod.release(db_session, progress, refund=False)
+        _, _, token = claim_mod.claim(db_session, progress)
+        claim_mod.release(db_session, progress, token, refund=False)
 
-        again, _ = claim_mod.claim(db_session, progress)
+        again, _, _ = claim_mod.claim(db_session, progress)
         assert again == claim_mod.CLAIM_OK
 
     def test_in_progress_is_not_reported_as_quota_exhausted(self, db_session, progress):
         """兩種拒絕對老師的意思完全不同：一個等一下就有，一個這題不用再按了。"""
         claim_mod.claim(db_session, progress)
-        outcome, _ = claim_mod.claim(db_session, progress)
+        outcome, _, _token = claim_mod.claim(db_session, progress)
 
         assert outcome != claim_mod.CLAIM_QUOTA_EXHAUSTED
 
@@ -125,7 +125,7 @@ class TestQuotaStillApplies:
         progress.ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
         db_session.commit()
 
-        outcome, count = claim_mod.claim(db_session, progress)
+        outcome, count, _token = claim_mod.claim(db_session, progress)
 
         assert outcome == claim_mod.CLAIM_QUOTA_EXHAUSTED
         assert count == MAX_AI_ANALYSIS_ATTEMPTS
@@ -136,35 +136,40 @@ class TestQuotaStillApplies:
         assert progress.ai_analysis_count == 1
 
     def test_release_with_refund_returns_the_slot(self, db_session, progress):
-        claim_mod.claim(db_session, progress)
-        claim_mod.release(db_session, progress, refund=True)
+        _, _, token = claim_mod.claim(db_session, progress)
+        claim_mod.release(db_session, progress, token, refund=True)
 
         db_session.refresh(progress)
         assert progress.ai_analysis_count == 0
         assert progress.scenario_grading_started_at is None
 
-    def test_refund_never_goes_negative(self, db_session, progress):
-        """例外路徑重入時可能放兩次鎖 —— 不能把計數扣成負的。"""
-        claim_mod.claim(db_session, progress)
-        claim_mod.release(db_session, progress, refund=True)
-        claim_mod.release(db_session, progress, refund=True)
+    def test_releasing_twice_does_not_double_refund(self, db_session, progress):
+        """例外路徑重入時可能放兩次 —— 第二次要什麼都不做。
 
-        db_session.refresh(progress)
-        assert progress.ai_analysis_count == 0
-
-    def test_release_always_clears_the_lock_even_when_count_is_zero(
-        self, db_session, progress
-    ):
-        """計數已是 0 時，退款那句 UPDATE 匹配不到列 —— 鎖還是得放掉。
-
-        少了這個，那一題會卡到逾時為止。
+        靠的不是 max(0, …) 而是 token：第一次 release 已經把 started_at 清成 NULL，
+        第二次的 UPDATE 就匹配不到列了。比夾 0 更準 —— 夾 0 只是把症狀蓋掉。
         """
-        claim_mod.claim(db_session, progress)
-        claim_mod.release(db_session, progress, refund=True)
-        claim_mod.release(db_session, progress, refund=True)
+        _, _, token = claim_mod.claim(db_session, progress)
+        assert claim_mod.release(db_session, progress, token, refund=True) is True
+        assert claim_mod.release(db_session, progress, token, refund=True) is False
 
         db_session.refresh(progress)
-        assert progress.scenario_grading_started_at is None
+        assert progress.ai_analysis_count == 0
+
+    def test_release_without_a_token_does_nothing(self, db_session, progress):
+        """沒搶到鎖的人不該放鎖 —— 否則第二個請求會把第一個的鎖清掉。"""
+        _, _, token = claim_mod.claim(db_session, progress)
+        refused, _, no_token = claim_mod.claim(db_session, progress)
+        assert refused == claim_mod.CLAIM_IN_PROGRESS
+        assert no_token is None
+
+        assert claim_mod.release(db_session, progress, no_token, refund=True) is False
+
+        db_session.refresh(progress)
+        # 第一個的鎖與額度都還在
+        assert progress.scenario_grading_started_at is not None
+        assert progress.ai_analysis_count == 1
+        claim_mod.release(db_session, progress, token, refund=False)
 
 
 class TestStaleLockSelfReleases:
@@ -175,7 +180,7 @@ class TestStaleLockSelfReleases:
         )
         db_session.commit()
 
-        outcome, _ = claim_mod.claim(db_session, progress)
+        outcome, _, _token = claim_mod.claim(db_session, progress)
         assert outcome == claim_mod.CLAIM_OK
 
     def test_a_fresh_lock_is_not_stolen(self, db_session, progress):
@@ -184,5 +189,85 @@ class TestStaleLockSelfReleases:
         )
         db_session.commit()
 
-        outcome, _ = claim_mod.claim(db_session, progress)
+        outcome, _, _token = claim_mod.claim(db_session, progress)
         assert outcome == claim_mod.CLAIM_IN_PROGRESS
+
+
+class TestTakeoverDoesNotCorruptTheNewOwner:
+    """逾時被接手之後，原本那個回來時不能動到新主人的鎖與額度。
+
+    這是 PR #1123 review 2、3 指出的問題：release 若只比對 id 就無條件清掉
+    started_at，A 會把 B 的鎖清掉、還把 B 的那一次額度退掉，於是第三個請求在 B 還在
+    跑的時候又進來了。
+    """
+
+    def test_the_original_runner_cannot_clear_the_new_lock(self, db_session, progress):
+        _, _, token_a = claim_mod.claim(db_session, progress)
+
+        # A 跑太久 —— 把它的鎖做舊，讓 B 接手得到
+        progress.scenario_grading_started_at = datetime.now(timezone.utc) - timedelta(
+            seconds=claim_mod.STALE_AFTER_SECONDS + 10
+        )
+        db_session.commit()
+        outcome_b, _, token_b = claim_mod.claim(db_session, progress)
+        assert outcome_b == claim_mod.CLAIM_OK
+
+        # A 這時候才回來
+        assert claim_mod.release(db_session, progress, token_a, refund=True) is False
+
+        db_session.refresh(progress)
+        # B 的鎖還在，第三個請求進不來
+        assert progress.scenario_grading_started_at is not None
+        outcome_c, _, _ = claim_mod.claim(db_session, progress)
+        assert outcome_c == claim_mod.CLAIM_IN_PROGRESS
+
+        # B 自己放得掉
+        assert claim_mod.release(db_session, progress, token_b, refund=False) is True
+
+    def test_the_original_runner_does_not_refund_the_new_owners_slot(
+        self, db_session, progress
+    ):
+        _, _, token_a = claim_mod.claim(db_session, progress)
+        progress.scenario_grading_started_at = datetime.now(timezone.utc) - timedelta(
+            seconds=claim_mod.STALE_AFTER_SECONDS + 10
+        )
+        db_session.commit()
+        claim_mod.claim(db_session, progress)
+
+        db_session.refresh(progress)
+        before = progress.ai_analysis_count
+
+        claim_mod.release(db_session, progress, token_a, refund=True)
+
+        db_session.refresh(progress)
+        # A 自己扣掉的那一次不退（單一計數器分不出誰的 +1，退掉就是退 B 的）——
+        # A 跑超過 180 秒本來就是異常，算它一次比誤退別人安全
+        assert progress.ai_analysis_count == before
+
+
+class TestReleaseSurvivesAFailedSession:
+    def test_release_works_after_a_failed_commit(self, db_session, progress):
+        """呼叫端的 commit 失敗後 session 會停在失敗狀態。
+
+        release 不先 rollback 的話，這裡下查詢會丟 PendingRollbackError，把原本的
+        錯誤蓋掉，而且鎖要卡到逾時才會放（PR #1123 review 1）。
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        _, _, token = claim_mod.claim(db_session, progress)
+
+        # 製造一個失敗的 flush，讓 session 進入需要 rollback 的狀態
+        try:
+            db_session.add(
+                StudentItemProgress(student_assignment_id=None, content_item_id=None)
+            )
+            db_session.flush()
+        except (IntegrityError, Exception):
+            pass
+
+        # 不應該丟例外，而且鎖要真的放掉
+        assert claim_mod.release(db_session, progress, token, refund=True) is True
+
+        db_session.refresh(progress)
+        assert progress.scenario_grading_started_at is None
+        assert progress.ai_analysis_count == 0

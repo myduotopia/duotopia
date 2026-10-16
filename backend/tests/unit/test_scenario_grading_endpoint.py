@@ -444,7 +444,7 @@ class TestDoubleClickOnlyPaysOnce:
 
         async def grade(*args, **kwargs):
             # 此刻第一個請求已經持有鎖
-            seen["outcome"], seen["count"] = claim_mod.claim(
+            seen["outcome"], seen["count"], _ = claim_mod.claim(
                 db_session, graded["progress"]
             )
             return AI_RESULT
