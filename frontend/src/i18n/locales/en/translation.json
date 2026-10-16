@@ -5006,7 +5006,7 @@
       "imageBlocked": "This description can't be turned into an image, please try a different one",
       "imageFailed": "Image generation failed, please try again later",
       "scenarioRequired": "Add the scenario first — AI needs it to write questions",
-      "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload image for now"
+      "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now"
     },
     "tenseTimes": {
       "present": "Present",

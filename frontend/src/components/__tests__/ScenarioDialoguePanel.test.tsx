@@ -20,7 +20,6 @@ import ScenarioDialoguePanel, {
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 
 const mockToastError = vi.fn();
-const mockToastInfo = vi.fn();
 
 // #1021: 產題／生成情境文章／擷取／TTS 都真的打 API 了，這裡一律 mock。
 // 預設回傳足夠的題目，讓「產一批」相關的測試維持原本的行為斷言。
@@ -73,7 +72,7 @@ vi.mock("sonner", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     success: vi.fn(),
-    info: (...args: unknown[]) => mockToastInfo(...args),
+    info: vi.fn(),
   },
 }));
 
@@ -1282,7 +1281,12 @@ describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
     gotoList();
 
     expect(generateButton()).toBeDisabled();
-    expect(generateButton().className).not.toContain("bg-blue-600");
+    const className = generateButton().className;
+    expect(className).not.toContain("bg-blue-600");
+    // 明確釘住停用的視覺，否則被人改成「看起來可按」也不會紅
+    expect(className).toContain("bg-gray-100");
+    expect(className).toContain("text-gray-400");
+    expect(className).toContain("cursor-not-allowed");
   });
 
   it("長文字不會把 104px 的圖框擠爆", () => {
@@ -1341,19 +1345,26 @@ describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
  * 逐題的備註區塊預設收合，裡面的輸入也掃不到。只掃 Step 2 的話，把
  * `text-[10px]` 放回去測試還是綠的。
  */
-describe("ScenarioDialoguePanel 字級不低於 12px（#1044）", () => {
+describe("ScenarioDialoguePanel 字級收斂回 Tailwind 級距（#1044）", () => {
+  /**
+   * 禁止**所有**任意字級值（`text-[...]`），不只 10／11px。
+   *
+   * 這張單的目的是把字級收斂回 Tailwind 既有級距，所以守衛也照這個標準 ——
+   * 只擋 10/11px 的話，`text-[0.7rem]`、`text-[9px]` 這類寫法會漏掉（review 指出）。
+   * 真的需要某個中間級距時，應該是先問「為什麼級距不夠用」，不是繞過守衛。
+   */
   const tooSmallIn = (container: HTMLElement) =>
     Array.from(container.querySelectorAll("*"))
       .map((el) => el.className?.toString?.() ?? "")
-      .filter((c) => /text-\[(?:[0-9]|1[01])px\]/.test(c));
+      .filter((c) => /\btext-\[[^\]]+\]/.test(c));
 
-  it("Step 1（設定）沒有低於 12px 的字級", () => {
+  it("Step 1（設定）沒有任意字級值", () => {
     const { container } = render(<ScenarioDialoguePanel />, { wrapper });
 
     expect(tooSmallIn(container)).toEqual([]);
   });
 
-  it("Step 2（題目清單）沒有低於 12px 的字級，含展開的備註區塊", () => {
+  it("Step 2（題目清單）沒有任意字級值，含展開的備註區塊", () => {
     const { container } = render(<ScenarioDialoguePanel />, { wrapper });
     fireEvent.click(screen.getByText(K.skip));
 
