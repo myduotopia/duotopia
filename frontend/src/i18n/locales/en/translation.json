@@ -4965,12 +4965,13 @@
       "backToSettings": "Back to settings",
       "viewQuestions": "View questions",
       "generateAnother": "Generate more questions",
-      "uploadImage": "Upload image",
+      "uploadImage": "Upload",
       "replaceImage": "Replace",
       "removeImage": "Remove",
       "generateScenario": "Generate scenario",
       "extractScenario": "Extract from files",
-      "generateImage": "Generate"
+      "generateImage": "Generate",
+      "comingSoon": "Coming soon"
     },
     "hints": {
       "rateLimit": "Up to 5 regenerations per minute",

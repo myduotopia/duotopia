@@ -406,39 +406,39 @@ function ScenarioImageSlot({
           <button
             type="button"
             onClick={pick}
-            className="flex items-center justify-center gap-1 rounded border border-gray-300 bg-white py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+            className="flex items-center justify-center gap-1 rounded border border-gray-300 bg-white py-1 text-xs font-semibold text-gray-600 whitespace-nowrap hover:bg-gray-50"
           >
-            <ImagePlus className="h-3.5 w-3.5" />
+            <ImagePlus className="h-3.5 w-3.5 shrink-0" />
             {t("scenarioDialogue.buttons.uploadImage")}
           </button>
           {imageGenerationEnabled ? (
             <button
               type="button"
               onClick={onGenerate}
-              className="flex items-center justify-center gap-1 rounded bg-blue-600 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+              className="flex items-center justify-center gap-1 rounded bg-blue-600 py-1 text-xs font-semibold text-white whitespace-nowrap hover:bg-blue-700"
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
               {t("scenarioDialogue.buttons.generateImage")}
             </button>
           ) : (
             /*
-             * #1044: 生圖先關著。**不用原生 disabled** —— 原生 disabled 的按鈕不派發
-             * click，那句「即將推出」就永遠出不來，老師只會覺得按鈕壞了（#1033 的教訓）。
-             * 改成灰掉但可點，點下去說明原因，並用 aria-disabled 讓輔助技術讀得到。
+             * #1044: 生圖先關著，照專案既有的停用慣例做（ui-style-guide §3 規則 3 與
+             * BulkActionBar 的 disabledReason / disabledBadge）：**原因要看得見**，
+             * 不是點了才知道。
+             *
+             * 所以按鈕文字直接換成「即將推出」，title 補完整說明。原因既然不藏在
+             * click 後面，就沒有 #1033 那個問題（那次的坑是「唯一的說明被原生
+             * disabled 吃掉」），可以用原生 disabled。
+             *
+             * 停用狀態不放圖示：框只有 104px 寬，"Coming soon" 加上圖示會擠到換行。
              */
             <button
               type="button"
-              aria-disabled
+              disabled
               title={t("scenarioDialogue.messages.imageGenerationComingSoon")}
-              onClick={() =>
-                toast.info(
-                  t("scenarioDialogue.messages.imageGenerationComingSoon"),
-                )
-              }
-              className="flex items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 py-1 text-xs font-semibold text-gray-400 cursor-help hover:bg-gray-200"
+              className="rounded border border-gray-200 bg-gray-100 py-1 text-xs font-semibold text-gray-400 whitespace-nowrap opacity-70 cursor-not-allowed"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              {t("scenarioDialogue.buttons.generateImage")}
+              {t("scenarioDialogue.buttons.comingSoon")}
             </button>
           )}
         </div>

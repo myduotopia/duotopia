@@ -4989,7 +4989,8 @@
       "removeImage": "移除",
       "generateScenario": "生成情境文章",
       "extractScenario": "從檔案擷取",
-      "generateImage": "AI 生成"
+      "generateImage": "AI 生成",
+      "comingSoon": "即將推出"
     },
     "hints": {
       "rateLimit": "每分鐘最多重新生成 5 次",
