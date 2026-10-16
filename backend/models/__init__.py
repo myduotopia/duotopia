@@ -38,6 +38,7 @@ from .credit_package_definition import CreditPackageDefinition
 # Magic Paste 每月配額計數（issue #891）
 from .magic_paste_usage import MagicPasteUsage
 from .scenario_image_usage import ScenarioImageUsage
+from .scenario_text_usage import ScenarioTextUsage
 from .social_post import SocialPost
 from .release_announcement import ReleaseAnnouncement
 
@@ -158,6 +159,7 @@ __all__ = [
     "CreditPackageDefinition",
     "MagicPasteUsage",
     "ScenarioImageUsage",
+    "ScenarioTextUsage",
     "SocialPost",
     "ReleaseAnnouncement",
     # Plans

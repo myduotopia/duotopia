@@ -5004,7 +5004,8 @@
       "imageQuotaExceeded": "You've used all your AI image generations this month — you can upload an image manually",
       "imageBlocked": "This description can't be turned into an image, please try a different one",
       "imageFailed": "Image generation failed, please try again later",
-      "scenarioRequired": "Add the scenario first — AI needs it to write questions"
+      "scenarioRequired": "Add the scenario first — AI needs it to write questions",
+      "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead"
     },
     "tenseTimes": {
       "present": "Present",

@@ -10,7 +10,7 @@ import logging
 from collections import defaultdict
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_
 from sqlalchemy.orm.attributes import flag_modified
@@ -53,9 +53,10 @@ from .detail import (
     _quiz_scoring_settings,
     _SPEAKING_SCORE_MODES,
 )
+from services import scenario_grading_claim as scenario_claim
 from services.analysis_quota import (
+    MAX_AI_ANALYSIS_ATTEMPTS,
     check_can_analyze,
-    increment_analysis_count,
     reset_analysis_count_for_assignment,
     reset_analysis_count_for_assignments,
 )
@@ -2415,6 +2416,7 @@ async def scenario_ai_grade(
         return _scenario_suggestion_view(item_progress.scenario_grading_data, True)
 
     # 與學生端重新分析共用同一個每題上限：同一段錄音的 AI 呼叫是同一種資源。
+    # check_can_analyze 擋的是「老師已經批過這一題」（403），與額度無關，仍要照查。
     check_can_analyze(item_progress)
 
     content_item = (
@@ -2432,12 +2434,48 @@ async def scenario_ai_grade(
         content.scenario_settings if content else None,
     )
 
+    # Issue #1025（PR #1036 review 指出的競態）：**同一題同時只能有一個分析在跑**。
+    #
+    # 原本是 check_can_analyze → 打 AI → increment_analysis_count，中間那段 Gemini
+    # 呼叫要好幾秒，老師雙擊（或開兩個分頁）時兩個請求會雙雙通過閘門，兩次 AI 都打
+    # 出去了。把額度改成「先扣再打」只擋得住**上限邊界**那一下 —— 計數還在 0/3 時
+    # 兩個請求都滿足 count < 3，照樣兩個都打（#1025 本機 review 指出）。
+    #
+    # 所以要擋的是「在進行中」而不是計數上限，用 scenario_grading_started_at 當鎖。
+    outcome, current_count, claim_token = scenario_claim.claim(db, item_progress)
+    if outcome == scenario_claim.CLAIM_QUOTA_EXHAUSTED:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "AI_ANALYSIS_QUOTA_EXCEEDED",
+                "message": "AI analysis quota exhausted for this item.",
+                "ai_analysis_count": current_count,
+                "ai_analysis_remaining": 0,
+                "max_attempts": MAX_AI_ANALYSIS_ATTEMPTS,
+            },
+        )
+    if outcome == scenario_claim.CLAIM_IN_PROGRESS:
+        # 409 而不是 429：額度沒用完，只是這一題正在跑。老師等一下就有結果，
+        # 叫他「額度用完了」是錯的訊息。
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SCENARIO_GRADING_IN_PROGRESS",
+                "message": "這一題的 AI 評分正在進行中，請稍等結果。",
+                "ai_analysis_count": current_count,
+            },
+        )
+
     from services.scenario_grading_ai import (
         ScenarioGradingError,
         ScenarioGradingInputError,
         get_scenario_grading_service,
     )
 
+    # 佔位之後一律用 try/finally 退款，不是在每個 except 各退一次：老師在 Gemini
+    # 跑到一半關掉分頁時丟的是 asyncio.CancelledError，它是 BaseException，
+    # `except Exception` 接不到，那個名額就永遠回不來（同 PR #1027 review R2）。
+    delivered = False
     try:
         result = await get_scenario_grading_service().grade(
             item_progress.recording_url, criteria
@@ -2458,24 +2496,50 @@ async def scenario_ai_grade(
         raise HTTPException(
             status_code=502, detail="AI grading failed, please try again later"
         )
+    else:
+        stored = {
+            "transcript": result["transcript"],
+            "scores": result["scores"],
+            "overall": result["overall"],
+            "feedback": result["feedback"],
+            "suggested_pass": result["suggested_pass"],
+            "graded_at": datetime.now(timezone.utc).isoformat(),
+            # 觀測用，不回給前端
+            "usage": result.get("usage"),
+            "estimated_cost_usd": result.get("estimated_cost_usd"),
+        }
 
-    stored = {
-        "transcript": result["transcript"],
-        "scores": result["scores"],
-        "overall": result["overall"],
-        "feedback": result["feedback"],
-        "suggested_pass": result["suggested_pass"],
-        "graded_at": datetime.now(timezone.utc).isoformat(),
-        # 觀測用，不回給前端
-        "usage": result.get("usage"),
-        "estimated_cost_usd": result.get("estimated_cost_usd"),
-    }
+        # 寫入之前先確認鎖還是我們的（PR #1123 review R2）。
+        #
+        # 放鎖有 token 保護，但「寫結果」沒有：這次分析若跑超過 180 秒被另一個請求
+        # 接手，我們算完照樣能把結果 commit 進去，蓋掉對方的、或在對方還在跑的時候
+        # 先落地。老師看到的會是另一次分析的結果，而且看不出哪裡不對。
+        #
+        # 結果仍然回給這個請求（他等了這麼久），只是不落地。
+        if scenario_claim.still_holds(db, item_progress, claim_token):
+            # 額度在打 AI 之前就佔掉了，這裡不再 increment。
+            item_progress.scenario_grading_data = stored
+            item_progress.transcription = result["transcript"]
+            # 刻意不碰 accuracy/fluency/pronunciation/completeness_score：那四欄是
+            # Azure 發音評測的語意，作業層報告直接讀 accuracy_score，混寫會污染
+            # 兩邊的數字。
+            db.commit()
+            delivered = True
+        else:
+            # 把用量與成本一起記：這種情況下老師拿到結果但下次載入看不到、額度卻扣了，
+            # 需要能估出發生頻率與浪費掉多少成本（PR #1123 review R3 第 3 點）
+            logger.warning(
+                "Scenario AI grading lost its claim before persisting | "
+                "progress=%s | usage=%s | cost=%s",
+                item_progress_id,
+                result.get("usage"),
+                result.get("estimated_cost_usd"),
+            )
+            # 鎖不是我們的了：額度不退（退掉就是退新主人的，同 release 的理由）
+            delivered = True
 
-    increment_analysis_count(item_progress, db)
-    item_progress.scenario_grading_data = stored
-    item_progress.transcription = result["transcript"]
-    # 刻意不碰 accuracy/fluency/pronunciation/completeness_score：那四欄是 Azure
-    # 發音評測的語意，作業層報告直接讀 accuracy_score，混寫會污染兩邊的數字。
-    db.commit()
-
-    return _scenario_suggestion_view(stored, False)
+        return _scenario_suggestion_view(stored, False)
+    finally:
+        # 一定要放鎖，否則這一題會卡住到 STALE_AFTER_SECONDS 逾時為止。
+        # 沒把建議交到老師手上就連額度一起還回去（模型失敗、資料有問題、中途取消）。
+        scenario_claim.release(db, item_progress, claim_token, refund=not delivered)

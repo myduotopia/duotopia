@@ -296,7 +296,7 @@ jobs:
               'subscription_periods', 'point_usage_logs', 'credit_packages', 'plans',
               'magic_paste_usage',
               -- 情境對話 AI 生圖月配額（#1024，JWT auth 業務表）
-              'scenario_image_usage',
+              'scenario_image_usage', 'scenario_text_usage',
               'teacher_subscription_transaction', 'teacher_subscription_transactions', 'invoice_status_history',
               'user_word_progress', 'practice_sessions', 'practice_answers',
               'organizations', 'schools', 'teacher_organizations', 'teacher_schools', 'classroom_schools', 'student_schools',
