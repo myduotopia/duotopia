@@ -23,9 +23,10 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Model name constants
-FLASH_MODEL = "gemini-2.5-flash"
-PRO_MODEL = "gemini-2.5-pro"
+# Model name constants —— 單一來源在 core/config.py（Issue #1119）。
+# 不要改回寫死字面值：gemini-2.5-* 已於 2026-10-20 退役。
+FLASH_MODEL = settings.VERTEX_AI_FLASH_MODEL
+PRO_MODEL = settings.VERTEX_AI_PRO_MODEL
 
 # Default timeout for Vertex AI calls (seconds)
 VERTEX_AI_TIMEOUT = 60
@@ -320,6 +321,7 @@ class VertexAIService:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         system_instruction: Optional[str] = None,
+        disable_thinking: bool = False,
     ) -> str:
         """
         同步版本的文字生成介面（用於 cron job 等非異步場景）
@@ -330,6 +332,10 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
+            disable_thinking: 關閉 thinking。**短輸出務必開**（Issue #1119）——
+                gemini-3.5-flash 的 thinking 實測吃掉 284~330 tokens，
+                max_tokens=300 這種設定會讓 thinking 把輸出預算吃光，
+                回傳空字串（finish=MAX_TOKENS），與 #874 同一個死法。
 
         Returns:
             生成的文字
@@ -342,6 +348,8 @@ class VertexAIService:
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
+        if disable_thinking:
+            self._set_thinking_budget(config, 0)
 
         try:
             response = model.generate_content(

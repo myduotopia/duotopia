@@ -127,10 +127,31 @@ class Settings:
         "VERTEX_AI_PROJECT_ID", "duotopia-472708"
     )
     # 預設 asia-northeast1（東京）：收斂學生學習資料出境範圍至亞洲（Issue #959）。
-    # asia-east1（台灣）經實測無 Gemini 2.5 模型（404），asia-northeast1 是唯一
-    # 同時提供 gemini-2.5-flash 與 gemini-2.5-pro 的亞洲 region，且與 Azure
-    # Speech（japaneast）同在日本東京，合規（非中港澳）。
+    # asia-east1（台灣）經實測無 Gemini 模型（404），asia-northeast1 是唯一
+    # 提供我們所需 Gemini 模型的亞洲 region，且與 Azure Speech（japaneast）
+    # 同在日本東京，合規（非中港澳）。
+    #
+    # ⚠️ 不要改成 "global"：那會讓請求被導到全球任意 region，推翻 #959 對
+    # 教育部 115 年校園徵求案「對外連線清單」的承諾。改這個值是合規決策，
+    # 不是技術選擇。迴歸測試：tests/unit/test_issue_1119_model_migration.py
     VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "asia-northeast1")
+
+    # 模型 ID 單一來源（Issue #1119）。
+    #
+    # gemini-2.5-flash / gemini-2.5-pro 於 2026-10-20 退役，必須汰換。
+    # 選 gemini-3.5-flash 的原因：2026-10-16 實測，它是 asia-northeast1
+    # **唯一**可用的 Gemini 3.x 模型 —— 較便宜的 gemini-3.5-flash-lite、
+    # gemini-3.1-flash-lite 與 pro 級的 3.x 在所有亞洲 region 都是 404，
+    # 只在 global / us-central1 才有。要用它們就得放棄 #959 的出境收斂。
+    #
+    # 成本：$1.50/$9.00 per 1M（非 global endpoint 再 +10%），比 2.5-flash 的
+    # $0.30/$2.50 貴。以 prod 近 30 天約 863 次呼叫估算，月費從約 $0.6 升到
+    # 約 $2.4，差額不具實質影響。
+    #
+    # pro 併入 flash：東京沒有任何 3.x pro（gemini-3.1-pro-preview 實測 404），
+    # 且 pro 只有帳單分析的內部 cron 在用（billing_analysis_service.py）。
+    VERTEX_AI_FLASH_MODEL: str = os.getenv("VERTEX_AI_FLASH_MODEL", "gemini-3.5-flash")
+    VERTEX_AI_PRO_MODEL: str = os.getenv("VERTEX_AI_PRO_MODEL", "gemini-3.5-flash")
 
     # TapPay Configuration
     TAPPAY_ENV: Literal["sandbox", "production"] = os.getenv("TAPPAY_ENV", "sandbox")

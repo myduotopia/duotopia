@@ -45,15 +45,25 @@ import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.5-flash"
+# 模型 ID 單一來源在 core/config.py（Issue #1119）—— gemini-2.5-* 已退役
+MODEL = settings.VERTEX_AI_FLASH_MODEL
 
 # 逐字稿 + 四個面向 + 回饋，抓寬一點避免截斷
 MAX_OUTPUT_TOKENS = 2048
 
 # 粗略單價（美元／百萬 token，僅供觀測）。音檔輸入也計在 input tokens。
-_PRICING_USD_PER_1M = {MODEL: {"input": 0.30, "output": 2.50}}
+#
+# gemini-3.5-flash 官方定價 $1.50 / $9.00（global endpoint）；我們跑在
+# asia-northeast1（非 global）要 +10% → $1.65 / $9.90。Issue #1119 查證於
+# 2026-10-16：https://cloud.google.com/vertex-ai/generative-ai/pricing
+#
+# ⚠️ 這張表以模型名為 key，換模型但忘了加價格會讓成本統計靜默變 0。
+# 迴歸測試：tests/unit/test_issue_1119_model_migration.py
+_PRICING_USD_PER_1M = {MODEL: {"input": 1.65, "output": 9.90}}
 
 _GCS_HOST = "storage.googleapis.com"
 
@@ -321,9 +331,14 @@ class ScenarioGradingService:
         meta = getattr(response, "usage_metadata", None)
         if meta is None:
             return {"input_tokens": 0, "output_tokens": 0}
+        # thinking token 以**輸出價**計費，必須併入 output_tokens，否則成本嚴重
+        # 低估（Issue #1119）。gemini-3.5-flash 的 thinking 量比 2.5 大很多：
+        # 批改路徑實測單次 thoughts=330，與實際輸出 76 同一個量級。
+        # 舊 response 沒有這個欄位時 getattr 取 0，行為不變。
         return {
             "input_tokens": getattr(meta, "prompt_token_count", 0) or 0,
-            "output_tokens": getattr(meta, "candidates_token_count", 0) or 0,
+            "output_tokens": (getattr(meta, "candidates_token_count", 0) or 0)
+            + (getattr(meta, "thoughts_token_count", 0) or 0),
         }
 
     @classmethod
