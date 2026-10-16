@@ -42,6 +42,7 @@ from utils.scenario_dialogue import (
     VOICES,
 )
 from core.config import settings
+from utils.ai_cost import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
 
@@ -441,21 +442,7 @@ class ScenarioDialogueAIService:
 
     @staticmethod
     def estimate_cost(usage: Dict[str, int], model: str = FLASH_MODEL) -> float:
-        pricing = _PRICING_USD_PER_1M.get(model)
-        if not pricing:
-            # 靜默回 0 會讓成本統計看起來「沒花錢」而沒人發現（PR #1122 review）。
-            # 最可能的原因是用環境變數覆寫了模型，但沒在 config 的價格表加對應單價。
-            logger.warning(
-                "成本估算略過：價格表沒有 %s 的單價，成本以 0 計。"
-                "請在 core/config.py 的 VERTEX_AI_PRICING_USD_PER_1M 補上",
-                model,
-            )
-            return 0.0
-        return round(
-            usage.get("input_tokens", 0) / 1_000_000 * pricing["input"]
-            + usage.get("output_tokens", 0) / 1_000_000 * pricing["output"],
-            6,
-        )
+        return estimate_cost_usd(model, usage)
 
     # ---------------------------------------------------------------- Vertex
 

@@ -345,7 +345,10 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
-            disable_thinking: 關閉 thinking。**短輸出務必開**（Issue #1119）——
+            disable_thinking: 關閉 thinking。**短輸出務必開**（Issue #1119）。
+                注意：PRO_MODEL 預設與 FLASH_MODEL 相同，所以
+                model_type="pro" 時這個參數**確實會生效** —— 舊的
+                gemini-2.5-pro 不能關 thinking，當時傳了等於沒用。
                 gemini-3.5-flash 的 thinking 實測吃掉 284~330 tokens，
                 max_tokens=300 這種設定會讓 thinking 把輸出預算吃光，
                 回傳空字串（finish=MAX_TOKENS），與 #874 同一個死法。

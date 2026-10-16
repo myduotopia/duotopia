@@ -4,7 +4,8 @@ Supports switching between Supabase and Cloud SQL
 """
 
 import os
-from typing import Literal, Optional  # noqa: F401
+from types import MappingProxyType
+from typing import Literal, Mapping, Optional  # noqa: F401
 from functools import lru_cache
 from pathlib import Path
 from dotenv import load_dotenv
@@ -164,9 +165,13 @@ class Settings:
     #
     # ⚠️ 以模型名為 key —— 換模型但忘了加價格，成本統計會靜默變 0。
     # 迴歸測試：tests/unit/test_issue_1119_model_migration.py
-    VERTEX_AI_PRICING_USD_PER_1M: dict = {
-        "gemini-3.5-flash": {"input": 1.65, "output": 9.90},
-    }
+    # 用 MappingProxyType 真正唯讀：三個服務共用同一個物件，
+    # 執行期被改到會讓成本統計無聲走鐘（PR #1122 review 第 2 點）
+    VERTEX_AI_PRICING_USD_PER_1M: Mapping[str, Mapping[str, float]] = MappingProxyType(
+        {
+            "gemini-3.5-flash": MappingProxyType({"input": 1.65, "output": 9.90}),
+        }
+    )
 
     # TapPay Configuration
     TAPPAY_ENV: Literal["sandbox", "production"] = os.getenv("TAPPAY_ENV", "sandbox")

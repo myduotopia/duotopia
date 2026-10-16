@@ -132,19 +132,57 @@ class TestPricingCoversConfiguredModel:
         模型的單價。某環境覆寫了模型卻沒補單價時，成本會變 0 —— 看起來像
         「沒花錢」而不是「算不出來」（PR #1122 review 第 1 點）。
         """
-        with patch.dict("sys.modules", {"vertexai": MagicMock()}):
-            from services import scenario_grading_ai
+        from utils import ai_cost
 
-        with patch.object(scenario_grading_ai, "logger") as mock_logger:
-            cost = scenario_grading_ai.ScenarioGradingService.estimate_cost(
+        ai_cost._reset_warning_state_for_tests()
+        with patch.object(ai_cost, "logger") as mock_logger:
+            cost = ai_cost.estimate_cost_usd(
+                "gemini-某個還沒補單價的模型",
                 {"input_tokens": 1000, "output_tokens": 500},
-                model="gemini-某個還沒補單價的模型",
             )
 
         assert cost == 0.0
         assert (
             mock_logger.warning.called
         ), "價格表查不到單價時必須留 warning —— 否則成本靜默變 0，沒有人會發現成本統計已經失效"
+
+    def test_unknown_model_warns_only_once(self):
+        """同一個模型只警告一次。
+
+        最可能的情境是某環境覆寫了模型卻沒補單價 —— 那會是**每個請求**都走到
+        這條路徑，每次都 log 會把 log 洗掉（PR #1122 review 第 3 點）。
+        """
+        from utils import ai_cost
+
+        ai_cost._reset_warning_state_for_tests()
+        usage = {"input_tokens": 10, "output_tokens": 10}
+        with patch.object(ai_cost, "logger") as mock_logger:
+            for _ in range(5):
+                ai_cost.estimate_cost_usd("gemini-沒單價", usage)
+
+        count = mock_logger.warning.call_count
+        assert count == 1, f"同一個模型警告了 {count} 次 —— 每個請求都 log 會洗版"
+
+    def test_services_share_the_same_cost_helper(self):
+        """三個服務的成本估算必須得到一致結果（原本是三份複製的實作）。"""
+        with patch.dict("sys.modules", {"vertexai": MagicMock()}):
+            from services.magic_paste_service import MagicPasteService
+            from services.scenario_dialogue_ai import ScenarioDialogueAIService
+            from services.scenario_grading_ai import ScenarioGradingService
+
+        from core.config import settings
+
+        model = settings.VERTEX_AI_FLASH_MODEL
+        usage = {"input_tokens": 12345, "output_tokens": 6789}
+
+        grading = ScenarioGradingService.estimate_cost(usage)
+        dialogue = ScenarioDialogueAIService.estimate_cost(usage)
+        magic = MagicPasteService._estimate_cost(model, usage)
+
+        assert grading == dialogue == magic > 0, (
+            f"三個服務算出不同成本：grading={grading} dialogue={dialogue} "
+            f"magic={magic}（model={model}）"
+        )
 
 
 @pytest.mark.unit
@@ -180,6 +218,69 @@ class TestThinkingTokensCounted:
 
         usage = ScenarioGradingService._usage_of(response)
         assert usage["output_tokens"] == 50
+
+
+@pytest.mark.unit
+class TestNoSmallBudgetWithThinkingOn:
+    """自動掃描：不可以有「thinking 開著 + max_tokens 很小」的呼叫點。
+
+    gemini-3.5-flash 的預設 thinking 實測吃 284~330 tokens。`max_tokens=300`
+    這種設定不關 thinking，輸出預算會被吃光而回空字串／截斷的句子
+    （#874 的死法，#1119 在 cron 與 billing 兩處踩到）。
+
+    這件事三輪 code review 問了三次，每次都靠人工盤點回答 —— 改成測試掃描，
+    以後新增呼叫點忘了關 thinking 會直接被擋下（PR #1122 review）。
+
+    範圍限於走共用封裝（generate_text / generate_json / generate_text_sync）
+    且 max_tokens 寫成字面值的呼叫。直接自建 GenerationConfig 的四個服務
+    用的是模組常數（2048~8192），餘裕充足且已實打驗證過。
+    """
+
+    # thinking 實測 284~330，留足餘裕
+    MIN_SAFE_BUDGET = 800
+    WRAPPER_CALLS = {"generate_text", "generate_json", "generate_text_sync"}
+
+    def test_no_call_site_risks_thinking_eating_the_output(self):
+        import ast
+
+        backend = pathlib.Path(__file__).resolve().parents[2]
+        violations = []
+
+        for folder in ("services", "routers"):
+            for path in sorted((backend / folder).glob("*.py")):
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    func = node.func
+                    name = func.attr if isinstance(func, ast.Attribute) else None
+                    if name not in self.WRAPPER_CALLS:
+                        continue
+
+                    kwargs = {
+                        kw.arg: kw.value for kw in node.keywords if kw.arg is not None
+                    }
+                    budget = kwargs.get("max_tokens")
+                    if not (
+                        isinstance(budget, ast.Constant)
+                        and isinstance(budget.value, int)
+                    ):
+                        continue  # 非字面值（預設值或變數）不在掃描範圍
+                    if budget.value >= self.MIN_SAFE_BUDGET:
+                        continue
+                    if "disable_thinking" in kwargs:
+                        continue
+
+                    violations.append(
+                        f"{folder}/{path.name}:{node.lineno} "
+                        f"max_tokens={budget.value} 未傳 disable_thinking"
+                    )
+
+        assert not violations, (
+            "以下呼叫點的 max_tokens 偏小又沒關 thinking，"
+            "gemini-3.5-flash 的 thinking（284~330 tokens）會吃掉輸出預算，"
+            "回空字串或被截斷的句子：\n  " + "\n  ".join(violations)
+        )
 
 
 @pytest.mark.unit
