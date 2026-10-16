@@ -9,6 +9,19 @@ export const FEATURE_FLAGS = {
   ONE_CAMPUS_LOGIN: true,
   /** 老師端 Google 登入按鈕（#740） */
   GOOGLE_LOGIN: true,
+  /**
+   * 情境對話逐題「AI 生成圖片」（#1024 做的 Imagen 生圖）。
+   *
+   * #1044 先關掉：實測發現生圖品質與流程還要調整，團隊決定先把「出內容 → 出作業 →
+   * 學生作答」整條主線做完整，之後再回頭修這一塊。
+   *
+   * **只關前端入口**：後端端點與月配額（scenario_image_usage）不動，已經生成的圖片
+   * 仍然顯示得出來、換得掉、刪得掉 —— 既有資料不能因為關掉入口就變成孤兒。
+   * 手動上傳圖片也完全不受影響，那是這段期間的主要途徑。
+   *
+   * 要開回來就把這裡改成 true（生圖的程式碼路徑完整保留著，沒有被刪）。
+   */
+  SCENARIO_IMAGE_GENERATION: false,
 } as const;
 
 /**

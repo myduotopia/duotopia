@@ -5,7 +5,7 @@
  * 1. 兩步共用同一份 state，來回切換不會弄丟填過的東西
  * 2. 「標題必填」擋的是儲存、「情境內容必填」擋的是 AI 產題 —— 兩者不同
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createRef, type ReactNode } from "react";
 import {
   render,
@@ -35,6 +35,27 @@ const fakeQuestion = (n: number) => ({
   keywords: [`kw${n}`],
   reference_answer: `Reference ${n}`,
   image_prompt: "",
+});
+
+/**
+ * #1044: 生圖的前端入口由 FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION 控制。
+ *
+ * 用可變物件而不是固定值 —— 同一個檔案裡兩種狀態都要測：關閉時是 coming soon，
+ * 開啟時生圖邏輯必須照常運作（那段程式碼沒有被刪，日後要開回來）。
+ * 元件是在 render 時才讀這個屬性，所以改屬性就會生效。
+ */
+// 空物件，由下面的 factory 用真的旗標填滿 —— 保持同一個 reference 才能靠改屬性切換
+const mockFlags = vi.hoisted(() => ({}) as Record<string, boolean>);
+
+vi.mock("@/config/featureFlags", async (importOriginal) => {
+  // 從真檔案繼承，只覆蓋這張單關心的那一個旗標。
+  // 自己抄一份清單的話，真檔案新增旗標時 mock 會靜靜少一個，而元件讀到 undefined
+  // 不會報錯、只會行為怪掉（review 指出）。
+  const actual = await importOriginal<typeof import("@/config/featureFlags")>();
+  Object.assign(mockFlags, actual.FEATURE_FLAGS, {
+    SCENARIO_IMAGE_GENERATION: false,
+  });
+  return { ...actual, FEATURE_FLAGS: mockFlags };
 });
 
 /**
@@ -593,12 +614,16 @@ describe("ScenarioDialoguePanel 單題情境圖片", () => {
       target: { files: [new File(["x"], name, { type: "image/png" })] },
     });
 
-  it("空圖框同時提供「上傳」與「AI 生成」兩個入口", () => {
+  it("空圖框有「上傳」，AI 那顆則標示為即將推出（#1044）", () => {
+    // 兩個版位都還在畫面上 —— 整個藏起來的話，老師會以為沒有這個功能。
+    // AI 那顆的文字換成「即將推出」，原因看得見、不必點（見 #1044 的 describe）。
     renderPanel();
     gotoList();
 
     expect(screen.getAllByText(K.uploadImage).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(K.generateImage).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("scenarioDialogue.buttons.comingSoon").length,
+    ).toBeGreaterThan(0);
   });
 
   it("Step 1 已經沒有整份情境圖片欄位", () => {
@@ -1142,6 +1167,20 @@ describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () 
  * 擋下 → 換描述、其他 → 稍後再試）。
  */
 describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
+  /**
+   * #1044 把生圖入口關掉了，但**生圖的程式碼路徑完整保留著**（之後要開回來）。
+   * 這個 describe 驗的就是那條路徑，所以明確把旗標開起來 —— 否則這些測試會跟著
+   * 當下的開關狀態一起紅，而開關狀態不是它們要守的東西。
+   * 關閉時的行為由下面「生圖 coming soon」那個 describe 負責。
+   */
+  beforeEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = true;
+  });
+
+  afterEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = false;
+  });
+
   const generateImageFor = async (index: number) => {
     fireEvent.click(
       screen.getAllByText("scenarioDialogue.buttons.generateImage")[index],
@@ -1215,6 +1254,218 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
       "scenarioDialogue.messages.imageFailed",
     );
   });
+});
+
+/**
+ * 生圖 coming soon（Issue #1044）
+ *
+ * 實測發現生圖品質與流程還要調整，團隊決定先把「出內容 → 出作業 → 學生作答」整條
+ * 主線做完整，之後再回頭修。這段期間入口關著，但要關得讓老師看得懂。
+ *
+ * 最重要的一條是**原因要看得見，不必點才知道**：按鈕文字直接寫「即將推出」，
+ * title 補完整說明（ui-style-guide §3 規則 3 與 BulkActionBar 的 disabledBadge
+ * 就是這個慣例）。
+ *
+ * 原因既然不藏在 click 後面，就沒有 #1033 那個坑 —— 那次的問題是「唯一的說明被原生
+ * disabled 吃掉」，不是「不能用原生 disabled」。所以這裡用原生 disabled 是對的。
+ */
+describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
+  const gotoList = () => fireEvent.click(screen.getByText(K.skip));
+
+  beforeEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = false;
+    generateScenarioImage.mockReset();
+    // 本機 review 抓到：這個 describe 原本沒自己補 createObjectURL，
+    // 只是靠別的 describe 洩漏的 global stub 才過。單獨跑會 TypeError。
+    global.URL.createObjectURL = vi.fn(
+      () => "blob:coming-soon",
+    ) as unknown as typeof URL.createObjectURL;
+    global.URL.revokeObjectURL =
+      vi.fn() as unknown as typeof URL.revokeObjectURL;
+  });
+
+  // 最後一條會把旗標開起來，不還原會汙染後面的 describe（本機 review 抓到）
+  afterEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = false;
+  });
+
+  const generateButton = () =>
+    screen
+      .getAllByText("scenarioDialogue.buttons.comingSoon")[0]
+      .closest("button") as HTMLButtonElement;
+
+  it("原因直接寫在按鈕上，不必點才知道", () => {
+    renderPanel();
+    gotoList();
+
+    // 專案慣例（ui-style-guide §3 規則 3 / BulkActionBar 的 disabledBadge）是
+    // 「原因要看得見」。原因不藏在 click 後面，就沒有 #1033 那個坑。
+    expect(generateButton()).toHaveAttribute(
+      "title",
+      "scenarioDialogue.messages.imageGenerationComingSoon",
+    );
+  });
+
+  it("停用狀態不會打生圖 API", () => {
+    renderPanel();
+    gotoList();
+
+    // 先釘住「它真的是停用的」—— 否則下面那句 click 在原生 disabled 的按鈕上
+    // 本來就不會派發事件，斷言會**不管實作對不對都通過**（review 指出的空驗）
+    expect(generateButton()).toBeDisabled();
+
+    fireEvent.click(generateButton());
+
+    expect(generateScenarioImage).not.toHaveBeenCalled();
+  });
+
+  it("看得出是停用狀態", () => {
+    renderPanel();
+    gotoList();
+
+    expect(generateButton()).toBeDisabled();
+    const className = generateButton().className;
+    expect(className).not.toContain("bg-blue-600");
+    // 明確釘住停用的視覺，否則被人改成「看起來可按」也不會紅
+    expect(className).toContain("bg-gray-100");
+    expect(className).toContain("text-gray-400");
+    expect(className).toContain("cursor-not-allowed");
+  });
+
+  it("長文字不會把 104px 的圖框擠爆", () => {
+    renderPanel();
+    gotoList();
+
+    // 兩顆按鈕都要 nowrap —— 英文標籤在 12px 下接近框寬上限，換行會把圖框撐開
+    expect(generateButton().className).toContain("whitespace-nowrap");
+    const uploadButton = screen
+      .getAllByText(K.uploadImage)[0]
+      .closest("button") as HTMLButtonElement;
+    expect(uploadButton.className).toContain("whitespace-nowrap");
+  });
+
+  it("手動上傳完全不受影響 —— 這段期間它是主要途徑", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[accept="image/*"]',
+    )!;
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], "a.png", { type: "image/png" })] },
+    });
+
+    expect(container.querySelector("img")).toBeInTheDocument();
+  });
+
+  it("旗標打開時回到正常的生圖按鈕", () => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = true;
+    renderPanel();
+    gotoList();
+
+    expect(
+      screen.queryByText("scenarioDialogue.buttons.comingSoon"),
+    ).not.toBeInTheDocument();
+    const button = screen
+      .getAllByText("scenarioDialogue.buttons.generateImage")[0]
+      .closest("button") as HTMLButtonElement;
+    expect(button).not.toBeDisabled();
+    expect(button.className).toContain("bg-blue-600");
+  });
+});
+
+/**
+ * 字級（Issue #1044）
+ *
+ * 面板原本有 34 處低於 12px（21 個 10px、13 個 11px），而專案對照的
+ * VocabularySetPanel 以 14px 為主體 —— 整個面板比專案其他地方小了約一個級距。
+ *
+ * 這條守的是「不要再有人補一個 text-[10px] 回來」。驗 class 而不是驗算出來的像素，
+ * 因為 jsdom 不跑 Tailwind，算出來的值一律是預設字級。
+ *
+ * **兩個步驟都要掃，而且要把收合區塊展開**（本機 review 抓到）：Step 1 是
+ * `{step === 1 && …}`，進 Step 2 後整個卸載，這張單修的多數位置其實在 Step 1；
+ * 逐題的備註區塊預設收合，裡面的輸入也掃不到。只掃 Step 2 的話，把
+ * `text-[10px]` 放回去測試還是綠的。
+ */
+describe("ScenarioDialoguePanel 字級收斂回 Tailwind 級距（#1044）", () => {
+  /**
+   * 禁止**所有**任意字級值（`text-[...]`），不只 10／11px。
+   *
+   * 這張單的目的是把字級收斂回 Tailwind 既有級距，所以守衛也照這個標準 ——
+   * 只擋 10/11px 的話，`text-[0.7rem]`、`text-[9px]` 這類寫法會漏掉（review 指出）。
+   * 真的需要某個中間級距時，應該是先問「為什麼級距不夠用」，不是繞過守衛。
+   */
+  const tooSmallIn = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("*"))
+      .map((el) => el.className?.toString?.() ?? "")
+      .filter((c) => /\btext-\[[^\]]+\]/.test(c));
+
+  it("Step 1（設定）沒有任意字級值", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+
+    expect(tooSmallIn(container)).toEqual([]);
+  });
+
+  it("Step 2（題目清單）沒有任意字級值，含展開的備註區塊", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    fireEvent.click(screen.getByText(K.skip));
+
+    // 備註／參考答案預設收合，不展開就掃不到裡面的輸入
+    screen
+      .getAllByText("scenarioDialogue.labels.advanced")
+      .forEach((el) => fireEvent.click(el));
+
+    expect(tooSmallIn(container)).toEqual([]);
+  });
+});
+
+/**
+ * 圖片欄位的標籤寬度預算（Issue #1044）
+ *
+ * 圖框固定 `w-[104px]` 且 `overflow-hidden`，扣掉 `p-1.5` 兩側只剩 92px。字級從 10px
+ * 提到 12px 之後，標籤再長一點就會被切掉 —— 而 jsdom 量不到版面，`whitespace-nowrap`
+ * 的測試也偵測不到溢出。
+ *
+ * 所以把那個預算從「註解裡的一行字」變成**會紅的測試**：新增語系或改標籤時會直接
+ * 在這裡被攔下來，而不是等到有人回報畫面被切掉（review R3 第 3 點）。
+ */
+describe("ScenarioDialoguePanel 圖框標籤寬度預算（#1044）", () => {
+  // text-xs（12px）下的粗略字寬：CJK 約等於字級，拉丁字母約一半多一點。
+  //
+  // 用 charCodeAt 判斷而不是字元類別的正規表示式 —— 那種寫法要嵌 U+3000（全角空格）
+  // 之類的碼點，會被 eslint 的 no-irregular-whitespace 擋下來（而且那個錯誤訊息
+  // 完全看不出跟寬度估算有關）。
+  const CJK_START = 0x2e80;
+  const estimateWidth = (text: string) =>
+    [...text].reduce(
+      (sum, ch) => sum + ((ch.codePointAt(0) ?? 0) >= CJK_START ? 12 : 6.7),
+      0,
+    );
+
+  const SLOT_WIDTH = 104;
+  const PADDING = 6 * 2; // p-1.5 兩側
+  const ICON_AND_GAP = 14 + 4; // h-3.5 圖示 + gap-1
+  const BUDGET = SLOT_WIDTH - PADDING;
+
+  const locales = ["zh-TW", "en"] as const;
+
+  it.each(locales)("%s 的「上傳」標籤（含圖示）塞得進 92px", async (locale) => {
+    const dict = await import(`@/i18n/locales/${locale}/translation.json`);
+    const label = dict.default.scenarioDialogue.buttons.uploadImage;
+
+    expect(estimateWidth(label) + ICON_AND_GAP).toBeLessThanOrEqual(BUDGET);
+  });
+
+  it.each(locales)(
+    "%s 的「即將推出」標籤（無圖示）塞得進 92px",
+    async (locale) => {
+      const dict = await import(`@/i18n/locales/${locale}/translation.json`);
+      const label = dict.default.scenarioDialogue.buttons.comingSoon;
+
+      expect(estimateWidth(label)).toBeLessThanOrEqual(BUDGET);
+    },
+  );
 });
 
 /**
