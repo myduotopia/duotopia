@@ -20,6 +20,7 @@ thoughts=284、實際輸出只有 1 個 token（finish=MAX_TOKENS），正是 #8
 """
 
 import os
+import pathlib
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -124,6 +125,27 @@ class TestPricingCoversConfiguredModel:
         )
         assert cost > 0
 
+    def test_unknown_model_warns_instead_of_silently_zero(self):
+        """價格表沒有的模型要留 warning。
+
+        模型 ID 可由環境變數覆寫（VERTEX_AI_FLASH_MODEL），但價格表只有預設
+        模型的單價。某環境覆寫了模型卻沒補單價時，成本會變 0 —— 看起來像
+        「沒花錢」而不是「算不出來」（PR #1122 review 第 1 點）。
+        """
+        with patch.dict("sys.modules", {"vertexai": MagicMock()}):
+            from services import scenario_grading_ai
+
+        with patch.object(scenario_grading_ai, "logger") as mock_logger:
+            cost = scenario_grading_ai.ScenarioGradingService.estimate_cost(
+                {"input_tokens": 1000, "output_tokens": 500},
+                model="gemini-某個還沒補單價的模型",
+            )
+
+        assert cost == 0.0
+        assert (
+            mock_logger.warning.called
+        ), "價格表查不到單價時必須留 warning —— 否則成本靜默變 0，沒有人會發現成本統計已經失效"
+
 
 @pytest.mark.unit
 class TestThinkingTokensCounted:
@@ -205,24 +227,41 @@ class TestDataResidencyNotRegressed:
     """
 
     def test_default_location_stays_in_asia(self):
-        import importlib
+        """直接讀 config.py 原始碼裡 os.getenv 的預設值，不 reload 模組。
 
-        env_without_loc = {
-            k: v for k, v in os.environ.items() if k != "VERTEX_AI_LOCATION"
-        }
-        try:
-            with patch.dict(os.environ, env_without_loc, clear=True), patch(
-                "dotenv.load_dotenv"
-            ):
-                import core.config
+        先前的寫法用 `importlib.reload(core.config)` 搭配清空的 os.environ，
+        有兩個問題（PR #1122 review 第 3 點）：reload 會產生新的 `settings`
+        物件，已 import 舊物件的模組會看到不同實例，測試間互相影響；而且
+        `import core.config` 失敗時 `finally` 裡的 `core` 是 unbound。
 
-                importlib.reload(core.config)
-                location = core.config.settings.VERTEX_AI_LOCATION
-        finally:
-            # 還原，避免影響後續測試（斷言失敗也要執行）
-            importlib.reload(core.config)
+        這個測試要守的其實只是「程式碼裡寫的預設值」，用 AST 讀就夠，
+        不必動執行期狀態。
+        """
+        import ast
 
-        assert location.startswith("asia-"), (
-            f"VERTEX_AI_LOCATION={location!r} 不在亞洲 —— 這會違反 #959 "
+        config_path = pathlib.Path(__file__).resolve().parents[2] / "core" / "config.py"
+        tree = ast.parse(config_path.read_text(encoding="utf-8"))
+
+        default = None
+        for node in ast.walk(tree):
+            # 比對 VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "...")
+            if not isinstance(node, ast.AnnAssign):
+                continue
+            target = node.target
+            if not (isinstance(target, ast.Name) and target.id == "VERTEX_AI_LOCATION"):
+                continue
+            call = node.value
+            if isinstance(call, ast.Call) and len(call.args) == 2:
+                literal = call.args[1]
+                if isinstance(literal, ast.Constant):
+                    default = literal.value
+            break
+
+        assert default is not None, (
+            "在 core/config.py 找不到 VERTEX_AI_LOCATION 的 os.getenv 預設值 —— "
+            "設定方式若改了，這個合規守門測試要一併更新"
+        )
+        assert default.startswith("asia-"), (
+            f"VERTEX_AI_LOCATION 預設值 {default!r} 不在亞洲 —— 這會違反 #959 "
             "對教育部徵求案的資料出境承諾，必須先取得合規確認"
         )
