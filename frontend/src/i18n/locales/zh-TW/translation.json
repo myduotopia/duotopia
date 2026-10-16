@@ -5025,7 +5025,8 @@
       "imageBlocked": "這個描述沒辦法生成圖片，請換個描述再試",
       "imageFailed": "圖片生成失敗，請稍後再試",
       "scenarioRequired": "請先輸入情境內容，AI 才有素材可以出題",
-      "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」"
+      "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
+      "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入"
     },
     "tenseTimes": {
       "present": "現在",

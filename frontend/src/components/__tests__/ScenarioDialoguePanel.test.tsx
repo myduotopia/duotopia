@@ -58,7 +58,34 @@ vi.mock("@/config/featureFlags", async (importOriginal) => {
   return { ...actual, FEATURE_FLAGS: mockFlags };
 });
 
+/**
+ * ApiError 必須是**同一個** class：元件用 `error instanceof ApiError` 判斷狀態碼，
+ * mock 掉 `@/lib/api` 之後，元件拿到的就是這裡定義的這個。原本測試用
+ * `new Error('402 {...}')` 捏假錯誤 —— 那會在實作改成 status 判斷之後**仍然通過**，
+ * 等於什麼都沒驗到（本機 review 抓到）。
+ */
+// vi.mock 的 factory 會被 hoist 到檔案最上面，所以 class 也要用 vi.hoisted 定義，
+// 否則 factory 執行時它還沒初始化（ReferenceError）。
+const MockApiError = vi.hoisted(
+  () =>
+    class MockApiError extends Error {
+      status: number;
+      detail: unknown;
+      constructor(status: number, detail: unknown) {
+        super(
+          typeof detail === "object" && detail && "message" in detail
+            ? String((detail as { message?: string }).message)
+            : String(detail),
+        );
+        this.name = "ApiError";
+        this.status = status;
+        this.detail = detail;
+      }
+    },
+);
+
 vi.mock("@/lib/api", () => ({
+  ApiError: MockApiError,
   apiClient: {
     generateScenarioQuestions: (...a: unknown[]) =>
       generateScenarioQuestions(...a),
@@ -1188,7 +1215,10 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
 
   it("額度用完（402）會告訴老師改用手動上傳", async () => {
     generateScenarioImage.mockRejectedValue(
-      new Error('402 {"error":"SCENARIO_IMAGE_QUOTA_EXCEEDED"}'),
+      new MockApiError(402, {
+        error: "SCENARIO_IMAGE_QUOTA_EXCEEDED",
+        message: "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片。",
+      }),
     );
     await prepareRows();
 
@@ -1200,7 +1230,9 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
   });
 
   it("被安全過濾擋下（422）會請老師換個描述", async () => {
-    generateScenarioImage.mockRejectedValue(new Error("422 blocked"));
+    generateScenarioImage.mockRejectedValue(
+      new MockApiError(422, { message: "描述被安全過濾擋下，請換個說法" }),
+    );
     await prepareRows();
 
     await generateImageFor(0);
@@ -1211,7 +1243,9 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
   });
 
   it("其他錯誤是「稍後再試」，不會誤導成額度或描述問題", async () => {
-    generateScenarioImage.mockRejectedValue(new Error("500 boom"));
+    generateScenarioImage.mockRejectedValue(
+      new MockApiError(500, { message: "伺服器錯誤" }),
+    );
     await prepareRows();
 
     await generateImageFor(0);
@@ -1432,4 +1466,78 @@ describe("ScenarioDialoguePanel 圖框標籤寬度預算（#1044）", () => {
       expect(estimateWidth(label)).toBeLessThanOrEqual(BUDGET);
     },
   );
+});
+
+/**
+ * 文字 AI 額度用完的提示（Issue #1025）
+ *
+ * 402 要與一般失敗分開講。老師可能已經填好半份設定，給他一句「稍後再試」等於叫他
+ * 白等 —— 這個月不會再成功。所以要明講額度用完、下個月重置、現在改用手動輸入。
+ */
+describe("ScenarioDialoguePanel 文字 AI 額度用完（#1025）", () => {
+  // 後端回的 detail 形狀；message 是中文句子，**不含** "402" 或錯誤碼 ——
+  // 這正是為什麼不能比對字串
+  const QUOTA_ERROR = new MockApiError(402, {
+    error: "SCENARIO_TEXT_QUOTA_EXCEEDED",
+    message:
+      "本月情境對話 AI 次數已用完，可以改用手動輸入；下個月 1 日自動重置。",
+  });
+
+  beforeEach(() => {
+    mockToastError.mockClear();
+  });
+
+  it("產題撞到額度 → 講額度，不是「稍後再試」", async () => {
+    generateScenarioQuestions.mockRejectedValue(QUOTA_ERROR);
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.textQuotaExceeded",
+    );
+  });
+
+  it("生成情境文章撞到額度 → 同一句提示", async () => {
+    // 生成情境文章在「AI 產生」那個 tab，而且訓練目標是必填（#1021）
+    generateScenarioArticle.mockRejectedValue(QUOTA_ERROR);
+    renderPanel();
+    switchTab(K.tabAi);
+    type(K.goalPlaceholder, "交通工具與問路");
+    await runGenerate(K.generateScenario);
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.textQuotaExceeded",
+    );
+  });
+
+  it("其他失敗仍然是一般的「產生失敗」，不會誤報成額度問題", async () => {
+    generateScenarioQuestions.mockRejectedValue(
+      new MockApiError(500, { message: "伺服器錯誤" }),
+    );
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.generateFailed",
+    );
+  });
+
+  it("撞到額度之後，老師填過的設定不會被清掉", async () => {
+    // 這是「改用手動輸入」這句話成立的前提 —— 設定被清掉的話等於前功盡棄
+    generateScenarioQuestions.mockRejectedValue(QUOTA_ERROR);
+    renderPanel();
+    fillRequiredForGenerate();
+    const scenarioBox = screen.getByPlaceholderText(K.scenarioPlaceholder);
+    const filled = (scenarioBox as HTMLTextAreaElement).value;
+    expect(filled).not.toBe("");
+
+    await runGenerate(K.generate);
+
+    // 設定還在，「改用手動輸入」這句話才站得住腳
+    expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+      filled,
+    );
+  });
 });

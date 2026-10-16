@@ -112,7 +112,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import {
   EMPTY_TENSE,
@@ -455,6 +455,25 @@ function ScenarioImageSlot({
       )}
     </div>
   );
+}
+
+/**
+ * 文字 AI 的失敗提示（Issue #1025）。
+ *
+ * 402（本月額度用完）要與一般失敗分開講：老師可能已經填好半份設定，
+ * 給他一句「稍後再試」等於叫他白等 —— 這個月不會再成功。所以明講額度用完、
+ * 下個月自動重置、現在可以改用手動輸入（面板上填過的東西都還在）。
+ *
+ * 三個呼叫點（產題、重產單題、生成情境文章／擷取）共用這一份。
+ */
+function textAiErrorKey(error: unknown): string {
+  // 用 status 判斷，**不要比對 message 字串**：ApiError 的 message 是後端 detail 裡的
+  // 那句中文，不含 "402" 也不含錯誤碼（見 api.ts 的 ApiError constructor）。比字串的話
+  // 這個分支永遠不會進去，額度提示等於死碼 —— 本機 review 抓到的就是這個。
+  if (error instanceof ApiError && error.status === 402) {
+    return "scenarioDialogue.messages.textQuotaExceeded";
+  }
+  return "scenarioDialogue.messages.generateFailed";
 }
 
 interface RowProps {
@@ -1151,7 +1170,7 @@ const ScenarioDialoguePanel = forwardRef<
       if (advance) setStep(2);
     } catch (error) {
       console.error("Failed to generate scenario questions:", error);
-      toast.error(t("scenarioDialogue.messages.generateFailed"));
+      toast.error(t(textAiErrorKey(error)));
     } finally {
       setIsGenerating(false);
     }
@@ -1208,7 +1227,7 @@ const ScenarioDialoguePanel = forwardRef<
       );
     } catch (error) {
       console.error("Failed to regenerate scenario question:", error);
-      toast.error(t("scenarioDialogue.messages.generateFailed"));
+      toast.error(t(textAiErrorKey(error)));
     } finally {
       setRegeneratingId(null);
     }
@@ -1255,7 +1274,7 @@ const ScenarioDialoguePanel = forwardRef<
       }
     } catch (error) {
       console.error("Failed to generate scenario content:", error);
-      toast.error(t("scenarioDialogue.messages.generateFailed"));
+      toast.error(t(textAiErrorKey(error)));
     } finally {
       setIsGeneratingScenario(false);
     }
@@ -1346,10 +1365,13 @@ const ScenarioDialoguePanel = forwardRef<
       patchRow(id, { imageUrl: image_url });
     } catch (error) {
       console.error("Failed to generate question image:", error);
-      const message = String((error as Error)?.message ?? "");
-      if (message.includes("402") || message.includes("QUOTA_EXCEEDED")) {
+      // 同 textAiErrorKey：改用 status，不比對 message 字串。
+      // 這段是 #1024 就有的同一個錯法（ApiError.message 是後端那句中文，不含狀態碼），
+      // 順手一起修 —— 留著等於知道壞了還放過。
+      const status = error instanceof ApiError ? error.status : 0;
+      if (status === 402) {
         toast.error(t("scenarioDialogue.messages.imageQuotaExceeded"));
-      } else if (message.includes("422")) {
+      } else if (status === 422) {
         toast.error(t("scenarioDialogue.messages.imageBlocked"));
       } else {
         toast.error(t("scenarioDialogue.messages.imageFailed"));
