@@ -210,18 +210,19 @@ class TestDataResidencyNotRegressed:
         env_without_loc = {
             k: v for k, v in os.environ.items() if k != "VERTEX_AI_LOCATION"
         }
-        with patch.dict(os.environ, env_without_loc, clear=True), patch(
-            "dotenv.load_dotenv"
-        ):
-            import core.config
+        try:
+            with patch.dict(os.environ, env_without_loc, clear=True), patch(
+                "dotenv.load_dotenv"
+            ):
+                import core.config
 
+                importlib.reload(core.config)
+                location = core.config.settings.VERTEX_AI_LOCATION
+        finally:
+            # 還原，避免影響後續測試（斷言失敗也要執行）
             importlib.reload(core.config)
-            location = core.config.settings.VERTEX_AI_LOCATION
 
         assert location.startswith("asia-"), (
             f"VERTEX_AI_LOCATION={location!r} 不在亞洲 —— 這會違反 #959 "
             "對教育部徵求案的資料出境承諾，必須先取得合規確認"
         )
-
-        # 還原，避免影響後續測試
-        importlib.reload(core.config)

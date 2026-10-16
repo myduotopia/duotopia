@@ -9,8 +9,9 @@ Vertex AI (Gemini) Service
 Model 對應（實際值見 core/config.py 的 VERTEX_AI_FLASH_MODEL /
 VERTEX_AI_PRO_MODEL，Issue #1119 起收斂為單一來源）：
 - "flash" → 一般用途（翻譯、例句、干擾選項等）
-- "pro"   → 複雜分析。目前與 flash 同一個模型：asia-northeast1 沒有任何
-            Gemini 3.x 的 pro（實測 404），詳見 config.py 註解
+- "pro"   → 複雜分析。**預設與 flash 同一個模型**，所以 model_type="pro"
+            實際走的就是 flash：asia-northeast1 沒有任何 Gemini 3.x 的 pro
+            （實測 404），詳見 config.py 註解
 """
 
 import os
@@ -72,7 +73,10 @@ class VertexAIService:
 
         model_type:
         - "flash": settings.VERTEX_AI_FLASH_MODEL
-        - "pro": settings.VERTEX_AI_PRO_MODEL（複雜分析）
+        model_type:
+        - "flash": settings.VERTEX_AI_FLASH_MODEL
+        - "pro": settings.VERTEX_AI_PRO_MODEL（預設與 flash 相同，
+          因此 model_type="pro" 預設實際走 flash）
 
         當有 system_instruction 時，建立新的 model 實例（Gemini 原生支援）。
         無 system_instruction 時，使用 cached model 以提升效能。
