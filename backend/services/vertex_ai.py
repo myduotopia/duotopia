@@ -6,9 +6,11 @@ Vertex AI (Gemini) Service
 - 文字生成（翻譯、例句生成等）
 - JSON 格式輸出（詞性分析、干擾選項等）
 
-Model 對應：
-- gpt-4o-mini → gemini-2.5-flash（快速、高效能）
-- gpt-4 → gemini-2.5-pro（複雜分析）
+Model 對應（實際值見 core/config.py 的 VERTEX_AI_FLASH_MODEL /
+VERTEX_AI_PRO_MODEL，Issue #1119 起收斂為單一來源）：
+- "flash" → 一般用途（翻譯、例句、干擾選項等）
+- "pro"   → 複雜分析。目前與 flash 同一個模型：asia-northeast1 沒有任何
+            Gemini 3.x 的 pro（實測 404），詳見 config.py 註解
 """
 
 import os
@@ -69,8 +71,8 @@ class VertexAIService:
         取得 GenerativeModel 實例
 
         model_type:
-        - "flash": gemini-2.5-flash
-        - "pro": gemini-2.5-pro（複雜分析）
+        - "flash": settings.VERTEX_AI_FLASH_MODEL
+        - "pro": settings.VERTEX_AI_PRO_MODEL（複雜分析）
 
         當有 system_instruction 時，建立新的 model 實例（Gemini 原生支援）。
         無 system_instruction 時，使用 cached model 以提升效能。
