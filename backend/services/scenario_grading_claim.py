@@ -105,6 +105,13 @@ def still_holds(db: Session, progress: StudentItemProgress, token) -> bool:
 
     窗口很窄（要超過 180 秒），但代價是老師看到的是**另一次分析的結果**，而且看不出
     哪裡不對 —— 值得多問一句。
+
+    **前提**：token 是時間戳，比對依賴它寫進 DB 再讀回來完全相等。PostgreSQL 的
+    ``timestamptz`` 是微秒精度，目前成立；哪天換了 DB 或降低欄位精度，這裡會變成
+    **永遠回 False＝結果永遠不落地**，而且不會報錯。
+    `test_the_token_round_trips_exactly` 就是為了讓那種情況大聲壞掉而存在的
+    （PR #1123 review R3 第 2 點）。真的要更保險的話是改用獨立的 uuid 欄位，
+    那是 schema 變更，不在這張單裡做。
     """
     if token is None:
         return False
@@ -148,6 +155,11 @@ def release(
     session 會停在失敗狀態，這裡再下查詢會丟 ``PendingRollbackError``，把原本的
     錯誤蓋掉、而且鎖要卡到逾時才會放（PR #1123 review 1）。
     rollback 不會丟掉 claim 寫的東西 —— 那個 commit 早就完成了。
+
+    **前提**：rollback 會讓 ``progress`` 的所有屬性過期（expire）。呼叫端在
+    ``finally`` 之後若還要讀它，會多打一次查詢，session 已壞時甚至會再丟錯。
+    目前的呼叫端在進 ``finally`` 之前就把回應算完了，所以沒事；要改動那個順序時
+    請一併確認（PR #1123 review R3 第 1 點）。
     """
     db.rollback()
 

@@ -303,3 +303,50 @@ class TestStillHolds:
     def test_false_without_a_token(self, db_session, progress):
         claim_mod.claim(db_session, progress)
         assert claim_mod.still_holds(db_session, progress, None) is False
+
+
+def test_the_token_round_trips_exactly(db_session, progress):
+    """token 寫進 DB 再讀回來必須**比對得到**。
+
+    `still_holds` 與 `release` 都用 `started_at == token` 做等值比對。哪天換了 DB 或
+    降低欄位精度，比對會變成永遠不成立 —— 結果永遠不落地、鎖永遠放不掉，而且**不會
+    報錯**。這條存在的目的就是讓那種情況大聲壞掉（PR #1123 review R3 第 2 點）。
+
+    ## 為什麼驗的是「SQL 比得到」而不是 Python 的 ==
+
+    第一版我寫成 Python 層的 `stored == token`，結果在 SQLite 上紅了 —— 但那是**我的
+    測試寫錯**，不是程式有問題：
+
+    * **微秒完整保留**（兩邊都是同一個值），那才是 review 擔心的精度問題；
+    * SQLite 會把 tzinfo 丟掉，所以 naive 與 aware 的 datetime 在 Python 層不相等。
+      PostgreSQL 的 timestamptz 不會。
+
+    而產品程式碼的比對是**在 SQL 裡**做的，不是在 Python 裡 —— 所以兩種 DB 都正常。
+    驗 Python 的 `==` 會在 SQLite 上得到一個假警報，所以這裡驗兩件該驗的事：
+    SQL 比對找得到那一列，以及微秒沒有被截掉。
+    """
+    _, _, token = claim_mod.claim(db_session, progress)
+
+    # 1) SQL 層比對得到 —— 這是 still_holds / release 實際依賴的那件事
+    found = (
+        db_session.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress.id,
+            StudentItemProgress.scenario_grading_started_at == token,
+        )
+        .count()
+    )
+    assert found == 1, "SQL 等值比對找不到那一列 → 結果永遠不落地、鎖永遠放不掉"
+
+    # 2) 微秒沒有被截掉（review 擔心的精度問題）。不比 tzinfo —— SQLite 會丟掉它，
+    #    PostgreSQL 不會，而那個差異不影響 SQL 比對。
+    db_session.expire(progress)
+    stored = (
+        db_session.query(StudentItemProgress)
+        .filter(StudentItemProgress.id == progress.id)
+        .first()
+        .scenario_grading_started_at
+    )
+    assert stored.replace(tzinfo=None) == token.replace(
+        tzinfo=None
+    ), f"時間戳精度被截掉了：寫入 {token!r}，讀回 {stored!r}"

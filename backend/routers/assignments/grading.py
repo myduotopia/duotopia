@@ -2526,9 +2526,14 @@ async def scenario_ai_grade(
             db.commit()
             delivered = True
         else:
+            # 把用量與成本一起記：這種情況下老師拿到結果但下次載入看不到、額度卻扣了，
+            # 需要能估出發生頻率與浪費掉多少成本（PR #1123 review R3 第 3 點）
             logger.warning(
-                "Scenario AI grading lost its claim before persisting | progress=%s",
+                "Scenario AI grading lost its claim before persisting | "
+                "progress=%s | usage=%s | cost=%s",
                 item_progress_id,
+                result.get("usage"),
+                result.get("estimated_cost_usd"),
             )
             # 鎖不是我們的了：額度不退（退掉就是退新主人的，同 release 的理由）
             delivered = True

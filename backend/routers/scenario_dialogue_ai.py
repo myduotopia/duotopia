@@ -151,7 +151,7 @@ async def _with_text_quota(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "error": "SCENARIO_TEXT_QUOTA_EXCEEDED",
-                "message": ("本月情境對話 AI 次數已用完，可以改用手動輸入；" "下個月 1 日自動重置。"),
+                "message": "本月情境對話 AI 次數已用完（下個月 1 日自動重置），可以改用手動輸入。",
                 "quota": charge,
             },
         )
