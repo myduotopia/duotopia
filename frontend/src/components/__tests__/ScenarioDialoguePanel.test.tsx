@@ -5,7 +5,7 @@
  * 1. 兩步共用同一份 state，來回切換不會弄丟填過的東西
  * 2. 「標題必填」擋的是儲存、「情境內容必填」擋的是 AI 產題 —— 兩者不同
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createRef, type ReactNode } from "react";
 import {
   render,
@@ -20,6 +20,7 @@ import ScenarioDialoguePanel, {
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 
 const mockToastError = vi.fn();
+const mockToastInfo = vi.fn();
 
 // #1021: 產題／生成情境文章／擷取／TTS 都真的打 API 了，這裡一律 mock。
 // 預設回傳足夠的題目，讓「產一批」相關的測試維持原本的行為斷言。
@@ -37,6 +38,26 @@ const fakeQuestion = (n: number) => ({
   image_prompt: "",
 });
 
+/**
+ * #1044: 生圖的前端入口由 FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION 控制。
+ *
+ * 用可變物件而不是固定值 —— 同一個檔案裡兩種狀態都要測：關閉時是 coming soon，
+ * 開啟時生圖邏輯必須照常運作（那段程式碼沒有被刪，日後要開回來）。
+ * 元件是在 render 時才讀這個屬性，所以改屬性就會生效。
+ */
+const mockFlags = vi.hoisted(() => ({
+  ASSIGNMENTS: true,
+  ONE_CAMPUS_LOGIN: true,
+  GOOGLE_LOGIN: true,
+  SCENARIO_IMAGE_GENERATION: false,
+}));
+
+vi.mock("@/config/featureFlags", () => ({
+  FEATURE_FLAGS: mockFlags,
+  ENABLE_GROUP_BUY: true,
+  ENABLE_SCENARIO_DIALOGUE: true,
+}));
+
 vi.mock("@/lib/api", () => ({
   apiClient: {
     generateScenarioQuestions: (...a: unknown[]) =>
@@ -52,7 +73,7 @@ vi.mock("sonner", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     success: vi.fn(),
-    info: vi.fn(),
+    info: (...args: unknown[]) => mockToastInfo(...args),
   },
 }));
 
@@ -567,6 +588,8 @@ describe("ScenarioDialoguePanel 單題情境圖片", () => {
     });
 
   it("空圖框同時提供「上傳」與「AI 生成」兩個入口", () => {
+    // #1044 起 AI 生成是 coming soon 狀態，但兩個入口都還在畫面上
+    // （整個藏起來的話，老師會以為這個功能不存在）
     renderPanel();
     gotoList();
 
@@ -1115,6 +1138,20 @@ describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () 
  * 擋下 → 換描述、其他 → 稍後再試）。
  */
 describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
+  /**
+   * #1044 把生圖入口關掉了，但**生圖的程式碼路徑完整保留著**（之後要開回來）。
+   * 這個 describe 驗的就是那條路徑，所以明確把旗標開起來 —— 否則這些測試會跟著
+   * 當下的開關狀態一起紅，而開關狀態不是它們要守的東西。
+   * 關閉時的行為由下面「生圖 coming soon」那個 describe 負責。
+   */
+  beforeEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = true;
+  });
+
+  afterEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = false;
+  });
+
   const generateImageFor = async (index: number) => {
     fireEvent.click(
       screen.getAllByText("scenarioDialogue.buttons.generateImage")[index],
@@ -1180,5 +1217,111 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
     expect(mockToastError).toHaveBeenCalledWith(
       "scenarioDialogue.messages.imageFailed",
     );
+  });
+});
+
+/**
+ * 生圖 coming soon（Issue #1044）
+ *
+ * 實測發現生圖品質與流程還要調整，團隊決定先把「出內容 → 出作業 → 學生作答」整條
+ * 主線做完整，之後再回頭修。這段期間入口關著，但要關得讓老師看得懂。
+ *
+ * 最重要的一條是**點下去要有回饋**：原生 disabled 的按鈕不派發 click，提示就變死碼，
+ * 老師只會覺得按鈕壞了（#1033 修過一次同樣的坑，別再踩）。
+ */
+describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
+  const gotoList = () => fireEvent.click(screen.getByText(K.skip));
+
+  beforeEach(() => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = false;
+    mockToastInfo.mockClear();
+    generateScenarioImage.mockReset();
+  });
+
+  const generateButton = () =>
+    screen
+      .getAllByText("scenarioDialogue.buttons.generateImage")[0]
+      .closest("button") as HTMLButtonElement;
+
+  it("點下去會說明「即將推出」，而不是沒反應", () => {
+    renderPanel();
+    gotoList();
+
+    fireEvent.click(generateButton());
+
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.imageGenerationComingSoon",
+    );
+  });
+
+  it("不會真的去打生圖 API", () => {
+    renderPanel();
+    gotoList();
+
+    fireEvent.click(generateButton());
+
+    expect(generateScenarioImage).not.toHaveBeenCalled();
+  });
+
+  it("沒有用原生 disabled —— 否則上面那句提示永遠出不來", () => {
+    renderPanel();
+    gotoList();
+
+    expect(generateButton()).not.toBeDisabled();
+    expect(generateButton()).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("游標與配色看得出是停用狀態", () => {
+    renderPanel();
+    gotoList();
+
+    const className = generateButton().className;
+    expect(className).toContain("cursor-help");
+    expect(className).not.toContain("bg-blue-600");
+  });
+
+  it("手動上傳完全不受影響 —— 這段期間它是主要途徑", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    gotoList();
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[accept="image/*"]',
+    )!;
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], "a.png", { type: "image/png" })] },
+    });
+
+    expect(container.querySelector("img")).toBeInTheDocument();
+  });
+
+  it("旗標打開時就是正常的生圖按鈕，不是 coming soon", () => {
+    mockFlags.SCENARIO_IMAGE_GENERATION = true;
+    renderPanel();
+    gotoList();
+
+    expect(generateButton()).not.toHaveAttribute("aria-disabled", "true");
+    expect(generateButton().className).toContain("bg-blue-600");
+  });
+});
+
+/**
+ * 字級（Issue #1044）
+ *
+ * 面板原本有 34 處低於 12px（21 個 10px、13 個 11px），而專案對照的
+ * VocabularySetPanel 以 14px 為主體 —— 整個面板比專案其他地方小了約一個級距。
+ *
+ * 這條守的是「不要再有人補一個 text-[10px] 回來」。驗 class 而不是驗算出來的像素，
+ * 因為 jsdom 不跑 Tailwind，算出來的值一律是預設字級。
+ */
+describe("ScenarioDialoguePanel 字級不低於 12px（#1044）", () => {
+  it("畫面上沒有任何低於 12px 的字級 class", () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    fireEvent.click(screen.getByText(K.skip));
+
+    const tooSmall = Array.from(container.querySelectorAll("*")).filter((el) =>
+      /text-\[(?:[0-9]|10|11)px\]/.test(el.className?.toString?.() ?? ""),
+    );
+
+    expect(tooSmall.map((el) => el.className)).toEqual([]);
   });
 });
