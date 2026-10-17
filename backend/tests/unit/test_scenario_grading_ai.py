@@ -295,6 +295,9 @@ def _install_fake_vertex(monkeypatch):
     )
     response.usage_metadata.prompt_token_count = 4000
     response.usage_metadata.candidates_token_count = 300
+    # thinking token 現在會併進 output_tokens（Issue #1119），fixture 要明確給值，
+    # 否則 MagicMock 會流進成本計算
+    response.usage_metadata.thoughts_token_count = 0
 
     model = MagicMock()
     model.generate_content_async = AsyncMock(return_value=response)

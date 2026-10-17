@@ -246,6 +246,9 @@ class BillingAnalysisService:
                 max_tokens=300,
                 temperature=0.7,
                 system_instruction=system_instruction,
+                # max_tokens 只有 300：gemini-3.5-flash 的 thinking 實測要
+                # 284~330 tokens，不關的話摘要會變空字串（Issue #1119）
+                disable_thinking=True,
             )
             summary = summary.strip()
 
