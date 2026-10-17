@@ -6,9 +6,12 @@ Vertex AI (Gemini) Service
 - 文字生成（翻譯、例句生成等）
 - JSON 格式輸出（詞性分析、干擾選項等）
 
-Model 對應：
-- gpt-4o-mini → gemini-2.5-flash（快速、高效能）
-- gpt-4 → gemini-2.5-pro（複雜分析）
+Model 對應（實際值見 core/config.py 的 VERTEX_AI_FLASH_MODEL /
+VERTEX_AI_PRO_MODEL，Issue #1119 起收斂為單一來源）：
+- "flash" → 一般用途（翻譯、例句、干擾選項等）
+- "pro"   → 複雜分析。**預設與 flash 同一個模型**，所以 model_type="pro"
+            實際走的就是 flash：asia-northeast1 沒有任何 Gemini 3.x 的 pro
+            （實測 404），詳見 config.py 註解
 """
 
 import os
@@ -23,9 +26,10 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Model name constants
-FLASH_MODEL = "gemini-2.5-flash"
-PRO_MODEL = "gemini-2.5-pro"
+# Model name constants —— 單一來源在 core/config.py（Issue #1119）。
+# 不要改回寫死字面值：gemini-2.5-* 已於 2026-10-20 退役。
+FLASH_MODEL = settings.VERTEX_AI_FLASH_MODEL
+PRO_MODEL = settings.VERTEX_AI_PRO_MODEL
 
 # Default timeout for Vertex AI calls (seconds)
 VERTEX_AI_TIMEOUT = 60
@@ -53,8 +57,17 @@ class VertexAIService:
                 self._initialized = True
                 logger.info(
                     f"Vertex AI initialized: project={self.project_id}, "
-                    f"location={self.location}"
+                    f"location={self.location}, flash={FLASH_MODEL}, "
+                    f"pro={PRO_MODEL}"
                 )
+                if PRO_MODEL == FLASH_MODEL:
+                    # 讓看 billing-analysis 品質的人不必翻 config 就知道
+                    # model_type="pro" 其實沒有換到更強的模型（PR #1122 review 第 2 點）
+                    logger.info(
+                        "Vertex AI: pro 與 flash 同為 %s —— model_type='pro' "
+                        "不會換到更強的模型（asia-northeast1 無 Gemini 3.x pro）",
+                        PRO_MODEL,
+                    )
             except Exception as e:
                 logger.error(f"Failed to initialize Vertex AI: {e}")
                 raise
@@ -68,8 +81,9 @@ class VertexAIService:
         取得 GenerativeModel 實例
 
         model_type:
-        - "flash": gemini-2.5-flash
-        - "pro": gemini-2.5-pro（複雜分析）
+        - "flash": settings.VERTEX_AI_FLASH_MODEL
+        - "pro": settings.VERTEX_AI_PRO_MODEL（預設與 flash 相同，
+          因此 model_type="pro" 預設實際走 flash）
 
         當有 system_instruction 時，建立新的 model 實例（Gemini 原生支援）。
         無 system_instruction 時，使用 cached model 以提升效能。
@@ -320,6 +334,7 @@ class VertexAIService:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         system_instruction: Optional[str] = None,
+        disable_thinking: bool = False,
     ) -> str:
         """
         同步版本的文字生成介面（用於 cron job 等非異步場景）
@@ -330,6 +345,13 @@ class VertexAIService:
             max_tokens: 最大輸出 token 數
             temperature: 溫度參數 (0-1)
             system_instruction: 系統指令（使用 Gemini 原生 system_instruction）
+            disable_thinking: 關閉 thinking。**短輸出務必開**（Issue #1119）。
+                注意：PRO_MODEL 預設與 FLASH_MODEL 相同，所以
+                model_type="pro" 時這個參數**確實會生效** —— 舊的
+                gemini-2.5-pro 不能關 thinking，當時傳了等於沒用。
+                gemini-3.5-flash 的 thinking 實測吃掉 284~330 tokens，
+                max_tokens=300 這種設定會讓 thinking 把輸出預算吃光，
+                回傳空字串（finish=MAX_TOKENS），與 #874 同一個死法。
 
         Returns:
             生成的文字
@@ -342,6 +364,8 @@ class VertexAIService:
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
+        if disable_thinking:
+            self._set_thinking_budget(config, 0)
 
         try:
             response = model.generate_content(

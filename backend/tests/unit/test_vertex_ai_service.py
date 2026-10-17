@@ -40,8 +40,16 @@ class TestVertexAIServiceInit:
         assert service.location == "us-west1"
 
     def test_model_constants(self):
-        assert FLASH_MODEL == "gemini-2.5-flash"
-        assert PRO_MODEL == "gemini-2.5-pro"
+        """模型 ID 收斂為單一來源 settings（Issue #1119）。
+
+        不再 pin 字面值：gemini-2.5-* 已於 2026-10-20 退役，寫死字面值的斷言
+        會在下一次汰換時再次失敗。改為驗證「跟著設定走」。
+        退役清單的守門在 tests/unit/test_issue_1119_model_migration.py。
+        """
+        from core.config import settings
+
+        assert FLASH_MODEL == settings.VERTEX_AI_FLASH_MODEL
+        assert PRO_MODEL == settings.VERTEX_AI_PRO_MODEL
 
 
 class TestGetModel:

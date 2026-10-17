@@ -19,9 +19,13 @@ import logging
 import math
 from typing import List, Dict, Any, Optional, Tuple
 
+from core.config import settings
+from utils.ai_cost import estimate_cost_usd
+
 logger = logging.getLogger(__name__)
 
-FLASH_MODEL = "gemini-2.5-flash"
+# 模型 ID 單一來源在 core/config.py（Issue #1119）—— gemini-2.5-* 已退役
+FLASH_MODEL = settings.VERTEX_AI_FLASH_MODEL
 
 # 一整張單字表 + 每項的翻譯/詞性/例句/例句翻譯，4000 tokens 會被截斷（issue #891
 # preview 實測 502）。拉高上限；若仍截斷，_parse_json 會救回已完整的項目。
@@ -70,10 +74,10 @@ DIALOGUE_TEXT_MAX_CHARS = 2000
 # （排版驗證對 image 區塊的 caption 上限；此處先截掉，避免存檔時整份 layout 被打回）
 FIGURE_CAPTION_MAX_CHARS = 300
 
-# 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）
-_PRICING_USD_PER_1M = {
-    FLASH_MODEL: {"input": 0.30, "output": 2.50},
-}
+# 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
+# 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
+# 會讓成本統計靜默變 0 —— 迴歸測試 tests/unit/test_issue_1119_model_migration.py
+_PRICING_USD_PER_1M = settings.VERTEX_AI_PRICING_USD_PER_1M
 
 
 class MagicPasteError(ValueError):
@@ -481,9 +485,11 @@ class MagicPasteService:
         usage = {"input_tokens": 0, "output_tokens": 0}
         meta = getattr(response, "usage_metadata", None)
         if meta is not None:
+            # thinking token 以輸出價計費，必須併入 output_tokens（Issue #1119）
             usage = {
                 "input_tokens": getattr(meta, "prompt_token_count", 0) or 0,
-                "output_tokens": getattr(meta, "candidates_token_count", 0) or 0,
+                "output_tokens": (getattr(meta, "candidates_token_count", 0) or 0)
+                + (getattr(meta, "thoughts_token_count", 0) or 0),
             }
         return self._parse_json(response.text), usage, FLASH_MODEL
 
@@ -886,14 +892,7 @@ class MagicPasteService:
 
     @staticmethod
     def _estimate_cost(model: str, usage: Dict[str, int]) -> float:
-        pricing = _PRICING_USD_PER_1M.get(model)
-        if not pricing:
-            return 0.0
-        return round(
-            usage.get("input_tokens", 0) / 1_000_000 * pricing["input"]
-            + usage.get("output_tokens", 0) / 1_000_000 * pricing["output"],
-            6,
-        )
+        return estimate_cost_usd(model, usage)
 
 
 _magic_paste_service: Optional[MagicPasteService] = None
