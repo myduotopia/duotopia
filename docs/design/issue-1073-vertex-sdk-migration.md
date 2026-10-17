@@ -149,8 +149,20 @@ commit `3a37b342`（#947 / PR #980）移除 OpenAI fallback 分支後，所有 A
 
 ### ⚠️ 與 thinking 的交互作用
 
-替代的 Gemini 3.x 系列改用 `thinking_level`，而且**傳 `thinking_budget` 會直接報錯**。
-所以 `disable_thinking=True` 不能照字面搬過去，必須依目標模型分兩種寫法。這會影響 `translation.py` 的全部 8 個呼叫點。
+> **2026-10-16 更正（issue #1119 實測）**：本節原本寫「Gemini 3.x 傳 `thinking_budget` 會直接報錯，必須改用 `thinking_level`」——**這是錯的**，該敘述來自文件推論而非實測。
+>
+> 實際打 `gemini-3.5-flash` 的結果：
+>
+> | 設定 | thoughts | 實際輸出 | 結果 |
+> |---|---|---|---|
+> | 不帶 thinking 設定 | 284 | **1** | finish=MAX_TOKENS，輸出被吃光 |
+> | `thinking_budget=0` | 0 | 77 | **仍然有效**，沒有報錯 |
+> | `thinking_level=MINIMAL` | 0 | 79 | 有效 |
+> | `thinking_level=LOW` | 286 | 0 | 關不掉 |
+>
+> 所以現有的 `disable_thinking` 機制（含 `_set_thinking_budget` 的 protobuf hack）**可以照搬**，不需要分兩種寫法。
+>
+> 但有一個反方向的新風險：3.5-flash 的**預設** thinking 量比 2.5 大得多（284~330 tokens），所以原本「沒有傳 `disable_thinking`」而靠預設值的呼叫點會被截斷。#1119 已為 `max_tokens=300` 的兩處補上。
 
 另外要注意：**Gemini 2.5 Pro 本來就不能關 thinking**，所以現在 `disable_thinking=True` 搭 `model_type="pro"` 已經是 no-op。
 
@@ -158,7 +170,16 @@ commit `3a37b342`（#947 / PR #980）移除 OpenAI fallback 分支後，所有 A
 
 ## 建議的執行計畫
 
-### Phase 1：模型汰換（急，建議 2026-10-16 前完成）
+### Phase 1：模型汰換 → **已拆到 issue #1119 執行**
+
+> **2026-10-16 更新**：模型汰換已獨立為 issue #1119。該 issue 的實測結論修正了本文件兩處推論：
+>
+> 1. **不需要為了換模型而遷 SDK。** 舊 SDK（1.95.0）可以呼叫 `gemini-3.5-flash`，`response_modalities` 也支援，protobuf 的 thinking hack 仍有效。本文件 Phase 2 因此可以獨立排程，不受模型期限綁。
+> 2. **Gemini 3.x 不是只在 `global` 端點。** `gemini-3.5-flash` 在 `asia-northeast1` 可用（200），所以 #959 的資料出境承諾**不需要**動。但較便宜的 `gemini-3.5-flash-lite`、`gemini-3.1-flash-lite` 與所有 3.x pro 在亞洲 region 都是 404，只在 global / us-central1 才有。
+> 3. **生圖沒有亞洲選項。** 所有 `imagen-*` 已從 publisher catalog 消失，替代的 `gemini-2.5-flash-image` 只在 us-central1 / global。要恢復生圖就得接受資料出境到美國，這是合規決策，#1119 保留未做。
+> 4. 生圖若要保留 `aspect_ratio` 與 `person_generation`（兒童影像防線），**必須**用新 SDK —— 舊 SDK 的 `GenerationConfig` 沒有 `image_config`。
+
+原始計畫（保留供對照）：
 
 1. 決定替代模型（需先確認 `asia-east1` / `us-central1` 可用性與定價）
 2. 把 model ID 抽成設定，不要散在各檔案 hardcode

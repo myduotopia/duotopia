@@ -41,10 +41,13 @@ from utils.scenario_dialogue import (
     TENSE_TIMES,
     VOICES,
 )
+from core.config import settings
+from utils.ai_cost import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
 
-FLASH_MODEL = "gemini-2.5-flash"
+# 模型 ID 單一來源在 core/config.py（Issue #1119）—— gemini-2.5-* 已退役
+FLASH_MODEL = settings.VERTEX_AI_FLASH_MODEL
 
 # 一次最多 10 題，每題含題目／翻譯／參考答案／必用字詞／生圖 prompt，
 # 抓寬一點避免截斷（截斷仍有 _salvage_objects 兜底）
@@ -53,10 +56,10 @@ MAX_OUTPUT_TOKENS = 8192
 # 情境文章不會太長（要讓學生讀得完），但中日韓字元吃 token，留點餘裕
 ARTICLE_MAX_OUTPUT_TOKENS = 2048
 
-# 粗略的每百萬 token 美元單價（僅供成本觀測，非計費用途）。與 magic_paste 同源。
-_PRICING_USD_PER_1M = {
-    FLASH_MODEL: {"input": 0.30, "output": 2.50},
-}
+# 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
+# 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
+# 會讓成本統計靜默變 0 —— 迴歸測試 tests/unit/test_issue_1119_model_migration.py
+_PRICING_USD_PER_1M = settings.VERTEX_AI_PRICING_USD_PER_1M
 
 # 翻譯語言的長度上限。這個欄位**不能**用白名單擋 —— 老師選「其他」時存的是他自己打的
 # 語言名字（#1016），白名單會直接把那個功能弄壞。所以改成「限長 + 壓成單行」。
@@ -439,14 +442,7 @@ class ScenarioDialogueAIService:
 
     @staticmethod
     def estimate_cost(usage: Dict[str, int], model: str = FLASH_MODEL) -> float:
-        pricing = _PRICING_USD_PER_1M.get(model)
-        if not pricing:
-            return 0.0
-        return round(
-            usage.get("input_tokens", 0) / 1_000_000 * pricing["input"]
-            + usage.get("output_tokens", 0) / 1_000_000 * pricing["output"],
-            6,
-        )
+        return estimate_cost_usd(model, usage)
 
     # ---------------------------------------------------------------- Vertex
 
@@ -455,9 +451,14 @@ class ScenarioDialogueAIService:
         meta = getattr(response, "usage_metadata", None)
         if meta is None:
             return {"input_tokens": 0, "output_tokens": 0}
+        # thinking token 以**輸出價**計費，必須併入 output_tokens，否則成本嚴重
+        # 低估（Issue #1119）。gemini-3.5-flash 的 thinking 量比 2.5 大很多：
+        # 批改路徑實測單次 thoughts=330，與實際輸出 76 同一個量級。
+        # 舊 response 沒有這個欄位時 getattr 取 0，行為不變。
         return {
             "input_tokens": getattr(meta, "prompt_token_count", 0) or 0,
-            "output_tokens": getattr(meta, "candidates_token_count", 0) or 0,
+            "output_tokens": (getattr(meta, "candidates_token_count", 0) or 0)
+            + (getattr(meta, "thoughts_token_count", 0) or 0),
         }
 
     @classmethod
