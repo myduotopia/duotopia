@@ -19,6 +19,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { isAssignableContentType } from "@/lib/assignableContentType";
 import {
@@ -475,10 +476,13 @@ function ContentCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!assignable) return;
+                      if (!assignable) {
+                        toast.info(t("tree.assignNotAvailable"));
+                        return;
+                      }
                       onAssign();
                     }}
-                    disabled={!assignable}
+                    aria-disabled={!assignable}
                     title={
                       assignable
                         ? t("tree.assign")
@@ -489,7 +493,7 @@ function ContentCard({
                       "relative pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']",
                       assignable
                         ? "bg-green-500/60 hover:bg-green-500/85"
-                        : "bg-gray-400/50 cursor-not-allowed",
+                        : "bg-gray-400/50 cursor-help",
                     )}
                   >
                     <SendHorizontal size={22} className="text-white" />

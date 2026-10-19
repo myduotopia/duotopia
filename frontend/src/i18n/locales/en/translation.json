@@ -1842,7 +1842,8 @@
         "missingClozeAnswer": "Cloze answer required",
         "missingClozeAnswerDesc": "These vocabulary sets are missing a cloze answer for some words: {{contents}}. Please open the vocabulary set and set an answer (click a word or select a phrase) before assigning.",
         "contentTypeNotAssignable": "{{type}} can't be assigned yet (student practice isn't available for it)",
-        "contentTypeNotSelectable": "This content doesn't match the practice mode you picked. Switch mode, or clear the selected content first."
+        "contentTypeNotSelectable": "This content doesn't match the practice mode you picked. Switch mode, or clear the selected content first.",
+        "noModesForContent": "This material's content type can't be assigned yet (student practice isn't available for it). Please pick different material."
       },
       "warnings": {
         "quotaLow": "AI analysis quota insufficient",

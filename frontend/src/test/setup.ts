@@ -97,3 +97,13 @@ vi.mock("lottie-react", () => ({
   default: () => null,
   useLottie: () => ({ View: null, play: vi.fn(), pause: vi.fn() }),
 }));
+
+// 情境對話派發旗標（per-environment）預設關閉，讓測試不受本機 .env 影響。
+//
+// DATASET_DISPATCH_STATUS 會讀這個值，而很多測試是靜態 import 整條依賴鏈的 ——
+// 開發者若把 .env.example 複製成 .env（裡面是 true），那些「情境對話不可派發」的
+// 斷言會在本機紅、CI 綠，非常難查。要驗開啟狀態的測試自己 stubEnv／doMock。
+if (!("VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH" in import.meta.env)) {
+  // 明確寫入而不是依賴「沒設定」，讓意圖看得出來
+}
+import.meta.env.VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH = "false";

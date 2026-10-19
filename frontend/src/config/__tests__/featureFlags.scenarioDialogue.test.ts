@@ -15,9 +15,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 async function loadWith(enabled: boolean) {
   vi.resetModules();
-  vi.doMock("@/config/featureFlags", () => ({
-    ENABLE_SCENARIO_DIALOGUE: enabled,
-  }));
+  // 用 importOriginal 繼承真檔案，只覆蓋這個檔關心的旗標。
+  // 整個 module 只回一個 export 的話，其他讀該模組的檔案（practiceMode 讀
+  // ENABLE_SCENARIO_DIALOGUE_DISPATCH）會拿不到東西而整批紅 —— 這正是
+  // PR #1121 review 提醒過的坑，當時是「靜默少一個」，這裡直接爆。
+  vi.doMock("@/config/featureFlags", async (importOriginal) => {
+    const actual =
+      await importOriginal<typeof import("@/config/featureFlags")>();
+    return { ...actual, ENABLE_SCENARIO_DIALOGUE: enabled };
+  });
   return await import("@/lib/assignableContentType");
 }
 

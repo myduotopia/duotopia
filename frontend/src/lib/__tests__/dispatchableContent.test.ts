@@ -43,7 +43,9 @@ describe("情境對話目前不可派發（#1052 標為開發中）", () => {
 describe("canUseModeForContentTypes —— 擋住「模式不在該內容清單裡」", () => {
   it("情境對話內容配任何模式都不行（清單是空的）", () => {
     for (const mode of listAllDispatchableModes()) {
-      expect(canUseModeForContentTypes(mode, ["SCENARIO_DIALOGUE"])).toBe(false);
+      expect(canUseModeForContentTypes(mode, ["SCENARIO_DIALOGUE"])).toBe(
+        false,
+      );
     }
   });
 
@@ -60,9 +62,9 @@ describe("canUseModeForContentTypes —— 擋住「模式不在該內容清單�
   });
 
   it("例句集配朗讀可以，配單字拼寫不行", () => {
-    expect(
-      canUseModeForContentTypes("reading", ["EXAMPLE_SENTENCES"]),
-    ).toBe(true);
+    expect(canUseModeForContentTypes("reading", ["EXAMPLE_SENTENCES"])).toBe(
+      true,
+    );
     expect(
       canUseModeForContentTypes("word_spelling", ["EXAMPLE_SENTENCES"]),
     ).toBe(false);

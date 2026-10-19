@@ -2005,7 +2005,8 @@
         "missingClozeAnswer": "缺少克漏字答案",
         "missingClozeAnswerDesc": "以下單字集有單字尚未設定克漏字答案：{{contents}}。請先到單字集編輯內容、點擊單字或框選片語設定答案後再派發。",
         "contentTypeNotAssignable": "{{type}}目前還不能派發作業（學生端作答功能尚未開放）",
-        "contentTypeNotSelectable": "這個內容與目前選的練習模式不合，請換個模式，或先清除已選擇的內容"
+        "contentTypeNotSelectable": "這個內容與目前選的練習模式不合，請換個模式，或先清除已選擇的內容",
+        "noModesForContent": "這份教材的題型目前還不能派發作業（學生端作答功能尚未開放），請改選其他教材。"
       },
       "warnings": {
         "quotaLow": "AI 分析額度不足",
