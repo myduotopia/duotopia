@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { isAssignableContentType } from "@/lib/assignableContentType";
+import { cn } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -596,21 +599,51 @@ function RecursiveTreeNode({
               )}
 
               {/* Assign button - always visible */}
-              {onAssign && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAssign(data, level, parentId);
-                  }}
-                  className="h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800"
-                  title={t("tree.assign")}
-                >
-                  <SendHorizontal className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden sm:inline text-xs font-medium">
-                    {t("tree.assign")}
-                  </span>
-                </button>
-              )}
+              {onAssign &&
+                (() => {
+                  // 判斷依據是「這個節點有沒有 type」而不是 level —— 只有內容節點
+                  // 帶 type，課程／單元沒有（整課派發不受影響）。沒有 type 就放行
+                  // 是刻意的：派發整個單元本來就合法，真正的擋關在對話框裡
+                  // （canUseModeForContentTypes 會依購物車內容再擋一次）。
+                  // 這個題型還不能派發時反灰並說明原因 —— 讓他按下去才卡住更糟：
+                  // 預選內容的路徑會跳過「選擇內容」那一步，老師會看到一排空的
+                  // 模式選單卻不知道為什麼（ui-style-guide §3 規則 3）。
+                  // 唯一判定在 isAssignableContentType → DATASET_DISPATCH_STATUS。
+                  const contentType =
+                    typeof data.type === "string" ? data.type : undefined;
+                  const assignable =
+                    contentType === undefined ||
+                    isAssignableContentType(contentType);
+                  return (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!assignable) {
+                          toast.info(t("tree.assignNotAvailable"));
+                          return;
+                        }
+                        onAssign(data, level, parentId);
+                      }}
+                      aria-disabled={!assignable}
+                      className={cn(
+                        "h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md border",
+                        assignable
+                          ? "bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800"
+                          : "bg-gray-50 dark:bg-gray-800/40 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 cursor-help",
+                      )}
+                      title={
+                        assignable
+                          ? t("tree.assign")
+                          : t("tree.assignNotAvailable")
+                      }
+                    >
+                      <SendHorizontal className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
+                      <span className="hidden sm:inline text-xs font-medium">
+                        {t("tree.assign")}
+                      </span>
+                    </button>
+                  );
+                })()}
 
               {/* More menu (⋯) with download (vocab_set only), copy, move, delete */}
               {(config.canDelete ||

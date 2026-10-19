@@ -19,6 +19,9 @@ import {
   type CSSProperties,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { isAssignableContentType } from "@/lib/assignableContentType";
 import {
   Folder,
   FileText,
@@ -461,19 +464,42 @@ function ContentCard({
                 <Play size={24} className="text-white ml-0.5" />
               </button>
             )}
-            {onAssign && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAssign();
-                }}
-                title={t("tree.assign")}
-                // #945: 同上，點擊容錯圈（四面各 +16px）
-                className="relative pointer-events-auto w-14 h-14 bg-green-500/60 hover:bg-green-500/85 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']"
-              >
-                <SendHorizontal size={22} className="text-white" />
-              </button>
-            )}
+            {onAssign &&
+              (() => {
+                // 這個題型還不能派發（唯一判定在 isAssignableContentType →
+                // DATASET_DISPATCH_STATUS）。按鈕留著但反灰並說明原因：整個藏起來
+                // 老師會以為沒有這個功能，而讓他按下去才卡住更糟 ——
+                // 預選內容的路徑會跳過「選擇內容」那一步，他會看到一排空的模式選單
+                // 卻不知道為什麼（ui-style-guide §3 規則 3）。
+                const assignable = isAssignableContentType(content.type);
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!assignable) {
+                        toast.info(t("tree.assignNotAvailable"));
+                        return;
+                      }
+                      onAssign();
+                    }}
+                    aria-disabled={!assignable}
+                    title={
+                      assignable
+                        ? t("tree.assign")
+                        : t("tree.assignNotAvailable")
+                    }
+                    // #945: 同上，點擊容錯圈（四面各 +16px）
+                    className={cn(
+                      "relative pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-colors after:absolute after:inset-[-16px] after:content-['']",
+                      assignable
+                        ? "bg-green-500/60 hover:bg-green-500/85"
+                        : "bg-gray-400/50 cursor-help",
+                    )}
+                  >
+                    <SendHorizontal size={22} className="text-white" />
+                  </button>
+                );
+              })()}
           </div>
         )}
       </div>

@@ -103,6 +103,7 @@ import {
   type QuizScoringSettings,
 } from "@/lib/quizScoring";
 import { ContentSelectCard } from "./assignment/ContentSelectCard";
+import { canUseModeForContentTypes } from "@/lib/dispatchableContent";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
 import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
@@ -1704,7 +1705,16 @@ export function AssignmentDialog({
           selectedClassrooms.some((c) => c.selectedStudentIds.length > 0)
         );
       case 1:
-        return !!formData.practice_mode;
+        // 選中的模式必須在「這些內容實際可用」的清單裡。
+        //
+        // 原本只檢查「有沒有選模式」—— 預選內容的路徑會跳過「選擇內容」那一步，
+        // #1030／#1033 的反灰守衛就被繞過了：情境對話的內容可以配著殘留的
+        // word_selection 一路派出去，學生端拿到不認得的資料形狀。
+        // 購物車空的（先選方式、後選教材）不介入，交給選內容那步擋。
+        return canUseModeForContentTypes(
+          formData.practice_mode,
+          cartItems.map((item) => item.contentType),
+        );
       case 2:
         return cartItems.length > 0;
       case 3:
@@ -3029,6 +3039,10 @@ export function AssignmentDialog({
               const modeList = dataset
                 ? listModesForDataset(dataset)
                 : listAllDispatchableModes();
+              // 清單是空的＝購物車裡的題型目前不能派發。沒有這段的話畫面只會是
+              // 一排空白加上按不動的「下一步」，老師完全不知道發生什麼事
+              // （而且預選內容的路徑沒有「選擇內容」那步可以退回去改）。
+              const noModesAvailable = modeList.length === 0;
               const currentConfig = formData.practice_mode
                 ? getModeConfig(formData.practice_mode)
                 : undefined;
@@ -3044,6 +3058,11 @@ export function AssignmentDialog({
               };
               return (
                 <div className="h-full flex flex-col">
+                  {noModesAvailable && (
+                    <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      {t("dialogs.assignmentDialog.errors.noModesForContent")}
+                    </div>
+                  )}
                   {/* 上方 chip 列：橫向卷 + 箭頭永遠顯示 + 邊緣漸層 */}
                   <div className="relative mb-4">
                     <button

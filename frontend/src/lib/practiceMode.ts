@@ -38,6 +38,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ScoreCategory } from "@/utils/scoreCategory";
+import { ENABLE_SCENARIO_DIALOGUE_DISPATCH } from "@/config/featureFlags";
 
 export type PracticeMode =
   | "reading"
@@ -836,7 +837,13 @@ export const DATASET_DISPATCH_STATUS: Record<
 > = {
   example_sentences: "released",
   vocabulary_set: "released",
-  scenario_dialogue: "in_development",
+  // 情境對話改成 per-environment：staging / develop 開著讓團隊驗證
+  // 「派發 → 學生作答 → 批改」整條線，production 關著直到驗完
+  // （同 ENABLE_SCENARIO_DIALOGUE 的做法，值由 deploy-frontend.yml 依分支給）。
+  // 這張表仍是唯一開關 —— 不要在元件或其他 helper 另外加判斷。
+  scenario_dialogue: ENABLE_SCENARIO_DIALOGUE_DISPATCH
+    ? "released"
+    : "in_development",
 };
 
 export function isDatasetDispatchable(dataset: PracticeDataset): boolean {
