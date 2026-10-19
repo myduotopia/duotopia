@@ -5723,7 +5723,8 @@
     "showExamAnswers": "考後顯示答案"
   },
   "tree": {
-    "assign": "指派為作業"
+    "assign": "指派為作業",
+    "assignNotAvailable": "此題型目前還不能派發作業（學生端作答功能尚未開放）"
   },
   "instantPractice": {
     "title": "即刻練習",

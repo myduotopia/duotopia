@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isAssignableContentType } from "@/lib/assignableContentType";
+import { cn } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -596,21 +598,45 @@ function RecursiveTreeNode({
               )}
 
               {/* Assign button - always visible */}
-              {onAssign && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAssign(data, level, parentId);
-                  }}
-                  className="h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800"
-                  title={t("tree.assign")}
-                >
-                  <SendHorizontal className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden sm:inline text-xs font-medium">
-                    {t("tree.assign")}
-                  </span>
-                </button>
-              )}
+              {onAssign &&
+                (() => {
+                  // 內容節點（level 2）才有型別可判；課程／單元節點照舊。
+                  // 這個題型還不能派發時反灰並說明原因 —— 讓他按下去才卡住更糟：
+                  // 預選內容的路徑會跳過「選擇內容」那一步，老師會看到一排空的
+                  // 模式選單卻不知道為什麼（ui-style-guide §3 規則 3）。
+                  // 唯一判定在 isAssignableContentType → DATASET_DISPATCH_STATUS。
+                  const contentType =
+                    typeof data.type === "string" ? data.type : undefined;
+                  const assignable =
+                    contentType === undefined ||
+                    isAssignableContentType(contentType);
+                  return (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!assignable) return;
+                        onAssign(data, level, parentId);
+                      }}
+                      disabled={!assignable}
+                      className={cn(
+                        "h-7 w-7 sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 inline-flex items-center justify-center sm:gap-1.5 rounded-md border",
+                        assignable
+                          ? "bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800"
+                          : "bg-gray-50 dark:bg-gray-800/40 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 cursor-not-allowed",
+                      )}
+                      title={
+                        assignable
+                          ? t("tree.assign")
+                          : t("tree.assignNotAvailable")
+                      }
+                    >
+                      <SendHorizontal className="h-3.5 w-3.5 sm:h-3.5 sm:w-3.5" />
+                      <span className="hidden sm:inline text-xs font-medium">
+                        {t("tree.assign")}
+                      </span>
+                    </button>
+                  );
+                })()}
 
               {/* More menu (⋯) with download (vocab_set only), copy, move, delete */}
               {(config.canDelete ||
