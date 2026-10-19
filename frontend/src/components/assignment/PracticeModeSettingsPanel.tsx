@@ -36,6 +36,7 @@ import {
   applySettingChange,
   isSegmentedOptionActive,
   isShowAnswerLockedByAudio,
+  toggleDescOverride,
   segmentedScoreCategory,
   type PracticeModeSettings,
 } from "./practiceModeSettings";
@@ -125,14 +126,12 @@ export function PracticeModeSettingsPanel({
   const timeDefault = Number(config.defaults.time_limit_per_question ?? 30);
 
   const renderToggle = (spec: SettingSpec & { kind: "toggle" }) => {
-    // show_answer 在例句重組用不同描述
-    // #880: show_translation 在例句朗讀是「句子」翻譯，不是單字翻譯
-    let descKey = TOGGLE_DESC[spec.key] ?? "";
-    if (spec.key === "show_answer" && mode === "rearrangement") {
-      descKey = `${PM}.showAnswerDesc`;
-    } else if (spec.key === "show_translation" && mode === "reading") {
-      descKey = `${PM}.showSentenceTranslationDesc`;
-    }
+    // 依模式覆寫說明文字的規則在 practiceModeSettings.toggleDescOverride（純函式、
+    // 有回歸護欄測試）—— 原本寫在這裡的 if/else 鏈每新增一個模式就可能漏改。
+    const descOverride = toggleDescOverride(spec.key, mode);
+    const descKey = descOverride
+      ? `${PM}.${descOverride}`
+      : (TOGGLE_DESC[spec.key] ?? "");
     const lockedByAudio =
       spec.key === "show_answer" && isShowAnswerLockedByAudio(mode, value);
     // Issue #631：缺題目圖片時禁止「開啟」顯示選項圖片（已開啟者可關閉）。

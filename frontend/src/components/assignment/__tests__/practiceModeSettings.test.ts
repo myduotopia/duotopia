@@ -5,7 +5,11 @@
  * 這些原本散在 AssignmentDialog 各 onChange，收斂後須與舊行為逐項一致（#846 根治）。
  */
 import { describe, it, expect } from "vitest";
-import type { SettingSpec } from "@/lib/practiceMode";
+import {
+  PRACTICE_MODE_REGISTRY,
+  type PracticeMode,
+  type SettingSpec,
+} from "@/lib/practiceMode";
 import {
   applySettingChange,
   clampPerQuestionTime,
@@ -13,6 +17,7 @@ import {
   isSegmentedOptionActive,
   isShowAnswerLockedByAudio,
   segmentedScoreCategory,
+  toggleDescOverride,
   type PracticeModeSettings,
 } from "../practiceModeSettings";
 
@@ -221,5 +226,56 @@ describe("clampPerQuestionTime / clampQuizTime — API 時間值夾到合法選�
     expect(clampPerQuestionTime(null)).toBe(30);
     expect(clampPerQuestionTime("abc")).toBe(30);
     expect(clampQuizTime(undefined)).toBe(0);
+  });
+});
+
+describe("toggleDescOverride — 同一個設定鍵在不同模式講的不是同一件事", () => {
+  it("例句朗讀的 show_translation 是「句子」翻譯（#880）", () => {
+    expect(toggleDescOverride("show_translation", "reading")).toBe(
+      "showSentenceTranslationDesc",
+    );
+  });
+
+  it("情境對話的 show_translation 是「題目」翻譯 —— 情境對話沒有單字", () => {
+    expect(toggleDescOverride("show_translation", "scenario_dialogue")).toBe(
+      "showQuestionTranslationDesc",
+    );
+  });
+
+  it("單字類模式沿用通用文案（回 null）", () => {
+    expect(toggleDescOverride("show_translation", "word_reading")).toBeNull();
+    expect(toggleDescOverride("show_translation", "word_cloze")).toBeNull();
+  });
+
+  it("例句重組的 show_answer 有專屬文案，其他模式沒有", () => {
+    expect(toggleDescOverride("show_answer", "rearrangement")).toBe(
+      "showAnswerDesc",
+    );
+    expect(toggleDescOverride("show_answer", "word_selection")).toBeNull();
+  });
+
+  it("沒有覆寫規則的設定鍵一律回 null", () => {
+    expect(toggleDescOverride("show_image", "scenario_dialogue")).toBeNull();
+    expect(toggleDescOverride("shuffle_questions", "reading")).toBeNull();
+  });
+
+  /**
+   * 回歸護欄（本次 bug 的病根）：通用文案寫死「單字的翻譯」，所以**不吃單字集**的
+   * 模式一旦有 show_translation 就必須有自己的文案。少了覆寫就會對老師講錯話，
+   * 而這種錯誤不會有任何測試或型別訊號 —— 情境對話就是這樣漏掉的。
+   */
+  it("不吃單字集的模式若有 show_translation，一定要有專屬文案", () => {
+    const offenders = (
+      Object.keys(PRACTICE_MODE_REGISTRY) as PracticeMode[]
+    ).filter((mode) => {
+      const config = PRACTICE_MODE_REGISTRY[mode];
+      const hasToggle = (config.settings ?? []).some(
+        (spec) => spec.key === "show_translation",
+      );
+      if (!hasToggle) return false;
+      if (config.supportedDatasets.includes("vocabulary_set")) return false;
+      return toggleDescOverride("show_translation", mode) === null;
+    });
+    expect(offenders).toEqual([]);
   });
 });
