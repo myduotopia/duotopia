@@ -19,17 +19,29 @@ const t = (key: string) => key;
 
 describe("情境對話（這次回報的 bug）", () => {
   it("不再顯示「未知類型」", () => {
-    const badge = assignmentTypeBadge("SCENARIO_DIALOGUE", "scenario_dialogue", t);
+    const badge = assignmentTypeBadge(
+      "SCENARIO_DIALOGUE",
+      "scenario_dialogue",
+      t,
+    );
     expect(badge.label).not.toContain("unknownType");
   });
 
   it("顯示的是情境對話的標籤", () => {
-    const badge = assignmentTypeBadge("SCENARIO_DIALOGUE", "scenario_dialogue", t);
+    const badge = assignmentTypeBadge(
+      "SCENARIO_DIALOGUE",
+      "scenario_dialogue",
+      t,
+    );
     expect(badge.label).toBe("practiceMode.scenario_dialogue.label");
   });
 
   it("徽章配色用 registry 的，不是灰色的 unknown", () => {
-    const badge = assignmentTypeBadge("SCENARIO_DIALOGUE", "scenario_dialogue", t);
+    const badge = assignmentTypeBadge(
+      "SCENARIO_DIALOGUE",
+      "scenario_dialogue",
+      t,
+    );
     expect(badge.className).toBe(
       PRACTICE_MODE_REGISTRY.scenario_dialogue.badgeClass,
     );
@@ -38,9 +50,9 @@ describe("情境對話（這次回報的 bug）", () => {
 
 describe("既有行為不能變", () => {
   it("單字集依 practice_mode 顯示", () => {
-    expect(assignmentTypeBadge("VOCABULARY_SET", "word_spelling", t).label).toBe(
-      "practiceMode.word_spelling.label",
-    );
+    expect(
+      assignmentTypeBadge("VOCABULARY_SET", "word_spelling", t).label,
+    ).toBe("practiceMode.word_spelling.label");
   });
 
   it("單字集沒有 practice_mode 時退回單字朗讀", () => {

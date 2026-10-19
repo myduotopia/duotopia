@@ -68,9 +68,7 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
-import {
-  isAutoScoredMode,
-} from "@/lib/practiceMode";
+import { isAutoScoredMode } from "@/lib/practiceMode";
 import { PracticeModeSettingsPanel } from "@/components/assignment/PracticeModeSettingsPanel";
 import {
   clampPerQuestionTime,
