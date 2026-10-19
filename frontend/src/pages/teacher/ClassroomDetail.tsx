@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { assignmentTypeBadge } from "@/lib/assignmentTypeLabel";
 import {
-  practiceModeLabelKey,
-  practiceModeBadgeClass,
   practiceModeFilterOptions,
   isAutoScoredMode,
   isQuizMode,
@@ -294,64 +293,10 @@ export default function ClassroomDetail({
     const contentType = assignment.content_type?.toUpperCase();
     const practiceMode = assignment.practice_mode;
 
-    if (contentType === "VOCABULARY_SET" || contentType === "SENTENCE_MAKING") {
-      const key = practiceModeLabelKey(practiceMode);
-      if (key) {
-        return { label: t(key), color: practiceModeBadgeClass(practiceMode) };
-      }
-      return {
-        label: t("practiceMode.word_reading.label"),
-        color:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-      };
-    }
-
-    if (
-      contentType === "EXAMPLE_SENTENCES" ||
-      contentType === "READING_ASSESSMENT"
-    ) {
-      if (practiceMode === "rearrangement") {
-        return {
-          label: t("practiceMode.rearrangement.label"),
-          color:
-            "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-        };
-      }
-      return {
-        label: t("practiceMode.reading.label"),
-        color:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-      };
-    }
-
-    const otherTypeLabels: Record<string, { label: string; color: string }> = {
-      SPEAKING_PRACTICE: {
-        label: t("classroomDetail.contentTypes.speakingPractice"),
-        color:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-      },
-      SPEAKING_SCENARIO: {
-        label: t("classroomDetail.contentTypes.speakingScenario"),
-        color:
-          "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-      },
-      LISTENING_CLOZE: {
-        label: t("classroomDetail.contentTypes.listeningCloze"),
-        color:
-          "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-      },
-      SPEAKING_QUIZ: {
-        label: t("classroomDetail.contentTypes.speakingQuiz"),
-        color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-      },
-    };
-
-    return (
-      otherTypeLabels[contentType || ""] || {
-        label: t("classroomDetail.labels.unknownType"),
-        color: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-      }
-    );
+    // 判定搬到 lib/assignmentTypeLabel —— 原本這段在三個地方各一份，
+    // 所以情境對話的作業三處同時顯示「未知類型」。
+    const badge = assignmentTypeBadge(contentType, practiceMode, t);
+    return { label: badge.label, color: badge.className };
   };
 
   // Archive states
@@ -3493,33 +3438,12 @@ export default function ClassroomDetail({
                   </Label>
                   <p className="font-medium">
                     {(() => {
-                      const contentTypeLabels: Record<string, string> = {
-                        READING_ASSESSMENT: t(
-                          "classroomDetail.contentTypes.readingAssessment",
-                        ),
-                        SPEAKING_PRACTICE: t(
-                          "classroomDetail.contentTypes.speakingPractice",
-                        ),
-                        SPEAKING_SCENARIO: t(
-                          "classroomDetail.contentTypes.speakingScenario",
-                        ),
-                        LISTENING_CLOZE: t(
-                          "classroomDetail.contentTypes.listeningCloze",
-                        ),
-                        SENTENCE_MAKING: t(
-                          "classroomDetail.contentTypes.sentenceMaking",
-                        ),
-                        SPEAKING_QUIZ: t(
-                          "classroomDetail.contentTypes.speakingQuiz",
-                        ),
-                      };
-                      return (
-                        contentTypeLabels[
-                          selectedAssignment.content_type || ""
-                        ] ||
-                        selectedAssignment.content_type ||
-                        t("classroomDetail.labels.unknownType")
-                      );
+                      // 同上，共用 lib/assignmentTypeLabel 的判定
+                      return assignmentTypeBadge(
+                        selectedAssignment.content_type?.toUpperCase(),
+                        selectedAssignment.practice_mode,
+                        t,
+                      ).label;
                     })()}
                   </p>
                 </div>
