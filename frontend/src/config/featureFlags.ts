@@ -79,3 +79,21 @@ export const ENABLE_SCENARIO_DIALOGUE =
   (
     import.meta.env.VITE_ENABLE_SCENARIO_DIALOGUE as string | undefined
   )?.toLowerCase() === "true";
+
+/**
+ * Issue #1052 後續 —— 情境對話**派發**的開關。
+ *
+ * 與 `ENABLE_SCENARIO_DIALOGUE`（建立教材入口）刻意分開：#1052 的註解寫明「這只管
+ * 派發」，兩者本來就可能在不同時間開放 —— 事實上我們曾經處在「建得了、派不了」
+ * 的狀態。合成一個會失去那個自由度。
+ *
+ * 與 `ENABLE_SCENARIO_DIALOGUE` 同樣是 **per-environment**：staging / develop 開著
+ * 讓團隊驗證「派發 → 學生作答 → 批改」整條線，production 關著直到驗完。
+ *
+ * **未設定時視為關閉**（必須是字串 `true` 才開）—— 漏設、拼錯、新環境忘了帶都落到
+ * 隱藏那一邊。要防的正是「未驗證的功能出現在 production」。
+ */
+export const ENABLE_SCENARIO_DIALOGUE_DISPATCH =
+  (
+    import.meta.env.VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH as string | undefined
+  )?.toLowerCase() === "true";
