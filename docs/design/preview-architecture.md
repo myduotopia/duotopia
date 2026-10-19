@@ -73,6 +73,26 @@
 **不會跟著老師當下調 toggle 變動**。reading / rearrangement 影響有限可接受；
 其他模式若也想走 demo 路徑就要承擔此 trade-off。
 
+#### C. 真實教材 + 學生頁路徑
+
+學生畫面不是獨立 Activity 元件、而是 `StudentActivityPageContent` 自己分流的模式，
+走這條：wrapper 抓**老師選的那份教材**（`GET /api/teachers/contents/{id}`），組成學生端的
+`Activity`，丟給 `StudentActivityPageContent` + `isDemoMode isPreviewMode`。
+與 B 的差別是教材是真的、設定跟著 formData 變；與 A 的差別是餵的單位是整個 Activity。
+
+| 模式 | Preview Wrapper | 資料來源 |
+|---|---|---|
+| reading（已選教材時） | ReadingPreview 的 ByContent 分支 | `GET /api/teachers/contents/{id}` |
+| scenario_dialogue | ScenarioDialoguePreview | `GET /api/teachers/contents/{id}` |
+
+**情境對話沒有「未選教材」的 fallback**：它只吃自己的資料集（`practiceMode.ts` 的
+`supportedDatasets`），借示範單字集來預覽等於顯示一個永遠派不出去的畫面，所以缺
+`contentId` 時直接說明原因。
+
+**組 Activity 時只帶學生端真的會看到的欄位**（`buildScenarioPreviewActivity`）。老師端
+端點會回 `reference_answer` 與 `image_prompt`，後端給學生的 `public_item_view` 會濾掉
+它們；預覽共用的是學生元件本身，所以餵資料這一步必須畫同一條界線。
+
 ---
 
 ## 改 Activity 元件時的檢查清單
@@ -87,6 +107,17 @@
   - 加進對應 PreviewWrapper 的 `previewSettings` 型別
   - AssignmentDialog 把 `formData.<新欄位>` 傳進去
 - [ ] 如果新增了 fetch / upload / submit，記得用 `isLivePreview` 旗標（或 `previewItems`/`previewWords`/`previewQuestions` 是否存在）gating
+
+## 新增練習模式時
+
+`DISPATCH_PREVIEW` 查不到的模式會顯示「此模式預覽尚未實作」。那行 fallback 本來是給
+真的還沒做的模式看的，但它也會悄悄吃掉「學生端做完了、忘了註冊預覽」的情況 ——
+情境對話就是這樣：#1031 的學生作答已經上 staging，老師在派發畫面只看到一行「尚未實作」。
+
+所以 `frontend/src/lib/__tests__/activityRegistry.test.ts` 把它反過來當契約：
+**`ASSIGNABLE_MODE_ORDER` 裡的模式一律要有 `DISPATCH_PREVIEW` entry**，漏註冊會紅燈。
+（刻意不用 `listAllDispatchableModes()` —— 那個會被 per-environment 派發旗標濾掉，
+護欄會在旗標關閉時失效，正好是要擋的那個洞。）
 
 ## Code Path 防呆
 

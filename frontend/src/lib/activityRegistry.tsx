@@ -25,6 +25,7 @@ import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPre
 import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
 import RearrangementPreview from "@/components/activities/RearrangementPreview";
 import ReadingPreview from "@/components/activities/ReadingPreview";
+import ScenarioDialoguePreview from "@/components/activities/ScenarioDialoguePreview";
 
 /** 派發預覽用的設定子集（鏡射 AssignmentDialog 的 formData 相關欄位/型別）。 */
 export interface DispatchPreviewSettings {
@@ -162,6 +163,15 @@ export const DISPATCH_PREVIEW: Partial<
     <ReadingPreview
       contentId={contentId}
       shuffleQuestions={settings.shuffle_questions}
+      timeLimitPerQuestion={settings.time_limit_per_question}
+      showTranslation={settings.show_translation}
+    />
+  ),
+  // 刻意不吃 vocabFallbackContentId：情境對話只吃自己的資料集，借示範單字集來預覽
+  // 等於顯示一個永遠派不出去的畫面（見 ScenarioDialoguePreview 檔頭）。
+  scenario_dialogue: ({ contentId, settings }) => (
+    <ScenarioDialoguePreview
+      contentId={contentId}
       timeLimitPerQuestion={settings.time_limit_per_question}
       showTranslation={settings.show_translation}
     />

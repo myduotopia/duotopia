@@ -760,7 +760,7 @@ export function getModeConfig(mode?: string | null): ModeConfig | undefined {
  * AssignmentDialog chip 列的顯示順序（base 模式後緊接其小考）。tug_of_war 不經 dialog 派發，
  * 故不在此清單；`listModesForDataset` 也據此排除。
  */
-const ASSIGNABLE_MODE_ORDER: PracticeMode[] = [
+export const ASSIGNABLE_MODE_ORDER: PracticeMode[] = [
   "reading",
   "rearrangement",
   "word_reading",

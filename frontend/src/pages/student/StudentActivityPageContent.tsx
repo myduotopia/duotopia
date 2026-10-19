@@ -113,8 +113,12 @@ export interface Activity {
     scenario_dialogue?: {
       keywords: string[];
       rubric_note: string;
-      tense: { time: string; aspect: string };
-      voice: string;
+      // 學生畫面不顯示這兩個（只有 AI 評分與老師批改用得到），而「沿用整體」要解析成
+      // 生效值，唯一判定處在後端 utils/scenario_dialogue.resolve_effective_tense /
+      // resolve_effective_voice —— 前端不複製那條規則。所以派發預覽
+      // （ScenarioDialoguePreview）只餵畫面真的會用到的欄位，這兩個設成選填。
+      tense?: { time: string; aspect: string };
+      voice?: string;
     };
     ai_assessment?: {
       accuracy_score?: number;
