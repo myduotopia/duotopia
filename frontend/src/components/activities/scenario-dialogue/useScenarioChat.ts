@@ -215,18 +215,33 @@ export function useScenarioChat({
           } else {
             setPhase("feedbackShown");
           }
+        })
+        .catch(() => {
+          if (session !== sessionRef.current) return;
+          // 建議取得失敗：這次作答不佔次數，還原狀態讓使用者重新作答
+          setAttempts((prev) =>
+            prev.map((list, i) =>
+              i === q ? list.filter((_, j) => j !== attemptIndex) : list,
+            ),
+          );
+          revokeAnswer({ answer });
+          if (isRetry) setRetry({ index: q, status: "answering" });
+          else setPhase("awaitingAnswer");
         });
     },
     [current, items, maxAttempts],
   );
 
+  const goNextRef = useRef(goNext);
+  goNextRef.current = goNext;
+
   // 目前這題用完次數 → 停一下自動進下一題
   const exhausted = (attempts[current]?.length ?? 0) >= maxAttempts;
   useEffect(() => {
     if (phase === "feedbackShown" && exhausted) {
-      later(goNext, AUTO_NEXT_MS);
+      later(() => goNextRef.current(), AUTO_NEXT_MS);
     }
-    // goNext 依賴會隨 state 變；只在進入 feedbackShown 時排一次
+    // 只在進入 feedbackShown 時排一次；goNext 透過 ref 取最新版本
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, exhausted]);
 
