@@ -5104,8 +5104,6 @@
       "showChineseFull": "顯示中文",
       "hideChinese": "隱藏中文",
       "chineseShort": "中",
-      "chineseNeedsEnglish": "先打開英文，才能看中文",
-      "playMessage": "播放這則訊息",
       "questionNav": "題號",
       "goToNo": "捲到第 {{no}} 題",
       "dotLocked": "第 {{no}} 題：還沒到這題",

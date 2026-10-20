@@ -8,8 +8,9 @@
  * 圖片為一次性產生的黑白線稿，放在 public/samples/scenario-dialogue/（650 第 5 題刻意無圖）。
  * 資料界線：`image_prompt` 不收進來；`reference_answer` 只在老師預覽才放進題目，
  * 學生模式下只有 mock AI（模擬後端）拿得到，用來產生「建議說法」。
- * AI 開場複述（opening）為 mock 文字；正式版由後端 AI 濃縮作答要求（下一階段）。
- * 朗讀用瀏覽器 speechSynthesis，speakEnglish 回傳「唸完」的 Promise（開場唸完才出第 1 題）。
+ * 翻譯語言（translateLanguage）照兩份教材的 `scenario_settings.translate_language`，都是中文
+ * （"chinese"）；學生介面語言＝中文時才有翻譯鈕。
+ * 朗讀用瀏覽器 speechSynthesis，speakEnglish 回傳「唸完」的 Promise（元件不使用回傳值）。
  */
 
 import type {
@@ -38,8 +39,8 @@ interface RawMaterial {
   title: string;
   level: string;
   rubric: string;
-  /** AI 開場複述（mock）：英文一句＋中文摘要 */
-  opening: { text: string; translation: string };
+  /** scenario_settings.translate_language（每題翻譯的語言） */
+  translateLanguage: string;
   scenarioContent: string;
   contextImages: string[];
   items: RawItem[];
@@ -54,10 +55,7 @@ export const MATERIALS: Record<MaterialId, RawMaterial> = {
     title: "上課口說練習",
     level: "B1",
     rubric: "請用完整句子回答",
-    opening: {
-      text: "Let's talk about Ethan's after-school activities! Remember to answer in complete sentences.",
-      translation: "來聊聊伊森放學後的活動！記得用完整的句子回答。",
-    },
+    translateLanguage: "chinese",
     scenarioContent:
       "Every afternoon, the bell rings at four o'clock, and Ethan quickly packs his schoolbag. While some of his classmates go straight home, Ethan has a busy schedule of extracurricular activities almost every day.\n\nOn Mondays and Thursdays, he rushes to the community sports center for table tennis training. He enjoys playing fast-paced matches with his coach and teammates, which helps him stay active after sitting in class all day.\n\nOn other weekdays, Ethan focuses on music and academics. He attends an English club on Tuesdays to practice speaking, and on Wednesdays, he plays the violin at a local music studio. These activities keep him busy but happy before he finally goes home for dinner.",
     contextImages: ["648-ctx1", "648-ctx2", "648-ctx3"],
@@ -117,11 +115,7 @@ export const MATERIALS: Record<MaterialId, RawMaterial> = {
     level: "A2",
     rubric:
       "學生學習以過去式描述暑假期間旅遊地點的天氣、季節，並用授予動詞談談自己的過去經驗。",
-    opening: {
-      text: "Let's talk about your summer trip! Remember to answer in the past tense.",
-      translation:
-        "來聊聊你的暑假旅行！記得用過去式描述當地的天氣、季節和你的經驗。",
-    },
+    translateLanguage: "chinese",
     scenarioContent: "談談暑假期間旅遊經驗",
     contextImages: [],
     items: [
@@ -225,7 +219,6 @@ export function buildSample(opts: SampleOptions): {
           images: [],
           rubric: m.rubric,
           level: m.level,
-          opening: m.opening,
         }
       : {
           title: m.title,
@@ -241,13 +234,13 @@ export function buildSample(opts: SampleOptions): {
               : [],
           rubric: m.rubric,
           level: m.level,
-          opening: m.opening,
         };
 
   const items: ScenarioChatItem[] = m.items.map((it, i) => ({
     id: `${m.id}-${i}`,
     text: it.text,
     translation: it.translation,
+    translationLanguage: m.translateLanguage,
     keywords: it.keywords,
     rubricNote: it.rubricNote || undefined,
     images: questionImages(m, i, opts.imageMode).map((name, k) => ({

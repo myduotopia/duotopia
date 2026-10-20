@@ -6,9 +6,11 @@
  * 路由：/sample/scenario-dialogue（App.tsx 只在 ENABLE_SCENARIO_DIALOGUE 開時註冊）。
  *
  * 右上角浮動「Sample 控制面板」切換：教材 #648／#650、情境 A/B/C、情境圖張數、
- * 題目配圖、回覆方式、身分（學生／老師預覽）、題目文字預設、翻譯、重置；
+ * 題目配圖、回覆方式、身分（學生／老師預覽）、題目文字預設、翻譯、學生介面語言（中文／英文）、重置；
  * 並顯示每題「是否點開文字」的紀錄（點開過一次就算，收回不取消）。任何設定變動都會重新開始一輪。
  * AI 回饋是固定 mock（第 1 次可以更好、第 2 次起很棒），不會判斷內容；面板上有一行小字說明。
+ * 「學生介面語言」只傳給情境對話元件的 uiLanguage（決定翻譯鈕是否出現），不切換整頁 i18n；
+ * 英文介面沒有翻譯鈕。日韓系統有預留但 sample 不示範。
  * 控制面板文字只寫中文（設計稿用，不進 i18n）。
  */
 
@@ -89,6 +91,7 @@ export default function ScenarioDialogueSample() {
   const [isPreview, setIsPreview] = useState(false);
   const [textHidden, setTextHidden] = useState(true);
   const [translation, setTranslation] = useState(true);
+  const [uiLanguage, setUiLanguage] = useState<"zh-TW" | "en">("zh-TW");
   const [resetKey, setResetKey] = useState(0);
   const [reveal, setReveal] = useState<TextRevealState[]>([]);
 
@@ -116,6 +119,7 @@ export default function ScenarioDialogueSample() {
     isPreview,
     textHidden,
     translation,
+    uiLanguage,
     resetKey,
   ].join("|");
 
@@ -150,6 +154,7 @@ export default function ScenarioDialogueSample() {
         }}
         onSubmit={handleSubmit}
         onRevealChange={setReveal}
+        uiLanguage={uiLanguage}
       />
 
       {/* Sample 控制面板 */}
@@ -282,6 +287,15 @@ export default function ScenarioDialogueSample() {
               options={[
                 { value: true, label: "開" },
                 { value: false, label: "關" },
+              ]}
+            />
+            <Segmented
+              label="學生介面語言"
+              value={uiLanguage}
+              onChange={setUiLanguage}
+              options={[
+                { value: "zh-TW", label: "中文" },
+                { value: "en", label: "英文（無翻譯鈕）" },
               ]}
             />
 

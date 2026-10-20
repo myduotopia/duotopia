@@ -2,7 +2,8 @@
  * AnswerBubble — 情境對話聊天流中學生的回答氣泡（#1133）。
  *
  * 靠右、主色藍底白字。語音回答用標準 AudioPlayer（compact＋tone="onPrimary"，
- * 藍底上的淺色按鈕與白色進度條）；打字回答顯示文字。
+ * 藍底上的淺色按鈕與白色進度條）；播放前讀不到時長時，用錄音當下記下的秒數（durationSec）
+ * 顯示（AudioPlayer fallbackDuration），不顯示 `--:--`。打字回答顯示文字。
  * 重答往下流動：舊的回答變淡（faded）但仍可播放；有多次時標「第 N 次」。
  * 老師預覽時旁邊顯示 mock AI 分數徽章（學生畫面一律不顯示分數）。
  */
@@ -54,6 +55,7 @@ export function AnswerBubble({
             tone="onPrimary"
             showTitle={false}
             readOnly
+            fallbackDuration={answer.durationSec}
             className="min-w-[12rem]"
           />
         ) : (

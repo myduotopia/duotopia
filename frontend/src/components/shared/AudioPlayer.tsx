@@ -5,6 +5,8 @@
  * tone（選用，#1133）：`onPrimary` 給放在主色藍底上的地方（例如情境對話的學生回答氣泡），
  * 只影響 compact 外觀：不鋪綠底、按鈕半透明白、進度條與文字白色。預設 `default` ＝原本綠色外觀，
  * 既有使用處不變。
+ * fallbackDuration（選用，秒，#1133）：音檔還讀不到時長時（例如 Chrome 錄音 webm 播放前常是
+ * 未知）改顯示這個秒數，不顯示 `--:--`；讀到真正時長後以真正時長為準。不傳時行為不變。
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Pause, RotateCcw, CheckCircle2 } from "lucide-react";
@@ -26,6 +28,8 @@ interface AudioPlayerProps {
   /** compact 專用配色：onPrimary＝放在主色藍底上（淺色按鈕）；預設綠色外觀 */
   tone?: "default" | "onPrimary";
   readOnly?: boolean;
+  /** 讀不到音檔時長時改顯示的秒數（例如錄音當下記下的秒數）；不傳＝顯示 --:-- */
+  fallbackDuration?: number;
 }
 
 export default function AudioPlayer({
@@ -41,6 +45,7 @@ export default function AudioPlayer({
   variant = "default",
   tone = "default",
   readOnly = false,
+  fallbackDuration,
 }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -309,7 +314,10 @@ export default function AudioPlayer({
     return null;
   }
 
-  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // 讀不到真正時長時，用外層給的秒數顯示（不傳 fallbackDuration 時就是 duration）
+  const shownDuration = duration > 0 ? duration : (fallbackDuration ?? duration);
+  const progressPercentage =
+    shownDuration > 0 ? Math.min(100, (currentTime / shownDuration) * 100) : 0;
 
   // Minimal variant - only play button
   if (variant === "minimal") {
@@ -388,7 +396,7 @@ export default function AudioPlayer({
               onPrimary ? "text-primary-foreground" : "text-gray-700",
             )}
           >
-            {formatTime(currentTime)} / {formatTime(duration, true)}
+            {formatTime(currentTime)} / {formatTime(shownDuration, true)}
           </span>
         </div>
 
@@ -460,7 +468,7 @@ export default function AudioPlayer({
 
             {/* Time Display - Current / Total */}
             <span className="text-sm text-gray-700 font-medium whitespace-nowrap min-w-[80px] text-right">
-              {formatTime(currentTime)} / {formatTime(duration, true)}
+              {formatTime(currentTime)} / {formatTime(shownDuration, true)}
             </span>
           </div>
         </div>

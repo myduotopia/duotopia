@@ -1,8 +1,9 @@
 /**
  * ChatTranscript — 情境對話的訊息流（#1133），從 ScenarioChatActivity 拆出來。
  *
- * 由上而下：開始前的開場招呼 → AI 開場複述（OpeningBubble）→ 每題（題目氣泡＋
- * 該題所有回答與建議，重答接在該題原有紀錄下方）→「輸入中…」→ 結尾語。
+ * 由上而下：開始前的開場招呼 → 每題（題目氣泡＋該題所有回答與建議，重答接在該題原有
+ * 紀錄下方）→「輸入中…」→ 結尾語。按「開始對話」後直接問第 1 題（沒有 AI 開場複述）。
+ * 每題翻譯鈕是否出現由外層算好的 translatable[i] 決定。
  * 每題外層 div 交給外層登記（registerBlock），供點點捲動與重答後捲回。
  *
  * 每題「最後一則」建議氣泡的操作（FeedbackBubble actions）：
@@ -13,23 +14,22 @@
 import { useTranslation } from "react-i18next";
 import { AnswerBubble } from "./AnswerBubble";
 import { FeedbackBubble, type FeedbackActions } from "./FeedbackBubble";
-import { OpeningBubble } from "./OpeningBubble";
 import { QuestionBubble } from "./QuestionBubble";
 import { AiRow, TypingIndicator } from "./TypingIndicator";
 import type { ScenarioChatState } from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
-  ScenarioChatContext,
   ScenarioChatItem,
   ScenarioChatSettings,
 } from "./types";
 
 interface Props {
   chat: ScenarioChatState;
-  context: ScenarioChatContext;
   items: ScenarioChatItem[];
   settings: ScenarioChatSettings;
   adapters: ScenarioChatAdapters;
+  /** 每題能不能看翻譯（老師開翻譯＋翻譯語言＝學生介面語言＋有翻譯文字） */
+  translatable: boolean[];
   registerBlock: (index: number, el: HTMLDivElement | null) => void;
   onRetry: (index: number) => void;
 }
@@ -39,10 +39,10 @@ const bubble =
 
 export function ChatTranscript({
   chat,
-  context,
   items,
   settings,
   adapters,
+  translatable,
   registerBlock,
   onRetry,
 }: Props) {
@@ -70,16 +70,6 @@ export function ChatTranscript({
         </AiRow>
       )}
 
-      {chat.openingShown && context.opening && (
-        <OpeningBubble
-          text={context.opening.text}
-          translation={context.opening.translation}
-          textDefaultHidden={settings.textDefaultHidden}
-          showTranslation={settings.showTranslation}
-          onPlay={() => adapters.speak(context.opening!.text)}
-        />
-      )}
-
       {items.slice(0, chat.revealedCount).map((item, i) => {
         const list = attempts[i];
         const last = list.length - 1;
@@ -94,7 +84,7 @@ export function ChatTranscript({
               total={items.length}
               item={item}
               visible={chat.visible[i]}
-              showTranslation={settings.showTranslation}
+              showTranslation={translatable[i]}
               isPreviewMode={isPreview}
               skipped={chat.skipped[i] && list.length === 0}
               averageScore={isPreview ? chat.averageFor(i) : null}

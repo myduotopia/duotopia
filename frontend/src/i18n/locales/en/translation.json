@@ -5085,8 +5085,6 @@
       "showChineseFull": "Show Chinese",
       "hideChinese": "Hide Chinese",
       "chineseShort": "中",
-      "chineseNeedsEnglish": "Show the English first to see the Chinese",
-      "playMessage": "Play this message",
       "questionNav": "Questions",
       "goToNo": "Scroll to question {{no}}",
       "dotLocked": "Question {{no}}: not reached yet",

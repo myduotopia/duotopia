@@ -2,11 +2,14 @@
  * useScenarioChat — 情境對話「訊息對話式」作答的狀態機（#1133）。
  *
  * 從 ScenarioChatActivity 拆出來，主元件只管版面。主流程：
- *   intro →（開始）→ aiTyping →（AI 開場複述，唸完）→ aiTyping → awaitingAnswer
+ *   intro →（開始）→ aiTyping → awaitingAnswer（第 1 題）
  *   →（送出）→ awaitingFeedback → feedbackShown →（再試一次）awaitingAnswer
  *   ／（下一題）aiTyping → … → finished
  *
+ * - 按「開始對話」直接問第 1 題；沒有 AI 開場複述（第 3 輪拿掉，作答要求已在開始前的卡片上）。
  * - 題目一題一題冒出：揭露前先顯示「輸入中…」TYPING_MS。
+ * - 題目自動播放：新題出現、下一題、老師跳題時播一次；正在回頭重答時不播（免得錄進去），
+ *   老師跳題先停掉正在唸的內容。
  * - 每題最多 maxAttempts 次；目前這題用完停 AUTO_NEXT_MS 自動進下一題。
  * - 重答（retry）：作答中或結束後，任何已出現、還沒答滿的題目都能按「再試一次」回頭答，
  *   不影響主流程（主流程的計時器照跑）。新回答與建議接在該題原有紀錄下方；
@@ -14,7 +17,8 @@
  *   已答滿的題目任何方式（點點、再試一次、老師跳題）都不可再作答，只能重聽。
  * - 老師預覽可跳題（jumpTo）：往後跳時中間未出現的題目標「略過」；往回跳保留紀錄、
  *   從該題往下流。跳題會丟掉還在等 AI 建議的那筆回答（不佔次數）。
- * - 英／中文字顯示（visible）可切換；`seen` 記錄是否點開過（收回不取消），回報給外層。
+ * - 英／翻譯文字顯示（visible）可切換；`seen` 記錄是否點開過（收回不取消），回報給外層。
+ *   翻譯（zh 欄位）只有 `translatable[i]` 為真的題目能開（老師開翻譯＋翻譯語言＝學生介面語言）。
  * - AI 建議以 adapters.getFeedback 注入；過期的回應（卸載／跳題後才回來）以 sessionRef 丟棄。
  * - 卸載時：停止朗讀、清計時器、revoke 所有錄音 blob URL。
  */
@@ -30,8 +34,6 @@ import type {
 
 export const TYPING_MS = 900;
 export const AUTO_NEXT_MS = 1500;
-/** 開場複述唸完才出第 1 題；朗讀沒回應時最多等這麼久 */
-const MAX_SPEAK_WAIT_MS = 8000;
 
 export type ScenarioChatPhase =
   | "intro"
@@ -52,9 +54,8 @@ interface Options {
   adapters: ScenarioChatAdapters;
   maxAttempts: number;
   textDefaultHidden: boolean;
-  showTranslation: boolean;
-  /** AI 開場複述（英文）；沒有就直接問第 1 題 */
-  openingText?: string;
+  /** 每題能不能看翻譯（老師開翻譯＋翻譯語言＝學生介面語言＋有翻譯文字） */
+  translatable: boolean[];
   /** 回報「是否點開過文字」紀錄 */
   onRevealChange?: (seen: TextRevealState[]) => void;
 }
@@ -68,8 +69,7 @@ export function useScenarioChat({
   adapters,
   maxAttempts,
   textDefaultHidden,
-  showTranslation,
-  openingText,
+  translatable,
   onRevealChange,
 }: Options) {
   const n = items.length;
@@ -86,7 +86,6 @@ export function useScenarioChat({
     items.map(() => ({ en: !textDefaultHidden, zh: false }));
   const [visible, setVisible] = useState<TextRevealState[]>(initialText);
   const [seen, setSeen] = useState<TextRevealState[]>(initialText);
-  const [openingShown, setOpeningShown] = useState(false);
   const [closingShown, setClosingShown] = useState(false);
   const [retry, setRetry] = useState<RetryState | null>(null);
   /** 重答結束的訊號：tick 變就捲回；delayed＝有新建議，先讓學生看一下再捲 */
@@ -145,21 +144,8 @@ export function useScenarioChat({
 
   const start = useCallback(() => {
     if (n === 0) return;
-    if (!openingText) {
-      typeThenReveal(0);
-      return;
-    }
-    setPhase("aiTyping");
-    later(() => {
-      setOpeningShown(true);
-      const session = sessionRef.current;
-      const spoken = Promise.resolve(adaptersRef.current.speak(openingText));
-      const cap = new Promise<void>((r) => setTimeout(r, MAX_SPEAK_WAIT_MS));
-      Promise.race([spoken, cap]).then(() => {
-        if (session === sessionRef.current) typeThenReveal(0);
-      });
-    }, TYPING_MS);
-  }, [n, openingText, later, typeThenReveal]);
+    typeThenReveal(0);
+  }, [n, typeThenReveal]);
 
   const finishAll = useCallback(() => {
     setPhase("aiTyping");
@@ -183,7 +169,7 @@ export function useScenarioChat({
     } else if (nextIdx < revealedCount) {
       setCurrent(nextIdx);
       setPhase("awaitingAnswer");
-      adaptersRef.current.speak(items[nextIdx].text);
+      if (!retryRef.current) adaptersRef.current.speak(items[nextIdx].text);
     } else {
       typeThenReveal(nextIdx);
     }
@@ -290,9 +276,11 @@ export function useScenarioChat({
 
   /**
    * 老師預覽：跳到第 i 題。答滿的題目不可再作答 → 回傳 false（畫面只捲過去）。
+   * 先停掉正在唸的內容；跳題會取消重答，並播放目標題（老師主動跳題，播放屬預期）。
    */
   const jumpTo = useCallback(
     (i: number): boolean => {
+      adaptersRef.current.stopSpeech?.();
       if (i < revealedCount && isExhausted(i)) return false;
       sessionRef.current += 1;
       clearTimers();
@@ -322,12 +310,12 @@ export function useScenarioChat({
     [revealedCount, items, isExhausted, clearTimers, typeThenReveal],
   );
 
-  /** 英／中文字切換：收起英文時中文一起收；中文要英文開著才能開 */
+  /** 英／翻譯文字切換：收起英文時翻譯一起收；翻譯要英文開著、且本題可翻譯才能開 */
   const toggleText = useCallback(
     (i: number, which: "en" | "zh") => {
       const cur = visible[i];
       if (!cur) return;
-      if (which === "zh" && (!showTranslation || !cur.en)) return;
+      if (which === "zh" && (!translatable[i] || !cur.en)) return;
       const next: TextRevealState =
         which === "en"
           ? { en: !cur.en, zh: cur.en ? false : cur.zh }
@@ -339,7 +327,7 @@ export function useScenarioChat({
         );
       }
     },
-    [visible, showTranslation],
+    [visible, translatable],
   );
 
   const averageFor = useCallback(
@@ -360,8 +348,8 @@ export function useScenarioChat({
       (s, l) => s + l.filter((a) => a.feedback).length,
       0,
     );
-    return `${revealedCount}-${total}-${fb}-${phase}-${openingShown}-${closingShown}`;
-  }, [attempts, revealedCount, phase, openingShown, closingShown]);
+    return `${revealedCount}-${total}-${fb}-${phase}-${closingShown}`;
+  }, [attempts, revealedCount, phase, closingShown]);
 
   return {
     phase,
@@ -371,7 +359,6 @@ export function useScenarioChat({
     skipped,
     visible,
     seen,
-    openingShown,
     closingShown,
     retry,
     retryBusy,

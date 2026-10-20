@@ -1,9 +1,9 @@
 /**
  * QuestionBubble — 情境對話聊天流中的「AI 提問」氣泡（#1133）。
  *
- * 先聽後看：`[🔊] [Aa 英] [中]` 小膠囊（RevealCapsules），英／中可切換顯示、收起；
- * 「中」要英文打開才能按（老師沒開翻譯就不出現）。老師設定「文字預設顯示」時英文一開始
- * 就打開（由 visible 帶入）。
+ * 先聽後看：`[🔊] [Aa 英] [中]` 小膠囊（RevealCapsules），英／翻譯可切換顯示、收起；
+ * 翻譯鈕只在 showTranslation（老師開翻譯＋翻譯語言＝學生介面語言，由外層算好）且英文已打開時
+ * 出現，否則不渲染。老師設定「文字預設顯示」時英文一開始就打開（由 visible 帶入）。
  * 題目圖片固定在氣泡頂部（多張 → ImageCarousel compact 輪播、點圖放大）。
  * 關鍵字一律可見；rubric_note 作答提示預設收合。
  * 老師預覽另有：參考答案開關、「本題平均」徽章、「略過」標記。
@@ -27,6 +27,7 @@ interface Props {
   item: ScenarioChatItem;
   /** 英／中目前是否顯示 */
   visible: TextRevealState;
+  /** 本題可以看翻譯（老師開翻譯＋翻譯語言＝學生介面語言＋有翻譯文字） */
   showTranslation: boolean;
   isPreviewMode: boolean;
   skipped: boolean;
@@ -94,7 +95,7 @@ export function QuestionBubble({
           <RevealCapsules
             enOn={visible.en}
             zhOn={visible.zh}
-            showZh={showTranslation && Boolean(item.translation)}
+            showTranslation={showTranslation}
             onPlay={onPlay}
             onToggleEn={() => onToggle("en")}
             onToggleZh={() => onToggle("zh")}
@@ -105,7 +106,7 @@ export function QuestionBubble({
               {item.text}
             </p>
           )}
-          {visible.en && visible.zh && showTranslation && item.translation && (
+          {visible.en && visible.zh && showTranslation && (
             <p className="quiz-translation-font text-gray-600">
               {item.translation}
             </p>

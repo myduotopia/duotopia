@@ -18,8 +18,15 @@ export interface ScenarioChatItem {
   id: string | number;
   /** 題目英文 */
   text: string;
-  /** 題目中文翻譯（老師沒開翻譯時不顯示） */
+  /**
+   * 題目翻譯（老師沒開翻譯時不顯示）。DB 每題只存一份，語言＝老師選的翻譯語言。
+   */
   translation?: string;
+  /**
+   * 翻譯的語言，取自 `scenario_settings.translate_language`（"chinese"／"japanese"／
+   * "korean"／自訂名稱）。只有與學生介面語言相同時才顯示翻譯鈕（見 translationLanguage.ts）。
+   */
+  translationLanguage?: string;
   keywords: string[];
   /** 作答提示（rubric_note，學生可見） */
   rubricNote?: string;
@@ -38,14 +45,6 @@ export interface ScenarioChatContext {
   /** 作答要求（global_rubric）—— 開始前以藍色提示卡顯示 */
   rubric?: string;
   level?: string;
-  /**
-   * AI 開場複述：按「開始對話」後 AI 第一則訊息（英文一句＋中文摘要），之後才問第 1 題。
-   * sample 用 mock 文字；正式版由後端 AI 濃縮作答要求（下一階段）。
-   */
-  opening?: {
-    text: string;
-    translation?: string;
-  };
 }
 
 export type ReplyMode = "voice" | "text";
@@ -84,7 +83,7 @@ export interface ScenarioChatAdapters {
     answer: ScenarioAnswer,
     attemptIndex: number,
   ) => Promise<ScenarioFeedback>;
-  /** 朗讀；回傳 Promise 時代表「唸完」（開場複述唸完才出第 1 題） */
+  /** 朗讀（回傳值不使用；sample 的 speakEnglish 會回傳「唸完」的 Promise） */
   speak: (text: string) => void | Promise<void>;
   /** 停止朗讀（卸載／重置時呼叫） */
   stopSpeech?: () => void;
@@ -94,6 +93,7 @@ export interface ScenarioChatSettings {
   replyMode: ReplyMode;
   /** 題目文字預設隱藏（先聽後看） */
   textDefaultHidden: boolean;
+  /** 老師翻譯開關；關 → 學生一律沒有翻譯鈕（英文仍可看） */
   showTranslation: boolean;
   isPreviewMode: boolean;
   maxAttempts: number;

@@ -2,16 +2,22 @@
  * ScenarioChatActivity — 情境對話「訊息對話式」作答畫面主體（#1133）。
  *
  * 只管版面、捲動，並把狀態機（useScenarioChat）接到訊息流（ChatTranscript）與輸入區：
- * - 開始前：作答要求卡（藍）→ 情境卡（紫，情境 C 沒有）→ 底部「開始對話」。
+ * - 開始前：作答要求卡（藍）→ 情境卡（紫，情境 C 沒有）→ 底部「開始對話」；
+ *   按下後直接問第 1 題（沒有 AI 開場複述）。
  *   手機／平板直式顯示在對話區；平板橫式／電腦（≥ lg）放左欄、常駐展開（獨立捲動）。
  * - 開始後（< lg）：兩張卡收合成上方一條 `[📋 作答要求] [📖 情境]` 小膠囊，點哪個展開哪個。
  * - 題號小點點（QuestionDots）：< lg 在標題列下方橫排，≥ lg 在對話欄左側直排。
- *   學生點了只捲到那一題；老師預覽點了跳題（取代舊的跳題列）。
+ *   學生點了只捲到那一題；老師預覽點了跳題（取代舊的跳題列）。開始對話前老師的點點
+ *   與學生一致：還沒出現的題目＝灰點，點了提示「還沒到這題」。
  * - 再試一次：任何已出現、沒答滿的題目都能回頭重答；輸入區上方出現「正在重答第 N 題 ✕」。
  *   AI 建議回來後先停在該題讓學生看一下（RETURN_DELAY_MS），再自動捲回原本進行中的題目；
  *   按 ✕ 取消則立刻捲回。
  * - 新訊息自動捲到底；使用者往上捲時不強制捲動，改顯示「↓ 新訊息」提示。
- *   內容高度變化（例如題目圖片晚載入）也會在貼底狀態下再捲一次（ResizeObserver）。
+ *   內容高度變化（例如題目圖片晚載入）也會在貼底狀態下再捲一次（ResizeObserver）；
+ *   重答中與重答後捲回計時中不做，免得打斷捲到該題／停留讓學生看建議。
+ * - 翻譯鈕：老師開翻譯（settings.showTranslation）＋題目翻譯語言＝學生介面語言
+ *   （uiLanguage，`zh` 開頭＝中文；英文介面沒有翻譯鈕）＋本題有翻譯文字，才算可翻譯；
+ *   英文打開後才出現（RevealCapsules）。uiLanguage 不傳時用 i18n 目前語言。
  * - 高度用 100dvh；底部輸入區留 safe-area。
  *
  * AI 建議與朗讀由 `adapters` 注入（sample 傳 mock；正式版之後接後端）。
@@ -19,7 +25,7 @@
  * 參考答案開關與 mock 分數。
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Mic } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +40,7 @@ import {
   hasContextCard,
   type InfoPanel,
 } from "./ScenarioContextCard";
+import { translationMatchesUi } from "./translationLanguage";
 import { useScenarioChat } from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
@@ -51,6 +58,11 @@ interface Props {
   onSubmit: () => void;
   /** 回報每題「是否點開過文字」 */
   onRevealChange?: (seen: TextRevealState[]) => void;
+  /**
+   * 學生介面語言（例如 "zh-TW"、"en"），決定翻譯鈕是否出現；不傳＝i18n 目前語言。
+   * sample 用控制面板的值，正式版傳學生實際介面語言。
+   */
+  uiLanguage?: string;
 }
 
 const NEAR_BOTTOM_PX = 80;
@@ -63,15 +75,26 @@ export function ScenarioChatActivity({
   adapters,
   onSubmit,
   onRevealChange,
+  uiLanguage,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = uiLanguage ?? i18n.language ?? "";
+  const translatable = useMemo(
+    () =>
+      items.map(
+        (it) =>
+          settings.showTranslation &&
+          Boolean(it.translation) &&
+          translationMatchesUi(it.translationLanguage, lang),
+      ),
+    [items, settings.showTranslation, lang],
+  );
   const chat = useScenarioChat({
     items,
     adapters,
     maxAttempts: settings.maxAttempts,
     textDefaultHidden: settings.textDefaultHidden,
-    showTranslation: settings.showTranslation,
-    openingText: context.opening?.text,
+    translatable,
     onRevealChange,
   });
   const { phase, current, retry } = chat;
@@ -95,6 +118,8 @@ export function ScenarioChatActivity({
   const lastRetryIdxRef = useRef<number | null>(null);
   const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasNew, setHasNew] = useState(false);
+  const retryActiveRef = useRef(retry);
+  retryActiveRef.current = retry;
 
   const registerBlock = useCallback((i: number, el: HTMLDivElement | null) => {
     blockRefs.current[i] = el;
@@ -129,13 +154,15 @@ export function ScenarioChatActivity({
     lastTopRef.current = el.scrollTop;
   };
 
-  // 內容長高（圖片晚載入等）時，貼底狀態下再捲一次
+  // 內容長高（圖片晚載入等）時，貼底狀態下再捲一次；重答中／捲回計時中不搶捲動
   useEffect(() => {
     const content = contentRef.current;
     if (!content || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
       const el = scrollRef.current;
-      if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+      if (!el || !stickRef.current) return;
+      if (retryActiveRef.current || returnTimerRef.current) return;
+      el.scrollTop = el.scrollHeight;
     });
     ro.observe(content);
     return () => ro.disconnect();
@@ -198,7 +225,10 @@ export function ScenarioChatActivity({
     if (idx !== null) {
       requestAnimationFrame(() => scrollToBlock(idx, "end"));
     }
-    returnTimerRef.current = setTimeout(returnToCurrent, RETURN_DELAY_MS);
+    returnTimerRef.current = setTimeout(() => {
+      returnTimerRef.current = null;
+      returnToCurrent();
+    }, RETURN_DELAY_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.retryReturn]);
 
@@ -254,7 +284,8 @@ export function ScenarioChatActivity({
     total: items.length,
     revealedCount: chat.revealedCount,
     current: started ? current : null,
-    allowAll: isPreview,
+    // 老師預覽開始對話後才能跳題；開始前與學生一致（灰點＋「還沒到這題」）
+    allowAll: isPreview && started,
     onSelect: handleDot,
   };
 
@@ -344,10 +375,10 @@ export function ScenarioChatActivity({
                   )}
                   <ChatTranscript
                     chat={chat}
-                    context={context}
                     items={items}
                     settings={settings}
                     adapters={adapters}
+                    translatable={translatable}
                     registerBlock={registerBlock}
                     onRetry={handleRetry}
                   />
