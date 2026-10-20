@@ -4,7 +4,9 @@
  * 預設外觀給首頁功能特色輪播用（Home.tsx）：圓點在上、圖片下方有說明文字區。
  * #1133 情境對話加 `compact` 選用模式（預設關閉，首頁不受影響）：圓點移到圖片下方、
  * 不留說明文字區、箭頭縮小並加白底、只有一張時不顯示箭頭與圓點；
- * `zoomable` 讓圖片可點擊放大（沿用 question-bank 的 ZoomableImage）。
+ * `zoomable` 讓圖片可點擊放大（沿用 question-bank 的 ZoomableImage）。放大視窗是 portal，
+ * React 事件仍會冒泡回輪播；觸控與鍵盤處理只接受輪播自己 DOM 內的事件，
+ * 放大視窗裡滑動／按左右鍵不會讓背後輪播換張。
  */
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -68,15 +70,23 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = ({
     [current, images.length, goTo],
   );
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
+  /** 事件來自放大視窗（portal）時不處理 */
+  const fromOutside = (e: React.SyntheticEvent) =>
+    !e.currentTarget.contains(e.target as Node);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (fromOutside(e)) return;
+    touchStartX.current = e.touches[0].clientX;
     touchEndX.current = e.touches[0].clientX;
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (fromOutside(e)) return;
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (fromOutside(e)) return;
     const diff = touchStartX.current - touchEndX.current;
     if (Math.abs(diff) > SWIPE_THRESHOLD) {
       if (diff > 0) next();
@@ -85,6 +95,7 @@ export const ImageCarousel: React.FC<ImageCarouselProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (fromOutside(e)) return;
     if (e.key === "ArrowLeft") prev();
     if (e.key === "ArrowRight") next();
   };

@@ -1,3 +1,11 @@
+/**
+ * AudioPlayer — 播放音檔（播放／暫停、進度條、時間、重新播放）。
+ *
+ * variant：default（大卡）、compact（一列）、minimal（只有播放鈕）。
+ * tone（選用，#1133）：`onPrimary` 給放在主色藍底上的地方（例如情境對話的學生回答氣泡），
+ * 只影響 compact 外觀：不鋪綠底、按鈕半透明白、進度條與文字白色。預設 `default` ＝原本綠色外觀，
+ * 既有使用處不變。
+ */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Pause, RotateCcw, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,6 +23,8 @@ interface AudioPlayerProps {
   autoPlay?: boolean;
   showTitle?: boolean;
   variant?: "default" | "compact" | "minimal";
+  /** compact 專用配色：onPrimary＝放在主色藍底上（淺色按鈕）；預設綠色外觀 */
+  tone?: "default" | "onPrimary";
   readOnly?: boolean;
 }
 
@@ -29,6 +39,7 @@ export default function AudioPlayer({
   autoPlay = false,
   showTitle = true,
   variant = "default",
+  tone = "default",
   readOnly = false,
 }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -321,10 +332,12 @@ export default function AudioPlayer({
   }
 
   if (variant === "compact") {
+    const onPrimary = tone === "onPrimary";
     return (
       <div
         className={cn(
-          "bg-green-50 rounded-lg p-3 flex items-center gap-3",
+          "rounded-lg flex items-center gap-3",
+          onPrimary ? "p-0" : "bg-green-50 p-3",
           className,
         )}
       >
@@ -332,7 +345,12 @@ export default function AudioPlayer({
 
         <button
           onClick={togglePlayback}
-          className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-700 transition-colors"
+          className={cn(
+            "rounded-full flex items-center justify-center transition-colors",
+            onPrimary
+              ? "w-11 h-11 bg-white/20 hover:bg-white/30"
+              : "w-10 h-10 bg-green-600 hover:bg-green-700",
+          )}
         >
           {isPlaying ? (
             <Pause className="w-5 h-5 text-white" />
@@ -350,15 +368,26 @@ export default function AudioPlayer({
 
         <div className="flex-1 flex items-center gap-2">
           <div
-            className="flex-1 h-1.5 bg-green-200 rounded-full cursor-pointer overflow-hidden"
+            className={cn(
+              "flex-1 h-1.5 rounded-full cursor-pointer overflow-hidden",
+              onPrimary ? "bg-white/30" : "bg-green-200",
+            )}
             onClick={handleProgressClick}
           >
             <div
-              className="h-full bg-green-500 rounded-full transition-all duration-100"
+              className={cn(
+                "h-full rounded-full transition-all duration-100",
+                onPrimary ? "bg-white" : "bg-green-500",
+              )}
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
-          <span className="text-xs text-gray-700 font-medium whitespace-nowrap min-w-[65px] text-right">
+          <span
+            className={cn(
+              "text-xs font-medium whitespace-nowrap min-w-[65px] text-right",
+              onPrimary ? "text-primary-foreground" : "text-gray-700",
+            )}
+          >
             {formatTime(currentTime)} / {formatTime(duration, true)}
           </span>
         </div>
@@ -366,10 +395,18 @@ export default function AudioPlayer({
         {!readOnly && (
           <button
             onClick={resetPlayback}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors"
+            className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+              onPrimary ? "hover:bg-white/20" : "hover:bg-green-100",
+            )}
             title="重新播放"
           >
-            <RotateCcw className="w-4 h-4 text-green-600" />
+            <RotateCcw
+              className={cn(
+                "w-4 h-4",
+                onPrimary ? "text-white" : "text-green-600",
+              )}
+            />
           </button>
         )}
       </div>

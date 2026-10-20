@@ -3,14 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import AudioPlayer from "./AudioPlayer";
-import {
-  Mic,
-  MicOff,
-  Square,
-  RotateCcw,
-  AlertCircle,
-  Loader2,
-} from "lucide-react";
+import AudioRecorderChatControls from "./AudioRecorderChatControls";
+import { Mic, MicOff, Square, RotateCcw, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AudioErrorData } from "@/utils/audioErrorLogger";
 import { toast } from "sonner";
@@ -53,6 +47,7 @@ interface AudioRecorderProps {
   /**
    * `chat`（#1133 情境對話）：大圓麥克風，點一下開始（秒數＋聲波）、再點停止 →
    * 可試聽／重錄；不包 Card、不跳「錄音完成」toast（由外層決定何時送出）。
+   * 畫面在 AudioRecorderChatControls.tsx。
    */
   variant?: "default" | "compact" | "minimal" | "chat";
   className?: string;
@@ -449,93 +444,21 @@ export default function AudioRecorder({
   const renderRecordingControls = () => {
     if (isChat) {
       return (
-        <div className="flex flex-col items-center gap-2">
-          {!isRecording && !localAudioUrl && (
-            <>
-              <button
-                type="button"
-                onClick={startRecording}
-                disabled={readOnly || disabled}
-                className="h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-md flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50"
-                aria-label={t("audioRecorder.ui.startRecording")}
-              >
-                <Mic className="h-7 w-7" />
-              </button>
-              <span className="text-xs text-gray-500">
-                {description || t("audioRecorder.ui.tapToRecord")}
-              </span>
-            </>
-          )}
-
-          {isRecording && (
-            <>
-              <div className="flex items-center gap-4">
-                <span className="w-12 text-right text-base font-medium tabular-nums text-red-600">
-                  {formatTime(recordingTime)}
-                </span>
-                <button
-                  type="button"
-                  onClick={stopRecording}
-                  disabled={isStopping}
-                  className="h-16 w-16 rounded-full bg-red-600 text-white shadow-md flex items-center justify-center hover:bg-red-700 transition-colors"
-                  aria-label={t("audioRecorder.ui.stopRecording")}
-                >
-                  {isStopping ? (
-                    <Loader2 className="h-7 w-7 animate-spin" />
-                  ) : (
-                    <Square className="h-6 w-6 fill-current" />
-                  )}
-                </button>
-                <div className="flex h-8 w-12 items-center gap-1" aria-hidden>
-                  {[45, 85, 60, 100, 50].map((h, i) => (
-                    <span
-                      key={i}
-                      className="w-1.5 rounded-full bg-red-500 animate-pulse"
-                      style={{
-                        height: `${isStopping ? 20 : h}%`,
-                        animationDelay: `${i * 150}ms`,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-              <span className="text-xs text-gray-500">
-                {isStopping
-                  ? t("audioRecorder.ui.processing")
-                  : t("audioRecorder.ui.tapToStop")}
-              </span>
-            </>
-          )}
-
-          {localAudioUrl && !isRecording && (
-            <div className="flex items-center gap-2">
-              <AudioPlayer
-                audioUrl={localAudioUrl}
-                variant="compact"
-                showTitle={false}
-                onError={onError}
-              />
-              {!readOnly && (
-                <Button
-                  variant="outline"
-                  onClick={handleReRecord}
-                  disabled={disabled}
-                  className="h-11"
-                >
-                  <RotateCcw className="w-4 h-4 mr-1" />
-                  {t("audioRecorder.ui.reRecord")}
-                </Button>
-              )}
-            </div>
-          )}
-
-          {status === "error" && !isRecording && (
-            <div className="flex items-center gap-1 text-red-600 text-xs">
-              <AlertCircle className="w-4 h-4" />
-              {errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
-            </div>
-          )}
-        </div>
+        <AudioRecorderChatControls
+          isRecording={isRecording}
+          isStopping={isStopping}
+          recordingTimeLabel={formatTime(recordingTime)}
+          audioUrl={localAudioUrl}
+          showError={status === "error"}
+          errorMessage={errorMessage}
+          description={description}
+          readOnly={readOnly}
+          disabled={disabled}
+          onStart={startRecording}
+          onStop={stopRecording}
+          onReRecord={handleReRecord}
+          onError={onError}
+        />
       );
     }
 

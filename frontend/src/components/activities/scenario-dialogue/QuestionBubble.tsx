@@ -1,21 +1,23 @@
 /**
  * QuestionBubble — 情境對話聊天流中的「AI 提問」氣泡（#1133）。
  *
- * 先聽後看（三段式）：預設只有播放鈕 →「看英文」顯示題目 → 英文出現後才有「看中文」
- * （老師沒開翻譯就不出現）。老師設定「文字預設顯示」時英文一開始就展開（由 reveal 帶入）。
+ * 先聽後看：`[🔊] [Aa 英] [中]` 小膠囊（RevealCapsules），英／中可切換顯示、收起；
+ * 「中」要英文打開才能按（老師沒開翻譯就不出現）。老師設定「文字預設顯示」時英文一開始
+ * 就打開（由 visible 帶入）。
  * 題目圖片固定在氣泡頂部（多張 → ImageCarousel compact 輪播、點圖放大）。
  * 關鍵字一律可見；rubric_note 作答提示預設收合。
  * 老師預覽另有：參考答案開關、「本題平均」徽章、「略過」標記。
+ * 重答改由每題最後一則建議氣泡的「再試一次」處理（FeedbackBubble），這裡不放按鈕。
  */
 
 import { useState } from "react";
-import { ChevronDown, Eye, Languages, Lightbulb, Volume2 } from "lucide-react";
+import { ChevronDown, Lightbulb } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ImageCarousel } from "@/components/ImageCarousel";
 import { cn } from "@/lib/utils";
+import { RevealCapsules } from "./RevealCapsules";
 import { AiRow } from "./TypingIndicator";
 import type { ScenarioChatItem, TextRevealState } from "./types";
 
@@ -23,29 +25,27 @@ interface Props {
   index: number;
   total: number;
   item: ScenarioChatItem;
-  reveal: TextRevealState;
+  /** 英／中目前是否顯示 */
+  visible: TextRevealState;
   showTranslation: boolean;
   isPreviewMode: boolean;
   skipped: boolean;
   averageScore: number | null;
   onPlay: () => void;
-  onReveal: (which: "en" | "zh") => void;
-  /** 結束後可補答時才傳 */
-  onReanswer?: () => void;
+  onToggle: (which: "en" | "zh") => void;
 }
 
 export function QuestionBubble({
   index,
   total,
   item,
-  reveal,
+  visible,
   showTranslation,
   isPreviewMode,
   skipped,
   averageScore,
   onPlay,
-  onReveal,
-  onReanswer,
+  onToggle,
 }: Props) {
   const { t } = useTranslation();
   const [hintOpen, setHintOpen] = useState(false);
@@ -91,47 +91,21 @@ export function QuestionBubble({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11"
-              onClick={onPlay}
-              aria-label={t("scenarioDialogue.chat.playQuestion")}
-            >
-              <Volume2 className="mr-1 h-5 w-5" />
-              {t("scenarioDialogue.chat.listen")}
-            </Button>
-            {!reveal.en && (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                onClick={() => onReveal("en")}
-              >
-                <Eye className="mr-1 h-4 w-4" />
-                {t("scenarioDialogue.chat.showEnglish")}
-              </Button>
-            )}
-            {reveal.en && showTranslation && !reveal.zh && (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                onClick={() => onReveal("zh")}
-              >
-                <Languages className="mr-1 h-4 w-4" />
-                {t("scenarioDialogue.chat.showChinese")}
-              </Button>
-            )}
-          </div>
+          <RevealCapsules
+            enOn={visible.en}
+            zhOn={visible.zh}
+            showZh={showTranslation && Boolean(item.translation)}
+            onPlay={onPlay}
+            onToggleEn={() => onToggle("en")}
+            onToggleZh={() => onToggle("zh")}
+          />
 
-          {reveal.en && (
+          {visible.en && (
             <p className="quiz-input-font font-medium leading-snug text-gray-900">
               {item.text}
             </p>
           )}
-          {reveal.en && showTranslation && reveal.zh && item.translation && (
+          {visible.en && visible.zh && showTranslation && item.translation && (
             <p className="quiz-translation-font text-gray-600">
               {item.translation}
             </p>
@@ -189,17 +163,6 @@ export function QuestionBubble({
                 </p>
               )}
             </div>
-          )}
-
-          {onReanswer && (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11"
-              onClick={onReanswer}
-            >
-              {t("scenarioDialogue.chat.reanswer")}
-            </Button>
           )}
         </div>
       </div>

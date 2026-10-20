@@ -8,6 +8,8 @@
  * 圖片為一次性產生的黑白線稿，放在 public/samples/scenario-dialogue/（650 第 5 題刻意無圖）。
  * 資料界線：`image_prompt` 不收進來；`reference_answer` 只在老師預覽才放進題目，
  * 學生模式下只有 mock AI（模擬後端）拿得到，用來產生「建議說法」。
+ * AI 開場複述（opening）為 mock 文字；正式版由後端 AI 濃縮作答要求（下一階段）。
+ * 朗讀用瀏覽器 speechSynthesis，speakEnglish 回傳「唸完」的 Promise（開場唸完才出第 1 題）。
  */
 
 import type {
@@ -36,6 +38,8 @@ interface RawMaterial {
   title: string;
   level: string;
   rubric: string;
+  /** AI 開場複述（mock）：英文一句＋中文摘要 */
+  opening: { text: string; translation: string };
   scenarioContent: string;
   contextImages: string[];
   items: RawItem[];
@@ -50,6 +54,10 @@ export const MATERIALS: Record<MaterialId, RawMaterial> = {
     title: "上課口說練習",
     level: "B1",
     rubric: "請用完整句子回答",
+    opening: {
+      text: "Let's talk about Ethan's after-school activities! Remember to answer in complete sentences.",
+      translation: "來聊聊伊森放學後的活動！記得用完整的句子回答。",
+    },
     scenarioContent:
       "Every afternoon, the bell rings at four o'clock, and Ethan quickly packs his schoolbag. While some of his classmates go straight home, Ethan has a busy schedule of extracurricular activities almost every day.\n\nOn Mondays and Thursdays, he rushes to the community sports center for table tennis training. He enjoys playing fast-paced matches with his coach and teammates, which helps him stay active after sitting in class all day.\n\nOn other weekdays, Ethan focuses on music and academics. He attends an English club on Tuesdays to practice speaking, and on Wednesdays, he plays the violin at a local music studio. These activities keep him busy but happy before he finally goes home for dinner.",
     contextImages: ["648-ctx1", "648-ctx2", "648-ctx3"],
@@ -109,6 +117,11 @@ export const MATERIALS: Record<MaterialId, RawMaterial> = {
     level: "A2",
     rubric:
       "學生學習以過去式描述暑假期間旅遊地點的天氣、季節，並用授予動詞談談自己的過去經驗。",
+    opening: {
+      text: "Let's talk about your summer trip! Remember to answer in the past tense.",
+      translation:
+        "來聊聊你的暑假旅行！記得用過去式描述當地的天氣、季節和你的經驗。",
+    },
     scenarioContent: "談談暑假期間旅遊經驗",
     contextImages: [],
     items: [
@@ -212,6 +225,7 @@ export function buildSample(opts: SampleOptions): {
           images: [],
           rubric: m.rubric,
           level: m.level,
+          opening: m.opening,
         }
       : {
           title: m.title,
@@ -227,6 +241,7 @@ export function buildSample(opts: SampleOptions): {
               : [],
           rubric: m.rubric,
           level: m.level,
+          opening: m.opening,
         };
 
   const items: ScenarioChatItem[] = m.items.map((it, i) => ({
@@ -253,13 +268,26 @@ function mockScore(itemId: string, attemptIndex: number) {
   return attemptIndex === 0 ? 60 + spread : 85 + spread;
 }
 
-export function speakEnglish(text: string) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+/** 朗讀英文；回傳的 Promise 在唸完（或出錯、被打斷）時 resolve */
+export function speakEnglish(text: string): Promise<void> {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return Promise.resolve();
+  }
   window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";
-  u.rate = 0.95;
-  window.speechSynthesis.speak(u);
+  return new Promise<void>((resolve) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = 0.95;
+    u.onend = () => resolve();
+    u.onerror = () => resolve();
+    window.speechSynthesis.speak(u);
+  });
+}
+
+export function stopSpeech() {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
 }
 
 /** mock AI：模擬後端（拿得到參考答案），第 1 次「可以更好」＋建議說法，之後「很棒」 */
@@ -267,6 +295,7 @@ export function createMockAdapters(material: MaterialId): ScenarioChatAdapters {
   const m = MATERIALS[material];
   return {
     speak: speakEnglish,
+    stopSpeech,
     getFeedback: (item, _answer, attemptIndex) =>
       new Promise<ScenarioFeedback>((resolve) => {
         const idx = Number(String(item.id).split("-")[1]);

@@ -1,5 +1,5 @@
 // Test workflow trigger: 2025-11-10
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { StudentProtectedRoute } from "./components/StudentProtectedRoute";
@@ -64,10 +64,14 @@ import WordSpellingSample from "./pages/sample/WordSpellingSample";
 import WordClozeSample from "./pages/sample/WordClozeSample";
 import WordCardSample from "./pages/sample/WordCardSample";
 import TugOfWarSample from "./pages/sample/TugOfWarSample";
-import ScenarioDialogueSample from "./pages/sample/ScenarioDialogueSample";
 import { Toaster } from "sonner";
 import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 import { useAnalyticsPageView } from "./hooks/useAnalyticsPageView";
+
+// #1133 設計稿含大量 mock 資料：lazy 載入，不打包進主程式（功能開關關閉時也不會被載入）
+const ScenarioDialogueSample = lazy(
+  () => import("./pages/sample/ScenarioDialogueSample"),
+);
 
 /**
  * Custom hook to detect mobile screen size
@@ -476,7 +480,11 @@ function App() {
         {ENABLE_SCENARIO_DIALOGUE && (
           <Route
             path="/sample/scenario-dialogue"
-            element={<ScenarioDialogueSample />}
+            element={
+              <Suspense fallback={null}>
+                <ScenarioDialogueSample />
+              </Suspense>
+            }
           />
         )}
 

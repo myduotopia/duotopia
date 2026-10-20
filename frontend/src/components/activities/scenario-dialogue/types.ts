@@ -35,9 +35,17 @@ export interface ScenarioChatContext {
   /** 題組文章（情境 C 為空） */
   content?: string;
   images: ScenarioImage[];
-  /** 作答要求（global_rubric） */
+  /** 作答要求（global_rubric）—— 開始前以藍色提示卡顯示 */
   rubric?: string;
   level?: string;
+  /**
+   * AI 開場複述：按「開始對話」後 AI 第一則訊息（英文一句＋中文摘要），之後才問第 1 題。
+   * sample 用 mock 文字；正式版由後端 AI 濃縮作答要求（下一階段）。
+   */
+  opening?: {
+    text: string;
+    translation?: string;
+  };
 }
 
 export type ReplyMode = "voice" | "text";
@@ -63,6 +71,7 @@ export interface ScenarioAttempt {
   feedback?: ScenarioFeedback;
 }
 
+/** 題目文字的英／中狀態；用在「目前顯示中」與「是否點開過」兩份紀錄 */
 export interface TextRevealState {
   en: boolean;
   zh: boolean;
@@ -75,7 +84,10 @@ export interface ScenarioChatAdapters {
     answer: ScenarioAnswer,
     attemptIndex: number,
   ) => Promise<ScenarioFeedback>;
-  speak: (text: string) => void;
+  /** 朗讀；回傳 Promise 時代表「唸完」（開場複述唸完才出第 1 題） */
+  speak: (text: string) => void | Promise<void>;
+  /** 停止朗讀（卸載／重置時呼叫） */
+  stopSpeech?: () => void;
 }
 
 export interface ScenarioChatSettings {

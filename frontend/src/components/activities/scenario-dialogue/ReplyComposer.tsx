@@ -8,7 +8,9 @@
  *   - 打字：聊天輸入框＋送出鈕（Enter 送出）
  * - waiting：AI 輸入中或等待使用者在建議氣泡上選「再試一次／下一題」時的提示
  * - finished：「提交作業」主按鈕
- * 補答模式（reviewing）上方多一列「正在補答第 N 題」＋取消。
+ * 回頭重答（retryNo）時上方多一條「正在重答第 N 題 ✕」；✕ 取消重答、回到進行中的題目
+ * （等 AI 建議時不能取消，不顯示 ✕）。外層以 key 區分重答／主流程，切換時元件重掛、
+ * 未送出的錄音丟掉；卸載時 revoke 未送出的錄音 URL。
  * 底部留 safe-area（瀏海機 home bar）。
  */
 
@@ -26,10 +28,12 @@ interface Props {
   state: ComposerState;
   replyMode: ReplyMode;
   waitingHint: string;
-  reviewingNo: number | null;
+  /** 正在回頭重答的題號（1 起算）；主流程為 null */
+  retryNo: number | null;
+  canCancelRetry: boolean;
   onStart: () => void;
   onSubmitAnswer: (answer: ScenarioAnswer) => void;
-  onCancelReview: () => void;
+  onCancelRetry: () => void;
   onSubmitAssignment: () => void;
 }
 
@@ -42,10 +46,11 @@ export function ReplyComposer({
   state,
   replyMode,
   waitingHint,
-  reviewingNo,
+  retryNo,
+  canCancelRetry,
   onStart,
   onSubmitAnswer,
-  onCancelReview,
+  onCancelRetry,
   onSubmitAssignment,
 }: Props) {
   const { t } = useTranslation();
@@ -65,8 +70,19 @@ export function ReplyComposer({
     }
   }, [state]);
 
+  // 卸載時釋放未送出的錄音
+  useEffect(
+    () => () => {
+      if (pendingRef.current) URL.revokeObjectURL(pendingRef.current.url);
+    },
+    [],
+  );
+
   const sendVoice = () => {
     if (!pending) return;
+    // 送出後音檔歸對話紀錄管（由 useScenarioChat 卸載時釋放）；先清 ref，
+    // 免得重答結束時本元件被換 key 卸載、把剛送出的音檔 revoke 掉
+    pendingRef.current = null;
     onSubmitAnswer({
       kind: "voice",
       audioUrl: pending.url,
@@ -170,20 +186,21 @@ export function ReplyComposer({
       className="border-t border-gray-200 bg-white px-3 pt-3"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      {reviewingNo !== null && state !== "finished" && (
-        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 text-sm text-blue-800">
-          <span>
-            {t("scenarioDialogue.chat.reviewing", { no: reviewingNo })}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-11 text-blue-800"
-            onClick={onCancelReview}
-          >
-            <X className="mr-1 h-4 w-4" />
-            {t("scenarioDialogue.chat.cancelReview")}
-          </Button>
+      {retryNo !== null && (
+        <div className="mb-2 flex min-h-11 items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 text-sm text-blue-800">
+          <span>{t("scenarioDialogue.chat.retrying", { no: retryNo })}</span>
+          {canCancelRetry && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11 w-11 p-0 text-blue-800"
+              onClick={onCancelRetry}
+              aria-label={t("scenarioDialogue.chat.cancelRetry")}
+              title={t("scenarioDialogue.chat.cancelRetry")}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          )}
         </div>
       )}
       {body}

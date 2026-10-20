@@ -7,11 +7,12 @@
  *
  * 右上角浮動「Sample 控制面板」切換：教材 #648／#650、情境 A/B/C、情境圖張數、
  * 題目配圖、回覆方式、身分（學生／老師預覽）、題目文字預設、翻譯、重置；
- * 並顯示每題「是否點開文字」的紀錄。任何設定變動都會重新開始一輪。
+ * 並顯示每題「是否點開文字」的紀錄（點開過一次就算，收回不取消）。任何設定變動都會重新開始一輪。
+ * AI 回饋是固定 mock（第 1 次可以更好、第 2 次起很棒），不會判斷內容；面板上有一行小字說明。
  * 控制面板文字只寫中文（設計稿用，不進 i18n）。
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Settings2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import type {
 import {
   buildSample,
   createMockAdapters,
+  stopSpeech,
   type MaterialId,
   type QuestionImageMode,
   type ScenarioKind,
@@ -117,10 +119,10 @@ export default function ScenarioDialogueSample() {
     resetKey,
   ].join("|");
 
-  const reset = useCallback(() => {
-    window.speechSynthesis?.cancel();
+  const reset = () => {
+    stopSpeech();
     setResetKey((k) => k + 1);
-  }, []);
+  };
 
   const pickMaterial = (m: MaterialId) => {
     setMaterial(m);
@@ -151,13 +153,8 @@ export default function ScenarioDialogueSample() {
       />
 
       {/* Sample 控制面板 */}
-      {/* 放在標題列（老師預覽時含跳題列）下方，避免蓋住題號與徽章 */}
-      <div
-        className={cn(
-          "fixed right-2 z-50 flex flex-col items-end",
-          isPreview ? "top-[7.5rem]" : "top-14",
-        )}
-      >
+      {/* 放在標題列（手機版含題號點點）下方，避免蓋住題號與徽章 */}
+      <div className="fixed right-2 top-[6.5rem] z-50 flex flex-col items-end lg:top-14">
         <Button
           type="button"
           variant="outline"
@@ -183,6 +180,11 @@ export default function ScenarioDialogueSample() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
+
+            <p className="text-xs text-gray-500">
+              AI 回饋為示意，不會判斷內容（第 1 次「可以更好」、第 2
+              次起「很棒」）。
+            </p>
 
             <Segmented
               label="教材"
