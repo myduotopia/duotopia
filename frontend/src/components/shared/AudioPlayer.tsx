@@ -315,7 +315,8 @@ export default function AudioPlayer({
   }
 
   // 讀不到真正時長時，用外層給的秒數顯示（不傳 fallbackDuration 時就是 duration）
-  const shownDuration = duration > 0 ? duration : (fallbackDuration ?? duration);
+  const shownDuration =
+    duration > 0 ? duration : (fallbackDuration ?? duration);
   const progressPercentage =
     shownDuration > 0 ? Math.min(100, (currentTime / shownDuration) * 100) : 0;
 
