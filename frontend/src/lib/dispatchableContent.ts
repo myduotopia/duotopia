@@ -29,7 +29,9 @@
 
 import {
   contentTypeToDataset,
+  isDatasetDispatchable,
   listModesForDataset,
+  DEFAULT_MODE_BY_DATASET,
   type PracticeMode,
 } from "./practiceMode";
 
@@ -46,10 +48,57 @@ export function canUseModeForContentTypes(
   if (!mode) return false;
   if (contentTypes.length === 0) return true;
 
-  return contentTypes.every((type) => {
-    const dataset = contentTypeToDataset(type);
-    // 未知型別：白名單語意，一律擋下
-    if (dataset === null) return false;
-    return listModesForDataset(dataset).includes(mode);
-  });
+  return contentTypes.every((type) => isContentTypeUsableForMode(mode, type));
+}
+
+/**
+ * 單一內容能不能用在這個模式上（上面那條規則的單筆版本）。
+ *
+ * 切換模式時要把不相容的內容請出購物車，用的必須是同一條規則。原本那段清理寫成
+ * 「模式是 word_* 就只留單字集」—— 手寫列舉，新增資料集時**不會有任何訊號**，
+ * 而且它的語意其實是反過來的：不是「word 模式只收單字集」，是「每個模式只收它
+ * `supportedDatasets` 裡的資料集」。
+ */
+export function isContentTypeUsableForMode(
+  mode: PracticeMode,
+  contentType: string | null | undefined,
+): boolean {
+  const dataset = contentTypeToDataset(contentType);
+  // 未知型別：白名單語意，一律擋下
+  if (dataset === null) return false;
+  return listModesForDataset(dataset).includes(mode);
+}
+
+/**
+ * 「帶著內容開啟派發對話框」時該用哪個練習模式；`null` = 推導不出來，沿用預設。
+ *
+ * ## 這是哪個 bug
+ *
+ * 派發對話框開啟時一律把 `practice_mode` reset 成寫死的 `word_selection`，而購物車
+ * 在同一個 render 就已經裝進預選內容了。接著那段清理 effect 看到 word 模式，把
+ * **非單字集的內容整批請出購物車** —— 老師從教材卡派發情境對話或例句集，內容在
+ * 他看到畫面之前就已經不見了，而且沒有任何提示。
+ *
+ * 班級頁派發沒事，是因為那條路徑購物車一開始是空的：老師先選模式、再選教材，
+ * 清理 effect 跑的時候模式已經對了。
+ *
+ * 所以初始模式不能寫死 —— 有預選內容時就從內容的資料集推導（查
+ * `DEFAULT_MODE_BY_DATASET`，不另寫對照表）。
+ *
+ * 資料集目前不可派發（per-environment 旗標關著）時回 `null`：那種情況本來就該被
+ * 前面的守衛擋下，這裡不要幫忙選一個派不出去的模式。
+ */
+export function initialModeForContentTypes(
+  contentTypes: Array<string | null | undefined>,
+): PracticeMode | null {
+  if (contentTypes.length === 0) return null;
+
+  const datasets = contentTypes.map(contentTypeToDataset);
+  const [first] = datasets;
+  if (first === null) return null;
+  // 混型別（理論上進不來）：挑誰都是錯的，交給守衛擋
+  if (!datasets.every((d) => d === first)) return null;
+  if (!isDatasetDispatchable(first)) return null;
+
+  return DEFAULT_MODE_BY_DATASET[first];
 }

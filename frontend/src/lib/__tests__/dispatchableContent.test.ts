@@ -24,7 +24,11 @@ import {
   listModesForDataset,
   type PracticeMode,
 } from "../practiceMode";
-import { canUseModeForContentTypes } from "../dispatchableContent";
+import {
+  canUseModeForContentTypes,
+  initialModeForContentTypes,
+  isContentTypeUsableForMode,
+} from "../dispatchableContent";
 
 describe("情境對話目前不可派發（#1052 標為開發中）", () => {
   it("可派發白名單排除情境對話", () => {
@@ -113,6 +117,112 @@ describe("canUseModeForContentTypes —— 擋住「模式不在該內容清單�
       expect(
         canUseModeForContentTypes(mode as PracticeMode, ["SCENARIO_DIALOGUE"]),
       ).toBe(false);
+    }
+  });
+});
+
+/**
+ * 夥伴 staging 回報第二輪：從班級頁派發情境對話可以成功，**從教材卡派發會失敗**。
+ *
+ * 根因不在守衛，在派發對話框開啟時的初始狀態：`practice_mode` 一律 reset 成寫死的
+ * `word_selection`，而購物車在同一個 render 就已經裝進預選內容。接著那段「切換模式
+ * 時清除不相容項目」的 effect 看到 word 模式，就把非單字集的內容整批請出購物車 ——
+ * 老師還沒看到畫面，內容就已經不見了，而且沒有任何提示。
+ *
+ * 單字集之所以沒事，正是因為它剛好是那段清理留下來的那一種。
+ */
+describe("initialModeForContentTypes — 帶著內容開啟時的初始模式", () => {
+  it("例句集推導出例句集的預設模式", () => {
+    expect(initialModeForContentTypes(["EXAMPLE_SENTENCES"])).toBe(
+      "rearrangement",
+    );
+    expect(initialModeForContentTypes(["READING_ASSESSMENT"])).toBe(
+      "rearrangement",
+    );
+  });
+
+  it("單字集推導出單字集的預設模式", () => {
+    expect(initialModeForContentTypes(["VOCABULARY_SET"])).toBe("word_reading");
+    expect(initialModeForContentTypes(["SENTENCE_MAKING"])).toBe(
+      "word_reading",
+    );
+  });
+
+  it("空購物車回 null —— 班級頁是先選方式再選教材，不要幫他決定", () => {
+    expect(initialModeForContentTypes([])).toBeNull();
+  });
+
+  it("未知型別回 null（白名單語意）", () => {
+    expect(initialModeForContentTypes(["NO_SUCH_TYPE"])).toBeNull();
+    expect(initialModeForContentTypes([null])).toBeNull();
+  });
+
+  it("混型別回 null —— 挑誰都是錯的，交給守衛擋", () => {
+    expect(
+      initialModeForContentTypes(["VOCABULARY_SET", "EXAMPLE_SENTENCES"]),
+    ).toBeNull();
+  });
+
+  /**
+   * 旗標關著時（例如 production）情境對話本來就派不出去，這裡不要幫忙選一個
+   * 派不出去的模式 —— 那會讓第 1 步的守衛與初始值互相矛盾。
+   */
+  it("資料集目前不可派發時回 null（測試環境旗標是關的）", () => {
+    expect(initialModeForContentTypes(["SCENARIO_DIALOGUE"])).toBeNull();
+  });
+
+  /**
+   * 回歸護欄：推導出來的模式必須通過第 1 步的守衛。兩者若對不上，老師會看到
+   * 一個已經選好、卻按不動「下一步」的畫面。
+   */
+  it("推導出的模式一定過得了 canUseModeForContentTypes", () => {
+    for (const type of [
+      "VOCABULARY_SET",
+      "SENTENCE_MAKING",
+      "EXAMPLE_SENTENCES",
+      "READING_ASSESSMENT",
+      "SCENARIO_DIALOGUE",
+    ]) {
+      const mode = initialModeForContentTypes([type]);
+      if (mode === null) continue; // 不可派發的資料集，本來就該被前面擋下
+      expect(canUseModeForContentTypes(mode, [type])).toBe(true);
+    }
+  });
+});
+
+describe("isContentTypeUsableForMode — 切換模式時該留下哪些內容", () => {
+  it("單字模式留得住單字集，留不住例句集與情境對話", () => {
+    expect(isContentTypeUsableForMode("word_selection", "VOCABULARY_SET")).toBe(
+      true,
+    );
+    expect(
+      isContentTypeUsableForMode("word_selection", "EXAMPLE_SENTENCES"),
+    ).toBe(false);
+    expect(
+      isContentTypeUsableForMode("word_selection", "SCENARIO_DIALOGUE"),
+    ).toBe(false);
+  });
+
+  it("例句朗讀兩種資料集都留得住（單字集用例句欄位）", () => {
+    expect(isContentTypeUsableForMode("reading", "EXAMPLE_SENTENCES")).toBe(
+      true,
+    );
+    expect(isContentTypeUsableForMode("reading", "VOCABULARY_SET")).toBe(true);
+  });
+
+  it("未知型別一律留不住（白名單語意）", () => {
+    expect(isContentTypeUsableForMode("word_reading", "NO_SUCH_TYPE")).toBe(
+      false,
+    );
+    expect(isContentTypeUsableForMode("word_reading", undefined)).toBe(false);
+  });
+
+  it("與 canUseModeForContentTypes 同源：單筆結果要能組合成整批結果", () => {
+    const types = ["VOCABULARY_SET", "EXAMPLE_SENTENCES"];
+    for (const mode of ["word_reading", "reading"] as const) {
+      expect(canUseModeForContentTypes(mode, types)).toBe(
+        types.every((t) => isContentTypeUsableForMode(mode, t)),
+      );
     }
   });
 });

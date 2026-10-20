@@ -48,6 +48,32 @@ describe("開關關閉（production 現況）", () => {
 });
 
 describe("開關打開（staging / develop）", () => {
+  /**
+   * 夥伴 staging 回報：班級頁派發情境對話可以，**教材卡派發不行**。
+   *
+   * 根因是派發對話框開啟時把 practice_mode 寫死成 word_selection，而購物車同一個
+   * render 已經裝進預選內容；「切換模式時清除不相容項目」的 effect 隨即把情境對話
+   * 請出購物車 —— 老師還沒看到畫面，內容就不見了。班級頁沒事是因為那條路徑購物車
+   * 一開始是空的（先選模式、再選教材）。
+   */
+  it("帶著情境對話內容開啟時，初始模式要是情境對話（不是 word_selection）", async () => {
+    const m = await loadWithDispatch(true);
+    expect(m.initialModeForContentTypes(["SCENARIO_DIALOGUE"])).toBe(
+      "scenario_dialogue",
+    );
+  });
+
+  it("情境對話內容在情境對話模式下留得住購物車", async () => {
+    const m = await loadWithDispatch(true);
+    expect(
+      m.isContentTypeUsableForMode("scenario_dialogue", "SCENARIO_DIALOGUE"),
+    ).toBe(true);
+    // 反向：單字模式留不住它（清理本身是對的，錯的是初始模式）
+    expect(
+      m.isContentTypeUsableForMode("word_selection", "SCENARIO_DIALOGUE"),
+    ).toBe(false);
+  });
+
   it("情境對話可派發", async () => {
     const m = await loadWithDispatch(true);
     expect(m.isDatasetDispatchable("scenario_dialogue")).toBe(true);
