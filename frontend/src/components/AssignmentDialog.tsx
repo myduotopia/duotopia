@@ -114,7 +114,10 @@ import { formatClassroomDisplayName } from "@/components/classroom/classroomGrad
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
 // #854 B2-a: 派發預覽改吃單一 registry（消除手寫 ternary 鏈），各 *Preview 元件
 // 已移入 activityRegistry。
-import { DISPATCH_PREVIEW } from "@/lib/activityRegistry";
+import {
+  DISPATCH_PREVIEW,
+  previewUsesSampleMaterial,
+} from "@/lib/activityRegistry";
 
 // Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的官方公開單字集
 // production 用 id 2212（"RPG" VOCABULARY_SET）；其他環境（staging / develop /
@@ -3205,13 +3208,22 @@ export function AssignmentDialog({
 
                     {/* 右：學生畫面預覽（viewport ≥ 960px 才顯示；min-w 320 確保可讀） */}
                     <div className="hidden min-[960px]:block flex-1 min-w-[320px] overflow-y-auto pr-1 h-full">
-                      {formData.practice_mode && (
-                        <div className="mb-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
-                          {t(
-                            "dialogs.assignmentDialog.practiceMode.studentPreviewDisclaimer",
-                          )}
-                        </div>
-                      )}
+                      {/*
+                        #1136: 只有真的借了範例教材才說「使用範例教材」。購物車裡有
+                        教材時預覽用的就是老師自己那份、設定也跟著左側即時變動，
+                        原本不分情況都顯示這段，兩句話在最常見的情況下都是錯的。
+                      */}
+                      {formData.practice_mode &&
+                        previewUsesSampleMaterial(
+                          formData.practice_mode as PracticeMode,
+                          cartItems[0]?.contentId,
+                        ) && (
+                          <div className="mb-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreviewDisclaimer",
+                            )}
+                          </div>
+                        )}
                       {(() => {
                         // #854 B2-a: 單一 registry 取代手寫 ternary 鏈
                         const render =
@@ -3235,7 +3247,12 @@ export function AssignmentDialog({
                           <Card className="p-3 border-gray-200">
                             <h4 className="text-xs font-semibold mb-2 text-gray-700">
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.studentPreview",
+                                previewUsesSampleMaterial(
+                                  formData.practice_mode as PracticeMode,
+                                  cartItems[0]?.contentId,
+                                )
+                                  ? "dialogs.assignmentDialog.practiceMode.studentPreviewSample"
+                                  : "dialogs.assignmentDialog.practiceMode.studentPreview",
                               )}
                             </h4>
                             {render({
