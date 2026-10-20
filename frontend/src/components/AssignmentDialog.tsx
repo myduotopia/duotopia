@@ -103,7 +103,11 @@ import {
   type QuizScoringSettings,
 } from "@/lib/quizScoring";
 import { ContentSelectCard } from "./assignment/ContentSelectCard";
-import { canUseModeForContentTypes } from "@/lib/dispatchableContent";
+import {
+  canUseModeForContentTypes,
+  initialModeForContentTypes,
+  isContentTypeUsableForMode,
+} from "@/lib/dispatchableContent";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
 import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
@@ -784,7 +788,16 @@ export function AssignmentDialog({
         assign_to_all: true,
         due_date: undefined,
         start_date: new Date(),
-        practice_mode: "word_selection",
+        // 帶著內容開啟時（教材卡派發）從內容的資料集推導初始模式。
+        // 寫死 word_selection 會讓下面那段清理把非單字集的預選內容整批
+        // 請出購物車 —— 老師還沒看到畫面，內容就已經不見了（夥伴 staging
+        // 回報「教材卡派發情境對話失敗」的根因）。空購物車維持舊預設。
+        practice_mode:
+          initialModeForContentTypes(
+            hasPreSelectedContents
+              ? preSelectedContents!.map((i) => i.contentType)
+              : [],
+          ) ?? "word_selection",
         time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
         quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
         is_live_quiz: false,
@@ -805,27 +818,29 @@ export function AssignmentDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load functions recreated each render; only run on dialog open/context change
   }, [open, classroomId, students, showOrgTab]);
 
-  // 當練習模式改變時，清除不相容的購物車項目
-  // 單字模式只能選單字集，需要移除例句集項目
-  // 例句模式（朗讀 / 重組）可以選全部，不需要清除
+  // 切換練習模式時，把這個模式吃不下的內容請出購物車。
+  //
+  // 規則查 registry 的 supportedDatasets（`isContentTypeUsableForMode`），不列舉模式。
+  // 原本寫成「模式是 word_* 就只留單字集」—— 手寫列舉，新增資料集時不會有任何訊號，
+  // 而且語意是反的：不是「word 模式只收單字集」，是「每個模式只收它支援的資料集」。
+  //
+  // 這段本身沒錯，錯的是它曾經配上寫死的初始模式 word_selection：帶著情境對話或
+  // 例句集從教材卡派發時，內容在老師看到畫面之前就被這裡清掉了。初始模式改成從
+  // 預選內容推導之後，這段只會在老師**真的去切模式**時動作。
+  //
+  // 比對用的是**當次 render 的 cartItems**，不是 `setCartItems(prev => ...)`。
+  // 這不是風格問題，是這個 bug 的另一半：對話框開啟時 reset 會在同一次 effect flush
+  // 裡同時排入「購物車 ← 預選內容」與「模式 ← 推導值」，而 functional update 的
+  // `prev` 讀得到那個已排隊的新購物車，`formData.practice_mode` 卻還是舊 render 的
+  // `word_selection` —— 新內容就這樣被舊模式刷掉。用 render 快照兩邊才是同一個時間點。
   useEffect(() => {
-    if (
-      formData.practice_mode === "word_reading" ||
-      formData.practice_mode === "word_selection" ||
-      formData.practice_mode === "word_spelling" ||
-      formData.practice_mode === "word_cloze" ||
-      formData.practice_mode === "word_selection_quiz" ||
-      formData.practice_mode === "word_spelling_quiz" ||
-      formData.practice_mode === "word_cloze_quiz"
-    ) {
-      setCartItems((prev) => {
-        const filtered = prev.filter((item) =>
-          isVocabularySetType(item.contentType),
-        );
-        return filtered.length !== prev.length ? filtered : prev;
-      });
-    }
-  }, [formData.practice_mode]);
+    const mode = formData.practice_mode;
+    if (!mode) return;
+    const filtered = cartItems.filter((item) =>
+      isContentTypeUsableForMode(mode, item.contentType),
+    );
+    if (filtered.length !== cartItems.length) setCartItems(filtered);
+  }, [formData.practice_mode, cartItems]);
 
   // Issue #1052: 選中的模式必須在 chip 列裡。開啟時 reset 一律寫 word_selection，
   // 「先帶入內容」的路徑（教材卡派發）若是例句集，word_selection 不在清單裡 ——
