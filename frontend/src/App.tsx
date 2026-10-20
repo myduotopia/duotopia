@@ -46,7 +46,10 @@ import CreateOrganization from "./pages/admin/CreateOrganization";
 import AdminOrgMonthlyBilling from "./pages/admin/AdminOrgMonthlyBilling";
 import AdminInstitutionInvoices from "./pages/admin/AdminInstitutionInvoices";
 import GroupBuyOpenPage from "./pages/teacher/GroupBuyOpenPage";
-import { ENABLE_GROUP_BUY } from "./config/featureFlags";
+import {
+  ENABLE_GROUP_BUY,
+  ENABLE_SCENARIO_DIALOGUE,
+} from "./config/featureFlags";
 import BlogListPage from "./pages/BlogListPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import AdminBlogPage from "./pages/admin/AdminBlogPage";
@@ -61,6 +64,7 @@ import WordSpellingSample from "./pages/sample/WordSpellingSample";
 import WordClozeSample from "./pages/sample/WordClozeSample";
 import WordCardSample from "./pages/sample/WordCardSample";
 import TugOfWarSample from "./pages/sample/TugOfWarSample";
+import ScenarioDialogueSample from "./pages/sample/ScenarioDialogueSample";
 import { Toaster } from "sonner";
 import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 import { useAnalyticsPageView } from "./hooks/useAnalyticsPageView";
@@ -468,6 +472,13 @@ function App() {
           path="/sample/vocabulary-set/word-card"
           element={<WordCardSample />}
         />
+        {/* #1133 情境對話訊息式 UI 設計稿 —— 跟著情境對話功能開關，production 不註冊 */}
+        {ENABLE_SCENARIO_DIALOGUE && (
+          <Route
+            path="/sample/scenario-dialogue"
+            element={<ScenarioDialogueSample />}
+          />
+        )}
 
         {/* Test Pages */}
         <Route

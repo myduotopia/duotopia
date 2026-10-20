@@ -219,7 +219,7 @@
 |---|---|---|
 | AIScoreDisplay | `frontend/src/components/shared/AIScoreDisplay.tsx` | 顯示 AI 發音評分 |
 | AudioPlayer | `frontend/src/components/shared/AudioPlayer.tsx` | 播放音檔（含時間顯示） |
-| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音 |
+| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音。`variant="chat"`（#1133 情境對話）：大圓麥克風、點一下開始／再點停止（秒數＋聲波）→ 試聽／重錄，不包 Card、不跳完成 toast |
 | BatchPasteArea | `frontend/src/components/shared/BatchPasteArea.tsx` | 帶行號的批次貼上文字區 |
 | BatchTranslateSettings | `frontend/src/components/shared/BatchTranslateSettings.tsx` | 批次翻譯語言設定 |
 | BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速） |
@@ -287,7 +287,7 @@
 | ConfirmDialog | `frontend/src/components/organization/ConfirmDialog.tsx` | 確認對話框（可設危險樣式） |
 | OneCampusBindSection | `frontend/src/components/settings/OneCampusBindSection.tsx` | 1Campus 綁定與信箱驗證狀態 |
 | StudentLoginQRShare | `frontend/src/components/teacher/StudentLoginQRShare.tsx` | 分享學生登入 QR code |
-| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。目前只有題庫用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出 |
+| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。題庫與 `ImageCarousel` 的 `zoomable` 模式（#1133 情境對話）使用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出 |
 
 ### 6.5 淘汰中
 

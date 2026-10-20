@@ -3,7 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import AudioPlayer from "./AudioPlayer";
-import { Mic, MicOff, Square, RotateCcw, AlertCircle } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Square,
+  RotateCcw,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AudioErrorData } from "@/utils/audioErrorLogger";
 import { toast } from "sonner";
@@ -43,7 +50,11 @@ interface AudioRecorderProps {
   errorMessage?: string;
 
   // UI customization
-  variant?: "default" | "compact" | "minimal";
+  /**
+   * `chat`（#1133 情境對話）：大圓麥克風，點一下開始（秒數＋聲波）、再點停止 →
+   * 可試聽／重錄；不包 Card、不跳「錄音完成」toast（由外層決定何時送出）。
+   */
+  variant?: "default" | "compact" | "minimal" | "chat";
   className?: string;
   showProgress?: boolean;
   showTimer?: boolean;
@@ -71,6 +82,7 @@ export default function AudioRecorder({
   autoStop,
 }: AudioRecorderProps) {
   const { t } = useTranslation();
+  const isChat = variant === "chat";
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -81,6 +93,8 @@ export default function AudioRecorder({
   const [status, setStatus] = useState<
     "idle" | "recording" | "completed" | "error"
   >(externalStatus);
+  // 按下停止到音檔驗證完成之間（約 1 秒），chat 版顯示處理中
+  const [isStopping, setIsStopping] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -110,6 +124,7 @@ export default function AudioRecorder({
 
   // Cleanup helper - 消除重複代碼
   const cleanup = useCallback(() => {
+    setIsStopping(false);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -282,12 +297,14 @@ export default function AudioRecorder({
             return;
           }
 
-          // 驗證通過，設定錄音
-          toast.success(t("audioRecorder.toast.recordingComplete"), {
-            description: t("audioRecorder.toast.recordingDuration", {
-              duration: validationResult.duration.toFixed(1),
-            }),
-          });
+          // 驗證通過，設定錄音（chat 版直接顯示試聽，不另跳 toast）
+          if (!isChat) {
+            toast.success(t("audioRecorder.toast.recordingComplete"), {
+              description: t("audioRecorder.toast.recordingDuration", {
+                duration: validationResult.duration.toFixed(1),
+              }),
+            });
+          }
 
           setLocalAudioUrl(audioUrl);
           setStatus("completed");
@@ -369,6 +386,7 @@ export default function AudioRecorder({
     autoStop,
     cleanup,
     recordingTime,
+    isChat,
   ]);
 
   // Stop recording
@@ -378,6 +396,7 @@ export default function AudioRecorder({
   // browser has time to flush the final chunk before we signal stop.
   const stopRecording = useCallback(async () => {
     if (mediaRecorderRef.current && isRecording) {
+      setIsStopping(true);
       if (mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.requestData();
         // Give the browser ~80 ms to deliver the final ondataavailable event
@@ -428,6 +447,98 @@ export default function AudioRecorder({
 
   // Render based on variant
   const renderRecordingControls = () => {
+    if (isChat) {
+      return (
+        <div className="flex flex-col items-center gap-2">
+          {!isRecording && !localAudioUrl && (
+            <>
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={readOnly || disabled}
+                className="h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-md flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50"
+                aria-label={t("audioRecorder.ui.startRecording")}
+              >
+                <Mic className="h-7 w-7" />
+              </button>
+              <span className="text-xs text-gray-500">
+                {description || t("audioRecorder.ui.tapToRecord")}
+              </span>
+            </>
+          )}
+
+          {isRecording && (
+            <>
+              <div className="flex items-center gap-4">
+                <span className="w-12 text-right text-base font-medium tabular-nums text-red-600">
+                  {formatTime(recordingTime)}
+                </span>
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  disabled={isStopping}
+                  className="h-16 w-16 rounded-full bg-red-600 text-white shadow-md flex items-center justify-center hover:bg-red-700 transition-colors"
+                  aria-label={t("audioRecorder.ui.stopRecording")}
+                >
+                  {isStopping ? (
+                    <Loader2 className="h-7 w-7 animate-spin" />
+                  ) : (
+                    <Square className="h-6 w-6 fill-current" />
+                  )}
+                </button>
+                <div className="flex h-8 w-12 items-center gap-1" aria-hidden>
+                  {[45, 85, 60, 100, 50].map((h, i) => (
+                    <span
+                      key={i}
+                      className="w-1.5 rounded-full bg-red-500 animate-pulse"
+                      style={{
+                        height: `${isStopping ? 20 : h}%`,
+                        animationDelay: `${i * 150}ms`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <span className="text-xs text-gray-500">
+                {isStopping
+                  ? t("audioRecorder.ui.processing")
+                  : t("audioRecorder.ui.tapToStop")}
+              </span>
+            </>
+          )}
+
+          {localAudioUrl && !isRecording && (
+            <div className="flex items-center gap-2">
+              <AudioPlayer
+                audioUrl={localAudioUrl}
+                variant="compact"
+                showTitle={false}
+                onError={onError}
+              />
+              {!readOnly && (
+                <Button
+                  variant="outline"
+                  onClick={handleReRecord}
+                  disabled={disabled}
+                  className="h-11"
+                >
+                  <RotateCcw className="w-4 h-4 mr-1" />
+                  {t("audioRecorder.ui.reRecord")}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {status === "error" && !isRecording && (
+            <div className="flex items-center gap-1 text-red-600 text-xs">
+              <AlertCircle className="w-4 h-4" />
+              {errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (variant === "minimal") {
       return (
         <div className="flex items-center gap-3">
@@ -629,6 +740,10 @@ export default function AudioRecorder({
       </div>
     );
   };
+
+  if (isChat) {
+    return <div className={className}>{renderRecordingControls()}</div>;
+  }
 
   return (
     <Card className={cn("p-6", className)}>
