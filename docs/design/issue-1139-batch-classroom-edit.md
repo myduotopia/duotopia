@@ -165,3 +165,22 @@
 - 後端：black（2 檔重新排版後通過）、flake8 `--config=../.flake8`（於 backend/，改動的 5 檔 0 錯誤）。
 - 前端：prettier --write（改動檔）、`npm run typecheck` 通過；`npx eslint` 改動檔 0 錯誤，僅 `SchoolClassroomsPage.tsx:129` 一個既有的 exhaustive-deps 警告；`npm run lint`（--max-warnings 0）因全專案既有 95 個警告而失敗，非本次新增。
 - pytest／vitest 未在本機跑（交給 CI）。
+
+### 第一階段審查意見（2026-10-21，code-reviewer）→ 使用者決定：修 R1–R3，R4 這次不做
+
+結論：需修正。後端權限／驗證、i18n key、UI 規範皆無問題；實作者計畫外的決定 reviewer 全部同意。
+
+- R1【高】`backend/tests/test_classroom_status.py:345-350`：既有測試用整個 dict 比對 batch-update 回傳，現在多了 `name` → CI 必紅。修法：預期值補 `"name": c1.name`。
+- R2【中】`BatchEditClassroomsDialog.tsx:274-285`＋`batchEditClassrooms.ts:132`：原本未設年級的列被設了年級（例如「全部年級設為」）後，下拉的空白選項選了沒反應，回不到「未設定」，違反 D9。修法：`originalGrade === null` 的列選空白時把 grade 還原成 null（`applyBatchEditChanges` 只在原值為 null 時接受 null）；補 vitest：全部設為 7 後把未設定的列改回未設定，送出筆數少一。
+- R3【低】`SchoolClassroomsPage.tsx:361`、`TeacherClassrooms.tsx:414`、`BatchEditClassroomsDialog.tsx:326`：批次編輯沿用年級的錯誤文字（「更新年級失敗」「沒有權限調整此學校的班級年級」「一次最多調整 200 個班級，請用年級篩選分批」），改名失敗時文字不對。修法：在 `classroomGrade.batchEdit` 加 `saveFailed`、`forbidden`、`limitExceeded`（中英），`batchGradeErrorMessageKey` 加參數讓呼叫端選用。
+- R4【低】老師 `ClassroomCreate.name`（`backend/routers/teachers/validators.py:123-124`）不限長度、機構 `SchoolClassroomCreate` 不去空白；不在計畫範圍，待使用者決定是否一起改。
+
+### 審查修正結果（R1–R3，2026-10-21）
+
+commit `3165df5b` fix(classroom): 批次編輯審查修正——測試補 name、未設定列可改回未設定、改用批次編輯專屬錯誤文字
+
+- R1：`backend/tests/test_classroom_status.py` 的 `test_batch_combined_fields` 預期回傳補 `"name": c1.name`；檔頭 docstring 註明回傳含 name。
+- R2：`batchEditClassrooms.ts` 的 `BatchEditChange.grade` 改為 `number | null`；`applyBatchEditChanges` 收到 null 時只在該列 `originalGrade === null` 才接受（還原回未設定、記來源），已有年級的列仍忽略。`BatchEditClassroomsDialog.tsx` 列年級下拉的 onChange 不再丟掉 null。補 vitest：純函式（null 只對原本未設定的列有效）、視窗（全部設為 7 後把未設定的列改回空白 → 儲存 (2) 變 (1)）。
+- R3：i18n `classroomGrade.batchEdit` 新增 `saveFailed`、`forbidden`、`limitExceeded`（zh-TW／en）。`batchGradeErrorMessageKey(error, scope = "grade")` 加 `scope` 參數（`"grade" | "batchEdit"`），老師頁、機構頁批次編輯失敗改傳 `"batchEdit"`；視窗超量提示改用 `classroomGrade.batchEdit.limitExceeded`。補 vitest：batchEdit scope 的 403／其他錯誤 key；視窗測試的超量文字 key 同步更新。
+- R4：照使用者決定未做。
+- 靜態檢查：black、flake8 通過；prettier、`npm run typecheck` 通過；eslint 改動檔 0 錯誤（僅 `SchoolClassroomsPage.tsx` 既有的 exhaustive-deps 警告）。pytest／vitest 交給 CI。
