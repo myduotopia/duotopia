@@ -278,9 +278,10 @@
 |---|---|---|
 | AssignmentDialog | `frontend/src/components/AssignmentDialog.tsx` | 派發作業對話框 |
 | ProgramVisibilitySelector | `frontend/src/components/ProgramVisibilitySelector.tsx` | 教材公開設定 |
-| AdjustGradeDialog | `frontend/src/components/classroom/AdjustGradeDialog.tsx` | 班級批次升／降一個年級 |
+| AdjustGradeDialog | `frontend/src/components/classroom/AdjustGradeDialog.tsx` | 班級批次升／降一個年級，或設為指定年級（含未設定年級的班，#1139） |
+| BatchEditClassroomsDialog | `frontend/src/components/classroom/BatchEditClassroomsDialog.tsx` | 班級批次編輯名稱＋年級（每班一列、全部年級設為、只送變動列）；`renderSidePanel` 是右側面板插槽（AI 助手用） |
 | GradeFilterSelect | `frontend/src/components/classroom/GradeFilterSelect.tsx` | 班級清單的年級篩選 |
-| GradeSelect | `frontend/src/components/classroom/GradeSelect.tsx` | 班級表單的年級下拉 |
+| GradeSelect | `frontend/src/components/classroom/GradeSelect.tsx` | 班級表單的年級下拉；`allowEmpty={false}` 時已有年級就不給空白選項（不能清回未設定） |
 | LevelBadge | `frontend/src/components/classroom/LevelBadge.tsx` | 班級 CEFR 等級徽章 |
 | MissingGradeBanner | `frontend/src/components/classroom/MissingGradeBanner.tsx` | 「有 N 個班級尚未設定年級」提醒 |
 | MissingGradeDialog | `frontend/src/components/classroom/MissingGradeDialog.tsx` | 逐班補填年級 |
