@@ -136,9 +136,11 @@ export interface BatchClassroomGradeResponse {
   count: number;
 }
 
-/** 批次更新個人班級（年級／等級／啟用狀態）的單筆內容（#1097）；每筆至少帶一個欄位 */
+/** 批次更新個人班級（名稱／年級／等級／啟用狀態）的單筆內容（#1097；名稱 #1139）；每筆至少帶一個欄位 */
 export interface BatchClassroomUpdateItem {
   classroom_id: number;
+  /** 去頭尾空白後 1–100 字（後端再驗一次） */
+  name?: string;
   grade?: number;
   level?: string;
   is_active?: boolean;
@@ -147,10 +149,23 @@ export interface BatchClassroomUpdateItem {
 export interface BatchClassroomUpdateResponse {
   updated: {
     id: number;
+    name: string;
     grade: number | null;
     level: string | null;
     is_active: boolean;
   }[];
+  count: number;
+}
+
+/** 批次編輯學校班級（名稱／年級，#1139）的單筆內容；每筆至少帶一個欄位 */
+export interface SchoolBatchClassroomUpdateItem {
+  classroom_id: number;
+  name?: string;
+  grade?: number;
+}
+
+export interface SchoolBatchClassroomUpdateResponse {
+  updated: { id: number; name: string; grade: number | null }[];
   count: number;
 }
 
@@ -873,7 +888,7 @@ class ApiClient {
     });
   }
 
-  /** 批次更新個人班級的年級／等級／啟用狀態（#1097）；全有或全無，最多 200 筆 */
+  /** 批次更新個人班級的名稱／年級／等級／啟用狀態（#1097；名稱 #1139）；全有或全無，最多 200 筆 */
   async batchUpdateClassrooms(
     items: BatchClassroomUpdateItem[],
   ): Promise<BatchClassroomUpdateResponse> {
@@ -906,6 +921,17 @@ class ApiClient {
     items: { classroom_id: number; grade: number }[],
   ): Promise<BatchClassroomGradeResponse> {
     return this.request(`/api/schools/${schoolId}/classrooms/batch-grade`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次編輯學校班級的名稱／年級（#1139）；全有或全無，最多 200 筆 */
+  async batchUpdateSchoolClassrooms(
+    schoolId: string,
+    items: SchoolBatchClassroomUpdateItem[],
+  ): Promise<SchoolBatchClassroomUpdateResponse> {
+    return this.request(`/api/schools/${schoolId}/classrooms/batch-update`, {
       method: "POST",
       body: JSON.stringify({ items }),
     });

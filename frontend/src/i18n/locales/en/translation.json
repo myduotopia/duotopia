@@ -6454,6 +6454,22 @@
       "switchDisableAria": "Disable selected classrooms",
       "switchEnableAria": "Enable selected classrooms"
     },
+    "batchEdit": {
+      "button": "Batch edit",
+      "title": "Edit classrooms",
+      "description": "Edit the names and grades of the selected classrooms, then save them all at once. Unchanged classrooms are not sent.",
+      "setAllLabel": "Set all grades to",
+      "nameLabel": "Class name for {{name}}",
+      "gradeLabel": "Grade for {{name}}",
+      "preview": "Shown as: {{name}}",
+      "changed": "Edited",
+      "aiChanged": "Edited by AI",
+      "nameRequired": "Enter a class name",
+      "nameTooLong": "Class names can be up to {{max}} characters",
+      "changedCount": "{{count}} classroom(s) edited",
+      "save": "Save ({{count}})",
+      "saveSuccess": "Updated {{count}} classroom(s)"
+    },
     "sort": {
       "gradeAsc": "Grade low→high",
       "gradeDesc": "Grade high→low",

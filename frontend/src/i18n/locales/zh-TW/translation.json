@@ -6497,6 +6497,22 @@
       "switchDisableAria": "停用選取的班級",
       "switchEnableAria": "啟用選取的班級"
     },
+    "batchEdit": {
+      "button": "批次編輯",
+      "title": "批次編輯班級",
+      "description": "修改所選班級的名稱與年級，確認後一次儲存。沒有修改的班級不會送出。",
+      "setAllLabel": "全部年級設為",
+      "nameLabel": "{{name}} 的班級名稱",
+      "gradeLabel": "{{name}} 的年級",
+      "preview": "顯示為：{{name}}",
+      "changed": "已修改",
+      "aiChanged": "AI 修改",
+      "nameRequired": "請輸入班級名稱",
+      "nameTooLong": "班級名稱最多 {{max}} 字",
+      "changedCount": "已修改 {{count}} 個班級",
+      "save": "儲存（{{count}}）",
+      "saveSuccess": "已更新 {{count}} 個班級"
+    },
     "sort": {
       "gradeAsc": "年級 低→高",
       "gradeDesc": "年級 高→低",

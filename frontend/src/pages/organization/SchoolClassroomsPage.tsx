@@ -3,7 +3,9 @@
  *
  * 班級清單＋年級篩選、建立／編輯班級、指派老師、學生側欄、派發作業、年級補填提醒。
  * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116），
- * 只有「調整年級」一顆按鈕（半透明白底，與其他批次操作列同一樣式）。按鈕層級見
+ * 有「調整年級」「批次編輯」兩顆按鈕（半透明白底、不分主次，與其他批次操作列同一樣式）。
+ * 「批次編輯」開 BatchEditClassroomsDialog，一次改多班名稱＋年級，走機構 batch-update（#1139）；
+ * 成功後以回傳的 {id, name, grade} 直接更新列表、不重抓。按鈕層級見
  * docs/design/ui-style-guide.md 第 3 節。
  */
 import { useState, useEffect, useRef } from "react";
@@ -22,6 +24,8 @@ import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
 import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import { BatchEditClassroomsDialog } from "@/components/classroom/BatchEditClassroomsDialog";
+import type { BatchEditUpdateItem } from "@/components/classroom/batchEditClassrooms";
 import { BulkActionBar } from "@/components/shared/BulkActionBar";
 import { useTeacherAuthStore } from "@/stores/teacherAuthStore";
 import { API_URL } from "@/config/api";
@@ -37,7 +41,7 @@ import { ClassroomStudentsSidebar } from "@/components/organization/ClassroomStu
 import { AssignmentDialog } from "@/components/AssignmentDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, Plus } from "lucide-react";
+import { Edit, GraduationCap, Plus } from "lucide-react";
 
 interface Classroom {
   id: string;
@@ -110,6 +114,7 @@ export default function SchoolClassroomsPage() {
   const [gradeFilter, setGradeFilter] = useState<string>(GRADE_FILTER_ALL);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAdjustGrade, setShowAdjustGrade] = useState(false);
+  const [showBatchEdit, setShowBatchEdit] = useState(false);
   const [showMissingGrade, setShowMissingGrade] = useState(false);
 
   // Guard: prevent StrictMode double-mount from triggering duplicate fetches
@@ -323,6 +328,41 @@ export default function SchoolClassroomsPage() {
     return ok;
   };
 
+  // 批次編輯名稱＋年級（#1139）：成功以回傳結果直接更新列表（不重抓），
+  // 先關對話框再清勾選；失敗視窗不關、保留輸入（錯誤訊息見 batchGradeErrorMessageKey）
+  const handleBatchEdit = async (
+    items: BatchEditUpdateItem<string>[],
+  ): Promise<boolean> => {
+    if (!schoolId) return false;
+    try {
+      const res = await apiClient.batchUpdateSchoolClassrooms(
+        schoolId,
+        items.map(({ id, name, grade }) => ({
+          classroom_id: Number(id),
+          name,
+          grade,
+        })),
+      );
+      const updatedById = new Map(res.updated.map((u) => [String(u.id), u]));
+      setClassrooms((prev) =>
+        prev.map((c) => {
+          const u = updatedById.get(c.id);
+          return u ? { ...c, name: u.name, grade: u.grade } : c;
+        }),
+      );
+      toast.success(
+        t("classroomGrade.batchEdit.saveSuccess", { count: res.count }),
+      );
+      setShowBatchEdit(false);
+      setSelectedIds(new Set());
+      return true;
+    } catch (error) {
+      logError("Failed to batch edit classrooms", error, { schoolId });
+      toast.error(t(batchGradeErrorMessageKey(error)));
+      return false;
+    }
+  };
+
   return (
     // 浮動操作列出現時預留底部空間，最後一列不被擋住（#1097）
     <div
@@ -431,6 +471,12 @@ export default function SchoolClassroomsPage() {
             icon: <GraduationCap className="h-4 w-4" aria-hidden="true" />,
             onClick: () => setShowAdjustGrade(true),
           },
+          {
+            key: "batch-edit",
+            label: t("classroomGrade.batchEdit.button"),
+            icon: <Edit className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowBatchEdit(true),
+          },
         ]}
         onClear={() => setSelectedIds(new Set())}
       />
@@ -464,6 +510,12 @@ export default function SchoolClassroomsPage() {
         onOpenChange={setShowAdjustGrade}
         classrooms={selectedClassrooms}
         onConfirm={handleAdjustGrades}
+      />
+      <BatchEditClassroomsDialog
+        open={showBatchEdit}
+        onOpenChange={setShowBatchEdit}
+        classrooms={selectedClassrooms}
+        onSave={handleBatchEdit}
       />
 
       {/* Assign Teacher Dialog */}
