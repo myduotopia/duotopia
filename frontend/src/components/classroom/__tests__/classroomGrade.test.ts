@@ -6,6 +6,7 @@ import {
   GRADE_OPTIONS,
   batchGradeErrorMessageKey,
   computeGradeAdjust,
+  computeGradeSet,
   formatClassroomDisplayName,
   isValidGrade,
   matchesGradeFilter,
@@ -125,6 +126,45 @@ describe("computeGradeAdjust", () => {
       { id: "s-2", name: "B", reason: "max" },
       { id: "s-3", name: "C", reason: "unset" },
     ]);
+  });
+});
+
+describe("computeGradeSet", () => {
+  it("changes every classroom not already at the target, including unset ones", () => {
+    const result = computeGradeSet(
+      [
+        { id: 1, name: "A", grade: 3 },
+        { id: 2, name: "B", grade: null },
+        { id: 3, name: "C" },
+        { id: 4, name: "D", grade: 12 },
+      ],
+      7,
+    );
+    expect(result.changes).toEqual([
+      { id: 1, name: "A", from: 3, to: 7 },
+      { id: 2, name: "B", from: null, to: 7 },
+      { id: 3, name: "C", from: null, to: 7 },
+      { id: 4, name: "D", from: 12, to: 7 },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it("skips classrooms already at the target as 'same'", () => {
+    const result = computeGradeSet(
+      [
+        { id: 1, name: "A", grade: 7 },
+        { id: 2, name: "B", grade: 6 },
+      ],
+      7,
+    );
+    expect(result.changes).toEqual([{ id: 2, name: "B", from: 6, to: 7 }]);
+    expect(result.skipped).toEqual([{ id: 1, name: "A", reason: "same" }]);
+  });
+
+  it("returns nothing to change when no valid target is chosen", () => {
+    const input = [{ id: 1, name: "A", grade: 3 }];
+    expect(computeGradeSet(input, null)).toEqual({ changes: [], skipped: [] });
+    expect(computeGradeSet(input, 13)).toEqual({ changes: [], skipped: [] });
   });
 });
 

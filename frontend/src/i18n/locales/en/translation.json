@@ -6384,13 +6384,18 @@
       "description": "Choose to move up or down one grade, check each classroom's before and after, then apply. Classroom names are not changed.",
       "up": "Up one grade",
       "down": "Down one grade",
+      "set": "Set to grade",
+      "targetLabel": "Target grade",
+      "descriptionSet": "All selected classes will be set to Grade {{grade}}. Class names won't change.",
+      "descriptionSetPending": "Choose a target grade. All selected classes will be set to it. Class names won't change.",
       "changesTitle": "{{count}} classroom(s) will change",
       "skippedTitle": "{{count}} classroom(s) skipped",
       "nothingToChange": "No classrooms can be adjusted",
       "reason": {
         "max": "Already Grade {{grade}}, cannot go up",
         "min": "Already Grade {{grade}}, cannot go down",
-        "unset": "Grade not set"
+        "unset": "Grade not set",
+        "same": "Already Grade {{grade}} (no change)"
       },
       "confirm": "Apply ({{count}})"
     },

@@ -6427,13 +6427,18 @@
       "description": "選擇升一級或降一級，確認每班調整前後的年級後套用。班級名稱不會變更。",
       "up": "升一級",
       "down": "降一級",
+      "set": "設為指定年級",
+      "targetLabel": "目標年級",
+      "descriptionSet": "所選班級的年級都會改成 {{grade}} 年級；班級名稱不會變更",
+      "descriptionSetPending": "選擇目標年級後，所選班級的年級都會改成該年級；班級名稱不會變更",
       "changesTitle": "將調整 {{count}} 個班級",
       "skippedTitle": "略過 {{count}} 個班級",
       "nothingToChange": "沒有可以調整的班級",
       "reason": {
         "max": "已是 {{grade}} 年級，無法再升",
         "min": "已是 {{grade}} 年級，無法再降",
-        "unset": "尚未設定年級"
+        "unset": "尚未設定年級",
+        "same": "已是 {{grade}} 年級（不變）"
       },
       "confirm": "套用（{{count}}）"
     },

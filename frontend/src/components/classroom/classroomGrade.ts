@@ -4,10 +4,11 @@
  * 個人「我的班級」與機構後台班級管理共用：
  * - 年級選項與篩選值
  * - computeGradeAdjust：批次升／降一級時，算出「會變動」與「略過（含原因）」兩組
+ * - computeGradeSet：批次「設為 N 年級」（#1139），含未設定年級的班；已是 N 年級的列入略過（same）
  * - formatClassroomDisplayName：組合班名（年級 8＋名稱「12」→「8年12班」／「Grade 8 Class 12」），
  *   學生端各處與老師端派作業、學生管理、班級詳情、作業管理共用；「我的班級」列表本身仍分兩欄
  *
- * 升降計算在前端完成，後端批次端點只負責驗證範圍與權限後寫入。
+ * 升降／指定計算在前端完成，後端批次端點只負責驗證範圍與權限後寫入。
  * 班級 id 型別不同（個人端 number、機構端 string），所以函式對 id 泛型。
  */
 import { GRADE_MAX, GRADE_MIN } from "@/components/shared/GradeRangeSlider";
@@ -104,7 +105,11 @@ export function matchesGradeFilter(
 
 export type GradeAdjustDirection = "up" | "down";
 
-export type GradeSkipReason = "max" | "min" | "unset";
+/** 調整年級視窗的三種模式：升一級／降一級／設為指定年級（#1139） */
+export type GradeAdjustMode = GradeAdjustDirection | "set";
+
+/** 略過原因：已達上限／下限、尚未設定（升降時）、已是目標年級（設為 N 時） */
+export type GradeSkipReason = "max" | "min" | "unset" | "same";
 
 export interface GradeAdjustClassroom<Id> {
   id: Id;
@@ -115,7 +120,8 @@ export interface GradeAdjustClassroom<Id> {
 export interface GradeChange<Id> {
   id: Id;
   name: string;
-  from: number;
+  /** 原年級；「設為 N 年級」時原本未設定的班為 null */
+  from: number | null;
   to: number;
 }
 
@@ -163,6 +169,35 @@ export function computeGradeAdjust<Id>(
       continue;
     }
     changes.push({ id, name, from: grade, to: grade + delta });
+  }
+
+  return { changes, skipped };
+}
+
+/**
+ * 批次「設為 N 年級」（#1139）。
+ * 所有班級（含尚未設定年級）都改成 target；已經是 target 的列入 skipped（reason: same）。
+ * target 無效（尚未選擇）時回傳空結果。保持輸入順序。
+ */
+export function computeGradeSet<Id>(
+  classrooms: readonly GradeAdjustClassroom<Id>[],
+  target: number | null,
+): GradeAdjustResult<Id> {
+  const changes: GradeChange<Id>[] = [];
+  const skipped: GradeSkip<Id>[] = [];
+  if (!isValidGrade(target)) return { changes, skipped };
+
+  for (const { id, name, grade } of classrooms) {
+    if (grade === target) {
+      skipped.push({ id, name, reason: "same" });
+      continue;
+    }
+    changes.push({
+      id,
+      name,
+      from: isValidGrade(grade) ? grade : null,
+      to: target,
+    });
   }
 
   return { changes, skipped };
