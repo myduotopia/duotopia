@@ -5,7 +5,8 @@
  * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116），
  * 有「調整年級」「批次編輯」兩顆按鈕（半透明白底、不分主次，與其他批次操作列同一樣式）。
  * 「批次編輯」開 BatchEditClassroomsDialog，一次改多班名稱＋年級，走機構 batch-update（#1139）；
- * 成功後以回傳的 {id, name, grade} 直接更新列表、不重抓。按鈕層級見
+ * 成功後以回傳的 {id, name, grade} 直接更新列表、不重抓；失敗訊息用批次編輯專屬文字
+ * （batchGradeErrorMessageKey(…, "batchEdit")）。按鈕層級見
  * docs/design/ui-style-guide.md 第 3 節。
  */
 import { useState, useEffect, useRef } from "react";
@@ -358,7 +359,7 @@ export default function SchoolClassroomsPage() {
       return true;
     } catch (error) {
       logError("Failed to batch edit classrooms", error, { schoolId });
-      toast.error(t(batchGradeErrorMessageKey(error)));
+      toast.error(t(batchGradeErrorMessageKey(error, "batchEdit")));
       return false;
     }
   };

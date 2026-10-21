@@ -77,6 +77,20 @@ describe("applyBatchEditChanges", () => {
     expect(buildBatchEditItems(next)).toEqual([]);
   });
 
+  it("accepts null only for rows that were unset when opened (D9)", () => {
+    const rows = setAllBatchEditGrades(makeBatchEditRows(classrooms), 7);
+    const next = applyBatchEditChanges(
+      rows,
+      [
+        { id: 1, grade: null }, // 原本未設定 → 可還原
+        { id: 3, grade: null }, // 原本 5 年級 → 忽略，維持 7
+      ],
+      "manual",
+    );
+    expect(next.map((r) => r.grade)).toEqual([null, 7, 7]);
+    expect(buildBatchEditItems(next)).toEqual([{ id: 3, grade: 7 }]);
+  });
+
   it("uses the last change for a repeated id and records the source", () => {
     const rows = makeBatchEditRows(classrooms);
     const next = applyBatchEditChanges(

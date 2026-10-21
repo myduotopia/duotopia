@@ -8,9 +8,10 @@
  * - 改過的列加標記（與打開視窗時的原值比較，名稱先去空白；改回原值標記消失）；
  *   AI 改過的格子用另一種標記（琥珀色），人工再改後換回人工標記（藍色）。
  * - 上方「全部年級設為 [▼]」：套到所有列（含原本未設定），只改年級，之後仍可逐列修改。
- * - 年級不能清回未設定（D9）：已有年級的列下拉不給空白選項；本來未設定的列可維持未設定，只改名也能存。
+ * - 年級不能清回未設定（D9）：已有年級的列下拉不給空白選項；本來未設定的列可維持未設定，只改名也能存，
+ *   被設了年級（例如「全部年級設為」）後也能選空白還原回未設定。
  * - 儲存只送有變動的列（buildBatchEditItems）；沒有變動、有名稱錯誤、或變動超過
- *   BATCH_GRADE_MAX_ITEMS（顯示 classroomGrade.limitExceeded）時，儲存鈕停用。
+ *   BATCH_GRADE_MAX_ITEMS（顯示 classroomGrade.batchEdit.limitExceeded）時，儲存鈕停用。
  * - API 呼叫交給呼叫端的 onSave：回傳 true 代表成功並關閉視窗；false 代表失敗，視窗不關、保留輸入。
  * - 有未儲存的修改時關閉（取消、Esc、點背景）先確認。
  *
@@ -278,11 +279,10 @@ export function BatchEditClassroomsDialog<Id extends string | number>({
                         aria-label={t("classroomGrade.batchEdit.gradeLabel", {
                           name: row.originalName,
                         })}
-                        onChange={(grade) => {
-                          if (grade !== null) {
-                            applyChanges([{ id: row.id, grade }], "manual");
-                          }
-                        }}
+                        onChange={(grade) =>
+                          // 空白（null）只在原本未設定的列出現，用來還原回未設定（D9）
+                          applyChanges([{ id: row.id, grade }], "manual")
+                        }
                         className={cn(
                           GRADE_SELECT_BASE,
                           "sm:w-40",
@@ -323,7 +323,9 @@ export function BatchEditClassroomsDialog<Id extends string | number>({
 
         {overLimit && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {t("classroomGrade.limitExceeded", { max: BATCH_GRADE_MAX_ITEMS })}
+            {t("classroomGrade.batchEdit.limitExceeded", {
+              max: BATCH_GRADE_MAX_ITEMS,
+            })}
           </p>
         )}
 

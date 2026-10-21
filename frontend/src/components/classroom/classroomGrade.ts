@@ -5,6 +5,7 @@
  * - 年級選項與篩選值
  * - computeGradeAdjust：批次升／降一級時，算出「會變動」與「略過（含原因）」兩組
  * - computeGradeSet：批次「設為 N 年級」（#1139），含未設定年級的班；已是 N 年級的列入略過（same）
+ * - batchGradeErrorMessageKey：批次失敗訊息 key（403 → 權限提示），scope 分年級／批次編輯兩組文字（#1139）
  * - formatClassroomDisplayName：組合班名（年級 8＋名稱「12」→「8年12班」／「Grade 8 Class 12」），
  *   學生端各處與老師端派作業、學生管理、班級詳情、作業管理共用；「我的班級」列表本身仍分兩欄
  *
@@ -30,15 +31,37 @@ export const GRADE_OPTIONS: readonly number[] = Array.from(
  */
 export const BATCH_GRADE_MAX_ITEMS = 200;
 
+/** 批次失敗訊息用哪一組文字：調整年級（grade）／批次編輯名稱＋年級（batchEdit，#1139） */
+export type BatchErrorScope = "grade" | "batchEdit";
+
+const BATCH_ERROR_KEYS: Record<
+  BatchErrorScope,
+  { forbidden: string; saveFailed: string }
+> = {
+  grade: {
+    forbidden: "classroomGrade.messages.forbidden",
+    saveFailed: "classroomGrade.messages.saveFailed",
+  },
+  batchEdit: {
+    forbidden: "classroomGrade.batchEdit.forbidden",
+    saveFailed: "classroomGrade.batchEdit.saveFailed",
+  },
+};
+
 /**
- * 批次設定年級失敗時要顯示的訊息 key：
+ * 批次設定年級／批次編輯失敗時要顯示的訊息 key：
  * HTTP 403 的 ApiError → 權限專屬提示；其他錯誤 → 一般失敗提示。
+ * scope 預設 "grade"（年級文字）；批次編輯傳 "batchEdit"，改名失敗時文字才不會說成「更新年級失敗」。
  */
-export function batchGradeErrorMessageKey(error: unknown): string {
+export function batchGradeErrorMessageKey(
+  error: unknown,
+  scope: BatchErrorScope = "grade",
+): string {
+  const keys = BATCH_ERROR_KEYS[scope];
   if (error instanceof ApiError && error.status === 403) {
-    return "classroomGrade.messages.forbidden";
+    return keys.forbidden;
   }
-  return "classroomGrade.messages.saveFailed";
+  return keys.saveFailed;
 }
 
 /** 篩選值：全部／未設定／"1"–"12" */

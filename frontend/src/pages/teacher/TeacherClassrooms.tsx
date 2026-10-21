@@ -4,7 +4,8 @@
  * 班級清單（桌機表格、手機卡片）＋等級／年級／狀態篩選與搜尋、排序、建立班級、列內直接編輯（編輯中不顯示批次操作列）。
  * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116）：
  * 「調整年級」「調整等級」「批次編輯」同一樣式（半透明白底、不分主次）、停用／啟用為開關；
- * 「批次編輯」開 BatchEditClassroomsDialog，一次改多班名稱＋年級，走 batch-update（#1139）；
+ * 「批次編輯」開 BatchEditClassroomsDialog，一次改多班名稱＋年級，走 batch-update（#1139），
+ * 失敗訊息用批次編輯專屬文字（batchGradeErrorMessageKey(…, "batchEdit")）；
  * 浮動列出現時列表底部預留 pb-24。按鈕層級見 docs/design/ui-style-guide.md 第 3 節。
  */
 import React, {
@@ -404,14 +405,15 @@ export default function TeacherClassrooms() {
   };
 
   // 批次編輯名稱＋年級（#1139）：成功先關對話框再清勾選；失敗視窗不關、保留輸入。
-  // 403／404／422 經 batchGradeErrorMessageKey 顯示（403 → 權限提示，其餘 → 一般失敗）
+  // 403／404／422 經 batchGradeErrorMessageKey(…, "batchEdit") 顯示批次編輯文字
+  // （403 → 權限提示，其餘 → 一般失敗）
   const handleBatchEdit = async (
     items: BatchEditUpdateItem<number>[],
   ): Promise<boolean> => {
     const ok = await statusActions.runBatchUpdate(
       items.map(({ id, name, grade }) => ({ classroom_id: id, name, grade })),
       "classroomGrade.batchEdit.saveSuccess",
-      batchGradeErrorMessageKey,
+      (error) => batchGradeErrorMessageKey(error, "batchEdit"),
     );
     if (ok) {
       setShowBatchEdit(false);

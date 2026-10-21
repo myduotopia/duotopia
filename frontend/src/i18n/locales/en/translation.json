@@ -6468,7 +6468,10 @@
       "nameTooLong": "Class names can be up to {{max}} characters",
       "changedCount": "{{count}} classroom(s) edited",
       "save": "Save ({{count}})",
-      "saveSuccess": "Updated {{count}} classroom(s)"
+      "saveSuccess": "Updated {{count}} classroom(s)",
+      "saveFailed": "Failed to save classroom changes. Please try again later.",
+      "forbidden": "You don't have permission to edit these classrooms",
+      "limitExceeded": "You can save changes to up to {{max}} classrooms at a time. Please work in batches."
     },
     "sort": {
       "gradeAsc": "Grade low→high",

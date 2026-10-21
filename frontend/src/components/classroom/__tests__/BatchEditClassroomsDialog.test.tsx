@@ -19,7 +19,8 @@ vi.mock("react-i18next", () => ({
         "classroomGrade.batchEdit.aiChanged": "Edited by AI",
         "classroomGrade.batchEdit.nameRequired": "Enter a class name",
         "classroomGrade.batchEdit.save": "Save ({{count}})",
-        "classroomGrade.limitExceeded": "Up to {{max}} classrooms at a time",
+        "classroomGrade.batchEdit.limitExceeded":
+          "Save up to {{max}} classrooms at a time",
         "classroomGrade.displayName": "{{grade}}年{{name}}班",
         "classroomGrade.gradeLabel": "Grade {{grade}}",
         "classroomGrade.selectPlaceholder": "Select a grade",
@@ -119,6 +120,19 @@ describe("BatchEditClassroomsDialog", () => {
     expect(screen.getByRole("button", { name: "Save (2)" })).not.toBeDisabled();
   });
 
+  it("lets an originally unset row go back to unset after 'set all'", () => {
+    renderDialog();
+    fireEvent.change(screen.getByLabelText("Set all grades to"), {
+      target: { value: "7" },
+    });
+    expect(screen.getByRole("button", { name: "Save (2)" })).not.toBeDisabled();
+
+    fireEvent.change(gradeSelect("八年12班"), { target: { value: "" } });
+    expect(gradeSelect("八年12班").value).toBe("");
+    // 還原回未設定 → 送出筆數少一（只剩班 3）
+    expect(screen.getByRole("button", { name: "Save (1)" })).not.toBeDisabled();
+  });
+
   it("does not offer an empty grade option for rows that already have a grade", () => {
     renderDialog();
     const withGrade = Array.from(gradeSelect("3").options).map((o) => o.value);
@@ -140,7 +154,7 @@ describe("BatchEditClassroomsDialog", () => {
       target: { value: "4" },
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      `Up to ${BATCH_GRADE_MAX_ITEMS} classrooms at a time`,
+      `Save up to ${BATCH_GRADE_MAX_ITEMS} classrooms at a time`,
     );
     expect(
       screen.getByRole("button", {

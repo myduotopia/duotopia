@@ -7,7 +7,9 @@
  * - 「改過」一律與打開視窗時的原值比較（名稱先去頭尾空白）；改回原值就不算變動、標記消失。
  * - 每格記錄最後是誰改的（manual／ai）：AI 改過的格子用另一種標記，人工再改後換回人工標記
  *   （第二階段 AI 助手經 applyBatchEditChanges(…, "ai") 填入）。
- * - 年級不能清回「未設定」（D9）：applyBatchEditChanges／setAllBatchEditGrades 只接受 1–12。
+ * - 年級不能清回「未設定」（D9）：applyBatchEditChanges 只接受 1–12；唯一例外是打開視窗時
+ *   本來就未設定的列（originalGrade === null），可用 null 還原回未設定（例如先「全部年級設為」
+ *   再把這列改回空白）。setAllBatchEditGrades 只接受 1–12。
  * - buildBatchEditItems：只送有變動的列，且每列只帶有變動的欄位（名稱已去空白）。
  * - 名稱驗證：去頭尾空白後 1–100 字，與後端 ClassroomName 一致；只檢查有變動的列。
  */
@@ -42,7 +44,8 @@ export interface BatchEditRow<Id> {
 export interface BatchEditChange<Id> {
   id: Id;
   name?: string;
-  grade?: number;
+  /** null＝還原回未設定，只對原本未設定的列有效（D9） */
+  grade?: number | null;
 }
 
 /** 送給批次端點前的通用格式；頁面自行轉成 {classroom_id, name?, grade?} */
@@ -109,7 +112,8 @@ export function batchEditRowNameError<Id>(
 
 /**
  * 把變更寫進表格：只動 id 在表格裡的列，只改名稱與年級。
- * 年級只接受 1–12（不能清回未設定）；同一 id 出現多次以最後一筆為準。
+ * 年級只接受 1–12；null 只在該列原本未設定時接受（還原回未設定），其餘忽略（D9）。
+ * 同一 id 出現多次以最後一筆為準。
  */
 export function applyBatchEditChanges<Id>(
   rows: readonly BatchEditRow<Id>[],
@@ -131,6 +135,9 @@ export function applyBatchEditChanges<Id>(
     }
     if (isValidGrade(change.grade)) {
       next.grade = change.grade;
+      next.gradeSource = source;
+    } else if (change.grade === null && row.originalGrade === null) {
+      next.grade = null;
       next.gradeSource = source;
     }
     return next;

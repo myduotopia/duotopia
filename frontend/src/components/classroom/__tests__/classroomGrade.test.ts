@@ -196,6 +196,18 @@ describe("batchGradeErrorMessageKey", () => {
       );
     }
   });
+
+  it("uses the batch-edit messages for the batchEdit scope", () => {
+    expect(
+      batchGradeErrorMessageKey(new ApiError(403, "Forbidden"), "batchEdit"),
+    ).toBe("classroomGrade.batchEdit.forbidden");
+    expect(
+      batchGradeErrorMessageKey(new ApiError(422, "error"), "batchEdit"),
+    ).toBe("classroomGrade.batchEdit.saveFailed");
+    expect(batchGradeErrorMessageKey(new Error("network"), "batchEdit")).toBe(
+      "classroomGrade.batchEdit.saveFailed",
+    );
+  });
 });
 
 describe("formatClassroomDisplayName", () => {

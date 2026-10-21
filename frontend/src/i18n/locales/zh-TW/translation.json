@@ -6511,7 +6511,10 @@
       "nameTooLong": "班級名稱最多 {{max}} 字",
       "changedCount": "已修改 {{count}} 個班級",
       "save": "儲存（{{count}}）",
-      "saveSuccess": "已更新 {{count}} 個班級"
+      "saveSuccess": "已更新 {{count}} 個班級",
+      "saveFailed": "儲存班級修改失敗，請稍後再試",
+      "forbidden": "您沒有權限編輯這些班級",
+      "limitExceeded": "一次最多儲存 {{max}} 個班級的修改，請分批處理"
     },
     "sort": {
       "gradeAsc": "年級 低→高",

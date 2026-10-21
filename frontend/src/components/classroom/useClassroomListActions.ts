@@ -17,7 +17,7 @@
  * - toggleActive：單列 Switch，PUT is_active。
  * - runBatchUpdate：POST batch-update（等級／停用／啟用／批次編輯名稱＋年級共用，#1139），
  *   超過 BATCH_GRADE_MAX_ITEMS 直接擋下；成功以回傳的 name／grade／level／is_active 就地更新。
- *   failureKey 可傳函式，依錯誤決定訊息（批次編輯用 batchGradeErrorMessageKey：403 → 權限提示）。
+ *   failureKey 可傳函式，依錯誤決定訊息（批次編輯用 batchGradeErrorMessageKey(…, "batchEdit")：403 → 權限提示）。
  * - bulkSetActive：只送狀態會改變的班級。
  */
 import { useCallback, useState } from "react";
