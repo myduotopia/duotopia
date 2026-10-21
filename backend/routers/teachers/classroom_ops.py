@@ -1,5 +1,10 @@
 """
 Classroom Ops operations for teachers.
+
+個人班級的列表／建立／編輯／刪除與批次端點：
+- POST /classrooms/batch-grade：只改年級（#1097）
+- POST /classrooms/batch-update：名稱／年級／等級／啟用狀態任意組合（#1097；名稱 #1139，
+  「我的班級」批次編輯視窗用）；名稱去頭尾空白後 1–100 字（ClassroomName）
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload, joinedload
@@ -313,9 +318,10 @@ async def batch_update_classrooms(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """批次更新個人班級的年級／等級／啟用狀態（#1097）
+    """批次更新個人班級的名稱／年級／等級／啟用狀態（#1097；名稱 #1139）
 
-    每筆可帶 grade、level、is_active 任意組合（至少一項）。
+    每筆可帶 name、grade、level、is_active 任意組合（至少一項）；
+    name 已由 schema 去頭尾空白並檢查 1–100 字。回傳每筆的 name 讓前端就地更新。
     全有或全無：任一班級不屬於本人或已刪除 → 404；任一班級屬於學校 → 403。
     停用（未刪除）的班級也會被查到，才能重新啟用。
     """
@@ -347,6 +353,8 @@ async def batch_update_classrooms(
     classroom_map = {c.id: c for c in classrooms}
     for item in payload.items:
         classroom = classroom_map[item.classroom_id]
+        if item.name is not None:
+            classroom.name = item.name
         if item.grade is not None:
             classroom.grade = grade_to_storage(item.grade)
         if item.level is not None:
@@ -361,6 +369,7 @@ async def batch_update_classrooms(
         updated.append(
             {
                 "id": classroom.id,
+                "name": classroom.name,
                 "grade": parse_grade(classroom.grade),
                 "level": classroom.level.value if classroom.level else "A1",
                 "is_active": bool(classroom.is_active),
