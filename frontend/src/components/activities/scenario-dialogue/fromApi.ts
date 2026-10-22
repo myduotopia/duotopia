@@ -82,6 +82,16 @@ export function scenarioChatSettings({
   };
 }
 
+/**
+ * 題目圖片的替代文字。
+ *
+ * 這一層是純函式、拿不到 i18n 的 `t`（只有元件有），所以先用固定格式，至少不要讓
+ * 讀螢幕的人只聽到一個數字。要完整在地化得把 `t` 傳進來。
+ */
+function imageAlt(questionNumber: number): string {
+  return `Question ${questionNumber} image`;
+}
+
 const text = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
@@ -122,7 +132,8 @@ export function scenarioChatFromTeacherContent(
       translationLanguage: translationLanguage || undefined,
       keywords: [...(block.keywords ?? [])],
       rubricNote: rubricNote || undefined,
-      images: imageUrl ? [{ src: imageUrl, alt: `${index + 1}` }] : [],
+      // alt 不要只給一個數字 —— 讀螢幕的人只會聽到「1」（PR #1142 review）
+      images: imageUrl ? [{ src: imageUrl, alt: imageAlt(index + 1) }] : [],
       ...(options.withReferenceAnswer && reference
         ? { referenceAnswer: reference }
         : {}),

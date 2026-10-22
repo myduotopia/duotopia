@@ -87,7 +87,7 @@ describe("scenarioChatFromTeacherContent", () => {
   it("題目圖片有就帶一張，沒有就空陣列", () => {
     const { items } = scenarioChatFromTeacherContent(detail);
     expect(items[0].images).toEqual([
-      { src: "https://example.com/q1.jpg", alt: expect.any(String) },
+      { src: "https://example.com/q1.jpg", alt: "Question 1 image" },
     ]);
     expect(items[1].images).toEqual([]);
   });
@@ -165,5 +165,11 @@ describe("scenarioChatFromTeacherContent", () => {
     expect(
       scenarioChatFromTeacherContent({ id: 1, title: "x", items: null }).items,
     ).toEqual([]);
+  });
+  it("alt 不是只有一個數字（讀螢幕的人要聽得懂那是什麼圖）", () => {
+    const { items } = scenarioChatFromTeacherContent(detail);
+    const alt = items[0].images[0].alt ?? "";
+    expect(alt).not.toMatch(/^\d+$/);
+    expect(alt).toContain("1");
   });
 });

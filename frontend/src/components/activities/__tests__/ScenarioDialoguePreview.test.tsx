@@ -95,6 +95,32 @@ describe("ScenarioDialoguePreview", () => {
     );
   });
 
+  it("換教材會重新開始，不帶著舊教材的對話", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ScenarioDialoguePreview contentId={501} showTranslation />,
+    );
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    await user.click(startButton()!);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/What did you do last weekend\?/).length,
+      ).toBeGreaterThan(0),
+    );
+
+    getContentDetail.mockResolvedValue({
+      ...DETAIL,
+      id: 777,
+      title: "另一份教材",
+      items: [{ ...DETAIL.items[0], id: 7001, text: "Where did you go?" }],
+    });
+    rerender(<ScenarioDialoguePreview contentId={777} showTranslation />);
+
+    // 回到「開始對話」那一步，而且舊教材的題目不該還留在對話裡
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    expect(screen.queryByText(/What did you do last weekend\?/)).toBeNull();
+  });
+
   it("沒有 contentId 時說明原因，不去抓任何教材", () => {
     render(<ScenarioDialoguePreview />);
     expect(getContentDetail).not.toHaveBeenCalled();

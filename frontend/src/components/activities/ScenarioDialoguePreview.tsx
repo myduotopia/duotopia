@@ -172,6 +172,14 @@ export default function ScenarioDialoguePreview({
 
   return (
     <ScenarioChatActivity
+      // 換教材要重新開始。**今天真正讓它歸零的是 loading 分支**：contentId 一變就
+      // 先 render PreviewNote，對話元件被 unmount，狀態跟著消失。
+      //
+      // 那為什麼還要 key？因為 `useScenarioChat` 的狀態是用 items 做 useState 的初值、
+      // **沒有任何 effect 在 items 變動時重置**。哪天有人為了少一次閃爍，改成「重新抓
+      // 資料時先留著舊畫面」，舊教材的對話就會立刻接到新題目上 —— 而那是個不會有人
+      // 察覺的錯。key 讓那個改動不會變成 bug（PR #1142 review 第 3 點）。
+      key={contentId}
       context={chat.context}
       items={chat.items}
       settings={settings}
