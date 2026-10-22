@@ -356,6 +356,11 @@ class TestSpendIsActuallyCapped:
     def test_ai_is_called_at_most_three_times_per_item(
         self, test_client: TestClient, db_session: Session, world
     ):
+        """依序呼叫版：第 4 次其實是 `check_can_analyze` 擋下的。
+
+        真正的並行保護（`UPDATE ... WHERE count < MAX`）由
+        `TestReserveSlotIsTheCapItself` 覆蓋 —— 那一條繞過 gate 直接驗函式。
+        """
         spy = AsyncMock(return_value=AI_RESULT)
         with patch(PATCH_TARGET, new=spy):
             codes = [_post(test_client, world).status_code for _ in range(5)]
@@ -513,6 +518,8 @@ class TestCancellationRefunds:
     ):
         import asyncio
 
+        # `pytest.raises(BaseException)` 範圍很寬（TestClient 會不會原樣往外拋
+        # CancelledError 取決於版本），所以真正的斷言是下面那句 count == 0。
         with patch(PATCH_TARGET, new=AsyncMock(side_effect=asyncio.CancelledError())):
             with pytest.raises(BaseException):  # noqa: B017
                 _post(test_client, world)

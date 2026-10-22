@@ -113,6 +113,14 @@ async def scenario_dialogue_feedback(
     # 403「老師已判定通過」優先於 429「次數用完」—— 前者是更清楚的理由
     check_can_analyze(progress)
 
+    # **這幾行一定要留在 db.commit() 之前。**
+    #
+    # commit 會讓這個 session 的 ORM 物件 expire，之後讀 `item.text` /
+    # `progress.recording_url` 都會觸發 refresh → 開一條新交易，而那條交易會一路開著
+    # 等 Gemini 回來（可能數十秒）。每個進行中的請求因此佔住一條連線處於
+    # *idle in transaction*，一個班同時作答就能把連線池吃光 —— 影響的是整個服務，
+    # 不只這個功能（PR #1141 review R4）。
+    #
     # 評分依據一律由 utils.scenario_dialogue 組出 —— 題目、參考答案、必用字詞、
     # 生效時態語態、整份作答指引的形狀只能有一處（與老師端同源）。
     criteria = sd.grading_criteria(
