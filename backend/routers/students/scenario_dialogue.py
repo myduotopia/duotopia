@@ -15,9 +15,18 @@
 `services/analysis_quota.py`（#676 Phase 2），而且批改頁的 Azure 分析用的是同一欄。
 另寫一套計數會讓同一題有兩個互不相識的上限。
 
-計數的時機照既有學生端端點（`routers/speech_assessment.py`）的做法：**先 gate、成功
-後才加**。這代表極短時間內的連點可能打出兩次 AI（上限仍守得住），換來的是「AI 失敗
-不吃學生次數」—— 對學生而言後者重要得多。前端在等建議時本來就會停用輸入區。
+## 先領額度再打 AI（PR #1141 review）
+
+這支原本照既有學生端端點（`routers/speech_assessment.py`）的做法「先 gate、成功後才
+加」，並在註解裡說「連點最多多打一通，上限仍守得住」。**那句話是錯的**：並行時每個
+請求都在 count < 3 時通過 gate，各自打一通付費的 Gemini，一個腳本可以在任何
+increment 落地之前連發幾十通 —— 存下來的數字仍停在 3，所以從資料完全看不出來。
+（#1025 在老師端踩過同一個坑。）
+
+改成 `reserve_analysis_slot()`：那一次 `UPDATE ... WHERE count < MAX` 是原子的，同時
+進來 N 個請求最多只有 3 個領到號碼牌，**AI 呼叫數因此真的有上限**；領不到的直接 429，
+一個 token 都不花。AI 失敗再用 `refund_analysis_slot()` 把那一次還回去，學生不會因為
+我們的錯誤被扣機會。
 """
 import logging
 from typing import Optional
@@ -32,7 +41,8 @@ from models.progress import StudentItemProgress
 from services.analysis_quota import (
     MAX_AI_ANALYSIS_ATTEMPTS,
     check_can_analyze,
-    increment_analysis_count,
+    refund_analysis_slot,
+    reserve_analysis_slot,
 )
 from services.scenario_student_feedback_ai import (
     ScenarioStudentFeedbackInputError,
@@ -100,8 +110,25 @@ async def scenario_dialogue_feedback(
             detail="這一題還沒有錄音",
         )
 
-    # 先 gate 再打 AI：第 4 次不會花掉任何 token（403 已通過 > 429 次數用完）
+    # 403「老師已判定通過」優先於 429「次數用完」—— 前者是更清楚的理由
     check_can_analyze(progress)
+
+    # 原子地領一次額度。領不到＝這一題已經用到上限（並行時也只有 3 個領得到），
+    # 直接 429，一個 token 都不花。見檔頭「先領額度再打 AI」。
+    count = reserve_analysis_slot(progress, db)
+    if count is None:
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "AI_ANALYSIS_QUOTA_EXCEEDED",
+                "message": "AI analysis quota exhausted for this item.",
+                "ai_analysis_count": MAX_AI_ANALYSIS_ATTEMPTS,
+                "ai_analysis_remaining": 0,
+                "max_attempts": MAX_AI_ANALYSIS_ATTEMPTS,
+            },
+        )
+    db.commit()
 
     # 評分依據一律由 utils.scenario_dialogue 組出 —— 題目、參考答案、必用字詞、
     # 生效時態語態、整份作答指引的形狀只能有一處（與老師端同源）。
@@ -119,21 +146,20 @@ async def scenario_dialogue_feedback(
             ui_language=payload.ui_language or "zh-TW",
         )
     except ScenarioStudentFeedbackInputError as exc:
-        # 題目資料不完整（例如題目被清空）—— 不是學生的錯，也不算用掉一次
+        # 題目資料不完整（例如題目被清空）—— 不是學生的錯，退還剛領的那一次
+        refund_analysis_slot(progress, db)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception:
-        # AI 爆掉（模型回了垃圾、Vertex 超時、音檔抓不到…）是我們的問題。
-        # 不能讓它吃掉學生的 3 次機會，也不該把 traceback 丟到學生畫面上，
-        # 所以這裡收成 503 讓前端顯示「請再試一次」。計數在下面，走不到。
+        # AI 爆掉（模型回了垃圾、Vertex 超時、音檔抓不到…）是我們的問題：退還額度，
+        # 收成 503 讓前端顯示「請再試一次」，不要把 traceback 丟到學生畫面上。
         logger.exception("scenario student feedback failed | progress=%s", progress.id)
+        refund_analysis_slot(progress, db)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI 暫時無法給建議，請再試一次",
         )
-
-    # 走到這裡才算用掉一次。AI 失敗（上面 raise）不吃學生的 3 次機會。
-    count = increment_analysis_count(progress, db)
-    db.commit()
 
     # **白名單輸出**：service 回的東西還帶著 usage／成本，模型有時也會自己多塞分數或
     # 把參考答案抄回來。學生那一側只拿這三個欄位加配額資訊。

@@ -342,3 +342,118 @@ class TestGuards:
             )
         assert resp.status_code == 400
         spy.assert_not_awaited()
+
+
+class TestSpendIsActuallyCapped:
+    """PR #1141 review：原本「先 gate、成功後才加」擋不住並行。
+
+    那個版本的每個請求都在 count < 3 時通過 gate，各自打一通**付費的** Gemini ——
+    存下來的數字仍停在 3，所以從資料完全看不出來花了多少。改成原子地「領號碼牌」
+    之後，AI 呼叫數才真的有上限。
+    """
+
+    def test_ai_is_called_at_most_three_times_per_item(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        spy = AsyncMock(return_value=AI_RESULT)
+        with patch(PATCH_TARGET, new=spy):
+            codes = [_post(test_client, world).status_code for _ in range(5)]
+
+        assert codes[:3] == [200, 200, 200]
+        assert codes[3:] == [429, 429]
+        # 真正的重點：第 4、5 次沒有花錢
+        assert spy.await_count == 3
+
+    def test_the_slot_is_taken_before_the_ai_call(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        """AI 還在跑的時候，額度就已經記在資料庫上了。
+
+        這是「有上限」的機制本身：領不到號碼牌的請求根本不會走到 AI。
+        """
+        seen = {}
+
+        async def slow_generate(**kwargs):
+            db_session.expire_all()
+            row = db_session.get(StudentItemProgress, world["progress"].id)
+            seen["count_during_ai"] = row.ai_analysis_count
+            return AI_RESULT
+
+        with patch(PATCH_TARGET, new=AsyncMock(side_effect=slow_generate)):
+            assert _post(test_client, world).status_code == 200
+
+        assert seen["count_during_ai"] == 1
+
+    def test_a_refund_puts_the_slot_back(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        """AI 失敗退還額度之後，學生還是有完整的 3 次。"""
+        with patch(PATCH_TARGET, new=AsyncMock(side_effect=RuntimeError("boom"))):
+            for _ in range(3):
+                assert _post(test_client, world).status_code == 503
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 0
+
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            resp = _post(test_client, world)
+        assert resp.status_code == 200
+        assert resp.json()["ai_analysis_remaining"] == 2
+
+    def test_bad_question_data_also_refunds(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        from services.scenario_student_feedback_ai import (
+            ScenarioStudentFeedbackInputError,
+        )
+
+        with patch(
+            PATCH_TARGET,
+            new=AsyncMock(side_effect=ScenarioStudentFeedbackInputError("沒有題目")),
+        ):
+            assert _post(test_client, world).status_code == 400
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 0
+
+
+class TestReserveSlotIsTheCapItself:
+    """直接驗 `reserve_analysis_slot`，**繞過 HTTP 層的 gate**。
+
+    端點上的 `check_can_analyze` 在依序呼叫時就會擋下第 4 次，所以從端點測不出
+    `UPDATE ... WHERE count < MAX` 有沒有在守 —— 那個 WHERE 才是並行時唯一的保護。
+    （mutation 檢查把 WHERE 拿掉時，端點那幾條測試全部照樣通過。）
+    """
+
+    def test_only_max_slots_can_ever_be_taken(self, db_session: Session, world):
+        from services.analysis_quota import (
+            MAX_AI_ANALYSIS_ATTEMPTS,
+            reserve_analysis_slot,
+        )
+
+        progress = world["progress"]
+        taken = [
+            reserve_analysis_slot(progress, db_session)
+            for _ in range(MAX_AI_ANALYSIS_ATTEMPTS + 2)
+        ]
+        db_session.commit()
+
+        assert taken[:MAX_AI_ANALYSIS_ATTEMPTS] == list(
+            range(1, MAX_AI_ANALYSIS_ATTEMPTS + 1)
+        )
+        # 超出的一律領不到（None），這是 AI 呼叫數有上限的唯一機制
+        assert taken[MAX_AI_ANALYSIS_ATTEMPTS:] == [None, None]
+
+        db_session.refresh(progress)
+        assert progress.ai_analysis_count == MAX_AI_ANALYSIS_ATTEMPTS
+
+    def test_refund_never_goes_below_zero(self, db_session: Session, world):
+        from services.analysis_quota import refund_analysis_slot
+
+        progress = world["progress"]
+        for _ in range(3):
+            refund_analysis_slot(progress, db_session)
+        db_session.commit()
+
+        db_session.refresh(progress)
+        assert progress.ai_analysis_count == 0
