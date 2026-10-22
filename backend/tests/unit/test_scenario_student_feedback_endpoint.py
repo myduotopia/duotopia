@@ -156,6 +156,7 @@ def _make_world(db: Session, tag: str = "a", content_type: str = "SCENARIO_DIALO
         "student": student,
         "progress": progress,
         "item": item,
+        "classroom": classroom,
         "headers": {"Authorization": f"Bearer {token}"},
     }
 
@@ -457,3 +458,44 @@ class TestReserveSlotIsTheCapItself:
 
         db_session.refresh(progress)
         assert progress.ai_analysis_count == 0
+
+
+class TestClassroomVisibility:
+    """#1097：作業所屬班級停用或已刪除就不給。
+
+    這個守衛是端點自己呼叫的（body 帶 item_progress_id，router 層的
+    `_assignment_guards` 看不到作業 id），所以得自己測 —— reviewer 指出的缺口。
+    """
+
+    def test_inactive_classroom_is_refused_without_paying(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        world["classroom"].is_active = False
+        db_session.commit()
+
+        spy = AsyncMock(return_value=AI_RESULT)
+        with patch(PATCH_TARGET, new=spy):
+            resp = _post(test_client, world)
+
+        assert resp.status_code == 403
+        assert "classroom_inactive" in resp.text
+        spy.assert_not_awaited()
+
+        # 也不該吃掉額度
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 0
+
+    def test_deleted_classroom_is_refused(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        from datetime import datetime, timezone
+
+        world["classroom"].deleted_at = datetime.now(timezone.utc)
+        db_session.commit()
+
+        spy = AsyncMock(return_value=AI_RESULT)
+        with patch(PATCH_TARGET, new=spy):
+            resp = _post(test_client, world)
+
+        assert resp.status_code == 403
+        spy.assert_not_awaited()

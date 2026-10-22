@@ -149,3 +149,37 @@ class TestNormalizeResult:
             }
         )
         assert "reference_answer" not in out
+
+
+class TestCommentLanguage:
+    """評語要用學生看得懂的語言寫；認不得的值回預設而不是丟錯。"""
+
+    def test_known_prefixes(self):
+        from services.scenario_student_feedback_ai import comment_language
+
+        assert comment_language("zh-TW") == "Traditional Chinese"
+        assert comment_language("zh-CN") == "Traditional Chinese"
+        assert comment_language("en") == "English"
+        assert comment_language("en-US") == "English"
+        assert comment_language("ja") == "Japanese"
+        assert comment_language("ko-KR") == "Korean"
+
+    def test_matches_primary_subtag_not_prefix(self):
+        """`startswith` 會讓 "enx" 命中 "en"，primary subtag 比對不會。
+
+        用 **非預設** 的語言來驗：拿 "zhx" 驗沒有意義 —— 預設值本來就是
+        Traditional Chinese，不管有沒有修都會通過（我第一版就是這樣寫的空測試）。
+        """
+        from services.scenario_student_feedback_ai import comment_language
+
+        assert comment_language("en") == "English"
+        # "enx" 的 primary subtag 是 "enx"，不是 "en" → 應該落到預設，不是 English
+        assert comment_language("enx") != "English"
+        assert comment_language("japanese-ish") != "Japanese"
+
+    def test_unknown_and_empty_fall_back(self):
+        from services.scenario_student_feedback_ai import comment_language
+
+        assert comment_language("klingon") == "Traditional Chinese"
+        assert comment_language("") == "Traditional Chinese"
+        assert comment_language(None) == "Traditional Chinese"

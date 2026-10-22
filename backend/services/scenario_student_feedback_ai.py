@@ -66,11 +66,11 @@ def comment_language(ui_language: Optional[str]) -> str:
     認不得的值回預設而不是丟錯：這個值是前端傳來的，不該讓一個沒見過的語言代碼
     把學生卡在「等建議」那一格。
     """
+    # 比對 **primary subtag**（BCP 47 的第一段），不是 startswith：
+    # startswith 會讓 "zhx"、"english-ish" 這種值也命中（PR #1141 review）。
     code = (ui_language or "").strip().lower()
-    for prefix, name in _COMMENT_LANGUAGE.items():
-        if code.startswith(prefix):
-            return name
-    return _DEFAULT_COMMENT_LANGUAGE
+    primary = code.split("-", 1)[0]
+    return _COMMENT_LANGUAGE.get(primary, _DEFAULT_COMMENT_LANGUAGE)
 
 
 def _describe_tense(tense: Optional[Dict[str, str]]) -> str:

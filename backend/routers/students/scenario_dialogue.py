@@ -139,27 +139,39 @@ async def scenario_dialogue_feedback(
     )
 
     service = get_scenario_student_feedback_service()
+    # 沒有成功拿到建議就要把剛領的額度還回去。用 try/finally 而不是在每個 except 裡
+    # 退款，是因為 **asyncio.CancelledError 是 BaseException**：學生等 Gemini 的時候
+    # 關掉頁面，handler 會被取消，`except Exception` 抓不到 —— 額度扣了卻沒退，
+    # 學生白白少一次機會（PR #1141 review R2）。finally 連取消都蓋得到。
+    used = False
     try:
         result = await service.generate(
             recording_url=progress.recording_url,
             criteria=criteria,
             ui_language=payload.ui_language or "zh-TW",
         )
+        used = True
     except ScenarioStudentFeedbackInputError as exc:
-        # 題目資料不完整（例如題目被清空）—— 不是學生的錯，退還剛領的那一次
-        refund_analysis_slot(progress, db)
-        db.commit()
+        # 題目資料不完整（例如題目被清空）—— 不是學生的錯
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception:
-        # AI 爆掉（模型回了垃圾、Vertex 超時、音檔抓不到…）是我們的問題：退還額度，
+        # AI 爆掉（模型回了垃圾、Vertex 超時、音檔抓不到…）是我們的問題：
         # 收成 503 讓前端顯示「請再試一次」，不要把 traceback 丟到學生畫面上。
         logger.exception("scenario student feedback failed | progress=%s", progress.id)
-        refund_analysis_slot(progress, db)
-        db.commit()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI 暫時無法給建議，請再試一次",
         )
+    finally:
+        if not used:
+            # rollback 先做：失敗路徑可能留下一個爛掉的交易，退款自己得活得下來
+            # （#1025 的教訓）。
+            #
+            # 競態：AI 跑的期間若老師把作業退回重做（計數歸零），這一退可能多退新一輪
+            # 的一次。機率極低、方向對學生有利，不另外處理。
+            db.rollback()
+            refund_analysis_slot(progress, db)
+            db.commit()
 
     # **白名單輸出**：service 回的東西還帶著 usage／成本，模型有時也會自己多塞分數或
     # 把參考答案抄回來。學生那一側只拿這三個欄位加配額資訊。
