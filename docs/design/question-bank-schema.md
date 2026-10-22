@@ -4,6 +4,8 @@
 > P4-P5（派發、考卷 PDF）另開 issue，但本設計已為混合題型試卷留位。
 >
 > **新增題型**（單題／題組骨架、三種題型對照表、加題型檢查清單）見 [`question-bank-question-types.md`](./question-bank-question-types.md)，或用 skill `/qb-add-type`。
+>
+> **上傳題本**（#1112：流程、確認畫面、語音、用量）見 [`question-bank-exam-import.md`](./question-bank-exam-import.md)；資料表見本文件「上傳題本（#1112）」段。
 
 ## 定案摘要
 
@@ -92,6 +94,8 @@
 | glossary | jsonb | 單字註解 `[{"word": "...", "zh": "..."}]`（#1079/#1081） |
 | grade_min / grade_max | smallint | 題組層預設，小題可覆寫 |
 | teacher_id / organization_id / school_id / visibility / is_platform | | 與 `questions` 相同；**題組內題目的 visibility 跟隨題組**（應用層同步） |
+| tts_accent | varchar, nullable | #1112 新增：主圖文音檔的朗讀口音（美式／英式／印度／澳洲）；上傳題本時抽中後固定 |
+| tts_voice | varchar, nullable | #1112 新增：散文／克漏字旁白用的 Gemini 聲音（AI 依內容挑選）；對話的各角色聲音存在 segments |
 | is_active / deleted_at / created_at / updated_at | | |
 
 規則：題組整組公開／派發／刪除，不可單獨派其中一題。考點掛在小題層（`question_exam_points`），題組層不掛。
@@ -113,7 +117,7 @@
 
 克漏字 = 閱讀題組的文字區塊裡有 `{{n}}` 空格，每個空格對一個小題。`question_groups.question_type` 由小題的 `question_type = 'cloze'` 推得，`questions.blank_index` 存空格編號。
 
-- **空格編號是權威**：`{{n}}` 的 n 就是小題的 `blank_index`，也是畫面顯示的編號。拖拉重排區塊**不改編號**；手動插入時 n = **目前（文章與小題）最大編號 + 1**（新題組從 1 開始；文章已有 1–4 時接著插入拿到 5）。**AI 擷取一律把印刷空格重編成 1..k**（見下方「考卷擷取」），所以題庫不存原卷題號（如 40–43）；考卷上實際印出的題號由派發時的排版位置決定（P4／P5）。只有 max + 1 超過上限 999 時才退回「最小未使用編號」—— 以前是 clamp 回 999，但 999 已被用掉會變成兩張小題對同一個空格；1–999 全部用完時回 `null`，「插入空格」與「在文末插入空格」按鈕 disabled（`group.layout.blankLimit`）。老師按「依閱讀順序重新編號」才會把 layout 的 `{{舊}}` 與小題 `blank_index` 一起映射成 1..k（一次 replace 完成，交換編號不會互撞）。
+- **空格編號是權威**：`{{n}}` 的 n 就是小題的 `blank_index`，也是畫面顯示的編號。拖拉重排區塊**不改編號**；手動插入時 n = **目前（文章與小題）最大編號 + 1**（新題組從 1 開始；文章已有 1–4 時接著插入拿到 5）。**AI 擷取一律把印刷空格重編成 1..k**（見下方「考卷擷取」），所以 `blank_index` 不是原卷題號；原卷題號（如 40–43）另外記在每個小題的 `question_source_links.source_question_no`（#1112，見 `question_sources` 段）。考卷上實際印出的題號由派發時的排版位置決定（P4／P5）。只有 max + 1 超過上限 999 時才退回「最小未使用編號」—— 以前是 clamp 回 999，但 999 已被用掉會變成兩張小題對同一個空格；1–999 全部用完時回 `null`，「插入空格」與「在文末插入空格」按鈕 disabled（`group.layout.blankLimit`）。老師按「依閱讀順序重新編號」才會把 layout 的 `{{舊}}` 與小題 `blank_index` 一起映射成 1..k（一次 replace 完成，交換編號不會互撞）。
 - **插入**：段落聚焦工具列的「插入空格」在游標處插入 `{{n}}`（非包裹式）。只改文字 —— 對應的小題卡由 `syncClozeQuestions` 從空格差集自動建立，狀態只有一份。「在文末插入空格」把 `{{n}}` 加到最後一個段落尾端（沒有段落就補一列）。
 - **刪除**：文字變更後比對前後的空格集合；消失的編號若對應小題還是「空白」（無題幹／圖、無填好的選項、無考點、無解析）就自動移除，有內容則保留並在卡上標「找不到空格 n」，提供「重新插入到文末」與「刪除小題」，驗證阻擋儲存。
 - **只有完整 `{{n}}` 配對才算空格**：老師打到一半的 `{{4` 不會觸發同步。
@@ -134,7 +138,7 @@
 - **題幹圖與選項圖**：`questions[i].stem_box_2d`、`questions[i].option_boxes`（與 `options` 等長，不是圖的位置為 `null`）。**圖片選項可以沒有字**：`options[i]` 為空字串、靠 `option_boxes[i]` 認；normalize 的「選項非空」規則改成「有字或有座標」。列表對這種選項顯示「(圖片)」。
 - **克漏字空格**：AI 必須把文章內的印刷空格（`__40__`、`___(40)___`、`(40)` …）**依閱讀順序重寫成 `{{1}}`…`{{k}}`**（`blanks_renumbered`），每個小題回對應的 `blank`。前端只在「每題都有 blank、不重複、且集合等於文章空格集合」時採用；否則整批改依閱讀順序補配（文章第 i 個空格 ↔ 第 i 題，`matchClozeBlanks`），多出來的小題 `blank_index` 留 `null` 交既有驗證提示。閱讀題組若意外拿到 `{{n}}`，前端轉回底線 `____`（避免 `assert_no_cloze_blanks` 422）。
 - **裁圖在前端**：所有 box 攤平成一批交給 `cropImageFileMany`（原圖只解碼一次），再循序上傳（`uploadCroppedBoxes`）。單張裁切或上傳失敗只讓那個位置變 `null`，不中斷其他張，老師可在卡片上換圖。
-- **PDF 不能裁圖**（前端沒有 pdf.js）：文字與空格照常擷取，圖片全部略過並 toast 提示手動補圖。
+- **PDF 不能裁圖**（前端沒有 pdf.js）：文字與空格照常擷取，圖片全部略過並 toast 提示手動補圖。這是現有「上傳圖片擷取」的行為，#1112 不改；「上傳題本」在前端先把 PDF 逐頁轉成圖片，所以可以裁圖。
 
 #### 題組端點與列表（#1082）
 
@@ -156,7 +160,7 @@
 | speaker_label | varchar(50) | `Man` / `Woman` / `Narrator` / 角色名 |
 | transcript | text NOT NULL | 該段文字；TTS 來源，老師示範卷逐段顯示 |
 | audio_url | text | 該段音檔（TTS 生成或上傳） |
-| tts_voice | varchar(100) | 該角色語音 id（沿用 `backend/utils/ttsVoiceResolver.py`） |
+| tts_voice | varchar(100) | 該角色語音 id。#1112 起存 AI 替角色挑的 Gemini 預設聲音名（同角色全程同聲） |
 | pause_after_ms | int default 0 | 段後停頓 |
 
 `UNIQUE (group_id, order_index)`
@@ -230,7 +234,22 @@
 
 兩者皆 NULL = 平台公用。可見範圍 = 平台公用 + 所屬機構 + 自己建的；`POST /api/question-bank/sources` 同名同型別回既有那筆。
 
-`question_source_links (question_id, source_id)` 多對多。
+`question_source_links` — 題目 ↔ 來源（多對多）：
+
+| 欄位 | 說明 |
+|------|------|
+| question_id | FK questions |
+| source_id | FK question_sources |
+| source_question_no | varchar(20), nullable（#1112 新增，冪等 migration）：這一題在該份原卷上印的題號，例如 "12"、"40" |
+| created_at | |
+| PK (question_id, source_id) | |
+
+原卷題號規則（#1112）：
+- **記在小題或單題上**。同一題屬於多份考卷，每份各記一筆、各記一個題號。
+- **題組沒有自己的來源連結**；題組的題號範圍由小題推算。以圖為準題組的題號也記在小題上，沒有小題就不記。
+- 克漏字 `blank_index` 維持 1..k，原卷題號只記在這個欄位。
+- 寫入時 (question_id, source_id) **已存在就只更新 `source_question_no`**，不新增第二筆。
+- 自己出題（手動加來源）時可以不填，維持 NULL。
 
 > 跟考點分開的原因：考點是「教什麼」，來源是「哪裡來」，兩者維護者與查詢方式不同，不混在同一棵樹。
 
@@ -254,6 +273,22 @@
 重複偵測時只比對 **(1) + (2)**，不含 (3)(4)，避免機構內部題目在其他情境曝光。
 
 重複偵測本期只對 `group_id IS NULL` 的單題做（比對 `normalized_stem`）；題組日後以 `passage_text` 做 trgm 相似比對。
+
+**上傳題本例外（#1112）**：匯入時只比對**老師自己的題目**（不含公開題），單題比「題目＋選項」、題組比「題組文字＋每個小題題目」（選項不同也算相同），比對前忽略空白、大小寫、標點。相同的題目預設不存。詳見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第六節。
+
+## 上傳題本（#1112）
+
+流程與畫面原則見 [`question-bank-exam-import.md`](./question-bank-exam-import.md)。新增三張表（冪等 migration；欄位名稱以 migration 為準）：
+
+| 表 | 一列代表 | 主要內容 |
+|----|----------|----------|
+| `exam_imports` | 一份上傳的題本（匯入草稿） | 老師、檔名、檔案內容雜湊（偵測重複匯入）、頁數、整份設定（年段、來源、教材、公開、口音選擇）、狀態、題數、token 總計、建立時間（未完成的保留 30 天） |
+| `exam_import_pages` | 題本的一頁 | 頁碼、狀態（處理中／完成／失敗）、頁面圖片 URL（GCS）、這一頁的題目卡 JSONB（含答案來源、老師改過的欄位清單、每題在頁面上的位置） |
+| `exam_import_usage` | 一次 AI 呼叫 | 類型（擷取／作答／考點／TTS）、模型、input／output／thinking token（分開存）、音檔秒數、估算美元 |
+
+- 用量只記錄、不扣老師額度，只在後台查；一般老師每天最多上傳 1 本，`Teacher.is_admin` 不限。
+- 放棄匯入或過期清除時，草稿、頁面圖片、匯入產生的音檔一起刪除。
+- 匯入產生的音檔是每題／每題組專屬檔案（GCS 路徑含題目或草稿 id），不共用 Azure 的 `tts/{hash}.mp3` 內容雜湊快取。
 
 ## AI 考點分析流程
 

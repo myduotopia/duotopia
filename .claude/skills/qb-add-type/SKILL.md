@@ -28,17 +28,17 @@ allowed-tools: Bash, PowerShell, Read, Write, Edit, Grep, Glob, AskUserQuestion
 
 ## 步驟 0：讀文件、確認題型規格
 
-1. 讀 `docs/design/question-bank-question-types.md`（全文）、`docs/design/question-bank-schema.md`（題組、segments、克漏字段落）、`docs/design/question-bank-layout-samples/README.md`。
+1. 讀 `docs/design/question-bank-question-types.md`（全文）、`docs/design/question-bank-schema.md`（題組、segments、克漏字、來源連結段落）、`docs/design/question-bank-exam-import.md`（上傳題本：確認畫面、重複判定、語音）、`docs/design/question-bank-layout-samples/README.md`。
 2. 決定並向使用者確認（附「目的與意義」，用畫面白話說明）：
    - 單題（`single`，走 `/questions`）還是題組（`group`，走 `/question-groups`）？
    - `question_type` 值（`QUESTION_TYPES` 已預留 `fill_in`／`listening`／`listening_image`）
-   - 照設計文件「三、現有三種題型對照表」逐列填出新題型的值：題幹可空、小題編號、新增小題方式、主圖文編輯器、題型專屬驗證、擷取模式與 `stimulus.kind`、AI 輸入、預覽、列表名稱
+   - 照設計文件「三、現有三種題型對照表」逐列填出新題型的值：題幹可空、小題編號、新增小題方式、主圖文編輯器、題型專屬驗證、擷取模式與 `stimulus.kind`、上傳題本 `exam_paper` 的題目卡 kind、原卷題號記在哪、自動語音、重複判定、AI 輸入、預覽、列表名稱
    - 需要的新素材欄位（例如題組整段音檔 `audio_url`：DB 已有，但 schema／`GroupDraft` 尚未接）
    - 驗收樣本用哪一份真實考卷題目
 
 ## 步驟 1：列檔案清單給使用者確認（未確認前不動工）
 
-照設計文件「四、加題型檢查清單」第 1～12 步，列出**這個題型實際要改的**檔案、函式與每步驗證方式（表格）。標出不用改的步驟與理由。使用者說 OK 才開始。
+照設計文件「四、加題型檢查清單」第 1～16 步，列出**這個題型實際要改的**檔案、函式與每步驗證方式（表格）。標出不用改的步驟與理由。使用者說 OK 才開始。
 
 ## 步驟 2：逐步實作
 
@@ -55,9 +55,13 @@ allowed-tools: Bash, PowerShell, Read, Write, Edit, Grep, Glob, AskUserQuestion
 | 7 列表 | `QuestionBankToolbar.tsx` `CREATE_TYPES`（`enabled: true`）、`CREATE_TYPES_ORDER`；`QuestionBankTab.tsx` `groupTypeLabel`（寫死 reading／cloze，題組題型要加） | |
 | 8 i18n | `frontend/src/i18n/locales/{zh-TW,en}/translation.json`：`questionBank.types.<type>`、`questionBank.groupTypes.<type>`、`questionBank.form.errors.*` | 兩語系同步 |
 | 9 AI | `aiDraft.ts` `toAiInputs`／`draftsEligibleForAi`；`groupDraft.ts` `unitPassageByKey`；`backend/services/question_bank_ai.py` `PASSAGE_RULE`／prompt | |
-| 10 擷取 | `backend/services/magic_paste_service.py`（`EXTRACT_MODES`、`_build_prompt`、`_normalize_reading_group`／新 normalize）；`components/shared/MagicPasteInput.tsx` 型別；`QuestionSheet.tsx` `extractMode`；`QuestionBankBatchPanel.tsx`；`extractedGroup.ts` `groupDraftFromExtracted` | 改後端需重啟本地後端才生效（先問） |
+| 10 擷取 | `backend/services/magic_paste_service.py`（`EXTRACT_MODES`、`_build_prompt`、`_normalize_reading_group`／新 normalize；上傳題本 `exam_paper` 題目卡陣列的分派與正規化）；`components/shared/MagicPasteInput.tsx` 型別；`QuestionSheet.tsx` `extractMode`；`QuestionBankBatchPanel.tsx`；`extractedGroup.ts` `groupDraftFromExtracted` | 不改動現有四種擷取模式；改後端需重啟本地後端才生效（先問） |
 | 11 樣本 | `docs/design/question-bank-layout-samples/<qNN-type>.json` + README 表格 | 測試資料用真實情境，不塞內容繞過驗證 |
-| 12 文件 | 見步驟 4 | |
+| 12 確認畫面 | 上傳題本的綜合確認畫面（新檔，不塞進 `QuestionSheet.tsx`）：顯示、題號導覽標色、編輯沿用 `QuestionCard`／`GroupCard`、與自己題庫重複的判定 | 規則見 `question-bank-exam-import.md` 第五、六節 |
+| 13 語音 | 要不要自動產生音檔、用哪個引擎（單題／小題 Azure；題組主圖文 Gemini；無文字不產生）、送 TTS 前的轉換 | 見 `question-bank-exam-import.md` 第七節 |
+| 14 標準答案 | 前後端驗證擋「沒有標準答案」；接上 AI 作答；答案頁依原卷題號回填、老師改過不覆蓋 | |
+| 15 AI 檢查／出題 | #1113、#1114 完成後支援新題型；未完成前標「不適用」 | |
+| 16 文件 | 見步驟 4 | |
 
 每步寫完同步更新改到檔案的頂部 JSDoc／docstring。
 
@@ -114,7 +118,7 @@ git diff --name-only <起點commit>..HEAD | xargs wc -l | sort -n | tail
 
 ## 步驟 4：更新設計文件
 
-- `docs/design/question-bank-question-types.md`：「核心原則」題型表加一列；「三、對照表」加一欄；「六、已知缺口」移除已補上的項目；若新題型新增了散寫判斷點，更新「五、禁止事項」的清單。
+- `docs/design/question-bank-question-types.md`：「題型總表」更新狀態；「核心原則」題型表加一列；「三、對照表」加一欄；「六、已知缺口」移除已補上的項目；若新題型新增了散寫判斷點，更新「五、禁止事項」的清單。
 - `docs/design/question-bank-schema.md`：新題型專屬規則段落（比照「克漏字題組（#1085）」）。
 - 一筆 `docs(#N): ...` commit。
 

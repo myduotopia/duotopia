@@ -16,6 +16,7 @@
 | [`score-category-mapping.md`](./score-category-mapping.md) | 作業計分類別（口說／閱讀／寫作／聽力）的判定對照表 |
 | [`question-bank-question-types.md`](./question-bank-question-types.md) | 題庫新增題型：同一個 sheet 依題型分流，附加題型檢查清單 |
 | [`question-bank-schema.md`](./question-bank-schema.md) | 題庫資料表設計與定案 |
+| [`question-bank-exam-import.md`](./question-bank-exam-import.md) | 題庫「上傳題本」：上傳畫面、逐頁處理與續做、綜合確認畫面、重複題、答案來源、題組語音、用量記錄 |
 | [`preview-architecture.md`](./preview-architecture.md) | 派發預覽直接用學生端 Activity 元件；改 Activity 要驗證預覽 |
 | [`quiz-scoring-methods.md`](./quiz-scoring-methods.md) | 打字類小考的評分方式（依單字／字母比例扣分、大小寫） |
 | [`question-bank-layout-samples/`](./question-bank-layout-samples/README.md) | 題型驗收樣本：題庫題組 layout 的 JSON 樣本（`question-bank-question-types.md` 引用） |
