@@ -5,6 +5,21 @@ import { vi } from "vitest";
 // Mock fetch globally
 global.fetch = vi.fn();
 
+// jsdom 沒有實作捲動 API。情境對話的對話式作答畫面（#1133）會在
+// requestAnimationFrame 裡呼叫 el.scrollTo 把訊息捲到底，jsdom 下會丟
+// "el.scrollTo is not a function" —— 而且是在 rAF callback 裡丟，不會讓某一條測試
+// 變紅，是變成 vitest 的 unhandled error（CI 照樣 exit 1，但所有測試都顯示 passed，
+// 很容易誤判成通過）。
+//
+// 補成 no-op 而不是在個別測試裡 stub：jsdom 本來就不會捲動，這是環境缺口不是程式問題，
+// 之後任何渲染到這個元件的測試都會踩到。
+if (!Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = () => {};
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 // Mock window.matchMedia for responsive components
 Object.defineProperty(window, "matchMedia", {
   writable: true,
