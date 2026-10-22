@@ -113,6 +113,17 @@ async def scenario_dialogue_feedback(
     # 403「老師已判定通過」優先於 429「次數用完」—— 前者是更清楚的理由
     check_can_analyze(progress)
 
+    # 評分依據一律由 utils.scenario_dialogue 組出 —— 題目、參考答案、必用字詞、
+    # 生效時態語態、整份作答指引的形狀只能有一處（與老師端同源）。
+    criteria = sd.grading_criteria(
+        item.text or "",
+        sd.read_item_block(item.item_metadata),
+        content.scenario_settings,
+    )
+
+    recording_url = progress.recording_url
+    progress_id = progress.id
+
     # 原子地領一次額度。領不到＝這一題已經用到上限（並行時也只有 3 個領得到），
     # 直接 429，一個 token 都不花。見檔頭「先領額度再打 AI」。
     count = reserve_analysis_slot(progress, db)
@@ -131,14 +142,6 @@ async def scenario_dialogue_feedback(
         )
     db.commit()
 
-    # 評分依據一律由 utils.scenario_dialogue 組出 —— 題目、參考答案、必用字詞、
-    # 生效時態語態、整份作答指引的形狀只能有一處（與老師端同源）。
-    criteria = sd.grading_criteria(
-        item.text or "",
-        sd.read_item_block(item.item_metadata),
-        content.scenario_settings,
-    )
-
     service = get_scenario_student_feedback_service()
     # 沒有成功拿到建議就要把剛領的額度還回去。用 try/finally 而不是在每個 except 裡
     # 退款，是因為 **asyncio.CancelledError 是 BaseException**：學生等 Gemini 的時候
@@ -147,7 +150,7 @@ async def scenario_dialogue_feedback(
     used = False
     try:
         result = await service.generate(
-            recording_url=progress.recording_url,
+            recording_url=recording_url,
             criteria=criteria,
             ui_language=payload.ui_language or "zh-TW",
         )
@@ -158,7 +161,7 @@ async def scenario_dialogue_feedback(
     except Exception:
         # AI 爆掉（模型回了垃圾、Vertex 超時、音檔抓不到…）是我們的問題：
         # 收成 503 讓前端顯示「請再試一次」，不要把 traceback 丟到學生畫面上。
-        logger.exception("scenario student feedback failed | progress=%s", progress.id)
+        logger.exception("scenario student feedback failed | progress=%s", progress_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI 暫時無法給建議，請再試一次",
@@ -170,9 +173,13 @@ async def scenario_dialogue_feedback(
             #
             # 競態：AI 跑的期間若老師把作業退回重做（計數歸零），這一退可能多退新一輪
             # 的一次。機率極低、方向對學生有利，不另外處理。
-            db.rollback()
-            refund_analysis_slot(progress, db)
-            db.commit()
+            # 退款失敗不能蓋掉原本的 503/400，只留 log 供人工補償。
+            try:
+                db.rollback()
+                refund_analysis_slot(progress, db)
+                db.commit()
+            except Exception:
+                logger.exception("refund failed | progress=%s", progress_id)
 
     # **白名單輸出**：service 回的東西還帶著 usage／成本，模型有時也會自己多塞分數或
     # 把參考答案抄回來。學生那一側只拿這三個欄位加配額資訊。
