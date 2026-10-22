@@ -3,97 +3,82 @@
  *
  * ⚠️ 改動前必讀：`docs/design/preview-architecture.md`
  *
- * ## 為什麼是這條路徑
+ * ## 這一版改成對話式 UI（#1140 Stage 2）
  *
- * 那份 doc 列了兩種預覽做法。情境對話只能走「ByContent」這一種：
+ * #1132 這支預覽原本塞 `StudentActivityPageContent`（當時學生端走
+ * `GroupedQuestionsTemplate`）。#1133／PR #1138 做出了情境對話專屬的訊息對話式
+ * 作答畫面，學生端也會換過去（Stage 3），所以預覽先換 —— 預覽的全部意義是
+ * 「老師看到的＝學生會看到的」，兩邊不同步就等於沒有預覽。
  *
- * * **demo 路徑不可行** —— 沒有公開的 demo 情境對話作業可借，而且 demo 路徑的設定來自
- *   demo 作業自己存的值，不會跟著老師當下調的 toggle 變。
- * * **previewItems 路徑不適用** —— 情境對話的學生畫面不是獨立 Activity 元件，而是
- *   `StudentActivityPageContent` 裡複用 `GroupedQuestionsTemplate` 再加上情境區塊
- *   （#1031），餵題目的入口就是整個 Activity 物件。
+ * 用的是學生端**同一個元件** `ScenarioChatActivity`，不另做一份 mock UI，與那份
+ * doc 的方案選擇一致。
  *
- * 所以做法同 `ReadingPreview` 的 ByContent 分支：抓老師端 content detail，組成學生端
- * 的 `Activity`，交給學生元件自己渲染 —— 老師看到的就是學生會看到的那個元件。
+ * ## 預覽不打 AI
+ *
+ * `getFeedback` 回的是一則**明確標示為預覽**的訊息，不呼叫 Stage 1 的端點：
+ *
+ * * 預覽不該扣老師點數（preview-architecture.md 的既有規則）；
+ * * 預覽裡沒有學生的錄音可以評 —— 老師是在看流程長什麼樣子。
+ *
+ * 刻意**不給假分數**（`ScenarioFeedback.score` 留空）。設計稿的預覽模式會顯示 mock
+ * 分數，那是設計稿在示意；真實預覽給老師一個假分數，他在批改頁看到的又是另一個真
+ * 分數，只會互相干擾。建議說法則用老師自己寫的參考答案 —— 那是他寫的，給他看合理。
  *
  * ## 沒有「未選教材」的 fallback
  *
- * 單字類模式在購物車為空時會借一份示範單字集（`PREVIEW_VOCAB_CONTENT_ID`）。情境對話
- * 不行：它只吃自己的資料集（`practiceMode.ts` 的 `supportedDatasets`），借單字集來預覽
- * 等於顯示一個永遠派不出去的畫面。缺 `contentId` 就說明原因。
+ * 情境對話只吃自己的資料集（`practiceMode.ts` 的 `supportedDatasets`），借示範單字集
+ * 來預覽等於顯示一個永遠派不出去的畫面。缺 `contentId` 就說明原因。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
+import { speakEnglish } from "@/utils/speakEnglish";
 import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
-import StudentActivityPageContent, {
-  type Activity,
-} from "@/pages/student/StudentActivityPageContent";
+import { ScenarioChatActivity } from "./scenario-dialogue/ScenarioChatActivity";
+import {
+  scenarioChatFromTeacherContent,
+  scenarioChatSettings,
+} from "./scenario-dialogue/fromApi";
+import type {
+  ScenarioChatAdapters,
+  ScenarioChatItem,
+  ScenarioFeedback,
+} from "./scenario-dialogue/types";
 
 const PM = "dialogs.assignmentDialog.practiceMode";
 
 export interface ScenarioDialoguePreviewProps {
   /** 購物車第一筆情境對話教材；沒有就無法預覽（見檔頭說明）。 */
   contentId?: number;
-  /** 老師當下調的每題秒數，預覽即時跟著變。 */
-  timeLimitPerQuestion?: number;
   /** 老師當下調的「顯示題目翻譯」開關。 */
   showTranslation?: boolean;
 }
 
 /**
- * 老師端 content detail → 學生端 `Activity`。
+ * 預覽模式下那一則「建議」。**不呼叫 AI** —— 預覽不扣老師點數，而且預覽裡根本沒有
+ * 學生的錄音可以評，老師是在看流程長什麼樣子。
  *
- * **只帶學生端真的會看到的欄位**，理由與後端 `utils/scenario_dialogue.public_item_view`
- * ／`public_settings_view` 一致：老師端端點會回 `reference_answer`（給 AI 當語言特徵
- * 對照）與 `image_prompt`（內部生圖用），學生看到就變成照著唸。預覽共用的是學生元件
- * 本身，所以這一步得畫同一條界線 —— 不然哪天學生元件多渲染一個欄位，預覽就漏了。
+ * * `comment` 明確標示是預覽，不假裝是 AI 說的話；
+ * * `suggestion` 用老師**自己寫的參考答案**（他寫的，給他看合理）；沒寫就留空，
+ *   不要憑空生一句；
+ * * **不給分數**。設計稿的預覽模式顯示 mock 分數是在示意；真實預覽給老師一個假分數，
+ *   他在批改頁看到的又是另一個真分數，只會互相干擾。
  *
- * 逐題的 `tense` / `voice` 刻意不帶：「沿用整體」的解析規則唯一判定處在後端
- * （`resolve_effective_tense` / `resolve_effective_voice`），前端不複製一份；而學生畫面
- * 本來就不顯示這兩個，少帶不會有視覺差異。
- *
- * 匯出給測試用（整個學生頁太重，不適合在這一層渲染驗證）。
+ * 抽成純函式是為了驗得到 —— 包在 useCallback 裡的話，上面這三條都沒有測試能守。
  */
-export function buildScenarioPreviewActivity(
-  detail: ScenarioContentDetail,
-): Activity {
-  const settings = detail.scenario_settings || {};
+export function buildPreviewFeedback(
+  item: Pick<ScenarioChatItem, "referenceAnswer">,
+  comment: string,
+): ScenarioFeedback {
   return {
-    id: 0,
-    content_id: detail.id ?? 0,
-    order: 1,
-    type: "SCENARIO_DIALOGUE",
-    title: detail.title ?? "",
-    content: "",
-    target_text: "",
-    duration: 0,
-    points: 100,
-    status: "NOT_STARTED",
-    score: null,
-    completed_at: null,
-    // 空題目不自己濾掉：學生端後端對情境對話是原樣回傳，濾掉會讓預覽與實際題數不一致
-    items: (detail.items ?? []).map((item) => ({
-      id: item.id,
-      text: item.text ?? "",
-      translation: item.translation ?? "",
-      audio_url: item.audio_url ?? undefined,
-      scenario_dialogue: {
-        keywords: [...(item.scenario_dialogue?.keywords ?? [])],
-        rubric_note: item.scenario_dialogue?.rubric_note ?? "",
-      },
-    })),
-    scenario_settings: {
-      scenario_content: settings.scenario_content ?? "",
-      global_rubric: settings.global_rubric ?? "",
-      translate_language: settings.translate_language ?? "",
-    },
+    verdict: "improve",
+    comment,
+    suggestion: item.referenceAnswer || undefined,
   };
 }
 
 export default function ScenarioDialoguePreview({
   contentId,
-  timeLimitPerQuestion,
   showTranslation,
 }: ScenarioDialoguePreviewProps) {
   const { t } = useTranslation();
@@ -126,9 +111,45 @@ export default function ScenarioDialoguePreview({
     };
   }, [contentId]);
 
-  const activity = useMemo(
-    () => (detail ? buildScenarioPreviewActivity(detail) : null),
+  // 老師預覽帶參考答案（他自己寫的示範回答），學生端那條路徑不會帶
+  const chat = useMemo(
+    () =>
+      detail
+        ? scenarioChatFromTeacherContent(detail, { withReferenceAnswer: true })
+        : null,
     [detail],
+  );
+
+  const previewComment = t(`${PM}.scenarioPreviewFeedback`);
+
+  const getFeedback = useCallback(
+    (item: ScenarioChatItem): Promise<ScenarioFeedback> =>
+      Promise.resolve(buildPreviewFeedback(item, previewComment)),
+    [previewComment],
+  );
+
+  const adapters = useMemo<ScenarioChatAdapters>(
+    () => ({
+      getFeedback,
+      speak: (text: string) => {
+        speakEnglish(text);
+      },
+      stopSpeech: () => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+      },
+    }),
+    [getFeedback],
+  );
+
+  const settings = useMemo(
+    () =>
+      scenarioChatSettings({
+        showTranslation: showTranslation ?? true,
+        isPreviewMode: true,
+      }),
+    [showTranslation],
   );
 
   if (contentId == null) {
@@ -137,7 +158,7 @@ export default function ScenarioDialoguePreview({
   if (loading) {
     return <PreviewNote text={t(`${PM}.previewLoading`)} />;
   }
-  if (error || !activity) {
+  if (error || !chat) {
     return (
       <PreviewNote
         text={`${t(`${PM}.previewLoadFailed`)}${error ? `：${error}` : ""}`}
@@ -145,24 +166,17 @@ export default function ScenarioDialoguePreview({
       />
     );
   }
-  if ((activity.items ?? []).length === 0) {
+  if (chat.items.length === 0) {
     return <PreviewNote text={t(`${PM}.scenarioPreviewEmpty`)} />;
   }
 
   return (
-    <StudentActivityPageContent
-      activities={[activity]}
-      assignmentTitle={activity.title}
-      assignmentId={0}
-      practiceMode="scenario_dialogue"
-      showTranslation={showTranslation ?? true}
-      timeLimitPerQuestion={timeLimitPerQuestion ?? 0}
-      isDemoMode={true}
-      isPreviewMode={true}
-      // 預覽不打 AI 分析端點（不扣老師點數）；情境對話的學生端本來也不跑發音評測
-      canUseAiAnalysis={false}
-      onBack={() => {}}
-      onSubmit={async () => {}}
+    <ScenarioChatActivity
+      context={chat.context}
+      items={chat.items}
+      settings={settings}
+      adapters={adapters}
+      onSubmit={() => {}}
     />
   );
 }
