@@ -1921,6 +1921,7 @@
         "previewLoadFailed": "Failed to load preview",
         "scenarioPreviewNeedsContent": "Select a scenario dialogue material to preview",
         "scenarioPreviewEmpty": "This material has no questions to preview",
+        "scenarioPreviewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
         "selectModePrompt": "Select a mode to see the preview",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",

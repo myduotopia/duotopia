@@ -207,10 +207,13 @@ export const DISPATCH_PREVIEW: Partial<
   ),
   // 刻意不吃 vocabFallbackContentId：情境對話只吃自己的資料集，借示範單字集來預覽
   // 等於顯示一個永遠派不出去的畫面（見 ScenarioDialoguePreview 檔頭）。
+  //
+  // #1140 Stage 2: 不傳 time_limit_per_question —— 對話式 UI 目前沒有倒數計時，
+  // 傳進去也不會有人用。這是已知缺口（要嘛在對話 UI 做倒數，要嘛把這個設定從
+  // 情境對話的 settings 移掉），記在 #1140，不在這裡假裝有在用。
   scenario_dialogue: ({ contentId, settings }) => (
     <ScenarioDialoguePreview
       contentId={contentId}
-      timeLimitPerQuestion={settings.time_limit_per_question}
       showTranslation={settings.show_translation}
     />
   ),

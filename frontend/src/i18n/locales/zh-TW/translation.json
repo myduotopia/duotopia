@@ -2065,6 +2065,7 @@
         "previewLoadFailed": "預覽載入失敗",
         "scenarioPreviewNeedsContent": "請先選擇要派發的情境對話教材",
         "scenarioPreviewEmpty": "此教材沒有題目可預覽",
+        "scenarioPreviewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
         "selectModePrompt": "選擇一個模式查看預覽",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
