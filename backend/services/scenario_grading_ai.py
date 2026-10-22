@@ -145,6 +145,34 @@ def mime_type_for_recording(url: Optional[str]) -> str:
     return EXTENSION_TO_MIME.get(ext.lower(), _DEFAULT_MIME)
 
 
+async def build_audio_part(recording_url: str, mime_type: str) -> Any:
+    """把錄音變成 Gemini 的 Part。
+
+    GCS 上的檔案用 ``from_uri`` 直接引用（不必下載，省頻寬也省記憶體）；本機開發
+    把錄音存在自己的 static 目錄，只能抓下來用 ``from_data``。
+
+    下載走 ``asyncio.to_thread``：requests 是同步的，直接在 async 路徑上呼叫會把
+    整個 event loop 卡住最長 30 秒（timeout），同一個 process 上其他請求全部跟著
+    停。production 走 GCS 那條不下載，但本機開發與未來的非 GCS 來源會踩到。
+
+    放在模組層是因為學生端的逐題建議（`scenario_student_feedback_ai`，#1140）要用
+    同一段管線。上面那個「同步 requests 會卡住 event loop」的陷阱不可以被複製一份。
+    """
+    from vertexai.generative_models import Part
+
+    gcs_uri = to_gcs_uri(recording_url)
+    if gcs_uri:
+        return Part.from_uri(gcs_uri, mime_type=mime_type)
+
+    import asyncio
+
+    import requests
+
+    response = await asyncio.to_thread(requests.get, recording_url, timeout=30)
+    response.raise_for_status()
+    return Part.from_data(data=response.content, mime_type=mime_type)
+
+
 def _describe_tense(tense: Optional[Dict[str, str]]) -> str:
     """時態穩定代碼 → 英文描述。時間與動貌都要有才算指定（同前端 isTenseSet）。"""
     if not isinstance(tense, dict):
@@ -333,28 +361,8 @@ class ScenarioGradingService:
 
     @classmethod
     async def _audio_part(cls, recording_url: str, mime_type: str) -> Any:
-        """把錄音變成 Gemini 的 Part。
-
-        GCS 上的檔案用 ``from_uri`` 直接引用（不必下載，省頻寬也省記憶體）；本機開發
-        把錄音存在自己的 static 目錄，只能抓下來用 ``from_data``。
-
-        下載走 ``asyncio.to_thread``：requests 是同步的，直接在 async 路徑上呼叫會把
-        整個 event loop 卡住最長 30 秒（timeout），同一個 process 上其他請求全部跟著
-        停。production 走 GCS 那條不下載，但本機開發與未來的非 GCS 來源會踩到。
-        """
-        from vertexai.generative_models import Part
-
-        gcs_uri = to_gcs_uri(recording_url)
-        if gcs_uri:
-            return Part.from_uri(gcs_uri, mime_type=mime_type)
-
-        import asyncio
-
-        import requests
-
-        response = await asyncio.to_thread(requests.get, recording_url, timeout=30)
-        response.raise_for_status()
-        return Part.from_data(data=response.content, mime_type=mime_type)
+        """保留原本的呼叫方式；實作搬到模組層的 :func:`build_audio_part`。"""
+        return await build_audio_part(recording_url, mime_type)
 
     async def grade(
         self,
