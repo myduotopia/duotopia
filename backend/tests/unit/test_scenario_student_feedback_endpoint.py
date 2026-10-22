@@ -499,3 +499,42 @@ class TestClassroomVisibility:
 
         assert resp.status_code == 403
         spy.assert_not_awaited()
+
+
+class TestCancellationRefunds:
+    """`finally` 退款就是為了取消而存在的（`CancelledError` 是 BaseException）。
+
+    沒有這條測試，有人把 `finally` 改回 `except Exception` 也不會有任何訊號 ——
+    review R3 指出的缺口。
+    """
+
+    def test_cancelled_request_gives_the_slot_back(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        import asyncio
+
+        with patch(PATCH_TARGET, new=AsyncMock(side_effect=asyncio.CancelledError())):
+            with pytest.raises(BaseException):  # noqa: B017
+                _post(test_client, world)
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 0
+
+
+class TestQuotaExhaustedBodyShape:
+    """429 的 body 形狀是前端（Stage 3）要讀的，鎖住它。"""
+
+    def test_429_body(self, test_client: TestClient, db_session: Session, world):
+        from services.analysis_quota import MAX_AI_ANALYSIS_ATTEMPTS
+
+        world["progress"].ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
+        db_session.commit()
+
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            resp = _post(test_client, world)
+
+        assert resp.status_code == 429
+        detail = resp.json()["detail"]
+        assert detail["code"] == "AI_ANALYSIS_QUOTA_EXCEEDED"
+        assert detail["ai_analysis_remaining"] == 0
+        assert detail["max_attempts"] == MAX_AI_ANALYSIS_ATTEMPTS

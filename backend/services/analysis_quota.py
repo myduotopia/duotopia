@@ -126,8 +126,12 @@ def reserve_analysis_slot(progress: StudentItemProgress, db: Session) -> Optiona
         )
     )
     if rows == 0:
-        # 沒領到：別人已經把這一題用到上限。把記憶體物件對齊真相後讓呼叫端回 429。
-        progress.ai_analysis_count = MAX_AI_ANALYSIS_ATTEMPTS
+        # 沒領到：別人已經把這一題用到上限。
+        #
+        # **刻意不寫記憶體物件**（原本這裡會設成 MAX）。那會讓 ORM 物件變 dirty，
+        # 接下來任何一次 commit 都可能 flush 出 `SET ai_analysis_count = 3` ——
+        # 若老師剛好在這之間把作業退回重做（計數歸零），那次 flush 就會把歸零蓋掉。
+        # 視窗極小，但這條路徑本來就不需要寫任何東西（PR #1141 review R3）。
         return None
     return int(progress.ai_analysis_count)
 

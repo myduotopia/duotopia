@@ -117,7 +117,8 @@ async def scenario_dialogue_feedback(
     # 直接 429，一個 token 都不花。見檔頭「先領額度再打 AI」。
     count = reserve_analysis_slot(progress, db)
     if count is None:
-        db.commit()
+        # 領不到就什麼都不要留下 —— rollback 而不是 commit（review R3）
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
