@@ -29,21 +29,16 @@
  * 情境對話只吃自己的資料集（`practiceMode.ts` 的 `supportedDatasets`），借示範單字集
  * 來預覽等於顯示一個永遠派不出去的畫面。缺 `contentId` 就說明原因。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
-import { speakEnglish } from "@/utils/speakEnglish";
 import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
 import { ScenarioChatActivity } from "./scenario-dialogue/ScenarioChatActivity";
 import {
   scenarioChatFromTeacherContent,
   scenarioChatSettings,
 } from "./scenario-dialogue/fromApi";
-import type {
-  ScenarioChatAdapters,
-  ScenarioChatItem,
-  ScenarioFeedback,
-} from "./scenario-dialogue/types";
+import { createPreviewScenarioAdapters } from "./scenario-dialogue/studentAdapters";
 
 const PM = "dialogs.assignmentDialog.practiceMode";
 
@@ -52,29 +47,6 @@ export interface ScenarioDialoguePreviewProps {
   contentId?: number;
   /** 老師當下調的「顯示題目翻譯」開關。 */
   showTranslation?: boolean;
-}
-
-/**
- * 預覽模式下那一則「建議」。**不呼叫 AI** —— 預覽不扣老師點數，而且預覽裡根本沒有
- * 學生的錄音可以評，老師是在看流程長什麼樣子。
- *
- * * `comment` 明確標示是預覽，不假裝是 AI 說的話；
- * * `suggestion` 用老師**自己寫的參考答案**（他寫的，給他看合理）；沒寫就留空，
- *   不要憑空生一句；
- * * **不給分數**。設計稿的預覽模式顯示 mock 分數是在示意；真實預覽給老師一個假分數，
- *   他在批改頁看到的又是另一個真分數，只會互相干擾。
- *
- * 抽成純函式是為了驗得到 —— 包在 useCallback 裡的話，上面這三條都沒有測試能守。
- */
-export function buildPreviewFeedback(
-  item: Pick<ScenarioChatItem, "referenceAnswer">,
-  comment: string,
-): ScenarioFeedback {
-  return {
-    verdict: "improve",
-    comment,
-    suggestion: item.referenceAnswer || undefined,
-  };
 }
 
 export default function ScenarioDialoguePreview({
@@ -120,27 +92,12 @@ export default function ScenarioDialoguePreview({
     [detail],
   );
 
+  // 預覽用的 adapters 與學生頁（老師預覽真實作業那條）共用同一個工廠 ——
+  // 「預覽不打 AI、不扣點數」只能有一份實作，兩份一定會漂移。
   const previewComment = t(`${PM}.scenarioPreviewFeedback`);
-
-  const getFeedback = useCallback(
-    (item: ScenarioChatItem): Promise<ScenarioFeedback> =>
-      Promise.resolve(buildPreviewFeedback(item, previewComment)),
+  const adapters = useMemo(
+    () => createPreviewScenarioAdapters(previewComment),
     [previewComment],
-  );
-
-  const adapters = useMemo<ScenarioChatAdapters>(
-    () => ({
-      getFeedback,
-      speak: (text: string) => {
-        speakEnglish(text);
-      },
-      stopSpeech: () => {
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-        }
-      },
-    }),
-    [getFeedback],
   );
 
   const settings = useMemo(

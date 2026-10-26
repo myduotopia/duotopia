@@ -5045,6 +5045,9 @@
     "tenseCombo": "{{time}} {{aspect}}",
     "chat": {
       "typing": "AI is typing",
+      "previewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
+      "quotaExhausted": "You've used all the AI feedback for this question. You can still answer the next one.",
+      "feedbackFailed": "AI feedback is unavailable right now. Please try again.",
       "questionImages": "Question images",
       "questionNo": "Question {{no}} / {{total}}",
       "skipped": "Skipped",
