@@ -281,6 +281,15 @@ const RECORDING_REQUIRED_TYPES = new Set([
   "SPEAKING",
 ]);
 
+// ⚠️ **不要把 SCENARIO_DIALOGUE 加進上面那個 set。**
+//
+// 學生確實是開口錄音作答，所以加進去看起來「明顯正確」—— 但 handleSubmit 的逐題檢查
+// 讀的是 `activities` state 裡的 `item.recording_url`，而情境對話的錄音是在
+// `studentAdapters` 裡上傳的（#1140 Stage 3），**不會回寫那份 state**。一加進去，
+// 送出時就會把每一題都列成「尚未錄音」。
+//
+// 真正要擋「沒答完就送出」的話，得讓對話式畫面把已完成的題目回報上來，而不是改這個 set。
+
 // 單字集搭配需要錄音的練習模式：
 // - reading       → 朗讀單字的例句
 // - word_reading  → 單字朗讀
@@ -384,6 +393,9 @@ export default function StudentActivityPageContent({
     () =>
       // 預覽（老師看真實作業、demo）**一定要用不碰網路的那組**：學生版會拿老師的
       // token 去打學生專用端點（401／403），還會寫 StudentItemProgress、動到配額。
+      //
+      // demo 用預覽版 adapters，但 settings 的 isPreviewMode 仍是 false —— 這是刻意的：
+      // demo 的訪客不該看到「預覽模式」那個給老師看的標示，但同樣不能打 AI。
       isPreviewMode || isDemoMode
         ? createPreviewScenarioAdapters(
             t("scenarioDialogue.chat.previewFeedback"),

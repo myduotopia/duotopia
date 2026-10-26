@@ -13,6 +13,10 @@
  * 上傳沿用既有的 `appendAudioToFormData`（處理各瀏覽器的音檔格式）與
  * `retryAudioUpload`（網路抖動重試），不自己寫一份。
  *
+ * **每次重答都會重新上傳**，這是刻意的：上傳端點對同一個 (assignment, content_item)
+ * 是覆寫 `recording_url`，所以最後留在伺服器上的就是學生最後那一次 —— 而那正是批改頁
+ * 要看的那一份。配額**只由建議端點計數**，所以重複上傳不會多扣次數。
+ *
  * ## 配額用完（429）不能讓學生卡住
  *
  * `useScenarioChat` 對 `getFeedback` 的 reject 會「還原狀態讓學生重新作答」。那對
@@ -136,6 +140,23 @@ export function isQuotaExhausted(error: unknown): boolean {
 }
 
 /**
+ * 朗讀：兩組 adapters 共用一份。
+ *
+ * 用既有的 `utils/speakEnglish`（#674 專門處理「中文系統語言會把 I 唸成 Capital I」）。
+ * 設計稿另外寫了一份簡化版，正式路徑不用那一份 —— 這個行為只能有一處實作。
+ */
+const speechAdapters = {
+  speak: (text: string) => {
+    speakEnglish(text);
+  },
+  stopSpeech: () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  },
+};
+
+/**
  * 預覽用的 adapters：**完全不碰網路**。
  *
  * 老師預覽有兩條路徑都會走到對話式畫面：
@@ -164,14 +185,7 @@ export function createPreviewScenarioAdapters(
         comment,
         suggestion: item.referenceAnswer || undefined,
       }),
-    speak: (text: string) => {
-      speakEnglish(text);
-    },
-    stopSpeech: () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-    },
+    ...speechAdapters,
   };
 }
 
@@ -217,15 +231,6 @@ export function createStudentScenarioAdapters({
       }
     },
 
-    // 既有的 production helper（#674 處理「中文系統語言會把 I 唸成 Capital I」）。
-    // 設計稿自己寫了一份簡化版，正式路徑不用那一份。
-    speak: (text: string) => {
-      speakEnglish(text);
-    },
-    stopSpeech: () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-    },
+    ...speechAdapters,
   };
 }
