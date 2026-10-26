@@ -422,8 +422,15 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: false,
     autoGraded: false,
     gradable: true,
-    settings: [SELECT_TIME_READING, TOGGLE_SHOW_TRANSLATION],
-    defaults: { time_limit_per_question: 30 },
+    // #1140 Stage 3: **刻意沒有每題時間限制**。
+    //
+    // 對話式作答畫面（#1133）沒有倒數計時（ScenarioChatSettings 沒有這個欄位，
+    // ReplyComposer／AudioRecorderChatControls 也沒有），留著 SELECT_TIME_READING
+    // 等於讓老師調一個完全沒有作用的設定 —— 對老師說謊比少一個設定糟。
+    //
+    // 要開放限時得先在對話 UI 做倒數（CountdownRing 已有現成元件），那是獨立的一張單。
+    settings: [TOGGLE_SHOW_TRANSLATION],
+    defaults: {},
     chipTitleKey: `${PM}.scenario_dialogue`,
     chipDescKey: `${PM}.scenario_dialogueDesc`,
     chipSelectedClass: "border-purple-500 bg-purple-50 text-purple-700",

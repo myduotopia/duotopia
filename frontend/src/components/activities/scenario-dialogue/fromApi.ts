@@ -142,3 +142,67 @@ export function scenarioChatFromTeacherContent(
 
   return { context, items };
 }
+
+/** 學生端作業 payload 裡本題型用得到的部分（`StudentActivityPageContent` 的 Activity）。 */
+export interface ScenarioStudentActivity {
+  title?: string | null;
+  scenario_settings?: {
+    scenario_content?: string | null;
+    global_rubric?: string | null;
+    translate_language?: string | null;
+  } | null;
+  items?: Array<{
+    id?: number;
+    text?: string | null;
+    translation?: string | null;
+    image_url?: string | null;
+    scenario_dialogue?: {
+      keywords?: string[];
+      rubric_note?: string;
+    } | null;
+  }> | null;
+}
+
+/**
+ * 學生端作業 payload → 對話式 UI 的 context／items。
+ *
+ * 與 :func:`scenarioChatFromTeacherContent` 是一對，差別只在資料界線：這一側的
+ * `reference_answer` / `image_prompt` **後端就已經濾掉了**（`public_item_view`），
+ * 所以這裡連「要不要帶」都不用選 —— 沒得帶。
+ *
+ * 逐欄白名單的理由同另一支：payload 之後若多了欄位，不會因為一次物件展開就跟著
+ * 流進畫面資料裡。
+ */
+export function scenarioChatFromStudentActivity(
+  activity: ScenarioStudentActivity,
+): ScenarioChatData {
+  const settings = activity.scenario_settings || {};
+  const translationLanguage = text(settings.translate_language);
+
+  const context: ScenarioChatContext = {
+    title: text(activity.title),
+    content: text(settings.scenario_content),
+    // 見檔頭：後端還沒有情境配圖欄位
+    images: [],
+    rubric: text(settings.global_rubric),
+  };
+
+  const items: ScenarioChatItem[] = (activity.items ?? []).map(
+    (item, index) => {
+      const block = item.scenario_dialogue || {};
+      const rubricNote = text(block.rubric_note);
+      const imageUrl = text(item.image_url);
+      return {
+        id: item.id ?? `idx-${index}`,
+        text: text(item.text),
+        translation: text(item.translation) || undefined,
+        translationLanguage: translationLanguage || undefined,
+        keywords: [...(block.keywords ?? [])],
+        rubricNote: rubricNote || undefined,
+        images: imageUrl ? [{ src: imageUrl, alt: imageAlt(index + 1) }] : [],
+      };
+    },
+  );
+
+  return { context, items };
+}

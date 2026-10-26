@@ -9,7 +9,10 @@
  * 2. **題數不自己增減**。預覽看到 3 題、學生實際拿到 4 題是最難追的那種 bug。
  */
 import { describe, it, expect } from "vitest";
-import { scenarioChatFromTeacherContent } from "../fromApi";
+import {
+  scenarioChatFromStudentActivity,
+  scenarioChatFromTeacherContent,
+} from "../fromApi";
 import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
 
 const detail: ScenarioContentDetail = {
@@ -171,5 +174,89 @@ describe("scenarioChatFromTeacherContent", () => {
     const alt = items[0].images[0].alt ?? "";
     expect(alt).not.toMatch(/^\d+$/);
     expect(alt).toContain("1");
+  });
+});
+
+describe("scenarioChatFromStudentActivity", () => {
+  const activity = {
+    title: "週末計畫",
+    scenario_settings: {
+      scenario_content: "你和朋友在討論這個週末要做什麼。",
+      global_rubric: "請用完整句子回答。",
+      translate_language: "chinese",
+    },
+    items: [
+      {
+        id: 9001,
+        text: "What did you do last weekend?",
+        translation: "你上週末做了什麼？",
+        image_url: "https://example.com/q1.jpg",
+        scenario_dialogue: { keywords: ["went"], rubric_note: "要用過去式" },
+      },
+      {
+        id: 9002,
+        text: "Who did you go with?",
+        scenario_dialogue: { keywords: [], rubric_note: "" },
+      },
+    ],
+  };
+
+  it("情境文章與作答指引進 context", () => {
+    const { context } = scenarioChatFromStudentActivity(activity);
+    expect(context.title).toBe("週末計畫");
+    expect(context.content).toBe("你和朋友在討論這個週末要做什麼。");
+    expect(context.rubric).toBe("請用完整句子回答。");
+  });
+
+  it("題目、翻譯、必用字詞、本題說明、題目圖片都帶過去", () => {
+    const { items } = scenarioChatFromStudentActivity(activity);
+    expect(items[0]).toMatchObject({
+      id: 9001,
+      text: "What did you do last weekend?",
+      translation: "你上週末做了什麼？",
+      translationLanguage: "chinese",
+      keywords: ["went"],
+      rubricNote: "要用過去式",
+    });
+    expect(items[0].images).toEqual([
+      { src: "https://example.com/q1.jpg", alt: "Question 1 image" },
+    ]);
+    expect(items[1].images).toEqual([]);
+  });
+
+  /**
+   * 學生端 payload 的 reference_answer / image_prompt 是後端的 public_item_view 就濾掉
+   * 的，所以這一支連「要不要帶」都沒有選項。這條測試是防止哪天有人把它改成物件展開。
+   */
+  it("學生端沒有參考答案可帶（也不該從任何地方冒出來）", () => {
+    const polluted = {
+      ...activity,
+      items: [
+        {
+          ...activity.items[0],
+          scenario_dialogue: {
+            ...activity.items[0].scenario_dialogue,
+            reference_answer: "I went to a movie.",
+            image_prompt: "a cinema",
+          },
+        },
+      ],
+    };
+    const { items } = scenarioChatFromStudentActivity(polluted);
+    expect(items[0].referenceAnswer).toBeUndefined();
+    const serialized = JSON.stringify(items);
+    expect(serialized).not.toContain("I went to a movie.");
+    expect(serialized).not.toContain("a cinema");
+  });
+
+  it("空 items／缺設定都落成安全預設", () => {
+    const { context, items } = scenarioChatFromStudentActivity({ items: null });
+    expect(context).toMatchObject({ title: "", content: "", rubric: "" });
+    expect(items).toEqual([]);
+  });
+
+  it("與老師端版本對同一份內容產生一致的題數", () => {
+    const { items } = scenarioChatFromStudentActivity(activity);
+    expect(items).toHaveLength(activity.items.length);
   });
 });

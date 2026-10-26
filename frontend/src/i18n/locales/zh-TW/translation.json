@@ -5064,6 +5064,8 @@
     "tenseCombo": "{{time}}{{aspect}}",
     "chat": {
       "typing": "AI 輸入中",
+      "quotaExhausted": "這一題的 AI 建議次數已經用完了，你還是可以繼續回答下一題。",
+      "feedbackFailed": "AI 建議暫時拿不到，請再試一次。",
       "questionImages": "題目圖片",
       "questionNo": "第 {{no}} / {{total}} 題",
       "skipped": "略過",

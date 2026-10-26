@@ -1427,6 +1427,32 @@ class ApiClient {
     });
   }
 
+  /**
+   * 情境對話：學生答完一題拿 AI 建議（#1140）。
+   *
+   * 錄音要先上傳（`/api/students/upload-recording` 會回 `progress_id`），這支只負責
+   * 「聽那一題已經存好的錄音、回一則建議」。
+   *
+   * 配額是**伺服器端**每題 3 次（與批改頁的 Azure 分析同一個計數）：用完回 429、
+   * 帶 `detail.code = "AI_ANALYSIS_QUOTA_EXCEEDED"`。
+   */
+  async scenarioDialogueFeedback(data: {
+    item_progress_id: number;
+    ui_language?: string;
+  }): Promise<{
+    verdict: "improve" | "great";
+    comment: string;
+    suggestion?: string | null;
+    ai_analysis_count: number;
+    ai_analysis_remaining: number;
+    max_attempts: number;
+  }> {
+    return this.request("/api/students/scenario-dialogue/feedback", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   // ===== Issue #1021: 情境對話 AI =====
   // 三個端點都不寫 DB —— 產出來的東西先回前端給老師改，按儲存才走 createContent。
 
