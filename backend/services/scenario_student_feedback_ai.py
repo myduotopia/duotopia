@@ -36,7 +36,14 @@ from services.scenario_grading_ai import (
 
 logger = logging.getLogger(__name__)
 
-MAX_OUTPUT_TOKENS = 1024
+# 這支只要回三個短欄位（verdict／兩句評語／一句建議說法），但 **gemini-3.5-flash 的
+# thinking token 算在輸出預算裡**，而它的 thinking 量比 2.5 大很多（#1119）。
+# 1024 加上預設開著的 thinking，實測在 staging 會把 JSON 截斷成
+# `Unterminated string` → 整包解析失敗 → 學生看到「AI 建議暫時拿不到」。
+#
+# 所以兩件事一起做：**關掉 thinking**（這個任務不需要推理，而且 thinking 以輸出價
+# 計費）＋ 留到 2048（與老師端評分同一個量級）當餘裕。
+MAX_OUTPUT_TOKENS = 2048
 
 VERDICTS = ("improve", "great")
 #: 認不得的 verdict 落在這裡。誤誇比誤糾難補救：學生以為講對了就不會再練。
@@ -235,6 +242,9 @@ class ScenarioStudentFeedbackService:
             temperature=0.3,
             response_mime_type="application/json",
         )
+        # 關掉 thinking：這個任務是「聽完說一句鼓勵＋一句建議說法」，不需要推理，
+        # 而 thinking token 會吃掉輸出預算（並以輸出價計費）。見 MAX_OUTPUT_TOKENS。
+        get_vertex_ai_service()._set_thinking_budget(config, 0)
         response = await model.generate_content_async(
             [
                 await build_audio_part(
@@ -248,7 +258,22 @@ class ScenarioStudentFeedbackService:
         from services.scenario_grading_ai import ScenarioGradingService
 
         usage = ScenarioGradingService._usage_of(response)
-        result = self.normalize_result(self.parse_json(response.text))
+        try:
+            result = self.normalize_result(self.parse_json(response.text))
+        except Exception:
+            # 把 finish_reason 記下來 —— MAX_TOKENS 就是「又被截斷了」，不必再猜。
+            # 第一次踩這個坑時 log 裡只有 JSONDecodeError，查了一輪才確認是截斷。
+            finish = None
+            try:
+                finish = response.candidates[0].finish_reason
+            except Exception:
+                pass
+            logger.warning(
+                "scenario_student_feedback_ai: 解析失敗 | finish_reason=%s | out=%s",
+                finish,
+                usage.get("output_tokens"),
+            )
+            raise
         cost = ScenarioGradingService.estimate_cost(usage)
         logger.info(
             "scenario_student_feedback_ai | in=%s out=%s | cost≈$%.5f",

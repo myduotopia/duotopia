@@ -59,6 +59,14 @@ interface Props {
   /** 回報每題「是否點開過文字」 */
   onRevealChange?: (seen: TextRevealState[]) => void;
   /**
+   * 回報每題「有沒有答過」（至少送出過一次答案）。
+   *
+   * 給呼叫端擋「略過每一題就送出」用 —— 學生端的送出檢查讀的是作業頁自己的
+   * `activities` state，而情境對話的錄音是在 adapters 裡上傳的、不會回寫那份 state，
+   * 所以答題進度只有這個元件知道（#1140 A 項）。
+   */
+  onProgressChange?: (answered: boolean[]) => void;
+  /**
    * 學生介面語言（例如 "zh-TW"、"en"），決定翻譯鈕是否出現；不傳＝i18n 目前語言。
    * sample 用控制面板的值，正式版傳學生實際介面語言。
    */
@@ -75,6 +83,7 @@ export function ScenarioChatActivity({
   adapters,
   onSubmit,
   onRevealChange,
+  onProgressChange,
   uiLanguage,
 }: Props) {
   const { t, i18n } = useTranslation();
@@ -98,6 +107,13 @@ export function ScenarioChatActivity({
     onRevealChange,
   });
   const { phase, current, retry } = chat;
+
+  // 答過＝這一題至少送出過一次答案（略過的題目 attempts 會是空的）
+  const answeredKey = chat.attempts.map((list) => list.length > 0).join(",");
+  useEffect(() => {
+    onProgressChange?.(chat.attempts.map((list) => list.length > 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- answeredKey 代表內容變化
+  }, [answeredKey, onProgressChange]);
   const isPreview = settings.isPreviewMode;
   const started = phase !== "intro";
 

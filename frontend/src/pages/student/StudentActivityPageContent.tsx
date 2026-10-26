@@ -41,6 +41,7 @@ import {
   createPreviewScenarioAdapters,
   createStudentScenarioAdapters,
 } from "@/components/activities/scenario-dialogue/studentAdapters";
+import { unansweredQuestionNumbers } from "@/components/activities/scenario-dialogue/submitGuard";
 import SentenceMakingActivity from "@/components/activities/SentenceMakingActivity";
 import RearrangementActivity, {
   type RearrangementQuestion,
@@ -419,6 +420,9 @@ export default function StudentActivityPageContent({
   const [submitting, setSubmitting] = useState(false);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
+  // #1140 A 項：情境對話每題「有沒有答過」。由 ScenarioChatActivity 回報 —— 它的
+  // 錄音是在 adapters 裡上傳的，不會回寫 activities state，所以送出檢查讀不到。
+  const [scenarioAnswered, setScenarioAnswered] = useState<boolean[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #835: Live quiz — 進入 guard + 收卷輪詢
@@ -2195,7 +2199,24 @@ export default function StudentActivityPageContent({
               isPreviewMode: Boolean(isPreviewMode),
             })}
             adapters={scenarioAdapters}
+            onProgressChange={setScenarioAnswered}
             onSubmit={() => {
+              // 略過的題目 attempts 是空的 —— 全部略過也走得到「送出」。這裡沿用
+              // 其他模式那個「未完成」dialog（可以取消，也可以堅持送出），而不是
+              // 直接擋掉：學生有可能真的想先交。
+              const unanswered = unansweredQuestionNumbers(
+                chat.items.length,
+                scenarioAnswered,
+              );
+              if (unanswered.length > 0 && !isPreviewMode) {
+                setIncompleteItems(
+                  unanswered.map((number) =>
+                    t("studentActivityPage.validation.itemNumber", { number }),
+                  ),
+                );
+                setShowSubmitDialog(true);
+                return;
+              }
               void handleSubmit();
             }}
           />

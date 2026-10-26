@@ -183,3 +183,34 @@ class TestCommentLanguage:
         assert comment_language("klingon") == "Traditional Chinese"
         assert comment_language("") == "Traditional Chinese"
         assert comment_language(None) == "Traditional Chinese"
+
+
+class TestOutputBudget:
+    """截斷事故的回歸測試（staging 實測）。
+
+    `gemini-3.5-flash` 的 thinking token 算在輸出預算裡，而它的 thinking 量比 2.5 大
+    很多（#1119）。原本 `MAX_OUTPUT_TOKENS = 1024` 又沒關 thinking，JSON 被截成
+    `Unterminated string` → 整包解析失敗 → 學生看到「AI 建議暫時拿不到」。
+    """
+
+    def test_output_budget_is_not_tighter_than_the_teacher_side(self):
+        """老師端評分（#1035）用 2048 且在 production 穩定，這支不該更緊。"""
+        from services import scenario_grading_ai as grading
+        from services.scenario_student_feedback_ai import MAX_OUTPUT_TOKENS
+
+        assert MAX_OUTPUT_TOKENS >= grading.MAX_OUTPUT_TOKENS
+
+    def test_thinking_is_disabled(self):
+        """關掉 thinking 是這個修正的主體 —— 不是只把上限調大就好。
+
+        thinking 以**輸出價**計費，而這個任務（聽完說一句鼓勵＋一句建議說法）不需要
+        推理。沒關的話預算一樣會被吃掉，只是晚一點才截斷。
+        """
+        import inspect
+
+        from services.scenario_student_feedback_ai import (
+            ScenarioStudentFeedbackService,
+        )
+
+        source = inspect.getsource(ScenarioStudentFeedbackService.generate)
+        assert "_set_thinking_budget(config, 0)" in source
