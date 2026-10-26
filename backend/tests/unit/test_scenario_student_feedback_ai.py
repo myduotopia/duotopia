@@ -19,6 +19,7 @@
 import pytest
 
 from services.scenario_student_feedback_ai import (
+    MAX_OUTPUT_TOKENS,
     ScenarioStudentFeedbackError,
     ScenarioStudentFeedbackInputError,
     ScenarioStudentFeedbackService as Svc,
@@ -35,6 +36,50 @@ CRITERIA = {
     "global_rubric": "請用完整句子回答",
     "question_level": "B1",
 }
+
+
+def _install_fake_vertex(monkeypatch):
+    """把 vertexai.generative_models 換成假模組，回傳 (fake, captured)。
+
+    與 `test_scenario_grading_ai` 同一套手法：用 `monkeypatch.setitem(sys.modules, ...)`
+    而不是 patch 真模組 —— 後者會觸發真正的 import，而本機／CI 不見得裝得起
+    google.cloud.aiplatform（裝不起來時錯誤還會被誤認成程式壞了）。
+    """
+    import sys
+    import types
+    from unittest.mock import AsyncMock, MagicMock
+
+    captured = {}
+
+    part = MagicMock()
+    part.from_uri.side_effect = lambda uri, mime_type: captured.update(
+        uri=uri, mime_type=mime_type
+    )
+    part.from_data.side_effect = lambda data, mime_type: captured.update(
+        data=data, mime_type=mime_type
+    )
+
+    response = MagicMock()
+    response.text = (
+        '{"verdict": "improve", "comment": "再完整一點", '
+        '"suggestion": "I went to the park."}'
+    )
+    response.usage_metadata.prompt_token_count = 3000
+    response.usage_metadata.candidates_token_count = 120
+    # thinking token 併進 output_tokens（#1119），要明確給值，否則 MagicMock 會流進成本計算
+    response.usage_metadata.thoughts_token_count = 0
+
+    model = MagicMock()
+    model.generate_content_async = AsyncMock(return_value=response)
+
+    fake = types.ModuleType("vertexai.generative_models")
+    fake.Part = part
+    fake.GenerativeModel = MagicMock(return_value=model)
+    fake.GenerationConfig = MagicMock()
+
+    monkeypatch.setitem(sys.modules, "vertexai.generative_models", fake)
+    monkeypatch.setattr("services.vertex_ai.get_vertex_ai_service", lambda: MagicMock())
+    return fake, captured
 
 
 class TestBuildPrompt:
@@ -183,3 +228,54 @@ class TestCommentLanguage:
         assert comment_language("klingon") == "Traditional Chinese"
         assert comment_language("") == "Traditional Chinese"
         assert comment_language(None) == "Traditional Chinese"
+
+
+class TestOutputBudget:
+    """截斷事故的回歸測試（staging 實測）。
+
+    `gemini-3.5-flash` 的 thinking token 算在輸出預算裡，而它的 thinking 量比 2.5 大
+    很多（#1119）。原本 `MAX_OUTPUT_TOKENS = 1024` 又沒關 thinking，JSON 被截成
+    `Unterminated string` → 整包解析失敗 → 學生看到「AI 建議暫時拿不到」。
+    """
+
+    def test_output_budget_is_not_tighter_than_the_teacher_side(self):
+        """老師端評分（#1035）用 2048 且在 production 穩定，這支不該更緊。"""
+        from services import scenario_grading_ai as grading
+        from services.scenario_student_feedback_ai import MAX_OUTPUT_TOKENS
+
+        assert MAX_OUTPUT_TOKENS >= grading.MAX_OUTPUT_TOKENS
+
+    @pytest.mark.asyncio
+    async def test_generate_disables_thinking_and_asks_for_the_bigger_budget(
+        self, monkeypatch
+    ):
+        """關掉 thinking 是這個修正的**主體**，不是只把上限調大就好。
+
+        thinking 以輸出價計費，而這個任務（聽完說一句鼓勵＋一句建議說法）不需要推理。
+        沒關的話預算一樣會被吃掉，只是晚一點才截斷。
+
+        第一版這條測試是用 `inspect.getsource` 比對字串 —— 改個變數名就誤報，而且驗的
+        是字串不是行為（PR #1145 review 指出）。改成把整條 generate 跑過一次，直接看
+        送進 Vertex 的設定。
+        """
+        from unittest.mock import MagicMock
+
+        fake, _ = _install_fake_vertex(monkeypatch)
+        budgets = []
+        monkeypatch.setattr(
+            "services.vertex_ai.VertexAIService._set_thinking_budget",
+            staticmethod(lambda config, budget: budgets.append(budget)),
+        )
+
+        await Svc().generate(
+            "https://storage.googleapis.com/b/recordings/a.webm",
+            {"question": "What did you do last weekend?"},
+        )
+
+        # thinking 關掉
+        assert budgets == [0]
+        # 輸出上限用的是模組常數，不是某個寫死的小數字
+        assert fake.GenerationConfig.call_args.kwargs["max_output_tokens"] == (
+            MAX_OUTPUT_TOKENS
+        )
+        assert isinstance(fake.GenerationConfig, MagicMock)
