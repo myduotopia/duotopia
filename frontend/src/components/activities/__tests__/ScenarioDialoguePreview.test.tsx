@@ -22,9 +22,7 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
-import ScenarioDialoguePreview, {
-  buildPreviewFeedback,
-} from "../ScenarioDialoguePreview";
+import ScenarioDialoguePreview from "../ScenarioDialoguePreview";
 
 const DETAIL = {
   id: 501,
@@ -144,35 +142,6 @@ describe("ScenarioDialoguePreview", () => {
     render(<ScenarioDialoguePreview contentId={501} />);
     await waitFor(() =>
       expect(screen.getByText(/previewLoadFailed|boom/)).toBeInTheDocument(),
-    );
-  });
-});
-
-describe("buildPreviewFeedback — 預覽那一則建議", () => {
-  it("建議說法用老師自己寫的參考答案", () => {
-    const fb = buildPreviewFeedback(
-      { referenceAnswer: "I went to a movie with my cousin." },
-      "（預覽）…",
-    );
-    expect(fb.suggestion).toBe("I went to a movie with my cousin.");
-  });
-
-  it("老師沒寫參考答案就留空，不憑空生一句", () => {
-    expect(buildPreviewFeedback({}, "（預覽）…").suggestion).toBeUndefined();
-    expect(
-      buildPreviewFeedback({ referenceAnswer: "" }, "（預覽）…").suggestion,
-    ).toBeUndefined();
-  });
-
-  it("不給分數 —— 預覽的假分數會和批改頁的真分數互相干擾", () => {
-    const fb = buildPreviewFeedback({ referenceAnswer: "x" }, "（預覽）…");
-    expect(fb.score).toBeUndefined();
-    expect(Object.keys(fb)).not.toContain("score");
-  });
-
-  it("評語用傳進來的預覽文案，不假裝是 AI 說的", () => {
-    expect(buildPreviewFeedback({}, "（預覽）會出現 AI 建議").comment).toBe(
-      "（預覽）會出現 AI 建議",
     );
   });
 });

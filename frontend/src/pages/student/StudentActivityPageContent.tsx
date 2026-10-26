@@ -37,7 +37,10 @@ import {
   scenarioChatFromStudentActivity,
   scenarioChatSettings,
 } from "@/components/activities/scenario-dialogue/fromApi";
-import { createStudentScenarioAdapters } from "@/components/activities/scenario-dialogue/studentAdapters";
+import {
+  createPreviewScenarioAdapters,
+  createStudentScenarioAdapters,
+} from "@/components/activities/scenario-dialogue/studentAdapters";
 import SentenceMakingActivity from "@/components/activities/SentenceMakingActivity";
 import RearrangementActivity, {
   type RearrangementQuestion,
@@ -379,11 +382,17 @@ export default function StudentActivityPageContent({
   // 狀態、不會說話，所以把錯誤接出來跳 toast，學生才知道為什麼要重答。
   const scenarioAdapters = useMemo(
     () =>
-      createStudentScenarioAdapters({
-        assignmentId,
-        onError: (message) => toast.error(message),
-      }),
-    [assignmentId],
+      // 預覽（老師看真實作業、demo）**一定要用不碰網路的那組**：學生版會拿老師的
+      // token 去打學生專用端點（401／403），還會寫 StudentItemProgress、動到配額。
+      isPreviewMode || isDemoMode
+        ? createPreviewScenarioAdapters(
+            t("scenarioDialogue.chat.previewFeedback"),
+          )
+        : createStudentScenarioAdapters({
+            assignmentId,
+            onError: (message) => toast.error(message),
+          }),
+    [assignmentId, isPreviewMode, isDemoMode, t],
   );
 
   // State management

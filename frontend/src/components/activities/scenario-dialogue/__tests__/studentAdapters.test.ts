@@ -50,6 +50,7 @@ vi.mock("i18next", () => ({
 }));
 
 import {
+  createPreviewScenarioAdapters,
   createStudentScenarioAdapters,
   isQuotaExhausted,
   toScenarioFeedback,
@@ -192,5 +193,47 @@ describe("getFeedback", () => {
       adapters.getFeedback(ITEM, { kind: "text", text: "hi" }, 0),
     ).rejects.toBeTruthy();
     expect(scenarioDialogueFeedback).not.toHaveBeenCalled();
+  });
+});
+
+describe("createPreviewScenarioAdapters — 預覽完全不碰網路", () => {
+  /**
+   * 兩條老師預覽路徑都走這組：派發 sheet 的即時預覽，以及
+   * `TeacherAssignmentPreviewPage`（用 isPreviewMode 預覽**真實作業**，practice_mode
+   * 也是真的）。用學生版會拿老師的 token 去打學生專用端點，還會動到配額。
+   */
+  it("不上傳、不呼叫任何 API", async () => {
+    const adapters = createPreviewScenarioAdapters("（預覽）…");
+    await adapters.getFeedback(ITEM, ANSWER, 0);
+    expect(scenarioDialogueFeedback).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("建議說法用老師自己寫的參考答案", async () => {
+    const adapters = createPreviewScenarioAdapters("（預覽）…");
+    const fb = await adapters.getFeedback(
+      { ...ITEM, referenceAnswer: "I went to a movie." },
+      ANSWER,
+      0,
+    );
+    expect(fb.suggestion).toBe("I went to a movie.");
+  });
+
+  it("沒有參考答案就留空（學生端 payload 本來就沒有這個欄位）", async () => {
+    const adapters = createPreviewScenarioAdapters("（預覽）…");
+    const fb = await adapters.getFeedback(ITEM, ANSWER, 0);
+    expect(fb.suggestion).toBeUndefined();
+  });
+
+  it("不給分數 —— 預覽的假分數會和批改頁的真分數互相干擾", async () => {
+    const adapters = createPreviewScenarioAdapters("（預覽）…");
+    const fb = await adapters.getFeedback(ITEM, ANSWER, 0);
+    expect(Object.keys(fb)).not.toContain("score");
+  });
+
+  it("評語用傳進來的預覽文案，不假裝是 AI 說的", async () => {
+    const adapters = createPreviewScenarioAdapters("（預覽）會出現 AI 建議");
+    const fb = await adapters.getFeedback(ITEM, ANSWER, 0);
+    expect(fb.comment).toBe("（預覽）會出現 AI 建議");
   });
 });

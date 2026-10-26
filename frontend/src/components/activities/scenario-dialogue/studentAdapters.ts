@@ -135,6 +135,46 @@ export function isQuotaExhausted(error: unknown): boolean {
   return typeof detail === "string" && detail.includes(QUOTA_CODE);
 }
 
+/**
+ * 預覽用的 adapters：**完全不碰網路**。
+ *
+ * 老師預覽有兩條路徑都會走到對話式畫面：
+ *
+ * * 派發 sheet 的即時預覽（`ScenarioDialoguePreview`，#1142）；
+ * * `TeacherAssignmentPreviewPage` —— 它用 `isPreviewMode` 餵
+ *   `StudentActivityPageContent` 預覽**真實作業**，practice_mode 也是真的，所以情境
+ *   對話的作業一樣會走進來。
+ *
+ * 兩條都不能用學生版 adapters：那會拿老師的 token 去打學生專用端點（401／403），
+ * 而且會寫 `StudentItemProgress`、動到配額。預覽的規則一向是「不打 AI、不扣點數」
+ * （preview-architecture.md）。
+ *
+ * * `comment` 由呼叫端給（要帶 i18n 文案，明確標示是預覽）；
+ * * `suggestion` 用老師**自己寫的參考答案**（他寫的，給他看合理）；學生端 payload
+ *   沒有這個欄位，所以在那條路徑上自然是空的；
+ * * **不給分數** —— 預覽的假分數會和批改頁的真分數互相干擾。
+ */
+export function createPreviewScenarioAdapters(
+  comment: string,
+): ScenarioChatAdapters {
+  return {
+    getFeedback: (item: ScenarioChatItem) =>
+      Promise.resolve({
+        verdict: "improve" as const,
+        comment,
+        suggestion: item.referenceAnswer || undefined,
+      }),
+    speak: (text: string) => {
+      speakEnglish(text);
+    },
+    stopSpeech: () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    },
+  };
+}
+
 export function createStudentScenarioAdapters({
   assignmentId,
   onError,
