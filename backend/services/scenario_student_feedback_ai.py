@@ -231,7 +231,7 @@ class ScenarioStudentFeedbackService:
         prompt = self.build_prompt(criteria, ui_language)
 
         from vertexai.generative_models import GenerationConfig, GenerativeModel
-        from services.vertex_ai import get_vertex_ai_service
+        from services.vertex_ai import VertexAIService, get_vertex_ai_service
 
         get_vertex_ai_service()._ensure_initialized()
 
@@ -244,7 +244,7 @@ class ScenarioStudentFeedbackService:
         )
         # 關掉 thinking：這個任務是「聽完說一句鼓勵＋一句建議說法」，不需要推理，
         # 而 thinking token 會吃掉輸出預算（並以輸出價計費）。見 MAX_OUTPUT_TOKENS。
-        get_vertex_ai_service()._set_thinking_budget(config, 0)
+        VertexAIService._set_thinking_budget(config, 0)
         response = await model.generate_content_async(
             [
                 await build_audio_part(
