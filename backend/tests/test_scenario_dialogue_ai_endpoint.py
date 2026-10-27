@@ -44,11 +44,17 @@ def captured(monkeypatch):
             "estimated_cost_usd": 0.0002,
         }
 
-    async def fake_extract(self, file_bytes, mime_type):
-        calls["extract"] = {"size": len(file_bytes), "mime": mime_type}
+    async def fake_extract(self, file_bytes, mime_type, ui_language="zh-TW"):
+        calls["extract"] = {
+            "size": len(file_bytes),
+            "mime": mime_type,
+            "ui_language": ui_language,
+        }
         return {
             "content": "Extracted passage.",
             "figures": [{"page": 1, "box_2d": [10, 20, 300, 400]}],
+            "suggested_title": "Shopping",
+            "truncated": False,
             "usage": {"input_tokens": 5, "output_tokens": 6},
             "estimated_cost_usd": 0.00005,
         }
@@ -410,3 +416,18 @@ def test_extract_article_returns_figures(test_client, auth_headers_teacher, capt
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["figures"] == [{"page": 1, "box_2d": [10, 20, 300, 400]}]
+
+
+def test_extract_article_returns_suggested_title_and_ui_language(
+    test_client, auth_headers_teacher, captured
+):
+    """#1146 使用者決定 5：擷取同一次呼叫一併建議標題，標題語言跟老師介面語言。"""
+    resp = test_client.post(
+        EXTRACT_URL,
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+        data={"ui_language": "en"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["suggested_title"] == "Shopping"
+    assert captured["extract"]["ui_language"] == "en"

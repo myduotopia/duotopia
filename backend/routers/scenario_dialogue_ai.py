@@ -17,12 +17,14 @@
 """
 
 import logging
+from collections import Counter
 from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional
 
 from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
     status,
@@ -143,6 +145,23 @@ def _ai_failed(what: str, exc: Exception) -> HTTPException:
     )
 
 
+# #1146 review 9：答非所問（usable=False）會退額度，等於不限次數免費呼叫 AI。
+# 先只記錄、不設上限 —— 用 log 觀察有沒有人反覆送無效輸入，再決定要不要擋。
+# 計數存在記憶體：每個 Cloud Run instance 各自計、重啟歸零，只供觀察趨勢用。
+_reask_refund_counts: Counter = Counter()
+
+
+def _log_reask_refund(teacher: Teacher, endpoint: str) -> None:
+    key = (getattr(teacher, "id", None), endpoint)
+    _reask_refund_counts[key] += 1
+    logger.warning(
+        "scenario_text_quota | reask_refund | teacher_id=%s | endpoint=%s | count=%s",
+        key[0],
+        endpoint,
+        _reask_refund_counts[key],
+    )
+
+
 async def _with_text_quota(
     db: Session,
     teacher: Teacher,
@@ -181,6 +200,8 @@ async def _with_text_quota(
         # #1146 答非所問（usable=False）時沒有產出任何內容，只回一句重問 ——
         # 同樣算「沒把東西交到老師手上」，退款。
         delivered = result.get("usable") is not False
+        if not delivered:
+            _log_reask_refund(teacher, endpoint)
         return {**result, "quota": charge}
     finally:
         # 沒把東西交到老師手上就退款（參數錯、模型沒產出、中途取消都算）——
@@ -291,10 +312,14 @@ async def generate_questions(
 @router.post("/extract-article")
 async def extract_article(
     file: UploadFile = File(...),
+    ui_language: str = Form("zh-TW", max_length=MAX_UI_LANGUAGE_CHARS),
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """從老師上傳的圖片 / PDF 擷取情境文章。"""
+    """從老師上傳的圖片 / PDF 擷取情境文章（#1146 起一併回 ``suggested_title``）。
+
+    ``ui_language`` 決定標題建議的語言（同 generate-article）。
+    """
     service = get_scenario_dialogue_ai_service()
 
     # 大小把關優先：最多讀「上限 + 1」bytes，超過就中止，避免超大檔整包先進記憶體
@@ -312,7 +337,9 @@ async def extract_article(
     async def run():
         try:
             return await service.extract_article(
-                file_bytes=file_bytes, mime_type=file.content_type
+                file_bytes=file_bytes,
+                mime_type=file.content_type,
+                ui_language=ui_language,
             )
         except ScenarioDialogueAIOutputError as e:
             raise _ai_failed("extract-article", e)

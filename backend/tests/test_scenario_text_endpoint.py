@@ -7,6 +7,7 @@ Gemini 全程 mock。這裡驗的是端點的產品決策：什麼時候扣額�
 """
 
 import io
+import logging
 
 import pytest
 
@@ -305,3 +306,36 @@ def test_unusable_input_does_not_burn_quota(
     assert resp.json()["usable"] is False
     assert resp.json()["reask"]
     assert test_client.get(QUOTA_URL, headers=auth_headers_teacher).json()["used"] == 0
+
+
+def test_unusable_input_refund_is_logged_per_teacher(
+    test_client, auth_headers_teacher, monkeypatch, caplog
+):
+    """#1146 review 9：答非所問退額度只記 log（teacher_id、端點、次數），不設上限。"""
+
+    async def reask(self, **kwargs):
+        return {"usable": False, "reask": "再具體一點", "usage": {}}
+
+    from routers import scenario_dialogue_ai as router_mod
+    from services import scenario_dialogue_ai as mod
+
+    monkeypatch.setattr(mod.ScenarioDialogueAIService, "generate_article", reask)
+    monkeypatch.setattr(router_mod, "_reask_refund_counts", router_mod.Counter())
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(2):
+            resp = test_client.post(
+                ARTICLE_URL, headers=auth_headers_teacher, json=ARTICLE_BODY
+            )
+            assert resp.status_code == 200, resp.text
+
+    logs = [r.getMessage() for r in caplog.records if "reask_refund" in r.getMessage()]
+    assert len(logs) == 2
+    assert "endpoint=generate-article" in logs[-1]
+    assert "count=2" in logs[-1]
+    assert "teacher_id=" in logs[-1]
+    # 不設上限：第三次照樣回重問，不是 429
+    resp = test_client.post(
+        ARTICLE_URL, headers=auth_headers_teacher, json=ARTICLE_BODY
+    )
+    assert resp.status_code == 200

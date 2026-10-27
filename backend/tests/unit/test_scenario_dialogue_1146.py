@@ -15,12 +15,20 @@ import pytest
 from services.scenario_context_images import image_mime_for_url, resolve_image_source
 from services.scenario_dialogue_ai import (
     ScenarioDialogueAIError,
+    ScenarioDialogueAIOutputError,
     ScenarioDialogueAIService,
 )
 from services.scenario_grading_ai import ScenarioGradingService
 from utils import scenario_dialogue as sd
 
 IMG = "https://storage.googleapis.com/bucket/images/a.png"
+
+
+@pytest.fixture(autouse=True)
+def _own_bucket(monkeypatch):
+    """本站圖片 bucket 固定為 ``bucket``、用 GCS（正式環境的設定）。"""
+    monkeypatch.setenv("GCS_BUCKET_NAME", "bucket")
+    monkeypatch.setenv("USE_GCS_STORAGE", "true")
 
 
 # ============================================================ 設定正規化
@@ -69,6 +77,31 @@ class TestSettingsNewFields:
     def test_more_than_five_images_rejected(self):
         with pytest.raises(ValueError):
             sd.normalize_settings({"scenario_images": [IMG] * 6})
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.example.com/images/a.png",
+            "http://storage.googleapis.com/bucket/images/a.png",
+            "https://storage.googleapis.com/other/images/a.png",
+            "https://storage.googleapis.com/bucket/audio/a.webm",
+            "https://duotopia.co/static/images/a.png",
+            "javascript:alert(1)",
+            "https://storage.googleapis.com/bucket/images/" + "x" * 3000,
+        ],
+    )
+    def test_non_own_images_are_dropped(self, url):
+        """review 3：存檔只留本站 bucket 的 images/ 網址，其餘丟棄（不擋整份存檔）。"""
+        settings = sd.normalize_settings({"scenario_images": [IMG, url]})
+        assert settings["scenario_images"] == [IMG]
+
+    def test_local_static_allowed_only_without_gcs(self, monkeypatch):
+        local = "http://localhost:8080/static/images/x.png"
+        settings = sd.normalize_settings({"scenario_images": [local]})
+        assert settings["scenario_images"] == []
+        monkeypatch.setenv("USE_GCS_STORAGE", "false")
+        settings = sd.normalize_settings({"scenario_images": [local]})
+        assert settings["scenario_images"] == [local]
 
     def test_images_must_be_a_list(self):
         with pytest.raises(ValueError):
@@ -255,15 +288,22 @@ class TestImageSource:
         """別的 bucket 交給 Vertex 讀 = 用我們的服務帳號讀別人的東西。"""
         assert resolve_image_source(IMG, "other") is None
 
-    def test_local_static_file(self):
-        assert resolve_image_source(
-            "http://localhost:8080/static/images/x.png", "bucket"
-        ) == ("local", "x.png")
+    def test_local_static_file_only_without_gcs(self):
+        url = "http://localhost:8080/static/images/x.png"
+        assert resolve_image_source(url, "bucket", use_gcs=False) == ("local", "x.png")
+        # review 3：正式環境（用 GCS）不接受 static 網址
+        assert resolve_image_source(url, "bucket", use_gcs=True) is None
+
+    def test_own_bucket_outside_images_prefix_is_rejected(self):
+        """同 bucket 還有音檔等其他東西，只開放圖片上傳服務寫的 images/。"""
+        url = "https://storage.googleapis.com/bucket/audio/x.webm"
+        assert resolve_image_source(url, "bucket") is None
 
     @pytest.mark.parametrize(
         "url",
         [
             "http://localhost:8080/static/images/../secret.png",
+            "https://storage.googleapis.com/bucket/images/../audio/x.webm",
             "http://localhost:8080/static/images/a/b.png",
             "http://169.254.169.254/latest/meta-data",
             "file:///etc/passwd",
@@ -271,9 +311,158 @@ class TestImageSource:
         ],
     )
     def test_other_sources_are_rejected(self, url):
-        assert resolve_image_source(url, "bucket") is None
+        assert resolve_image_source(url, "bucket", use_gcs=False) is None
 
     def test_mime_from_extension(self):
         assert image_mime_for_url(IMG) == "image/png"
         assert image_mime_for_url("https://x/y.JPG") == "image/jpeg"
         assert image_mime_for_url("https://x/y") == "image/jpeg"
+
+
+# ============================================================ 讀圖（build_image_parts）
+
+
+class _FakePart:
+    @staticmethod
+    def from_data(data, mime_type):
+        return ("data", data, mime_type)
+
+    @staticmethod
+    def from_uri(uri, mime_type):
+        return ("uri", uri, mime_type)
+
+
+class _FakeResponse:
+    def __init__(self, text):
+        self.text = text
+
+
+def _fake_vertex(monkeypatch, text, sent=None):
+    """把 _call_vertex 換掉：記下送出的 prompt 與圖片 Part，回固定文字。"""
+
+    async def fake_call(cls, prompt, max_tokens, file_part=None, extra_parts=None):
+        if sent is not None:
+            sent["prompt"] = prompt
+            sent["parts"] = extra_parts
+        return _FakeResponse(text), {"input_tokens": 0, "output_tokens": 0}
+
+    monkeypatch.setattr(
+        ScenarioDialogueAIService, "_call_vertex", classmethod(fake_call)
+    )
+
+
+class TestBuildImageParts:
+    """review 7：讀圖失敗略過；張數以實際送出的為準。"""
+
+    @pytest.fixture
+    def local_dir(self, monkeypatch, tmp_path):
+        import services.image_upload as upload_mod
+        import vertexai.generative_models as gm
+
+        class FakeUploader:
+            bucket_name = "bucket"
+            use_gcs = False
+            local_image_dir = str(tmp_path)
+
+        monkeypatch.setattr(upload_mod, "get_image_upload_service", FakeUploader)
+        monkeypatch.setattr(gm, "Part", _FakePart)
+        (tmp_path / "ok.png").write_bytes(b"png")
+        return tmp_path
+
+    def test_unreadable_and_foreign_images_are_skipped(self, local_dir):
+        from services.scenario_context_images import build_image_parts
+
+        parts = build_image_parts(
+            [
+                "http://localhost:8080/static/images/ok.png",
+                "http://localhost:8080/static/images/missing.png",  # 讀檔失敗
+                "https://evil.example.com/x.png",  # 非本站
+                "https://storage.googleapis.com/bucket/images/a.jpg",
+            ]
+        )
+        assert parts == [
+            ("data", b"png", "image/png"),
+            ("uri", "gs://bucket/images/a.jpg", "image/jpeg"),
+        ]
+
+    def test_question_prompt_counts_only_images_actually_sent(
+        self, local_dir, monkeypatch
+    ):
+        """叫模型看 2 張圖卻只送 1 張，模型會亂編 —— prompt 張數 = 實際送出張數。"""
+        import asyncio
+
+        sent = {}
+        _fake_vertex(
+            monkeypatch, '{"title": "T", "questions": [{"question": "Q1?"}]}', sent
+        )
+        asyncio.run(
+            ScenarioDialogueAIService().generate_questions(
+                scenario_content="S",
+                count=3,
+                scenario_images=[
+                    "http://localhost:8080/static/images/ok.png",
+                    "http://localhost:8080/static/images/missing.png",
+                ],
+            )
+        )
+        assert len(sent["parts"]) == 1
+        assert "1 picture(s)" in sent["prompt"]
+        assert "2 picture(s)" not in sent["prompt"]
+
+
+# ============================================================ 擷取：標題與截斷救援
+
+
+class TestExtractTitleAndSalvage:
+    def test_prompt_asks_title_and_puts_content_last(self):
+        prompt = ScenarioDialogueAIService.build_extract_prompt("en")
+        assert '"title"' in prompt
+        assert "English" in prompt
+        # 截斷時斷的是 content 尾巴，所以 content 要放最後
+        assert prompt.index('"figures": [') < prompt.index('"content": "<')
+
+    def test_complete_json_is_not_truncated(self):
+        raw, truncated = ScenarioDialogueAIService.parse_extract_json(
+            '{"title": "T", "figures": [], "content": "Hello."}'
+        )
+        assert truncated is False
+        assert raw["content"] == "Hello."
+
+    def test_truncated_content_is_salvaged_not_502(self):
+        """review 4：截斷時保住已輸出的文章、標題與完整的圖片座標。"""
+        text = (
+            '{"title": "At the park", "figures": [{"page": 1, "box_2d": '
+            '[1, 2, 300, 400]}], "content": "Tom is at the park.\\nHe is pla'
+        )
+        raw, truncated = ScenarioDialogueAIService.parse_extract_json(text)
+        assert truncated is True
+        assert raw["title"] == "At the park"
+        assert raw["content"] == "Tom is at the park.\nHe is pla"
+        assert ScenarioDialogueAIService.normalize_figures(raw) == [
+            {"page": 1, "box_2d": [1, 2, 300, 400]}
+        ]
+
+    def test_truncated_inside_unicode_escape(self):
+        text = '{"title": "T", "figures": [], "content": "caf\\u00'
+        raw, truncated = ScenarioDialogueAIService.parse_extract_json(text)
+        assert truncated is True
+        assert raw["content"] == "caf"
+
+    def test_garbage_still_raises(self):
+        with pytest.raises(ScenarioDialogueAIOutputError):
+            ScenarioDialogueAIService.parse_extract_json("not json at all")
+
+    def test_extract_returns_suggested_title_and_truncated_flag(self, monkeypatch):
+        import asyncio
+        import vertexai.generative_models as gm
+
+        monkeypatch.setattr(gm, "Part", _FakePart)
+        _fake_vertex(
+            monkeypatch, '{"title": "Shopping", "figures": [], "content": "I bu'
+        )
+        out = asyncio.run(
+            ScenarioDialogueAIService().extract_article(b"x", "image/png", "en")
+        )
+        assert out["suggested_title"] == "Shopping"
+        assert out["truncated"] is True
+        assert out["content"] == "I bu"

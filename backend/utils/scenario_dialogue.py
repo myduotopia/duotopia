@@ -48,7 +48,9 @@ reference_answer 不得外流到學生端
 ``VOICES`` 一一對應，老師切換介面語言不會改變存進資料庫的值。未知代碼一律擋下
 （丟 ``ValueError``），避免前端／AI 產題送進髒資料後才在評分階段爆掉。
 """
-from typing import Any, Dict, List, Optional
+import os
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 # item_metadata 底下的命名空間 key
 SCENARIO_ITEM_KEY = "scenario_dialogue"
@@ -140,8 +142,69 @@ def _normalize_tts_settings(raw: Any) -> Optional[Dict[str, str]]:
     }
 
 
+_GCS_HOST = "storage.googleapis.com"
+# 圖片上傳服務（services/image_upload.py）存 GCS 時的路徑前綴：images/<環境>/<檔名>
+_GCS_IMAGE_PREFIX = "images/"
+# 本機開發（USE_GCS_STORAGE != true）時圖片存在 backend/static/images/
+_LOCAL_IMAGE_PREFIX = "/static/images/"
+
+
+def own_image_storage() -> Tuple[str, bool]:
+    """本站圖片存放設定 ``(bucket_name, use_gcs)``，與 ImageUploadService 讀同一組環境變數。
+
+    不直接 new ImageUploadService：它的建構子會建目錄、讀 GCS 設定，存檔正規化用不到。
+    """
+    bucket = os.getenv("GCS_BUCKET_NAME", "duotopia-audio")
+    use_gcs = os.getenv("USE_GCS_STORAGE", "false").lower() == "true"
+    return bucket, use_gcs
+
+
+def classify_own_image_url(
+    url: Any, bucket_name: str, use_gcs: bool
+) -> Optional[Tuple[str, str]]:
+    """判斷情境圖網址是不是「我們自己存的圖」（#1146 review 3）。
+
+    回傳 ``("gcs", "gs://bucket/images/...")``、``("local", "<檔名>")`` 或 ``None``。
+
+    * GCS：只收 ``https://storage.googleapis.com/<本站 bucket>/images/...``。
+      同 bucket 底下還有音檔等其他東西，只開放圖片上傳服務寫入的 ``images/`` 前綴。
+    * 本機 static：只在**沒有**用 GCS（本機開發）時接受。正式環境不會有 static 圖，
+      若仍收的話，任何人都能塞一個 ``http://任意主機/static/images/x.png`` 進來。
+
+    純函式：存檔正規化（本檔）與 AI 讀圖（services/scenario_context_images）共用同一規則。
+    """
+    if not url or not isinstance(url, str):
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme == "https" and parsed.netloc == _GCS_HOST:
+        path = parsed.path.lstrip("/")
+        bucket, _, blob = path.partition("/")
+        if (
+            bucket
+            and bucket == bucket_name
+            and blob.startswith(_GCS_IMAGE_PREFIX)
+            and ".." not in blob
+        ):
+            return ("gcs", f"gs://{bucket}/{blob}")
+        return None
+    if (
+        not use_gcs
+        and parsed.scheme in ("http", "https")
+        and parsed.path.startswith(_LOCAL_IMAGE_PREFIX)
+    ):
+        filename = parsed.path[len(_LOCAL_IMAGE_PREFIX) :]
+        # 只收單純檔名，擋掉 ../ 之類的路徑穿越
+        if filename and filename == os.path.basename(filename) and ".." not in filename:
+            return ("local", filename)
+    return None
+
+
 def normalize_scenario_images(raw: Any) -> List[str]:
-    """情境圖網址清單（#1146）。去掉空白項；超過上限直接擋下，不靜靜截斷。
+    """情境圖網址清單（#1146）。去掉空白項與非本站網址；超過上限直接擋下，不靜靜截斷。
+
+    非本站網址（別的網站、別的 bucket、正式環境的 static 路徑）直接丟棄 —— 前端只會
+    送上傳服務回來的網址，其他來源不是 bug 就是有人手動打 API，存進去也只會在
+    學生端顯示外部圖片、在 AI 讀圖時被略過（review 3）。
 
     靜靜截斷的話，老師以為存了 6 張、學生只看到 5 張，而且他完全不知道少了哪一張 ——
     前端擷取時已經「保留前 5 張並提示」，送到這裡還超過就是前端的 bug，該讓它爆出來。
@@ -150,12 +213,16 @@ def normalize_scenario_images(raw: Any) -> List[str]:
         return []
     if not isinstance(raw, list):
         raise ValueError(f"scenario_images 需為陣列，收到 {type(raw).__name__}")
-    urls = [u.strip() for u in (_text(x) for x in raw) if u.strip()]
+    bucket_name, use_gcs = own_image_storage()
+    urls = [
+        u
+        for u in (_text(x).strip() for x in raw)
+        if u
+        and len(u) <= MAX_IMAGE_URL_CHARS
+        and classify_own_image_url(u, bucket_name, use_gcs) is not None
+    ]
     if len(urls) > MAX_SCENARIO_IMAGES:
         raise ValueError(f"情境圖最多 {MAX_SCENARIO_IMAGES} 張，收到 {len(urls)} 張")
-    for url in urls:
-        if len(url) > MAX_IMAGE_URL_CHARS:
-            raise ValueError("情境圖網址過長")
     return urls
 
 

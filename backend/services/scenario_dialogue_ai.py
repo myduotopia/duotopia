@@ -61,6 +61,10 @@ MAX_OUTPUT_TOKENS = 8192
 # 情境文章不會太長（要讓學生讀得完），但中日韓字元吃 token，留點餘裕
 ARTICLE_MAX_OUTPUT_TOKENS = 2048
 
+# 擷取（#1146 review 4）：照抄的講義文章可能比 AI 自己寫的長，再加上最多 20 組
+# 圖片座標與標題建議，2048 不夠用。截斷時仍有 _salvage_extract 兜底保住文章。
+EXTRACT_MAX_OUTPUT_TOKENS = 8192
+
 # 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
 # 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
 # 會讓成本統計靜默變 0 —— 迴歸測試 tests/unit/test_issue_1119_model_migration.py
@@ -396,11 +400,14 @@ class ScenarioDialogueAIService:
         return "\n".join(lines)
 
     @classmethod
-    def build_extract_prompt(cls) -> str:
+    def build_extract_prompt(cls, ui_language: str = "zh-TW") -> str:
         """從圖片 / PDF 擷取情境文章。
 
         擷取是「照抄」不是「重寫」—— 老師上傳講義是希望用自己那份內容，模型自由發揮
         會讓他發現對不上。
+
+        JSON 欄位順序刻意是 title → figures → content：輸出被 token 上限截斷時，
+        斷掉的是最長的 content 尾巴，標題與圖片座標已經完整（見 _salvage_extract）。
         """
         return "\n".join(
             [
@@ -425,8 +432,13 @@ class ScenarioDialogueAIService:
                 "- List figures in reading order. If there are none, return an empty "
                 "list.",
                 "",
-                'Return JSON: {"content": "<the passage>", '
-                '"figures": [{"page": 1, "box_2d": [ymin, xmin, ymax, xmax]}]}',
+                # #1146 使用者決定 5：擷取也一併建議標題（同一次呼叫，不另打 AI）
+                "Also suggest a short activity title for this scenario (at most 8 "
+                f"words, in {reask_language(ui_language)}).",
+                "",
+                'Return JSON with the keys in this order: {"title": "<title>", '
+                '"figures": [{"page": 1, "box_2d": [ymin, xmin, ymax, xmax]}], '
+                '"content": "<the passage>"}',
             ]
         )
 
@@ -460,7 +472,75 @@ class ScenarioDialogueAIService:
             raise ScenarioDialogueAIOutputError("AI 回傳的內容不是可用的 JSON")
 
     @staticmethod
-    def _salvage_objects(text: str) -> List[Dict[str, Any]]:
+    def _partial_json_string(text: str, key: str) -> Optional[str]:
+        """從（可能被截斷的）JSON 文字取出 ``"key": "..."`` 的字串值。
+
+        字串本身被截斷（沒有結尾引號）時，回傳已輸出的部分；找不到 key 回 None。
+        """
+        m = re.search(r'"%s"\s*:\s*"' % re.escape(key), text)
+        if not m:
+            return None
+        buf: List[str] = []
+        escaped = False
+        for ch in text[m.end() :]:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                break
+            buf.append(ch)
+        raw = "".join(buf)
+        # 截在跳脫序列中間（例如 \u00 後面沒了）時 json.loads 會失敗 —— 逐步退掉尾巴
+        for cut in range(0, 7):
+            candidate = raw[: len(raw) - cut]
+            try:
+                return json.loads('"' + candidate + '"')
+            except json.JSONDecodeError:
+                continue
+        return None
+
+    @classmethod
+    def _salvage_extract(cls, text: str) -> Optional[Dict[str, Any]]:
+        """擷取輸出被截斷時的救援（#1146 review 4）：保住文章、標題與完整的圖片座標。
+
+        出題用的 ``_salvage_objects`` 只撿「像題目」的物件，套在擷取上會把整篇文章
+        丟掉、直接 502 —— 老師上傳一份長講義，結果什麼都拿不到。
+        """
+        content = cls._partial_json_string(text, "content") or ""
+        title = cls._partial_json_string(text, "title") or ""
+        figures = [o for o in cls._complete_objects(text) if "box_2d" in o]
+        if not content.strip() and not figures:
+            return None
+        return {"title": title, "content": content, "figures": figures}
+
+    @classmethod
+    def parse_extract_json(cls, content: str) -> Tuple[Any, bool]:
+        """擷取專用的 JSON 解析，回傳 ``(raw, truncated)``。"""
+        text = (content or "").strip()
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text).strip()
+        try:
+            return json.loads(text), False
+        except json.JSONDecodeError:
+            salvaged = cls._salvage_extract(text)
+            if salvaged is None:
+                raise ScenarioDialogueAIOutputError("AI 回傳的內容不是可用的 JSON")
+            logger.warning(
+                "scenario_dialogue_ai: 擷取 JSON 截斷，救回文章 %d 字、圖 %d 張",
+                len(salvaged["content"]),
+                len(salvaged["figures"]),
+            )
+            return salvaged, True
+
+    @classmethod
+    def _salvage_objects(cls, text: str) -> List[Dict[str, Any]]:
+        """從截斷的出題 JSON 裡救回完整的題目物件。"""
+        # 只留看起來像題目的物件 —— 巢狀掃描也會撿到外層或其他結構
+        return [o for o in cls._complete_objects(text) if "question" in o]
+
+    @staticmethod
+    def _complete_objects(text: str) -> List[Dict[str, Any]]:
         """從截斷的 JSON 裡掃出所有完整的 ``{...}`` 物件。
 
         用 stack 而不是只看最外層：截斷發生時，最外層的 ``{"questions": [...``
@@ -491,8 +571,7 @@ class ScenarioDialogueAIService:
                     continue
                 if isinstance(parsed, dict):
                     objects.append(parsed)
-        # 只留看起來像題目的物件 —— 巢狀掃描也會撿到外層或其他結構
-        return [o for o in objects if "question" in o]
+        return objects
 
     @staticmethod
     def _text(value: Any) -> str:
@@ -794,17 +873,23 @@ class ScenarioDialogueAIService:
         }
 
     async def extract_article(
-        self, file_bytes: bytes, mime_type: str
+        self, file_bytes: bytes, mime_type: str, ui_language: str = "zh-TW"
     ) -> Dict[str, Any]:
+        """回傳 ``content`` / ``figures`` / ``suggested_title`` / ``truncated``。
+
+        ``truncated=True``：輸出被截斷，文章可能缺結尾（前端提示老師核對）。
+        """
         self.validate_file(file_bytes, mime_type)
 
         from vertexai.generative_models import Part
 
         part = Part.from_data(data=file_bytes, mime_type=mime_type)
         response, usage = await self._call_vertex(
-            self.build_extract_prompt(), ARTICLE_MAX_OUTPUT_TOKENS, file_part=part
+            self.build_extract_prompt(ui_language),
+            EXTRACT_MAX_OUTPUT_TOKENS,
+            file_part=part,
         )
-        raw = self.parse_json(response.text)
+        raw, truncated = self.parse_extract_json(response.text)
         figures = self.normalize_figures(raw)
         # 只有圖、沒有文字的檔案（例如一張情境插畫）也是合法的情境來源（#1146）：
         # 有圖就不因為文字空白而整包失敗。兩者都沒有才算這次沒產出。
@@ -815,6 +900,8 @@ class ScenarioDialogueAIService:
         return {
             "content": content,
             "figures": figures,
+            "suggested_title": self.normalize_title(raw),
+            "truncated": truncated,
             "usage": usage,
             "estimated_cost_usd": self._log_usage("extract", usage),
         }
