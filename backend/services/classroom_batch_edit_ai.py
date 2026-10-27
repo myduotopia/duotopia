@@ -30,11 +30,10 @@ from typing import Any, Optional, Sequence
 
 from pydantic import BaseModel, ValidationError
 
+from models.question_bank import GRADE_MAX, GRADE_MIN
+from routers.schemas.classroom import CLASSROOM_NAME_MAX_LENGTH
 from services.vertex_ai import get_vertex_ai_service
 
-CLASSROOM_NAME_MAX_LENGTH = 100
-GRADE_MIN = 1
-GRADE_MAX = 12
 MAX_REPLY_CHARS = 2000
 # max_tokens：固定 500 ＋ 每班約 40（plan：「依班數放大」）
 BASE_MAX_TOKENS = 500

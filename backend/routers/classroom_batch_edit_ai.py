@@ -114,7 +114,7 @@ async def ai_suggest(
             classrooms, history, payload.instruction
         )
     except Exception as e:  # 解析失敗 / TimeoutError / provider errors
-        logger.warning("[classroom-batch-edit-ai] suggest failed: %s", e)
+        logger.exception("[classroom-batch-edit-ai] suggest failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI 暫時無法回應，請重試",
