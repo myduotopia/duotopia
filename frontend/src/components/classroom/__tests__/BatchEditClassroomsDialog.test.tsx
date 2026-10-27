@@ -102,6 +102,25 @@ describe("BatchEditClassroomsDialog", () => {
     expect(screen.getByRole("button", { name: "Save (1)" })).toBeDisabled();
   });
 
+  it("keeps the red border while an invalid name input has focus (V3)", () => {
+    renderDialog();
+    fireEvent.change(nameInput("3"), { target: { value: "" } });
+    const className = nameInput("3").className;
+    expect(className).toContain("focus:border-red-500");
+    expect(className).toContain("focus:ring-red-500");
+    expect(className).not.toContain("focus:border-blue-500");
+    expect(className).not.toContain("focus:ring-blue-500");
+  });
+
+  it("puts the dialog and its overlay above the floating teaching toolbar (V1)", () => {
+    renderDialog();
+    expect(screen.getByRole("dialog").className).toContain("z-[160]");
+    const layered = document.querySelectorAll(".z-\\[160\\]");
+    // 視窗本身＋遮罩
+    expect(layered.length).toBe(2);
+    layered.forEach((el) => expect(el.className).not.toContain("z-50"));
+  });
+
   it("limits the name input to 100 characters", () => {
     renderDialog();
     expect(nameInput("3").maxLength).toBe(100);

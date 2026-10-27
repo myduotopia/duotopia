@@ -6,6 +6,7 @@
  * 「調整年級」「調整等級」「批次編輯」同一樣式（半透明白底、不分主次）、停用／啟用為開關；
  * 「批次編輯」開 BatchEditClassroomsDialog，一次改多班名稱＋年級，走 batch-update（#1139），
  * 失敗訊息用批次編輯專屬文字（batchGradeErrorMessageKey(…, "batchEdit")）；
+ * 平台管理員在批次編輯視窗另有 AI 助手面板（useClassroomRenameAssistantSlot，#1139 第二階段）；
  * 浮動列出現時列表底部預留 pb-24。按鈕層級見 docs/design/ui-style-guide.md 第 3 節。
  */
 import React, {
@@ -75,6 +76,7 @@ import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
 import { BatchEditClassroomsDialog } from "@/components/classroom/BatchEditClassroomsDialog";
+import { useClassroomRenameAssistantSlot } from "@/components/classroom/ClassroomRenameAssistantPanel";
 import type { BatchEditUpdateItem } from "@/components/classroom/batchEditClassrooms";
 import {
   AdjustLevelDialog,
@@ -139,6 +141,8 @@ export default function TeacherClassrooms() {
   const [bulkStatusCount, setBulkStatusCount] = useState(0);
   const [showAdjustLevel, setShowAdjustLevel] = useState(false);
   const [showBatchEdit, setShowBatchEdit] = useState(false);
+  // 批次編輯的 AI 助手面板：只有平台管理員拿得到（#1139 D3）
+  const renderRenameAssistant = useClassroomRenameAssistantSlot<number>();
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createFormData, setCreateFormData] = useState<{
@@ -1512,6 +1516,7 @@ export default function TeacherClassrooms() {
         onOpenChange={setShowBatchEdit}
         classrooms={selectedClassrooms}
         onSave={handleBatchEdit}
+        renderSidePanel={renderRenameAssistant}
       />
       <AdjustLevelDialog
         open={showAdjustLevel}

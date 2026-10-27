@@ -6471,7 +6471,30 @@
       "saveSuccess": "Updated {{count}} classroom(s)",
       "saveFailed": "Failed to save classroom changes. Please try again later.",
       "forbidden": "You don't have permission to edit these classrooms",
-      "limitExceeded": "You can save changes to up to {{max}} classrooms at a time. Please work in batches."
+      "limitExceeded": "You can save changes to up to {{max}} classrooms at a time. Please work in batches.",
+      "ai": {
+        "title": "AI assistant",
+        "adminOnly": "(visible to platform admins only)",
+        "intro": "Tell the AI how to change these classrooms' names or grades, e.g. \"Remove the grade from the class names\". The AI only fills in the table; nothing is saved until you click Save.",
+        "inputLabel": "Instructions for the AI",
+        "placeholder": "e.g. Remove the grade from the class names",
+        "send": "Send",
+        "stop": "Stop",
+        "thinking": "AI is thinking…",
+        "applying": "Applying {{current}}/{{total}}",
+        "applied": "Filled in {{count}} classroom(s). Review them, then click Save.",
+        "stopped": "Stopped. Filled in {{current}}/{{total}} classroom(s); the rest were discarded.",
+        "cancelled": "Stopped. The table was not changed.",
+        "noChanges": "The AI didn't change any classrooms.",
+        "error": "The AI is temporarily unavailable. Please try again.",
+        "changeLine": "{{from}} → {{to}}",
+        "gradeChange": " (grade: {{from}} → {{to}})",
+        "undo": "Undo last AI edit",
+        "undoHint": "Undo restores the whole table to how it was before that AI edit, including any manual edits made since.",
+        "undone": "Restored the table to before the last AI edit.",
+        "expand": "Expand AI assistant",
+        "collapse": "Collapse AI assistant"
+      }
     },
     "sort": {
       "gradeAsc": "Grade low→high",

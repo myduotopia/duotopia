@@ -14,10 +14,13 @@
  *   BATCH_GRADE_MAX_ITEMS（顯示 classroomGrade.batchEdit.limitExceeded）時，儲存鈕停用。
  * - API 呼叫交給呼叫端的 onSave：回傳 true 代表成功並關閉視窗；false 代表失敗，視窗不關、保留輸入。
  * - 有未儲存的修改時關閉（取消、Esc、點背景）先確認。
+ * - 名稱有錯時，輸入框在焦點狀態也維持紅框（不被藍色焦點框蓋過）。
  *
- * 版面：預留右側面板插槽 renderSidePanel（第二階段 AI 助手）。有面板時視窗加寬，
- * 寬螢幕表格與面板左右並排；窄螢幕面板改在表格上方（D11）。面板經 context 讀表格、
+ * 版面：右側面板插槽 renderSidePanel（第二階段 AI 助手 ClassroomRenameAssistantPanel，
+ * 頁面以 useClassroomRenameAssistantSlot() 取得，只有平台管理員有）。有面板時視窗加寬，
+ * 寬螢幕表格與面板左右並排；窄螢幕面板改在表格上方、可收合（D11）。面板經 context 讀表格、
  * 以 applyChanges(…, "ai") 填入、以 setRows 復原快照；寫入資料庫仍只能靠人按「儲存」。
+ * 視窗與遮罩層級（z-[160]）高於全站右側浮動工具列，手機寬度不會被工具列蓋住。
  *
  * 狀態處理（同 AdjustGradeDialog）：每次打開於 render 階段以當下勾選的班級重建表格；
  * 開著時父層背景重新載入不會覆蓋輸入；關閉動畫期間沿用最後的表格。
@@ -83,6 +86,10 @@ export interface BatchEditClassroomsDialogProps<Id extends string | number> {
 }
 
 const SET_ALL_SELECT_ID = "batch-edit-set-all-grade";
+
+// 視窗與遮罩的層級高於全站右側浮動工具列（DigitalTeachingToolbar：外層 z-[140]、工具列 z-[150]），
+// 手機寬度時工具列才不會蓋住列右緣的標記與輸入框（#1139 V1）。只調這個視窗，不動工具列。
+const DIALOG_LAYER = "z-[160]";
 
 const GRADE_SELECT_BASE =
   "w-full px-3 py-2 border dark:bg-gray-800 dark:text-gray-100 rounded-md text-sm";
@@ -176,8 +183,10 @@ export function BatchEditClassroomsDialog<Id extends string | number>({
       }}
     >
       <DialogContent
+        overlayClassName={DIALOG_LAYER}
         className={cn(
           "bg-white dark:bg-gray-800 max-h-[90vh] flex flex-col sm:max-w-3xl",
+          DIALOG_LAYER,
           sidePanel ? "lg:max-w-6xl" : undefined,
         )}
       >
@@ -268,7 +277,8 @@ export function BatchEditClassroomsDialog<Id extends string | number>({
                         className={cn(
                           "flex-1",
                           errorText
-                            ? "border-red-500 dark:border-red-500"
+                            ? // 有錯時焦點狀態也維持紅框（#1139 V3）
+                              "border-red-500 dark:border-red-500 focus:border-red-500 focus:ring-red-500 focus-visible:ring-red-500"
                             : changedBorder(nameChanged, row.nameSource),
                         )}
                       />

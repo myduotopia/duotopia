@@ -169,6 +169,19 @@ export interface SchoolBatchClassroomUpdateResponse {
   count: number;
 }
 
+/** 批次編輯 AI 助手（#1139）：送出視窗裡那幾班的當下名稱／年級＋最近 10 輪對話＋本次指示 */
+export interface ClassroomBatchEditAiRequest {
+  classrooms: { id: number; name: string; grade: number | null }[];
+  history: { role: "user" | "assistant"; content: string }[];
+  instruction: string;
+}
+
+/** AI 建議：只含名稱／年級，後端已過濾不在清單的 id、超長名稱、越界年級 */
+export interface ClassroomBatchEditAiResponse {
+  reply: string;
+  changes: { id: number; name?: string; grade?: number }[];
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -934,6 +947,18 @@ class ApiClient {
     return this.request(`/api/schools/${schoolId}/classrooms/batch-update`, {
       method: "POST",
       body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次編輯 AI 助手（#1139）：只限平台管理員；只回建議、不寫入資料庫；signal 用來「停止」 */
+  async suggestClassroomBatchEdit(
+    payload: ClassroomBatchEditAiRequest,
+    signal?: AbortSignal,
+  ): Promise<ClassroomBatchEditAiResponse> {
+    return this.request("/api/classrooms/batch-edit/ai-suggest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
     });
   }
 
