@@ -5097,6 +5097,24 @@
       "attemptsReached": "{{max}} attempts used",
       "retrying": "Re-answering question {{no}}",
       "cancelRetry": "Cancel re-answer"
+    },
+    "images": {
+      "label": "Scenario images",
+      "hint": "Students see these while answering (up to 5)",
+      "alt": "Scenario image {{n}}",
+      "add": "Upload image",
+      "full": "Up to {{max}} scenario images. Delete one before uploading another.",
+      "fullShort": "5 / 5 full",
+      "remove": "Delete this scenario image",
+      "crop": "Adjust crop",
+      "cropUnavailable": "This image was saved earlier and has no original to re-crop. Delete it and upload again to change the area.",
+      "cropTitle": "Adjust crop",
+      "cropHint": "Drag on the original to select the area to keep, then press Apply.",
+      "applyCrop": "Apply",
+      "cropFailed": "Cropping failed. Please try again.",
+      "uploadFailed": "{{count}} scenario image(s) failed to upload. You can upload them yourself.",
+      "overLimit": "Up to {{max}} scenario images; {{count}} more were skipped.",
+      "someNotCropped": "Some pictures couldn't be cropped automatically. You can upload them yourself."
     }
   },
   "vocabularySet": {

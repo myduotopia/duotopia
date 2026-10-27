@@ -5116,6 +5116,24 @@
       "attemptsReached": "已達 {{max}} 次",
       "retrying": "正在重答第 {{no}} 題",
       "cancelRetry": "取消重答"
+    },
+    "images": {
+      "label": "情境圖",
+      "hint": "學生作答時看得到，最多 5 張",
+      "alt": "情境圖 {{n}}",
+      "add": "上傳圖片",
+      "full": "情境圖最多 {{max}} 張，請先刪掉一張再上傳",
+      "fullShort": "已滿 5 張",
+      "remove": "刪除這張情境圖",
+      "crop": "調整裁切範圍",
+      "cropUnavailable": "這張圖是之前存的，沒有原圖可以重新裁切；要換範圍請刪掉後重新上傳",
+      "cropTitle": "調整裁切範圍",
+      "cropHint": "在原圖上拖拉出要保留的範圍，按「套用」後會換成新的裁切結果。",
+      "applyCrop": "套用",
+      "cropFailed": "裁切失敗，請再試一次",
+      "uploadFailed": "{{count}} 張情境圖上傳失敗，可以再自己補傳",
+      "overLimit": "情境圖最多 {{max}} 張，其餘 {{count}} 張已略過",
+      "someNotCropped": "有些圖沒辦法自動裁下來，可以自己另外上傳"
     }
   },
   "vocabularySet": {
