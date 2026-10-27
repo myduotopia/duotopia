@@ -184,3 +184,8 @@ commit `3165df5b` fix(classroom): 批次編輯審查修正——測試補 name�
 - R3：i18n `classroomGrade.batchEdit` 新增 `saveFailed`、`forbidden`、`limitExceeded`（zh-TW／en）。`batchGradeErrorMessageKey(error, scope = "grade")` 加 `scope` 參數（`"grade" | "batchEdit"`），老師頁、機構頁批次編輯失敗改傳 `"batchEdit"`；視窗超量提示改用 `classroomGrade.batchEdit.limitExceeded`。補 vitest：batchEdit scope 的 403／其他錯誤 key；視窗測試的超量文字 key 同步更新。
 - R4：照使用者決定未做。
 - 靜態檢查：black、flake8 通過；prettier、`npm run typecheck` 通過；eslint 改動檔 0 錯誤（僅 `SchoolClassroomsPage.tsx` 既有的 exhaustive-deps 警告）。pytest／vitest 交給 CI。
+
+### R1–R3 修正審查（2026-10-21，新 code-reviewer）
+結論：通過。兩個小問題不擋合併，留待之後：
+- 【低】`BatchEditClassroomsDialog.test.tsx:130-133` 未直接驗證第 1 列「已修改」標記消失（只從儲存筆數間接推得）。
+- 【低】`useClassroomListActions.ts:189-192` `runBatchUpdate` 超量提示仍用年級版文字；批次編輯視窗會先擋，實際走不到。
