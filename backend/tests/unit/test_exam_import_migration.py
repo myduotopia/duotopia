@@ -58,6 +58,18 @@ def test_upgrade_is_idempotent(source):
     assert up.count("_add_constraint(") >= 4
 
 
+def test_page_claim_and_resend_columns(source):
+    """C2 第二輪：claim_id／resend_count 在 CREATE TABLE 裡，另有守衛補欄位（表已存在的環境）。"""
+    up, _ = _split(source)
+    assert "claim_id VARCHAR(32)" in up
+    assert "resend_count SMALLINT NOT NULL DEFAULT 0" in up
+    assert '_add_column("exam_import_pages", "claim_id"' in up
+    assert '_add_column("exam_import_pages", "resend_count"' in up
+    helper = source.split("def _add_column(", 1)[1].split("def upgrade()", 1)[0]
+    assert "table_schema = 'public'" in helper
+    assert "IF NOT EXISTS" in helper
+
+
 def test_upgrade_has_no_destructive_or_raw_alembic_ops(source):
     up, _ = _split(source)
     for forbidden in (

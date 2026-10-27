@@ -283,9 +283,10 @@
 | 表 | 一列代表 | 主要內容 |
 |----|----------|----------|
 | `exam_imports` | 一份上傳的題本（匯入草稿） | `teacher_id`、`file_name`、`file_hash`（檔案內容 SHA-256，偵測重複匯入）、`page_count`（≤ 20）、`settings` JSONB（年段、來源、教材、公開、機構／學校）、`tts_accents` JSONB（口音多選）、`known_answers` JSONB（答案頁的題號 → 答案）、`status`（`processing` 還有頁沒處理完／`ready` 每頁都處理過／`saved` 全部存入／`abandoned` 放棄）、`question_count`、用量加總（`ai_call_count`、`input_tokens`、`output_tokens`、`thinking_tokens`、`estimated_cost_usd`）、`abandoned_at`、`created_at`（未完成的 30 天內顯示） |
-| `exam_import_pages` | 題本的一頁 | `page_no`、`status`（`pending` 未送／`processing` 處理中／`done` 完成／`failed` 失敗）、`image_url`（GCS 頁圖）、`is_answer_page`、`answer_key` JSONB（這一頁的題號 → 答案）、`cards` JSONB（題目卡：答案來源、老師改過的欄位清單、每題在頁面上的位置、重複標記、口音）、`error`、`processed_at` |
+| `exam_import_pages` | 題本的一頁 | `page_no`、`status`（`pending` 未送／`processing` 處理中／`done` 完成／`failed` 失敗）、`image_url`（GCS 頁圖）、`is_answer_page`、`answer_key` JSONB（這一頁的題號 → 答案）、`cards` JSONB（題目卡：答案來源、老師改過的欄位清單、每題在頁面上的位置、重複標記、口音、`retry_count` 重試單一題次數）、`error`、`claim_id`（正在處理這一頁的請求識別值，AI 回來後確認仍是自己才寫入）、`resend_count`（整頁重送次數，第一次處理不算，上限 2）、`processed_at` |
 | `exam_import_usage` | 一次 AI 呼叫 | `call_type`（`extract_page` 擷取一頁＝擷取＋作答＋考點／`retry_question` 重試單一題／`tts`）、`model`、`input_tokens`／`output_tokens`／`thinking_tokens`（分開存）、`audio_seconds`、`estimated_cost_usd`、`succeeded`、`page_no` |
 
+- 逾時與次數上限：單次 AI 呼叫最多 2 分鐘；`processing` 超過 3 分鐘可重送；整頁重送每頁最多 2 次（`resend_count`）、重試單一題每張卡最多 2 次（`retry_count`），超過回 409 `EXAM_IMPORT_RETRY_LIMIT`。規則見 [question-bank-exam-import.md](./question-bank-exam-import.md) 第三節與「處理失敗」。
 - 用量只記錄、不扣老師額度，只在後台查；一般老師每天（台灣時間自然日）最多上傳 1 本，計算當天建立、沒有放棄的 `exam_imports`；`Teacher.is_admin` 不限。
 - 同一位老師上傳的檔案內容雜湊與自己未放棄的 `exam_imports` 相同時擋下，回傳那次匯入的 id（畫面附「打開那次匯入」連結）。
 - 放棄匯入時（只有 `processing`／`ready` 可以放棄），草稿頁、頁面圖片、匯入產生的音檔一起刪除；`exam_imports` 列與用量列保留。過期匯入的自動清理排程另議（目前只是不顯示）。

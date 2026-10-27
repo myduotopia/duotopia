@@ -1,5 +1,6 @@
 """
-上傳題本匯入流程（Issue #1112 C2）：建立匯入、逐頁擷取、答案頁回填、重試單一題、放棄、用量。
+上傳題本匯入流程（Issue #1112 C2）：建立匯入、逐頁擷取、答案頁回填、放棄、用量。
+重試單一題在 ``services/exam_import_retry.py``（本模組的 ``retry_question`` 照樣可用）。
 
 規則來源：docs/design/question-bank-exam-import.md、計畫檔定案 14–17。
 
@@ -12,8 +13,15 @@
 - **跨頁題組**：某頁第一張卡標「延續上一頁題組」→ 併進前面最近一個有卡片的已處理頁的最後一張
   題組卡（跨三頁以上也接得上；克漏字空格編號接續）。中間有頁還沒處理就先留著，處理完再併。
   規則在 ``exam_paper_cards.merge_continuations``（報告腳本共用）。
-- **並發**：同一頁用條件式 UPDATE 搶 processing（同頁同時送兩次只有一個成功）；AI 回來後
-  ``lock_import`` 鎖住匯入列、讀最新資料，再做答案套用／合併／比對／計數／用量加總。
+- **並發**：同一頁用條件式 UPDATE 搶 processing（同頁同時送兩次只有一個成功），並寫入這次請求的
+  ``claim_id``；送 AI 前 ``commit`` 釋放 DB 連線（AI 最多等 2 分鐘，不佔著連線）；AI 回來後
+  ``lock_import`` 鎖住匯入列、讀最新資料，**確認這一頁仍是自己搶到的**（``claim_id`` 相同、仍在
+  processing）才寫入，否則只記用量、丟掉結果（409 ``EXAM_IMPORT_PAGE_BUSY``）。鎖內整理出錯 →
+  rollback → 標失敗並記用量。
+- **逾時與重送**（定案 18）：單次 AI 呼叫最多 2 分鐘（逾時＝該頁失敗、用量照記）；卡在
+  processing 超過 3 分鐘（``STALE_PROCESSING``）的頁可以重送。**整頁重送每頁最多 2 次**
+  （``MAX_PAGE_RESENDS``）：第一次處理（pending → processing）不算；失敗後、或處理中超過 3 分鐘後
+  再送才算一次；已經 2 次還要再送回 409 ``EXAM_IMPORT_RETRY_LIMIT``，不呼叫 AI。
 - **口音**：每張題目卡分配一種（勾一種＝全部同一種；多種＝平均分配：從目前用最少次的口音中隨機抽），
   抽中後固定；「延續上一頁題組」的卡不算進次數。
 - **用量**：每次 AI 呼叫寫一列 ``exam_import_usage``，``exam_imports`` 同步加總；AI 回應無法解析時
@@ -26,11 +34,12 @@ from __future__ import annotations
 import copy
 import logging
 import random
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, case, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -51,7 +60,6 @@ from models.exam_import import (
     PAGE_STATUS_PENDING,
     PAGE_STATUS_PROCESSING,
     USAGE_CALL_EXTRACT_PAGE,
-    USAGE_CALL_RETRY_QUESTION,
 )
 from models.question_bank import EXAM_POINT_STATUS_ACTIVE
 from services import exam_import_storage
@@ -62,15 +70,14 @@ from services.exam_paper_cards import (
     CARD_KIND_GROUP,
     answer_is_locked,
     apply_answer_key,
-    card_has_question,
     iter_card_questions,
     merge_continuations,
-    normalize_question_no,
 )
 from services.exam_paper_service import (
     CallUsage,
     ExamPaperOutputError,
     ExamPaperService,
+    ExamPaperTimeoutError,
     get_exam_paper_service,
 )
 from services.magic_paste_quota import is_unlimited
@@ -81,8 +88,11 @@ TAIPEI = ZoneInfo("Asia/Taipei")
 DAILY_LIMIT = 1
 UNFINISHED_RETENTION_DAYS = 30
 UNFINISHED_STATUSES = (EXAM_IMPORT_STATUS_PROCESSING, EXAM_IMPORT_STATUS_READY)
-# 頁卡在 processing 超過這段時間（請求中途斷掉）就視同失敗，可以重送整頁
-STALE_PROCESSING = timedelta(minutes=10)
+# 頁卡在 processing 超過這段時間（請求中途斷掉）就視同失敗，可以重送整頁。
+# 比 AI 逾時（exam_paper_service.AI_CALL_TIMEOUT_SECONDS＝2 分鐘）多留一分鐘給上傳頁圖與寫入。
+STALE_PROCESSING = timedelta(minutes=3)
+# 整頁重送上限（第一次處理不算；失敗後或過期後再送才算）
+MAX_PAGE_RESENDS = 2
 
 
 class ExamImportError(Exception):
@@ -477,50 +487,87 @@ def lock_import(db: Session, import_id: int) -> ExamImport:
     )
 
 
-def _claim_page(db: Session, page: ExamImportPage) -> None:
-    """條件式 UPDATE 把頁改成 processing：同一頁同時送兩次，只有一個請求拿得到。
+def _claim_page(db: Session, page_id: int, page_no: int) -> str:
+    """條件式 UPDATE 把頁改成 processing、寫入新的 ``claim_id``（回傳它）並 commit。
 
-    卡在 processing 超過 ``STALE_PROCESSING`` 的頁（請求中途斷掉）視同失敗，可以重送。
+    同一頁同時送兩次，只有一個請求拿得到。可以搶的頁：
+    - ``pending``：第一次處理，不算重送；
+    - ``failed``，或卡在 processing 超過 ``STALE_PROCESSING``（請求中途斷掉）：算一次重送，
+      ``resend_count`` 已達 ``MAX_PAGE_RESENDS`` 就不給搶（409 ``EXAM_IMPORT_RETRY_LIMIT``）。
+    其他情況（處理中、已處理完）回 409 ``EXAM_IMPORT_PAGE_BUSY``。
     """
     now = _utcnow()
-    claimable = or_(
-        ExamImportPage.status.in_((PAGE_STATUS_PENDING, PAGE_STATUS_FAILED)),
-        and_(
-            ExamImportPage.status == PAGE_STATUS_PROCESSING,
-            or_(
-                ExamImportPage.updated_at.is_(None),
-                ExamImportPage.updated_at < now - STALE_PROCESSING,
-            ),
+    stale = and_(
+        ExamImportPage.status == PAGE_STATUS_PROCESSING,
+        or_(
+            ExamImportPage.updated_at.is_(None),
+            ExamImportPage.updated_at < now - STALE_PROCESSING,
         ),
     )
+    resendable = or_(ExamImportPage.status == PAGE_STATUS_FAILED, stale)
+    claimable = or_(
+        ExamImportPage.status == PAGE_STATUS_PENDING,
+        and_(resendable, ExamImportPage.resend_count < MAX_PAGE_RESENDS),
+    )
+    claim_id = uuid.uuid4().hex
     claimed = (
         db.query(ExamImportPage)
-        .filter(ExamImportPage.id == page.id, claimable)
+        .filter(ExamImportPage.id == page_id, claimable)
         .update(
             {
                 ExamImportPage.status: PAGE_STATUS_PROCESSING,
                 ExamImportPage.error: None,
+                ExamImportPage.claim_id: claim_id,
+                # SET 右邊讀的是更新前的 status：pending 不加、其餘（重送）加一
+                ExamImportPage.resend_count: ExamImportPage.resend_count
+                + case((ExamImportPage.status == PAGE_STATUS_PENDING, 0), else_=1),
                 ExamImportPage.updated_at: now,
             },
             synchronize_session=False,
         )
     )
-    if not claimed:
-        db.rollback()
-        raise ExamImportError(
-            409, "EXAM_IMPORT_PAGE_BUSY", f"第 {page.page_no} 頁正在處理或已處理完"
+    if claimed:
+        db.commit()
+        return claim_id
+    over_limit = (
+        db.query(ExamImportPage.id)
+        .filter(
+            ExamImportPage.id == page_id,
+            resendable,
+            ExamImportPage.resend_count >= MAX_PAGE_RESENDS,
         )
-    db.commit()
+        .first()
+        is not None
+    )
+    db.rollback()
+    if over_limit:
+        raise ExamImportError(
+            409,
+            "EXAM_IMPORT_RETRY_LIMIT",
+            f"第 {page_no} 頁已經重送 {MAX_PAGE_RESENDS} 次，請改用手動補題",
+            retry_limit=MAX_PAGE_RESENDS,
+        )
+    raise ExamImportError(409, "EXAM_IMPORT_PAGE_BUSY", f"第 {page_no} 頁正在處理或已處理完")
+
+
+def _owns_page(page: Optional[ExamImportPage], claim_id: str) -> bool:
+    return (
+        page is not None
+        and page.status == PAGE_STATUS_PROCESSING
+        and page.claim_id == claim_id
+    )
 
 
 def _fail_page(
     db: Session,
     import_id: int,
     page_no: int,
+    claim_id: str,
     error: str,
     usage: Optional[CallUsage] = None,
 ) -> None:
-    """AI 失敗：鎖內記用量（若有）、把還在 processing 的頁標成失敗。"""
+    """AI 失敗或整理結果出錯：鎖內記用量（若有）；這一頁**仍是自己搶到的**才標成失敗
+    （已被別的請求重搶就不動它）。"""
     db.rollback()
     imp = lock_import(db, import_id)
     if usage is not None:
@@ -533,9 +580,10 @@ def _fail_page(
             succeeded=False,
         )
     page = next((p for p in imp.pages if p.page_no == page_no), None)
-    if page is not None and page.status == PAGE_STATUS_PROCESSING:
+    if _owns_page(page, claim_id):
         page.status = PAGE_STATUS_FAILED
         page.error = error
+        page.claim_id = None
         _refresh_status_and_count(imp)
     db.commit()
 
@@ -555,9 +603,10 @@ async def process_page(
 ) -> ExamImportPage:
     """擷取一頁並寫進草稿。
 
-    只有還沒處理完（pending／failed，或卡在 processing 太久）的頁可以送：整頁失敗才重送整頁；
-    已處理完的頁改用 ``retry_question`` 以題為單位重讀（處理完的頁可能已和下一頁合併跨頁題組，
-    整頁重來會弄亂）。AI 回來後在 ``lock_import`` 的鎖內寫入（見該函式說明）。
+    只有還沒處理完（pending／failed，或卡在 processing 超過 3 分鐘）的頁可以送：整頁失敗才重送
+    整頁（重送上限見 ``_claim_page``）；已處理完的頁改用 ``retry_question`` 以題為單位重讀（處理完
+    的頁可能已和下一頁合併跨頁題組，整頁重來會弄亂）。送 AI 前 commit 釋放連線；AI 回來後在
+    ``lock_import`` 的鎖內確認仍持有這一頁（``claim_id``）才寫入（見模組說明）。
     """
     _require_open(imp)
     page = _get_page(imp, page_no)
@@ -567,40 +616,78 @@ async def process_page(
         )
     service = service or get_exam_paper_service()
     mime = service.validate_page_image(image_bytes, mime_type)
-    import_id = imp.id
-    _claim_page(db, page)
+    import_id, page_id = imp.id, page.id
+    claim_id = _claim_page(db, page_id, page_no)
 
     try:
         image_url = exam_import_storage.store_page_image(
             import_id, page_no, image_bytes, mime
         )
-        page = _get_page(imp, page_no)
-        page.image_url = image_url
-        db.commit()
+        db.query(ExamImportPage).filter(
+            ExamImportPage.id == page_id, ExamImportPage.claim_id == claim_id
+        ).update({ExamImportPage.image_url: image_url}, synchronize_session=False)
         catalog, code_to_id = exam_point_catalog(db)
+        known = dict(imp.known_answers or {})
+        db.commit()  # 送 AI 前結束交易、把連線還給連線池（AI 最多等 2 分鐘）
         result = await service.extract_page(
             image_bytes,
             mime,
             page_no=page_no,
-            known_answers=imp.known_answers or {},
+            known_answers=known,
             exam_point_catalog=catalog,
             code_to_id=code_to_id,
         )
+    except ExamPaperTimeoutError as e:
+        _fail_page(db, import_id, page_no, claim_id, "AI 處理逾時", usage=e.usage)
+        raise
     except ExamPaperOutputError as e:
-        _fail_page(db, import_id, page_no, "AI 回傳格式錯誤", usage=e.usage)
+        _fail_page(db, import_id, page_no, claim_id, "AI 回傳格式錯誤", usage=e.usage)
         raise
     except Exception:
-        _fail_page(db, import_id, page_no, "AI 擷取失敗")
+        _fail_page(db, import_id, page_no, claim_id, "AI 擷取失敗")
         raise
 
     imp = lock_import(db, import_id)
+    try:
+        return _write_page_result(db, imp, page_no, claim_id, result, rng)
+    except ExamImportError:
+        raise
+    except Exception:
+        logger.exception("[exam-import] import=%s page=%s 整理結果失敗", import_id, page_no)
+        _fail_page(db, import_id, page_no, claim_id, "整理擷取結果失敗", usage=result.usage)
+        raise
+
+
+def _write_page_result(
+    db: Session,
+    imp: ExamImport,
+    page_no: int,
+    claim_id: str,
+    result: Any,
+    rng: Optional[random.Random],
+) -> ExamImportPage:
+    """鎖內：確認仍持有這一頁、記用量、套答案／合併／比對／計數後 commit。
+
+    匯入已結束（AI 處理期間被放棄）或這一頁已被別的請求重搶：用量照記（失敗），結果丟掉、回 409。
+    """
+    page = _get_page(imp, page_no)
+    closed = imp.status not in UNFINISHED_STATUSES
+    if closed or not _owns_page(page, claim_id):
+        record_usage(
+            db,
+            imp,
+            call_type=USAGE_CALL_EXTRACT_PAGE,
+            usage=result.usage,
+            page_no=page_no,
+            succeeded=False,
+        )
+        db.commit()
+        if closed:
+            raise ExamImportError(409, "EXAM_IMPORT_CLOSED", "這次匯入已結束，不能再處理頁面")
+        raise ExamImportError(409, "EXAM_IMPORT_PAGE_BUSY", f"第 {page_no} 頁已由另一次送出接手處理")
     record_usage(
         db, imp, call_type=USAGE_CALL_EXTRACT_PAGE, usage=result.usage, page_no=page_no
     )
-    if imp.status not in UNFINISHED_STATUSES:  # AI 處理期間被放棄：用量照記，結果丟掉
-        db.commit()
-        _require_open(imp)
-    page = _get_page(imp, page_no)
 
     # 用鎖內最新的已知答案（等待 AI 期間別頁可能已存好答案頁）＋本頁答案表套到新卡
     latest_known = {**(imp.known_answers or {}), **result.answer_key}
@@ -614,6 +701,7 @@ async def process_page(
     page.answer_key = result.answer_key or None
     page.status = PAGE_STATUS_DONE
     page.error = None
+    page.claim_id = None
     page.processed_at = _utcnow()
     _touch(page)
 
@@ -624,213 +712,6 @@ async def process_page(
     db.commit()
     db.refresh(page)
     return page
-
-
-def _find_card(
-    imp: ExamImport,
-    page_no: int,
-    card_id: Optional[str],
-    question_no: Optional[str],
-) -> Optional[Tuple[ExamImportPage, int]]:
-    """找重試的目標卡：card_id 跨所有已處理頁找；只有題號時先找這一頁，再找其他頁
-    （跨頁合併過的題組放在它開始的那一頁）。"""
-    pages = _done_pages(imp)
-    if card_id:
-        for p in pages:
-            for i, c in enumerate(p.cards or []):
-                if c.get("card_id") == card_id:
-                    return p, i
-        return None
-    if not question_no:
-        return None
-    for p in sorted(pages, key=lambda p: p.page_no != page_no):
-        for i, c in enumerate(p.cards or []):
-            if card_has_question(c, question_no):
-                return p, i
-    return None
-
-
-def _is_merged_group(card: Mapping[str, Any]) -> bool:
-    return card.get("kind") == CARD_KIND_GROUP and len(card.get("pages") or []) > 1
-
-
-def _replace_in_merged_group(
-    old: Dict[str, Any], new_card: Mapping[str, Any], question_no: Optional[str]
-) -> bool:
-    """跨頁合併過的題組：只換掉那一個題號的小題。比不到題號回 False。"""
-    new_q = next(
-        (
-            q
-            for q in iter_card_questions(new_card)
-            if question_no and q.get("source_question_no") == question_no
-        ),
-        None,
-    )
-    questions = old["group"]["questions"]
-    slot = next(
-        (
-            i
-            for i, q in enumerate(questions)
-            if question_no and q.get("source_question_no") == question_no
-        ),
-        None,
-    )
-    if new_q is None or slot is None:
-        return False
-    new_q["blank"] = questions[slot].get("blank")
-    questions[slot] = new_q
-    return True
-
-
-def _check_retry_target(
-    imp: ExamImport,
-    page_no: int,
-    card_id: Optional[str],
-    question_no: Optional[str],
-    bbox: Optional[List[int]],
-) -> Tuple[Optional[str], Optional[List[int]]]:
-    """送 AI 前先確認目標卡、補出題號／位置。回傳 (題號, bbox)。"""
-    found = _find_card(imp, page_no, card_id, question_no)
-    if card_id and found is None:
-        raise ExamImportError(404, "EXAM_IMPORT_CARD_NOT_FOUND", "找不到這張題目卡")
-    if found is not None:
-        old = found[0].cards[found[1]]
-        if page_no not in (old.get("pages") or [old.get("page_no")]):
-            raise ExamImportError(
-                422, "EXAM_IMPORT_RETRY_TARGET", f"這張題目卡不在第 {page_no} 頁"
-            )
-        if not question_no:
-            question_no = next(
-                (
-                    q.get("source_question_no")
-                    for q in iter_card_questions(old)
-                    if q.get("source_question_no") and q.get("page_no") == page_no
-                ),
-                None,
-            )
-        if not bbox and old.get("page_no") == page_no:
-            bbox = old.get("bbox")
-        if _is_merged_group(old) and not question_no:
-            raise ExamImportError(
-                422, "EXAM_IMPORT_RETRY_MERGED", "跨頁題組請指定要重讀的題號，或手動補這一題"
-            )
-    if not question_no and not bbox:
-        raise ExamImportError(422, "EXAM_IMPORT_RETRY_TARGET", "請指定題號或位置")
-    return question_no, bbox
-
-
-async def retry_question(
-    db: Session,
-    imp: ExamImport,
-    page_no: int,
-    image_bytes: bytes,
-    mime_type: str,
-    *,
-    card_id: Optional[str] = None,
-    question_no: Optional[str] = None,
-    bbox: Optional[List[int]] = None,
-    service: Optional[ExamPaperService] = None,
-) -> Dict[str, Any]:
-    """只重讀一頁裡的一題（給題號或 bbox；或給 card_id 由卡片推得），取代該卡。回傳新卡。
-
-    目標卡跨所有已處理頁找（跨頁合併過的題組放在它開始的那一頁）。合併題組（``pages`` 不只
-    一頁）只換掉那一個題號的小題，其他頁併進來的素材與小題保留；比不到題號回 422（請老師手動補），
-    不會用單頁的局部題組蓋掉整個合併題組。
-    """
-    _require_open(imp)
-    page = _get_page(imp, page_no)
-    if page.status != PAGE_STATUS_DONE:
-        raise ExamImportError(409, "EXAM_IMPORT_PAGE_NOT_DONE", "這一頁還沒處理完，請重送整頁")
-    service = service or get_exam_paper_service()
-    mime = service.validate_page_image(image_bytes, mime_type)
-    import_id = imp.id
-    question_no, bbox = _check_retry_target(
-        imp, page_no, card_id, normalize_question_no(question_no), bbox
-    )
-
-    catalog, code_to_id = exam_point_catalog(db)
-    try:
-        result = await service.extract_page(
-            image_bytes,
-            mime,
-            page_no=page_no,
-            known_answers=imp.known_answers or {},
-            exam_point_catalog=catalog,
-            code_to_id=code_to_id,
-            focus_question_no=question_no,
-            focus_box=bbox,
-        )
-    except ExamPaperOutputError as e:
-        db.rollback()
-        imp = lock_import(db, import_id)
-        record_usage(
-            db,
-            imp,
-            call_type=USAGE_CALL_RETRY_QUESTION,
-            usage=e.usage,
-            page_no=page_no,
-            succeeded=False,
-        )
-        db.commit()
-        raise
-
-    imp = lock_import(db, import_id)
-    record_usage(
-        db,
-        imp,
-        call_type=USAGE_CALL_RETRY_QUESTION,
-        usage=result.usage,
-        page_no=page_no,
-    )
-
-    def fail(status_code: int, code: str, message: str) -> ExamImportError:
-        db.commit()  # 用量照記
-        return ExamImportError(status_code, code, message)
-
-    if imp.status not in UNFINISHED_STATUSES:
-        raise fail(409, "EXAM_IMPORT_CLOSED", "這次匯入已結束，不能再處理頁面")
-    new_card = next(
-        (c for c in result.cards if card_has_question(c, question_no)), None
-    ) or (result.cards[0] if result.cards else None)
-    if new_card is None:
-        raise fail(422, "EXAM_IMPORT_RETRY_EMPTY", "AI 沒有讀到這一題，請手動補這一題")
-
-    known = imp.known_answers or {}
-    # AI 處理期間卡片可能被合併／移動：鎖內重新找一次
-    found = _find_card(imp, page_no, card_id, question_no)
-    if card_id and found is None:
-        raise fail(404, "EXAM_IMPORT_CARD_NOT_FOUND", "找不到這張題目卡")
-    if found is not None:
-        owner, index = found
-        cards = copy.deepcopy(owner.cards or [])
-        old = cards[index]
-        if _is_merged_group(old):
-            if not _replace_in_merged_group(old, new_card, question_no):
-                raise fail(422, "EXAM_IMPORT_RETRY_MERGED", "跨頁題組裡比不到這個題號，請手動補這一題")
-            target = old
-        else:
-            new_card["card_id"] = old.get("card_id") or new_card["card_id"]
-            new_card["tts_accent"] = old.get("tts_accent")
-            new_card["continues_previous"] = bool(old.get("continues_previous"))
-            cards[index] = new_card
-            target = new_card
-    else:
-        owner = _get_page(imp, page_no)
-        cards = copy.deepcopy(owner.cards or [])
-        cards.append(new_card)
-        assign_accents(list(imp.tts_accents or []), _all_cards(imp), [new_card])
-        target = new_card
-    apply_answer_key([target], known)
-    owner.cards = cards
-    _touch(owner)
-    target_id = target["card_id"]
-    _refresh_duplicates(db, imp)
-    _refresh_status_and_count(imp)
-    db.commit()
-    for c in _all_cards(imp):
-        if c.get("card_id") == target_id:
-            return copy.deepcopy(c)
-    raise ExamImportError(404, "EXAM_IMPORT_CARD_NOT_FOUND", "找不到這張題目卡")
 
 
 # --------------------------------------------------------------------------- #
@@ -854,6 +735,11 @@ def serialize_import(imp: ExamImport, include_pages: bool = False) -> Dict[str, 
     }
     if include_pages:
         out["known_answers"] = imp.known_answers or {}
+        # 前端用來判斷還能不能「重送整頁」／「重試」，用完就只剩「手動補這一題」
+        out["retry_limits"] = {
+            "page_resends": MAX_PAGE_RESENDS,
+            "question_retries": _max_question_retries(),
+        }
         out["pages"] = [serialize_page(p) for p in pages]
     return out
 
@@ -867,13 +753,32 @@ def serialize_page(page: ExamImportPage) -> Dict[str, Any]:
         "answer_key": page.answer_key or {},
         "cards": page.cards or [],
         "error": page.error,
+        "resend_count": page.resend_count or 0,
         "processed_at": page.processed_at.isoformat() if page.processed_at else None,
     }
+
+
+def _max_question_retries() -> int:
+    from services.exam_import_retry import MAX_QUESTION_RETRIES
+
+    return MAX_QUESTION_RETRIES
+
+
+def __getattr__(name: str) -> Any:
+    """舊匯入相容：``retry_question`` 已拆到 ``services/exam_import_retry.py``（它反過來匯入本模組，
+    所以延遲載入，避免循環匯入）。"""
+    if name in ("retry_question", "MAX_QUESTION_RETRIES"):
+        from services import exam_import_retry
+
+        return getattr(exam_import_retry, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
     "ANSWER_SOURCE_ANSWER_PAGE",
     "DAILY_LIMIT",
+    "MAX_PAGE_RESENDS",
+    "STALE_PROCESSING",
     "ExamImportError",
     "abandon_import",
     "assign_accents",
@@ -887,7 +792,6 @@ __all__ = [
     "lock_import",
     "process_page",
     "record_usage",
-    "retry_question",
     "serialize_import",
     "serialize_page",
     "taipei_day_bounds",

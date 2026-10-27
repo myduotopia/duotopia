@@ -5,7 +5,8 @@
                          頁數、整份設定（JSONB：年段／來源／教材／公開／歸屬）、朗讀口音選擇、
                          狀態、題數、已知答案對照（題號 → 正確選項 index）、用量加總。
 - ``exam_import_pages``  題本的一頁：頁碼、狀態、頁圖 URL（GCS）、是否答案頁、這一頁的題目卡
-                         JSONB（含答案來源、老師改過的欄位清單、每題在頁面上的位置）。
+                         JSONB（含答案來源、老師改過的欄位清單、每題在頁面上的位置、單題重試
+                         次數）、處理中的請求識別值 ``claim_id``、整頁重送次數 ``resend_count``。
 - ``exam_import_usage``  每次 AI 呼叫一列：類型、模型、input／output／thinking token（分開存）、
                          音檔秒數（TTS 用，語音段才寫）、估算美元。只記不扣老師額度。
 - ``question_source_links.source_question_no``  原卷題號（"12"、"40"），可為空。
@@ -15,7 +16,9 @@
 
 Idempotent（遵守 CLAUDE.md Migration 鐵則）：
   - CREATE TABLE IF NOT EXISTS
-  - ADD COLUMN 包在 information_schema 守衛裡（table_schema = 'public'）
+  - ADD COLUMN 包在 information_schema 守衛裡（table_schema = 'public'）；
+    ``exam_import_pages.claim_id``／``resend_count`` 在 CREATE TABLE 裡，另以守衛補欄位，
+    表已先建立（本 migration 較早版本）的環境再跑一次也會補上
   - constraint 先用 pg_constraint JOIN pg_class（以 table 鎖定）檢查後建立
   - CREATE INDEX IF NOT EXISTS
   - upgrade 沒有 DROP / RENAME / ALTER TYPE
@@ -51,6 +54,24 @@ def _add_constraint(table: str, name: str, ddl: str) -> None:
                   AND cls.relname = '{table}'
             ) THEN
                 ALTER TABLE {table} ADD CONSTRAINT {name} {ddl};
+            END IF;
+        END $$;
+        """
+    )
+
+
+def _add_column(table: str, column: str, ddl: str) -> None:
+    """欄位不存在才加（information_schema 限定 public schema）。"""
+    op.execute(
+        f"""
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = '{table}'
+                  AND column_name = '{column}'
+            ) THEN
+                ALTER TABLE public.{table} ADD COLUMN {column} {ddl};
             END IF;
         END $$;
         """
@@ -117,12 +138,16 @@ def upgrade() -> None:
             answer_key JSONB,
             cards JSONB NOT NULL DEFAULT '[]'::jsonb,
             error TEXT,
+            claim_id VARCHAR(32),
+            resend_count SMALLINT NOT NULL DEFAULT 0,
             processed_at TIMESTAMPTZ,
             created_at TIMESTAMPTZ DEFAULT now(),
             updated_at TIMESTAMPTZ
         )
         """
     )
+    _add_column("exam_import_pages", "claim_id", "VARCHAR(32)")
+    _add_column("exam_import_pages", "resend_count", "SMALLINT NOT NULL DEFAULT 0")
     _add_constraint(
         "exam_import_pages",
         "uq_exam_import_pages_import_page",

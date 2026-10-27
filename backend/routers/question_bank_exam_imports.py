@@ -34,7 +34,11 @@ from routers.question_bank_schemas import ProgramLinkIn
 from routers.teachers import get_current_teacher
 from services import exam_import_service as eis
 from services import question_bank_service as qbs
-from services.exam_paper_service import ExamPaperError, ExamPaperOutputError
+from services.exam_paper_service import (
+    ExamPaperError,
+    ExamPaperOutputError,
+    ExamPaperTimeoutError,
+)
 from services.magic_paste_service import MagicPasteError, MagicPasteService
 from utils.ttsVoiceResolver import ACCENT_CHOICES
 
@@ -125,6 +129,17 @@ async def _read_page_file(file: UploadFile) -> bytes:
     return data
 
 
+def _ai_timeout(next_step: str) -> HTTPException:
+    """AI 超過 2 分鐘沒回應（已中斷、用量已記）。前端照 ``error`` 顯示失敗與下一步。"""
+    return HTTPException(
+        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+        detail={
+            "error": "EXAM_IMPORT_AI_TIMEOUT",
+            "message": f"AI 處理超過 2 分鐘，{next_step}",
+        },
+    )
+
+
 def _ai_failed(what: str, exc: Exception) -> HTTPException:
     logger.warning("[exam-import] %s failed: %s", what, exc, exc_info=True)
     return HTTPException(
@@ -204,6 +219,8 @@ async def extract_exam_import_page(
     """送一頁頁圖（PNG／JPEG／WebP）：存 GCS、AI 擷取、寫入頁狀態與題目卡。
 
     回傳這一頁與整份匯入摘要；答案頁會回填其他頁，所以前端收到答案頁後要重抓整份（GET）。
+    409 ``EXAM_IMPORT_PAGE_BUSY``（處理中／已由另一次送出接手）、``EXAM_IMPORT_RETRY_LIMIT``
+    （整頁重送已 2 次）、504 ``EXAM_IMPORT_AI_TIMEOUT``（AI 超過 2 分鐘，該頁已標失敗）。
     """
     imp = _load(db, teacher, import_id)
     data = await _read_page_file(file)
@@ -213,6 +230,8 @@ async def extract_exam_import_page(
         raise _raise(e)
     except (ExamPaperError, MagicPasteError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ExamPaperTimeoutError:
+        raise _ai_timeout("這一頁已標為失敗，可以重送整頁")
     except ExamPaperOutputError as e:
         raise _ai_failed("page", e)
     except Exception as e:  # AI 供應商錯誤
@@ -233,7 +252,10 @@ async def retry_exam_import_question(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """只重讀那一頁的那一題（送頁圖＋題號／bbox，或 card_id），取代該卡；回傳新卡。"""
+    """只重讀那一頁的那一題（送頁圖＋題號／bbox，或 card_id），取代該卡；回傳新卡。
+
+    每張卡最多重試 2 次，超過回 409 ``EXAM_IMPORT_RETRY_LIMIT``（請老師手動補這一題）。
+    """
     imp = _load(db, teacher, import_id)
     box = None
     if bbox:
@@ -261,6 +283,8 @@ async def retry_exam_import_question(
         raise _raise(e)
     except (ExamPaperError, MagicPasteError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ExamPaperTimeoutError:
+        raise _ai_timeout("可以再重試或手動補這一題")
     except ExamPaperOutputError as e:
         raise _ai_failed("retry", e)
     except Exception as e:

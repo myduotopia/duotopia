@@ -186,26 +186,46 @@ def match_cloze_blanks(paragraphs: List[str], questions: List[Dict[str, Any]]) -
         q["blank"] = blanks[i] if i < len(blanks) else None
 
 
+def renumber_cloze_blanks(
+    paragraphs: List[str], questions: List[Dict[str, Any]]
+) -> List[str]:
+    """依閱讀順序把文章空格重編成 1..k，小題 ``blank`` 跟著換；回傳新的段落。
+
+    跨頁合併後編號可能有缺號或從很大的數字開始（例如原卷第 41 題起），存進題庫前整理成連續編號，
+    C4 存檔驗證（文章空格 ↔ 小題 blank 一一對應）才對得上。小題 blank 不在文章裡的設為 None。
+    """
+    mapping = {old: i + 1 for i, old in enumerate(blank_numbers(paragraphs))}
+    if all(old == new for old, new in mapping.items()):
+        renumbered = list(paragraphs)
+    else:
+        renumbered = [
+            BLANK_TOKEN_RE.sub(lambda m: "{{%d}}" % mapping[int(m.group(1))], p or "")
+            for p in paragraphs
+        ]
+    for q in questions:
+        b = q.get("blank")
+        q["blank"] = mapping.get(b) if isinstance(b, int) else None
+    return renumbered
+
+
 # --------------------------------------------------------------------------- #
 # 跨頁題組
 # --------------------------------------------------------------------------- #
 def merge_group_cards(target: Dict[str, Any], cont: Dict[str, Any]) -> None:
     """把「延續上一頁」的題組卡併進上一頁的題組卡（就地修改 target）。
 
-    克漏字空格編號：下一頁文章自己從 {{1}} 重編時（最小編號不大於上一頁已用到的編號），
-    下一頁的空格與小題 blank 一起加上位移；下一頁文章沒有空格（只有小題）或 AI 已經接續編號時
-    不加位移。合併後對整個題組重跑 ``match_cloze_blanks``，對不上就依閱讀順序補配。
+    克漏字空格編號：下一頁文章自己從 {{1}} 重編時（最小編號不大於上一頁**文章**已用到的編號；
+    只看文章空格，不看小題 blank，避免小題 blank 亂填時位移過頭），下一頁的空格與小題 blank
+    一起加上位移；下一頁文章沒有空格（只有小題）或 AI 已經接續編號時不加位移。合併後對整個題組
+    重跑 ``match_cloze_blanks``（對不上就依閱讀順序補配），再依閱讀順序重編成 1..k
+    （``renumber_cloze_blanks``）。
     """
     tg, cg = target["group"], cont["group"]
     ts, cs = tg["stimulus"], cg["stimulus"]
     is_cloze = GROUP_TYPE_CLOZE in (tg.get("group_type"), cg.get("group_type"))
     if is_cloze:
         tg["group_type"] = GROUP_TYPE_CLOZE
-        used = max(
-            blank_numbers(ts.get("paragraphs") or [])
-            + [q.get("blank") or 0 for q in tg["questions"]],
-            default=0,
-        )
+        used = max(blank_numbers(ts.get("paragraphs") or []), default=0)
         cont_blanks = blank_numbers(cs.get("paragraphs") or [])
         if used and cont_blanks and min(cont_blanks) <= used:
             cs["paragraphs"] = [
@@ -240,6 +260,7 @@ def merge_group_cards(target: Dict[str, Any], cont: Dict[str, Any]) -> None:
     )
     if is_cloze and ts["paragraphs"]:
         match_cloze_blanks(ts["paragraphs"], tg["questions"])
+        ts["paragraphs"] = renumber_cloze_blanks(ts["paragraphs"], tg["questions"])
     target["pages"] = sorted(
         set(target.get("pages") or []) | set(cont.get("pages") or [])
     )
@@ -308,4 +329,5 @@ __all__ = [
     "merge_group_cards",
     "normalize_answer_key",
     "normalize_question_no",
+    "renumber_cloze_blanks",
 ]

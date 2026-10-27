@@ -141,6 +141,12 @@ class ExamImportPage(Base):
     # 題目卡陣列（形狀見 services/exam_paper_service.py 模組說明）
     cards = Column(JSONB, nullable=False, default=list)
     error = Column(Text, nullable=True)
+    # 正在處理這一頁的那次請求的識別值（搶到 processing 時寫入）：AI 回來後確認仍是自己搶到的
+    # 才寫結果，避免卡太久被重搶後舊請求把結果寫進去或把頁標失敗
+    claim_id = Column(String(32), nullable=True)
+    # 整頁重送次數：第一次處理不算；失敗後、或處理中超過 3 分鐘後再送才算。上限見
+    # services/exam_import_service.py ``MAX_PAGE_RESENDS``
+    resend_count = Column(SmallInteger, nullable=False, default=0, server_default="0")
     processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -31,6 +31,7 @@
       "duplicate_of": null,                  # 重複比對結果（exam_import_service 填）
       "tts_accent": null,                    # 口音分配（exam_import_service 填）
       "teacher_edited": [],                  # 老師改過的卡片層欄位（C4 寫入）
+      "retry_count": 0,                      # 「重試單一題」呼叫 AI 的次數（上限 2，沒有就是 0）
       "question": {...},                     # kind = single
       "group": {                             # kind = group
         "group_type": "reading" | "cloze", "title": "...",
@@ -54,6 +55,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -106,6 +108,11 @@ MAX_OUTPUT_TOKENS = 16384
 # 這次呼叫要「作答」，給一點 thinking 預算（比 magic paste 純擷取的 0 多）；
 # 用量表另存 thinking token，之後可依實測調整
 THINKING_BUDGET = 2048
+
+# 單次 AI 呼叫（一頁或重試單一題）最多等 2 分鐘（定案 18）：逾時就中斷，該頁標失敗、用量照記
+# （沒有回應就沒有 token 數，記一列 0 token、succeeded=false）。處理中的頁 3 分鐘後才可重送
+# （exam_import_service.STALE_PROCESSING），比逾時多留一分鐘給上傳頁圖與寫入。
+AI_CALL_TIMEOUT_SECONDS = 120
 
 ALLOWED_PAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 
@@ -619,7 +626,8 @@ class ExamPaperService:
         """擷取一頁。``exam_point_catalog`` = ``[{"code", "name"}]``（平台 active 考點）。
 
         AI 回應被擋、沒有文字或無法解析時丟 ``ExamPaperOutputError``（帶著已產生的 ``usage``），
-        呼叫端（exam_import_service）負責把失敗的呼叫也記進用量表。
+        呼叫端（exam_import_service）負責把失敗的呼叫也記進用量表。超過
+        ``AI_CALL_TIMEOUT_SECONDS`` 沒回應就中斷，丟 ``ExamPaperTimeoutError``（0 token 的 usage）。
         """
         mime = self.validate_page_image(image_bytes, mime_type)
         if extract_mode not in (EXTRACT_MODE_EXAM_PAPER, EXTRACT_MODE_CLOZE_GROUP):
@@ -631,7 +639,21 @@ class ExamPaperService:
             focus_question_no=focus_question_no,
             focus_box=focus_box,
         )
-        text, usage = await self._call_model(image_bytes, mime, prompt)
+        try:
+            text, usage = await asyncio.wait_for(
+                self._call_model(image_bytes, mime, prompt),
+                timeout=AI_CALL_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as e:
+            logger.warning(
+                "[exam-paper] page=%s AI call timed out after %ss",
+                page_no,
+                AI_CALL_TIMEOUT_SECONDS,
+            )
+            raise ExamPaperTimeoutError(
+                f"AI 處理超過 {AI_CALL_TIMEOUT_SECONDS // 60} 分鐘",
+                CallUsage(model=FLASH_MODEL),
+            ) from e
         try:
             raw = MagicPasteService._parse_json(text)
         except Exception as e:
@@ -697,6 +719,10 @@ class ExamPaperOutputError(Exception):
     def __init__(self, message: str, usage: CallUsage):
         super().__init__(message)
         self.usage = usage
+
+
+class ExamPaperTimeoutError(ExamPaperOutputError):
+    """AI 呼叫超過 ``AI_CALL_TIMEOUT_SECONDS``：已中斷，沒有回應所以 usage 是 0 token。"""
 
 
 def response_text_and_usage(response: Any, model: str) -> Tuple[str, CallUsage]:

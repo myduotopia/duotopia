@@ -8,7 +8,11 @@ import random
 import pytest
 
 from services.exam_import_service import assign_accents
-from services.exam_paper_cards import merge_continuations, merge_group_cards
+from services.exam_paper_cards import (
+    merge_continuations,
+    merge_group_cards,
+    renumber_cloze_blanks,
+)
 from services.exam_paper_service import (
     ExamPaperOutputError,
     normalize_page,
@@ -88,6 +92,45 @@ def test_cloze_continuation_restarting_at_one_is_offset():
     g = target["group"]
     assert g["stimulus"]["paragraphs"][-1] == "They {{3}} friends."
     assert [q["blank"] for q in g["questions"]] == [1, 2, 3]
+
+
+def test_cloze_offset_ignores_bogus_question_blanks():
+    """位移只看文章空格：上一頁小題 blank 亂填（9）不會讓下一頁位移過頭。"""
+    target = _group_card(
+        1, ["I {{1}} a cat and {{2}} a dog."], [_q("40", 1), _q("41", 2)]
+    )
+    target["group"]["questions"][1]["blank"] = 9
+    cont = _group_card(2, ["They {{1}} friends."], [_q("42", 1)], cont=True)
+    merge_group_cards(target, cont)
+    g = target["group"]
+    assert g["stimulus"]["paragraphs"] == [
+        "I {{1}} a cat and {{2}} a dog.",
+        "They {{3}} friends.",
+    ]
+    assert [q["blank"] for q in g["questions"]] == [1, 2, 3]
+
+
+def test_cloze_merge_renumbers_whole_group_from_one():
+    """AI 用原卷題號當空格編號（41 起）：合併後整組依閱讀順序重編 1..k。"""
+    target = _group_card(
+        1, ["I {{41}} a cat and {{42}} a dog."], [_q("41", 41), _q("42", 42)]
+    )
+    cont = _group_card(2, ["They {{43}} friends."], [_q("43", 43)], cont=True)
+    merge_group_cards(target, cont)
+    g = target["group"]
+    assert g["stimulus"]["paragraphs"] == [
+        "I {{1}} a cat and {{2}} a dog.",
+        "They {{3}} friends.",
+    ]
+    assert [q["blank"] for q in g["questions"]] == [1, 2, 3]
+
+
+def test_renumber_cloze_blanks_maps_questions_and_drops_unknown():
+    paragraphs = ["A {{5}} b {{9}}.", "C {{5}} d {{12}}."]
+    questions = [{"blank": 12}, {"blank": 5}, {"blank": 7}, {"blank": None}]
+    out = renumber_cloze_blanks(paragraphs, questions)
+    assert out == ["A {{1}} b {{2}}.", "C {{1}} d {{3}}."]
+    assert [q["blank"] for q in questions] == [3, 1, None, None]
 
 
 # ---------------------------------------------------------------- 跨頁合併

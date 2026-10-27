@@ -5,7 +5,7 @@
   （SQLite 沒有列鎖，只驗證邏輯與「AI 回來後才鎖、才讀」）
 - 同一頁同時送兩次：條件式搶 processing，第二個 409；卡太久的 processing 可以重送
 - 已存入的匯入不能放棄（409）
-- 跨頁合併過的題組重試：只換那一題；比不到題號 422（用量照記）
+- 跨頁合併過的題組重試：只換那一題；AI 回傳沒有那個題號 422 ``EXAM_IMPORT_RETRY_EMPTY``（用量照記）
 - AI 回應被擋：照記用量、頁標失敗
 - 重複比對：題庫題目含 ``{{n}}``、選項順序不同也算相同
 - 送頁與重試的跨老師 404
@@ -293,7 +293,8 @@ def test_retry_cross_page_group_without_matching_number_is_422(
         question_no="42",
     )
     assert resp.status_code == 422
-    assert resp.json()["detail"]["error"] == "EXAM_IMPORT_RETRY_MERGED"
+    # AI 回傳沒有第 42 題：不拿別題頂替（C2 第二輪修正第 4 條）
+    assert resp.json()["detail"]["error"] == "EXAM_IMPORT_RETRY_EMPTY"
     # 合併題組沒被局部結果蓋掉，用量照記
     data = _get(test_client, teacher, imp["id"])
     assert data["pages"][0]["cards"][-1]["group"]["questions"][2]["status"] == "failed"
