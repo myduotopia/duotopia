@@ -14,6 +14,7 @@ import {
   fireEvent,
   waitFor,
   act,
+  within,
 } from "@testing-library/react";
 import ScenarioDialoguePanel, {
   type ScenarioDialoguePanelHandle,
@@ -163,10 +164,12 @@ vi.mock("@/components/ui/select", async () => {
   };
 });
 
-// t 回傳 key 本身，測試就用 key 當選取器
+// t 回傳 key 本身，測試就用 key 當選取器。
+// 例外：帶 `files`（擷取失敗的檔名）時接在 key 後面，才驗得到提示裡列了哪些檔。
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, opts?: { files?: unknown }) =>
+      typeof opts?.files === "string" ? `${key}|${opts.files}` : key,
     i18n: { language: "zh-TW" },
   }),
 }));
@@ -348,6 +351,38 @@ describe("ScenarioDialoguePanel 引導式對話（#1146）", () => {
     ).toBeInTheDocument();
     // 「題目怎麼來？」的回答被清掉了
     expect(screen.queryByText(K.source("manual"))).toBeNull();
+  });
+
+  it("重開「需要情境嗎？」而情境框有內容 → 確認文字講明情境也會清掉（review 2-2）", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "老師貼好的情境。");
+    fireEvent.click(screen.getByText(K.next));
+    chooseSource("ai");
+
+    fireEvent.click(screen.getAllByText(K.change)[0]);
+    expect(
+      screen.getByText("scenarioDialogue.setup.modeChangeConfirmDescription"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("scenarioDialogue.setup.reopenConfirmDescription"),
+    ).toBeNull();
+  });
+
+  it("下一步／開始產生在底部列，不在輸入區或設定卡裡（修正第 2 輪）", () => {
+    renderPanel();
+    chooseMode("existing");
+    const scenarioStep = document.querySelector('[data-step="scenario"]')!;
+    expect(within(scenarioStep as HTMLElement).queryByText(K.next)).toBeNull();
+    expect(screen.getByText(K.next)).toBeInTheDocument();
+
+    type(K.scenarioPlaceholder, "It is Monday.");
+    fireEvent.click(screen.getByText(K.next));
+    chooseSource("ai");
+
+    const card = screen.getByTestId("question-settings-card");
+    expect(within(card).queryByText(K.generate)).toBeNull();
+    expect(screen.getByText(K.generate)).toBeInTheDocument();
   });
 
   it("有現成的情境：沒貼東西「下一步」按不下去", () => {
@@ -610,9 +645,75 @@ describe("ScenarioDialoguePanel 情境來源", () => {
       ),
     );
     expect(extractScenarioArticle).toHaveBeenCalledTimes(3);
+    // 提示只列第 2 檔（review 2-3：要驗到檔名，不只是 key）
     expect(mockToastError).toHaveBeenCalledWith(
-      "scenarioDialogue.messages.extractFailedFiles",
+      "scenarioDialogue.messages.extractFailedFiles|p2.png",
     );
+  });
+
+  it("擷取撞到額度（402）就停，不再送剩下的檔，沒送的也列進失敗（review 2-1）", async () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    chooseMode("existing");
+
+    extractScenarioArticle
+      .mockResolvedValueOnce({ content: "Page one." })
+      .mockRejectedValueOnce(new MockApiError(402, "quota"))
+      .mockResolvedValueOnce({ content: "Page three." });
+
+    const fileInput = container.querySelector(
+      'input[accept="image/*,application/pdf"]',
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(["a"], "p1.png", { type: "image/png" }),
+          new File(["b"], "p2.png", { type: "image/png" }),
+          new File(["c"], "p3.png", { type: "image/png" }),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+        "Page one.",
+      ),
+    );
+    expect(extractScenarioArticle).toHaveBeenCalledTimes(2);
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.textQuotaExceeded",
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.extractFailedFiles|p2.png, p3.png",
+    );
+  });
+
+  it("每個檔都擷取失敗 → 用「全部失敗」那句，不說其他檔已放進情境框（review 2-1）", async () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    chooseMode("existing");
+
+    extractScenarioArticle
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce({ content: "" });
+
+    const fileInput = container.querySelector(
+      'input[accept="image/*,application/pdf"]',
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(["a"], "p1.png", { type: "image/png" }),
+          new File(["b"], "p2.png", { type: "image/png" }),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith(
+        "scenarioDialogue.messages.extractAllFailed|p1.png, p2.png",
+      ),
+    );
+    expect(mockToastError).not.toHaveBeenCalledWith(
+      expect.stringContaining("scenarioDialogue.messages.extractFailedFiles"),
+    );
+    expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue("");
   });
 
   it("擷取回的標題建議在標題空白時填入（使用者決定 5）", async () => {

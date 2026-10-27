@@ -6,10 +6,11 @@
  * （選填，學生看得到）。每一項都看得到、可改、有預設。
  *
  * 卡片頂端的確認句帶出老師原話（出題方向），讓他在按「開始產生」前看得到 AI 會照什麼出題。
+ *
+ * 卡片只放設定欄位（修正第 2 輪）：「開始產生」、「查看題目清單」、額度提示都移到對話的
+ * 底部列右側（`ScenarioSetupChat`），跟「回上一步」同一列。
  */
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Loader2, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -53,12 +54,6 @@ export interface QuestionSettingsCardProps {
   onTTSSettingsChange: (settings: TTSSettingsState) => void;
   globalRubric: string;
   onGlobalRubricChange: (rubric: string) => void;
-  generating: boolean;
-  /** 清單已滿 10 題時不能再產；給原因（按鈕停用要說明） */
-  fullReason: string | null;
-  hasQuestions: boolean;
-  onGenerate: () => void;
-  onViewList: () => void;
 }
 
 const COUNT_OPTIONS = Array.from(
@@ -68,7 +63,6 @@ const COUNT_OPTIONS = Array.from(
 
 export function QuestionSettingsCard(props: QuestionSettingsCardProps) {
   const { t } = useTranslation();
-  const disabled = props.generating || !!props.fullReason;
 
   return (
     <div
@@ -183,39 +177,6 @@ export function QuestionSettingsCard(props: QuestionSettingsCardProps) {
           className="min-h-0 resize-y"
         />
       </div>
-
-      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-        {props.fullReason && (
-          <span className="text-xs text-gray-500 mr-auto">
-            {props.fullReason}
-          </span>
-        )}
-        {props.hasQuestions && (
-          <Button variant="outline" onClick={props.onViewList}>
-            {t("scenarioDialogue.buttons.viewQuestions")}
-            <ArrowRight className="ml-1 h-4 w-4" />
-          </Button>
-        )}
-        <Button
-          onClick={props.onGenerate}
-          disabled={disabled}
-          title={props.fullReason ?? undefined}
-        >
-          {props.generating ? (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="mr-1 h-4 w-4" />
-          )}
-          {props.generating
-            ? t("scenarioDialogue.buttons.generating")
-            : props.hasQuestions
-              ? t("scenarioDialogue.buttons.generateAnother")
-              : t("scenarioDialogue.setup.startGenerate")}
-        </Button>
-      </div>
-      <p className="text-right text-xs text-gray-400">
-        {t("scenarioDialogue.hints.rateLimit")}
-      </p>
     </div>
   );
 }

@@ -682,7 +682,12 @@ const ScenarioDialoguePanel = forwardRef<
   }));
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    /*
+      右側留白 pr-10：老師後台的數位教學工具列（DigitalTeachingToolbar）固定在視窗右緣、
+      約 54px 寬、疊在 sheet 上面，所有寬度都會出現（可收合、可上下拖）。不留白的話，
+      貼右的老師泡泡和題目卡右側的按鈕會被它蓋住（#1146 修正第 2 輪）。
+    */
+    <div className="flex flex-col h-full min-h-0 pr-10">
       {/* ===== 引導式對話（#1146，取代舊的 Step 1 設定頁）===== */}
       {step === 1 && (
         <ScenarioSetupChat
@@ -735,17 +740,15 @@ const ScenarioDialoguePanel = forwardRef<
               onTTSSettingsChange={setup.setTTSSettings}
               globalRubric={setup.globalRubric}
               onGlobalRubricChange={setup.setGlobalRubric}
-              generating={isGenerating}
-              fullReason={
-                filledCount >= MAX_ITEMS
-                  ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
-                  : null
-              }
-              hasQuestions={hasQuestions}
-              onGenerate={() => void handleGenerate(true)}
-              onViewList={goToList}
             />
           }
+          generating={isGenerating}
+          generateBlockedReason={
+            filledCount >= MAX_ITEMS
+              ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
+              : null
+          }
+          onGenerate={() => void handleGenerate(true)}
         />
       )}
 

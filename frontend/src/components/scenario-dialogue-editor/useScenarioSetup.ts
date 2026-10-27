@@ -316,15 +316,24 @@ export function useScenarioSetup({
    * **每個檔各自成敗**（review 1）：中間一個檔失敗，其他檔擷取到的文字照樣寫進情境框，
    * 最後統一提示哪幾個檔失敗 —— 一次傳 3 份講義、第 3 份失敗就整批丟掉，前兩份的
    * AI 次數也白花了。
+   *
+   * 額度用完（402）就停，不再送剩下的檔（review 2：後面每個檔都會撞同一個 402），沒送的
+   * 檔一起列進失敗清單。一個檔都沒成功時改用「全部失敗」那句提示 —— 「其他檔案的內容已
+   * 放進情境框」在這時不成立。
    */
   const extractFiles = async (files: File[]) => {
     setExtracting(true);
     const parts: string[] = [];
     const failedNames: string[] = [];
+    let succeeded = 0;
     let quotaExceeded = false;
     let truncated = false;
     try {
-      for (const file of files) {
+      for (const [index, file] of files.entries()) {
+        if (quotaExceeded) {
+          failedNames.push(...files.slice(index).map((f) => f.name));
+          break;
+        }
         try {
           const result = await apiClient.extractScenarioArticle(
             file,
@@ -336,6 +345,7 @@ export function useScenarioSetup({
             failedNames.push(file.name);
             continue;
           }
+          succeeded += 1;
           if (text) parts.push(text);
           if (result.truncated) truncated = true;
           onSuggestedTitle(result.suggested_title);
@@ -365,9 +375,12 @@ export function useScenarioSetup({
     }
     if (failedNames.length) {
       toast.error(
-        t("scenarioDialogue.messages.extractFailedFiles", {
-          files: failedNames.join(", "),
-        }),
+        t(
+          succeeded > 0
+            ? "scenarioDialogue.messages.extractFailedFiles"
+            : "scenarioDialogue.messages.extractAllFailed",
+          { files: failedNames.join(", ") },
+        ),
       );
     }
     if (truncated) toast.info(t("scenarioDialogue.messages.extractTruncated"));

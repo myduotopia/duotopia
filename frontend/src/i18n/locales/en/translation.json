@@ -5003,6 +5003,7 @@
       "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now",
       "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead",
       "extractFailedFiles": "Couldn't extract these files: {{files}}. Content from the other files is in the scenario box — you can upload the failed ones again.",
+      "extractAllFailed": "Couldn't extract any of the files: {{files}}. Upload them again, or paste the scenario into the scenario box.",
       "extractTruncated": "This file is long, so the end of the extracted passage may be missing. Please check the scenario box."
     },
     "tenseTimes": {

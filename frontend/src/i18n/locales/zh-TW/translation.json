@@ -5022,6 +5022,7 @@
       "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
       "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入",
       "extractFailedFiles": "這些檔案沒有擷取成功：{{files}}。其他檔案的內容已放進情境框，可以再傳一次失敗的檔案。",
+      "extractAllFailed": "檔案都沒有擷取成功：{{files}}。可以再傳一次，或直接把情境貼進情境框。",
       "extractTruncated": "檔案內容較長，擷取到的文章結尾可能不完整，請核對情境框。"
     },
     "tenseTimes": {

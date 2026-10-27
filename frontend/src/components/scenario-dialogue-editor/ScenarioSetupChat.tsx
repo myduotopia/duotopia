@@ -5,7 +5,11 @@
  *
  * - 已答的步驟顯示成「問句＋老師的回答」，旁邊有「改選」。後面還有已答步驟時先跳確認
  *   「後面的設定會清空，已產生的題目保留」（`ConfirmDialog`）。
- * - 目前這一步下方有「回上一步」。
+ * - 底部列（修正第 2 輪）：左＝「回上一步」，右＝目前這一步的主要動作（請 AI 寫情境／
+ *   下一步／開始產生，同一時間只有一個主按鈕）。選項型步驟（需要情境嗎？、題目怎麼來？）
+ *   沒有主要動作，右側只在已有題目時放「查看題目清單」。
+ * - 版面：對話區撐滿 sheet 寬，老師泡泡貼右（像一般聊天）；每一步的輸入區另限 `max-w-3xl`，
+ *   免得文字框在寬螢幕被拉得太長。右側浮動工具列的留白由面板（`ScenarioDialoguePanel`）處理。
  * - 答非所問：AI 寫情境（訓練目標）與 AI 出題（出題方向）由同一次 AI 呼叫判斷，不可用就
  *   在該步驟顯示重問句（`goalReask` / `directionReask`），不產內容。
  * - 產生前的確認句帶出老師原話。
@@ -74,8 +78,13 @@ export interface ScenarioSetupChatProps {
   onGenerateArticle: () => void;
   onExtractFiles: (files: File[]) => void;
 
-  /** 出題設定卡（面板組好傳進來，參數太多不在這裡轉手） */
+  /** 出題設定卡（只有設定欄位；面板組好傳進來，參數太多不在這裡轉手） */
   settingsCard: ReactNode;
+  /** 設定卡那一步的「開始產生」放在底部列，由這裡畫 */
+  generating: boolean;
+  /** 清單已滿 10 題時不能再產；給原因（按鈕停用要說明） */
+  generateBlockedReason: string | null;
+  onGenerate: () => void;
   hasQuestions: boolean;
   onViewList: () => void;
 }
@@ -204,7 +213,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
 
       case "goal":
         return (
-          <div className="space-y-3 pl-9">
+          <div className="max-w-3xl space-y-3 pl-9">
             {props.goalReask && <BotBubble>{props.goalReask}</BotBubble>}
             <Textarea
               value={props.goal}
@@ -247,19 +256,12 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
                 </span>
               </BotBubble>
             )}
-            <Button
-              onClick={props.onGenerateArticle}
-              disabled={busy || !props.goal.trim()}
-            >
-              <Sparkles className="mr-1 h-4 w-4" />
-              {t("scenarioDialogue.setup.writeArticle")}
-            </Button>
           </div>
         );
 
       case "scenario":
         return (
-          <div className="space-y-3 pl-9">
+          <div className="max-w-3xl space-y-3 pl-9">
             {answers.scenarioMode === "existing" && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -303,15 +305,6 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
               className="min-h-0 resize-y"
             />
             <ScenarioImageStrip actions={props.imageActions} />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={props.onScenarioDone}
-                disabled={busy || !scenarioReady}
-              >
-                {t("scenarioDialogue.setup.next")}
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
           </div>
         );
 
@@ -332,7 +325,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
 
       case "direction":
         return (
-          <div className="space-y-3 pl-9">
+          <div className="max-w-3xl space-y-3 pl-9">
             {props.directionReask && (
               <BotBubble>{props.directionReask}</BotBubble>
             )}
@@ -344,18 +337,68 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
               aria-label={t("scenarioDialogue.setup.q.direction")}
               className="min-h-0 resize-y"
             />
-            <Button
-              onClick={props.onDirectionDone}
-              disabled={!props.direction.trim()}
-            >
-              {t("scenarioDialogue.setup.next")}
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
           </div>
         );
 
       case "settings":
-        return <div className="pl-9">{props.settingsCard}</div>;
+        return <div className="max-w-3xl pl-9">{props.settingsCard}</div>;
+    }
+  };
+
+  /** 底部列右側：目前這一步的主要動作（同一時間只有一個主按鈕） */
+  const renderPrimaryAction = () => {
+    switch (current) {
+      case "goal":
+        return (
+          <Button
+            onClick={props.onGenerateArticle}
+            disabled={busy || !props.goal.trim()}
+          >
+            <Sparkles className="mr-1 h-4 w-4" />
+            {t("scenarioDialogue.setup.writeArticle")}
+          </Button>
+        );
+      case "scenario":
+        return (
+          <Button
+            onClick={props.onScenarioDone}
+            disabled={busy || !scenarioReady}
+          >
+            {t("scenarioDialogue.setup.next")}
+            <ArrowRight className="ml-1 h-4 w-4" />
+          </Button>
+        );
+      case "direction":
+        return (
+          <Button
+            onClick={props.onDirectionDone}
+            disabled={!props.direction.trim()}
+          >
+            {t("scenarioDialogue.setup.next")}
+            <ArrowRight className="ml-1 h-4 w-4" />
+          </Button>
+        );
+      case "settings":
+        return (
+          <Button
+            onClick={props.onGenerate}
+            disabled={props.generating || !!props.generateBlockedReason}
+            title={props.generateBlockedReason ?? undefined}
+          >
+            {props.generating ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-1 h-4 w-4" />
+            )}
+            {props.generating
+              ? t("scenarioDialogue.buttons.generating")
+              : props.hasQuestions
+                ? t("scenarioDialogue.buttons.generateAnother")
+                : t("scenarioDialogue.setup.startGenerate")}
+          </Button>
+        );
+      default:
+        return null;
     }
   };
 
@@ -368,7 +411,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
 
   return (
     <div className="flex-1 min-h-0">
-      <div className="max-w-3xl space-y-4" data-testid="scenario-setup-chat">
+      <div className="space-y-4" data-testid="scenario-setup-chat">
         {steps.map((step) => {
           const answered = isAnswered(step, answers);
           const isCurrent = step === current;
@@ -401,9 +444,14 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
             </Button>
           )}
           <span className="flex-1" />
-          {/* 回到對話改設定後，不必重產也要能回題目清單（已產生的題目保留） */}
-          {(props.hasQuestions || current === null) &&
-            current !== "settings" && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {current === "settings" && props.generateBlockedReason && (
+              <span className="text-xs text-gray-500">
+                {props.generateBlockedReason}
+              </span>
+            )}
+            {/* 回到對話改設定後，不必重產也要能回題目清單（已產生的題目保留） */}
+            {(props.hasQuestions || current === null) && (
               <Button
                 variant={current === null ? "default" : "outline"}
                 onClick={props.onViewList}
@@ -413,6 +461,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             )}
+            {renderPrimaryAction()}
+          </div>
+          {current === "settings" && (
+            <p className="w-full text-right text-xs text-gray-400">
+              {t("scenarioDialogue.hints.rateLimit")}
+            </p>
+          )}
         </div>
       </div>
 
@@ -422,7 +477,12 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
           if (!open) setPendingReopen(null);
         }}
         title={t("scenarioDialogue.setup.reopenConfirmTitle")}
-        description={t("scenarioDialogue.setup.reopenConfirmDescription")}
+        description={
+          // 重開「需要情境嗎？」而情境框／情境圖有內容：改選後情境也會清掉，要講清楚（review 2-2）
+          pendingReopen === "mode" && scenarioReady
+            ? t("scenarioDialogue.setup.modeChangeConfirmDescription")
+            : t("scenarioDialogue.setup.reopenConfirmDescription")
+        }
         confirmText={t("scenarioDialogue.setup.reopenConfirm")}
         cancelText={t("contentEditor.buttons.cancel")}
         onConfirm={() => {
