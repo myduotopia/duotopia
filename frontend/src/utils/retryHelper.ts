@@ -117,6 +117,11 @@ export const RETRYABLE_UPLOAD_STATUSES: ReadonlySet<number> = new Set([
  *
  * 匯出是為了讓覆寫 `shouldRetry` 的呼叫端能**對非 HTTP 錯誤沿用這一套**，而不是自己
  * 寫一個更寬的版本（review 第 2 點：我的覆寫一度讓任何非 4xx 的錯誤都重試）。
+ *
+ * ⚠️ **拿得到 HTTP status 的錯誤不要走這條。** 它比對的是錯誤訊息字串，而後端的訊息
+ * 可能剛好含數字 —— 例如「錄音太短」的 detail 是 `Must be at least 500 bytes`，
+ * 裡面的 "500" 會讓一個確定失敗的 400 被判成可重試（#1148 就是這樣白等 7 秒）。
+ * 有 status 就依 status 判斷。
  */
 export function isRetryableUploadError(error: Error): boolean {
   // 只有網路錯誤或暫時性錯誤才重試

@@ -174,6 +174,10 @@ export async function uploadAnswerRecording(params: {
     // 但 408／425／429 是暫時性的，預設刻意重試它們（上傳是 upsert，重複安全），
     // 覆寫時不可以一併擋掉。非 HTTP 的錯誤（網路、timeout）沿用預設那套判斷 ——
     // 兩者都是 PR #1148 review 抓到的退步，我原本的覆寫比預設寬也比預設窄。
+    //
+    // 5xx 這裡是**整段**都重試，比預設列的 500/502/503/504 稍寬（501／505／511 也會
+    // 重試）。這是刻意的：上傳失敗在伺服器端一律當暫時性處理，而且重複上傳安全。
+    // （PR #1149 review 第 1 點指出我原本的註解寫「不比預設寬」是錯的。）
     (error) => {
       if (error instanceof RecordingUploadError) {
         if (RETRYABLE_UPLOAD_STATUSES.has(error.status)) return true;

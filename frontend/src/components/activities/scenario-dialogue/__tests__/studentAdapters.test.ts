@@ -375,11 +375,44 @@ describe("重試判斷不可以比預設窄也不可以比預設寬（#1148 revi
     return mod.createStudentScenarioAdapters({ assignmentId: 7 });
   }
 
-  it("429（限流）要重試 —— 上傳是 upsert，重複安全", async () => {
-    const calls = uploadAlwaysFailing(429, "Too Many Requests");
-    const adapters = await freshAdapters();
-    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
-    expect(calls()).toBeGreaterThan(1);
+  // RETRYABLE_UPLOAD_STATUSES 有三個值，只測一個等於另外兩個沒人守
+  it.each([[408], [425], [429]])(
+    "%i 要重試 —— 暫時性，而且上傳是 upsert、重複安全",
+    async (status) => {
+      const calls = uploadAlwaysFailing(status, `status ${status}`);
+      const adapters = await freshAdapters();
+      await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+      expect(calls()).toBeGreaterThan(1);
+    },
+    20000,
+  );
+
+  /**
+   * 這條守的是 review 第 2 點修回來的那個退步：我的覆寫一度讓**任何**非 4xx 的錯誤
+   * 都重試（連 TypeError 都算），比預設寬。非 HTTP 的錯誤要沿用預設那套判斷。
+   */
+  it("非 HTTP 錯誤沿用預設判斷：NetworkError 重試、一般 Error 不重試", async () => {
+    for (const [message, expectRetry] of [
+      ["NetworkError: failed", true],
+      ["something went terribly wrong", false],
+    ] as const) {
+      let calls = 0;
+      global.fetch = vi.fn(async (url: unknown) => {
+        if (String(url).startsWith("blob:")) {
+          return { ok: true, blob: async () => new Blob(["x"]) } as never;
+        }
+        calls += 1;
+        throw new Error(message);
+      }) as never;
+
+      const adapters = await freshAdapters();
+      await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+      if (expectRetry) {
+        expect(calls, message).toBeGreaterThan(1);
+      } else {
+        expect(calls, message).toBe(1);
+      }
+    }
   }, 20000);
 
   it("400（錄音太長）不重試", async () => {
