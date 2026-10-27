@@ -94,7 +94,7 @@
 | glossary | jsonb | 單字註解 `[{"word": "...", "zh": "..."}]`（#1079/#1081） |
 | grade_min / grade_max | smallint | 題組層預設，小題可覆寫 |
 | teacher_id / organization_id / school_id / visibility / is_platform | | 與 `questions` 相同；**題組內題目的 visibility 跟隨題組**（應用層同步） |
-| tts_accent | varchar, nullable | #1112 新增：主圖文音檔的朗讀口音（美式／英式／印度／澳洲）；上傳題本時抽中後固定 |
+| tts_accent | varchar, nullable | #1112 新增：題組的朗讀口音（美式／英式／印度／澳洲），主圖文與小題音檔都用這一種；上傳題本時抽中後固定 |
 | tts_voice | varchar, nullable | #1112 新增：散文／克漏字旁白用的 Gemini 聲音（AI 依內容挑選）；對話的各角色聲音存在 segments |
 | is_active / deleted_at / created_at / updated_at | | |
 
@@ -167,7 +167,7 @@
 
 #### 圖片題組的對話文稿（#1083，2026-10-06 開始使用）
 
-以圖為準的題組（漫畫、對話情境圖）擷取時，AI 另回逐句對話 `stimulus.dialogue = [{speaker, text}]`，存成這張表的一句一段（`order_index` 依閱讀順序、`speaker_label`、`transcript`；`audio_url`／`tts_voice`／`pause_after_ms` 留給之後的題組對話音檔）。不需要 migration。
+以圖為準的題組（漫畫、對話情境圖）擷取時，AI 另回逐句對話 `stimulus.dialogue = [{speaker, text}]`，存成這張表的一句一段（`order_index` 依閱讀順序、`speaker_label`、`transcript`；`tts_voice` #1112 起使用（AI 替角色挑的 Gemini 聲音）；`audio_url`／`pause_after_ms` 維持預留）。不需要 migration。
 
 - **API**：`POST`／`PATCH /question-groups` 收 `segments: [{speaker_label, transcript}]`（兩者都不可空白；說話者 ≤50 字、台詞 ≤2000 字、最多 100 句）。建立時依序寫入；PATCH 有帶就整組替換（`[]` = 清掉），不帶不動。`GET` 與建立／更新回應都帶 `segments`。
 - **`passage_text` 由 segments 推導**：格式為「非對話文字（標題、旁白、標示；可無）＋空行＋逐句 `Speaker: line`」。後端只保留送來文字版**開頭**的非對話文字（結尾必須正好是這份對話，否則旁白也不留），對話部分一律由 segments 重組；PATCH 只改排版時沿用原本的旁白。沒有 segments 的題組（海報、地圖、散文、舊資料）規則不變。
@@ -274,7 +274,7 @@
 
 重複偵測本期只對 `group_id IS NULL` 的單題做（比對 `normalized_stem`）；題組日後以 `passage_text` 做 trgm 相似比對。
 
-**上傳題本例外（#1112）**：匯入時只比對**老師自己的題目**（不含公開題），單題比「題目＋選項」、題組比「題組文字＋每個小題題目」（選項不同也算相同），比對前忽略空白、大小寫、標點。相同的題目預設不存。詳見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第六節。
+**上傳題本例外（#1112）**：匯入時只比對**老師自己的題目**（不含公開題），單題比「題目＋選項」、題組比「題組文字＋每個小題題目」（選項不同也算相同），比對前忽略空白、大小寫、標點。相同的題目不存（不提供「仍要存」）。詳見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第六節。
 
 ## 上傳題本（#1112）
 
@@ -286,8 +286,10 @@
 | `exam_import_pages` | 題本的一頁 | 頁碼、狀態（處理中／完成／失敗）、頁面圖片 URL（GCS）、這一頁的題目卡 JSONB（含答案來源、老師改過的欄位清單、每題在頁面上的位置） |
 | `exam_import_usage` | 一次 AI 呼叫 | 類型（擷取／作答／考點／TTS）、模型、input／output／thinking token（分開存）、音檔秒數、估算美元 |
 
-- 用量只記錄、不扣老師額度，只在後台查；一般老師每天最多上傳 1 本，`Teacher.is_admin` 不限。
+- 用量只記錄、不扣老師額度，只在後台查；一般老師每天（台灣時間自然日）最多上傳 1 本，計算當天建立、沒有放棄的 `exam_imports`；`Teacher.is_admin` 不限。
+- 同一位老師上傳的檔案內容雜湊與自己未放棄的 `exam_imports` 相同時擋下，回傳那次匯入的 id（畫面附「打開那次匯入」連結）。
 - 放棄匯入或過期清除時，草稿、頁面圖片、匯入產生的音檔一起刪除。
+- 題目或題組軟刪除（寫入 `deleted_at`）時，同時刪掉它專屬的 GCS 音檔。
 - 匯入產生的音檔是每題／每題組專屬檔案（GCS 路徑含題目或草稿 id），不共用 Azure 的 `tts/{hash}.mp3` 內容雜湊快取。
 
 ## AI 考點分析流程

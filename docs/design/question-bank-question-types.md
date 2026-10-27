@@ -115,7 +115,7 @@ type UnitDraft =
 | 題型專屬驗證 | 批內／庫內重複（`normalized_stem`） | 文章不得有 `{{n}}`（`assert_no_cloze_blanks`） | 空格集合 = 小題 `blank_index` 集合、不重複（`validate_cloze_blanks`／`clozeBlankError`）；`DELETE /questions/{id}` 拒刪克漏字小題 |
 | 擷取 extract_mode | `multiple_choice` → `_normalize_mc_items` → `draftsFromExtracted` | `reading_group` → `_normalize_reading_group` → `groupDraftFromExtracted`；拿到 `{{n}}` 轉回 `____`（`stripBlankTokens`） | `reading_group`（同上）；保留 AI 重編的 `{{1..k}}`，小題 `blank` 對位或 `matchClozeBlanks` 依閱讀順序補配 |
 | 擷取素材 `stimulus.kind` | — | `text`（段落＋`figures`）或 `image`（整塊裁圖＋可選 `dialogue`） | 實務上 `text`（空格在文字裡） |
-| 上傳題本 `exam_paper`（#1112，規劃中） | 題目卡 `kind: single` | 題目卡 `kind: group` | 題目卡 `kind: group`，空格與小題對應走 `cloze_group` 的正規化（#1086） |
+| 上傳題本 `exam_paper`（#1112，規劃中） | 題目卡 `kind: single` | 題目卡 `kind: group` | 題目卡 `kind: group`，空格與小題對應走 `cloze_group`（#1112 C2 新增），沿用 #1086 空格對位規則 |
 | 原卷題號 | 單題自己的 `source_question_no` | 記在每個小題上 | 記在每個小題上（`blank_index` 維持 1..k） |
 | 自動語音（上傳題本） | 題幹：Azure | 小題題幹：Azure；文章：Gemini 單聲；對話 segments：Gemini 多說話者；以圖為準無文字：不產生 | 小題：Azure；文章：Gemini，`{{n}}` 唸成 "blank" |
 | 與自己題庫重複（上傳題本） | 題目＋選項都相同 | 題組文字（`passage_text`／segments 串接）＋每個小題題目相同，選項不同也算 | 同閱讀題組 |
@@ -237,7 +237,7 @@ type UnitDraft =
 
 ### 16. 文件同步
 
-- 本文件「題型總表」更新狀態、第三節對照表加一欄、第一節題型清單加一列。
+- 本文件「題型總表」更新狀態、第三節對照表加一欄、「核心原則」題型表加一列。
 - `docs/design/question-bank-schema.md`：題型專屬欄位或規則段落（比照「克漏字題組（#1085）」）。
 - 改到的檔案頂部 JSDoc／docstring（例如 `QuestionSheet.tsx` 模式說明、`QuestionUnitList.tsx`、`question_bank_groups.py`）。
 
