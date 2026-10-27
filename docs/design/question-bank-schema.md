@@ -274,7 +274,7 @@
 
 重複偵測本期只對 `group_id IS NULL` 的單題做（比對 `normalized_stem`）；題組日後以 `passage_text` 做 trgm 相似比對。
 
-**上傳題本例外（#1112）**：匯入時只比對**老師自己的題目**（不含公開題），單題比「題目＋選項」、題組比「題組文字＋每個小題題目」（選項不同也算相同），比對前忽略空白、大小寫、標點。相同的題目不存（不提供「仍要存」）。詳見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第六節。
+**上傳題本例外（#1112）**：匯入時只比對**老師自己的題目**（不含公開題），單題比「題目＋選項」（選項順序不同也算相同）、題組比「題組文字＋每個小題題目」（選項不同也算相同），比對前忽略空白、大小寫、標點。相同的題目不存（不提供「仍要存」）。詳見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第六節。
 
 ## 上傳題本（#1112）
 
@@ -282,13 +282,13 @@
 
 | 表 | 一列代表 | 主要內容 |
 |----|----------|----------|
-| `exam_imports` | 一份上傳的題本（匯入草稿） | 老師、檔名、檔案內容雜湊（偵測重複匯入）、頁數、整份設定（年段、來源、教材、公開、口音選擇）、狀態、題數、token 總計、建立時間（未完成的保留 30 天） |
-| `exam_import_pages` | 題本的一頁 | 頁碼、狀態（處理中／完成／失敗）、頁面圖片 URL（GCS）、這一頁的題目卡 JSONB（含答案來源、老師改過的欄位清單、每題在頁面上的位置） |
-| `exam_import_usage` | 一次 AI 呼叫 | 類型（擷取／作答／考點／TTS）、模型、input／output／thinking token（分開存）、音檔秒數、估算美元 |
+| `exam_imports` | 一份上傳的題本（匯入草稿） | `teacher_id`、`file_name`、`file_hash`（檔案內容 SHA-256，偵測重複匯入）、`page_count`（≤ 20）、`settings` JSONB（年段、來源、教材、公開、機構／學校）、`tts_accents` JSONB（口音多選）、`known_answers` JSONB（答案頁的題號 → 答案）、`status`（`processing` 還有頁沒處理完／`ready` 每頁都處理過／`saved` 全部存入／`abandoned` 放棄）、`question_count`、用量加總（`ai_call_count`、`input_tokens`、`output_tokens`、`thinking_tokens`、`estimated_cost_usd`）、`abandoned_at`、`created_at`（未完成的 30 天內顯示） |
+| `exam_import_pages` | 題本的一頁 | `page_no`、`status`（`pending` 未送／`processing` 處理中／`done` 完成／`failed` 失敗）、`image_url`（GCS 頁圖）、`is_answer_page`、`answer_key` JSONB（這一頁的題號 → 答案）、`cards` JSONB（題目卡：答案來源、老師改過的欄位清單、每題在頁面上的位置、重複標記、口音）、`error`、`processed_at` |
+| `exam_import_usage` | 一次 AI 呼叫 | `call_type`（`extract_page` 擷取一頁＝擷取＋作答＋考點／`retry_question` 重試單一題／`tts`）、`model`、`input_tokens`／`output_tokens`／`thinking_tokens`（分開存）、`audio_seconds`、`estimated_cost_usd`、`succeeded`、`page_no` |
 
 - 用量只記錄、不扣老師額度，只在後台查；一般老師每天（台灣時間自然日）最多上傳 1 本，計算當天建立、沒有放棄的 `exam_imports`；`Teacher.is_admin` 不限。
 - 同一位老師上傳的檔案內容雜湊與自己未放棄的 `exam_imports` 相同時擋下，回傳那次匯入的 id（畫面附「打開那次匯入」連結）。
-- 放棄匯入或過期清除時，草稿、頁面圖片、匯入產生的音檔一起刪除。
+- 放棄匯入時（只有 `processing`／`ready` 可以放棄），草稿頁、頁面圖片、匯入產生的音檔一起刪除；`exam_imports` 列與用量列保留。過期匯入的自動清理排程另議（目前只是不顯示）。
 - 題目或題組軟刪除（寫入 `deleted_at`）時，同時刪掉它專屬的 GCS 音檔。
 - 匯入產生的音檔是每題／每題組專屬檔案（GCS 路徑含題目或草稿 id），不共用 Azure 的 `tts/{hash}.mp3` 內容雜湊快取。
 
