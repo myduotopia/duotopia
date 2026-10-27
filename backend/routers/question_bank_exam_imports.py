@@ -5,7 +5,7 @@
 - GET    /api/question-bank/exam-imports                                 未完成的匯入（30 天內）
 - GET    /api/question-bank/exam-imports/{id}                            匯入（含所有頁與題目卡）
 - POST   /api/question-bank/exam-imports/{id}/pages/{page_no}            送一頁頁圖擷取
-- POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/retry      重讀單一題（題號／bbox／card_id）
+- POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/retry      重讀單一題（card_id 或題號，bbox 只輔助）
 - DELETE /api/question-bank/exam-imports/{id}                            放棄匯入（刪草稿與頁圖）
 
 本檔的 ``router`` 不帶 prefix／tags，由 ``routers/question_bank.py`` ``include_router`` 掛上
@@ -33,6 +33,7 @@ from routers.question_bank_common import _parse_uuid, _require_bank_membership
 from routers.question_bank_schemas import ProgramLinkIn
 from routers.teachers import get_current_teacher
 from services import exam_import_service as eis
+from services.exam_import_retry import retry_question
 from services import question_bank_service as qbs
 from services.exam_paper_service import (
     ExamPaperError,
@@ -252,10 +253,23 @@ async def retry_exam_import_question(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """只重讀那一頁的那一題（送頁圖＋題號／bbox，或 card_id），取代該卡；回傳新卡。
+    """只重讀那一頁的那一題，取代該卡；回傳新卡。
 
-    每張卡最多重試 2 次，超過回 409 ``EXAM_IMPORT_RETRY_LIMIT``（請老師手動補這一題）。
+    必須指定既有的題目卡：``card_id`` 或題號（``bbox`` 只是輔助定位，不能單獨使用）。都沒給 →
+    422 ``EXAM_IMPORT_RETRY_TARGET``；題號比不到任何卡 → 404 ``EXAM_IMPORT_CARD_NOT_FOUND``。
+    擷取時漏掉、沒有卡的題請老師「手動補這一題」。每張卡最多重試 2 次，超過回 409
+    ``EXAM_IMPORT_RETRY_LIMIT``。
     """
+    card_id = (card_id or "").strip() or None
+    question_no = (question_no or "").strip() or None
+    if not card_id and not question_no:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "EXAM_IMPORT_RETRY_TARGET",
+                "message": "請指定要重試的題目卡或題號；漏掉的題請手動補這一題",
+            },
+        )
     imp = _load(db, teacher, import_id)
     box = None
     if bbox:
@@ -269,7 +283,7 @@ async def retry_exam_import_question(
             )
     data = await _read_page_file(file)
     try:
-        card = await eis.retry_question(
+        card = await retry_question(
             db,
             imp,
             page_no,

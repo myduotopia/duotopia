@@ -12,6 +12,7 @@ from services.exam_paper_cards import (
     merge_continuations,
     merge_group_cards,
     renumber_cloze_blanks,
+    renumber_cloze_cards,
 )
 from services.exam_paper_service import (
     ExamPaperOutputError,
@@ -131,6 +132,25 @@ def test_renumber_cloze_blanks_maps_questions_and_drops_unknown():
     out = renumber_cloze_blanks(paragraphs, questions)
     assert out == ["A {{1}} b {{2}}.", "C {{1}} d {{3}}."]
     assert [q["blank"] for q in questions] == [3, 1, None, None]
+
+
+def test_renumber_cloze_cards_single_page_cloze_from_one():
+    """單頁克漏字（原卷第 41 題起）寫入時也重編 1..k；閱讀題組、沒有空格的題組不動。"""
+    import copy
+
+    cloze = _group_card(
+        1, ["I {{41}} a cat and {{42}} a dog."], [_q("41", 41), _q("42", 42)]
+    )
+    reading = _group_card(1, ["Plain text."], [_q("7", 7)], group_type="reading")
+    no_blanks = _group_card(1, ["No blanks here."], [_q("50", 50)])
+    single = _single_card(1, "60")
+    untouched = copy.deepcopy([reading, no_blanks, single])
+    renumber_cloze_cards([cloze, reading, no_blanks, single])
+    assert cloze["group"]["stimulus"]["paragraphs"] == [
+        "I {{1}} a cat and {{2}} a dog."
+    ]
+    assert [q["blank"] for q in cloze["group"]["questions"]] == [1, 2]
+    assert [reading, no_blanks, single] == untouched
 
 
 # ---------------------------------------------------------------- 跨頁合併

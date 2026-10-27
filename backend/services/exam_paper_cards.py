@@ -208,6 +208,25 @@ def renumber_cloze_blanks(
     return renumbered
 
 
+def renumber_cloze_cards(cards: Iterable[Dict[str, Any]]) -> None:
+    """寫入草稿時，每張克漏字題組卡（就地）把文章空格與小題 blank 重編成 1..k。
+
+    單頁克漏字（例如原卷第 41–45 題印成 ``{{41}}``…）和跨頁合併後的題組用同一套編號，
+    C4 存檔驗證只需要處理 1..k 一種情況。文章沒有空格的題組不動。
+    """
+    for card in cards:
+        group = card.get("group") if card.get("kind") == CARD_KIND_GROUP else None
+        if not group or group.get("group_type") != GROUP_TYPE_CLOZE:
+            continue
+        stimulus = group.get("stimulus") or {}
+        paragraphs = stimulus.get("paragraphs") or []
+        if not blank_numbers(paragraphs):
+            continue
+        stimulus["paragraphs"] = renumber_cloze_blanks(
+            paragraphs, group.get("questions") or []
+        )
+
+
 # --------------------------------------------------------------------------- #
 # 跨頁題組
 # --------------------------------------------------------------------------- #
@@ -330,4 +349,5 @@ __all__ = [
     "normalize_answer_key",
     "normalize_question_no",
     "renumber_cloze_blanks",
+    "renumber_cloze_cards",
 ]

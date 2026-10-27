@@ -13,15 +13,18 @@
 - **跨頁題組**：某頁第一張卡標「延續上一頁題組」→ 併進前面最近一個有卡片的已處理頁的最後一張
   題組卡（跨三頁以上也接得上；克漏字空格編號接續）。中間有頁還沒處理就先留著，處理完再併。
   規則在 ``exam_paper_cards.merge_continuations``（報告腳本共用）。
-- **並發**：同一頁用條件式 UPDATE 搶 processing（同頁同時送兩次只有一個成功），並寫入這次請求的
-  ``claim_id``；送 AI 前 ``commit`` 釋放 DB 連線（AI 最多等 2 分鐘，不佔著連線）；AI 回來後
+- **並發**：先 ``lock_import`` 鎖住匯入列，再用條件式 UPDATE 搶 processing（同頁同時送兩次只有
+  一個成功），並寫入這次請求的 ``claim_id``；送 AI 前 ``commit`` 釋放 DB 連線（AI 最多等 2 分鐘，不佔著連線）；AI 回來後
   ``lock_import`` 鎖住匯入列、讀最新資料，**確認這一頁仍是自己搶到的**（``claim_id`` 相同、仍在
   processing）才寫入，否則只記用量、丟掉結果（409 ``EXAM_IMPORT_PAGE_BUSY``）。鎖內整理出錯 →
   rollback → 標失敗並記用量。
 - **逾時與重送**（定案 18）：單次 AI 呼叫最多 2 分鐘（逾時＝該頁失敗、用量照記）；卡在
   processing 超過 3 分鐘（``STALE_PROCESSING``）的頁可以重送。**整頁重送每頁最多 2 次**
   （``MAX_PAGE_RESENDS``）：第一次處理（pending → processing）不算；失敗後、或處理中超過 3 分鐘後
-  再送才算一次；已經 2 次還要再送回 409 ``EXAM_IMPORT_RETRY_LIMIT``，不呼叫 AI。
+  再送才算一次；已經 2 次還要再送回 409 ``EXAM_IMPORT_RETRY_LIMIT``，不呼叫 AI（頁若還卡在
+  processing 就順手改成失敗「處理逾時」，讓匯入能變 ready）。逾時沒有回應，用量記 0 token
+  （實際花了多少不得而知，不估算；log 會標示）。
+- **克漏字空格編號**：寫入草稿時每張克漏字題組都重編成 1..k（單頁、跨頁合併後都一樣）。
 - **口音**：每張題目卡分配一種（勾一種＝全部同一種；多種＝平均分配：從目前用最少次的口音中隨機抽），
   抽中後固定；「延續上一頁題組」的卡不算進次數。
 - **用量**：每次 AI 呼叫寫一列 ``exam_import_usage``，``exam_imports`` 同步加總；AI 回應無法解析時
@@ -72,6 +75,7 @@ from services.exam_paper_cards import (
     apply_answer_key,
     iter_card_questions,
     merge_continuations,
+    renumber_cloze_cards,
 )
 from services.exam_paper_service import (
     CallUsage,
@@ -487,15 +491,45 @@ def lock_import(db: Session, import_id: int) -> ExamImport:
     )
 
 
-def _claim_page(db: Session, page_id: int, page_no: int) -> str:
-    """條件式 UPDATE 把頁改成 processing、寫入新的 ``claim_id``（回傳它）並 commit。
+def _is_stale(page: ExamImportPage, now: datetime) -> bool:
+    updated = _as_utc(page.updated_at)
+    return page.status == PAGE_STATUS_PROCESSING and (
+        updated is None or updated < now - STALE_PROCESSING
+    )
 
-    同一頁同時送兩次，只有一個請求拿得到。可以搶的頁：
+
+def _expire_stale_page(db: Session, imp: ExamImport, page_no: int) -> None:
+    """（鎖內）重送次數已用完、又卡在 processing 超過 3 分鐘的頁：改成失敗（「處理逾時」）並
+    commit，否則它永遠卡在處理中，整份匯入也一直不會變成 ready。"""
+    page = next((p for p in imp.pages if p.page_no == page_no), None)
+    if page is None or not _is_stale(page, _utcnow()):
+        db.rollback()
+        return
+    page.status = PAGE_STATUS_FAILED
+    page.error = "處理逾時"
+    page.claim_id = None
+    _refresh_status_and_count(imp)
+    db.commit()
+
+
+def _claim_page(db: Session, import_id: int, page_id: int, page_no: int) -> str:
+    """先 ``lock_import`` 鎖住匯入列，再用條件式 UPDATE 把頁改成 processing、寫入新的
+    ``claim_id``（回傳它）並 commit。
+
+    先拿匯入列的鎖，和寫入結果（``_write_page_result``／``_fail_page``）、放棄、重試排隊，
+    不會在別人鎖內整理的中途改到頁狀態；條件式 UPDATE 再保證同一頁同時送兩次只有一個拿得到。
+    可以搶的頁：
     - ``pending``：第一次處理，不算重送；
     - ``failed``，或卡在 processing 超過 ``STALE_PROCESSING``（請求中途斷掉）：算一次重送，
-      ``resend_count`` 已達 ``MAX_PAGE_RESENDS`` 就不給搶（409 ``EXAM_IMPORT_RETRY_LIMIT``）。
-    其他情況（處理中、已處理完）回 409 ``EXAM_IMPORT_PAGE_BUSY``。
+      ``resend_count`` 已達 ``MAX_PAGE_RESENDS`` 就不給搶（409 ``EXAM_IMPORT_RETRY_LIMIT``）；
+      這時若頁還卡在 processing，順手改成失敗（``_expire_stale_page``），讓匯入能變 ready。
+    其他情況（處理中、已處理完）回 409 ``EXAM_IMPORT_PAGE_BUSY``。匯入已結束回 409
+    ``EXAM_IMPORT_CLOSED``。
     """
+    imp = lock_import(db, import_id)
+    if imp.status not in UNFINISHED_STATUSES:
+        db.rollback()
+        raise ExamImportError(409, "EXAM_IMPORT_CLOSED", "這次匯入已結束，不能再處理頁面")
     now = _utcnow()
     stale = and_(
         ExamImportPage.status == PAGE_STATUS_PROCESSING,
@@ -539,14 +573,15 @@ def _claim_page(db: Session, page_id: int, page_no: int) -> str:
         .first()
         is not None
     )
-    db.rollback()
     if over_limit:
+        _expire_stale_page(db, imp, page_no)
         raise ExamImportError(
             409,
             "EXAM_IMPORT_RETRY_LIMIT",
             f"第 {page_no} 頁已經重送 {MAX_PAGE_RESENDS} 次，請改用手動補題",
             retry_limit=MAX_PAGE_RESENDS,
         )
+    db.rollback()
     raise ExamImportError(409, "EXAM_IMPORT_PAGE_BUSY", f"第 {page_no} 頁正在處理或已處理完")
 
 
@@ -617,7 +652,7 @@ async def process_page(
     service = service or get_exam_paper_service()
     mime = service.validate_page_image(image_bytes, mime_type)
     import_id, page_id = imp.id, page.id
-    claim_id = _claim_page(db, page_id, page_no)
+    claim_id = _claim_page(db, import_id, page_id, page_no)
 
     try:
         image_url = exam_import_storage.store_page_image(
@@ -668,10 +703,12 @@ def _write_page_result(
 ) -> ExamImportPage:
     """鎖內：確認仍持有這一頁、記用量、套答案／合併／比對／計數後 commit。
 
-    匯入已結束（AI 處理期間被放棄）或這一頁已被別的請求重搶：用量照記（失敗），結果丟掉、回 409。
+    匯入已結束（AI 處理期間被放棄：頁已被刪掉，所以先判斷匯入狀態、頁用 ``next(..., None)`` 找，
+    找不到視為不再持有）或這一頁已被別的請求重搶：用量照記（失敗），結果丟掉、回 409
+    （``EXAM_IMPORT_CLOSED``／``EXAM_IMPORT_PAGE_BUSY``）。
     """
-    page = _get_page(imp, page_no)
     closed = imp.status not in UNFINISHED_STATUSES
+    page = next((p for p in imp.pages if p.page_no == page_no), None)
     if closed or not _owns_page(page, claim_id):
         record_usage(
             db,
@@ -692,6 +729,8 @@ def _write_page_result(
     # 用鎖內最新的已知答案（等待 AI 期間別頁可能已存好答案頁）＋本頁答案表套到新卡
     latest_known = {**(imp.known_answers or {}), **result.answer_key}
     apply_answer_key(result.cards, latest_known)
+    # 單頁克漏字也統一重編成 1..k（跨頁合併時 merge_group_cards 會再整組重編）
+    renumber_cloze_cards(result.cards)
     others = [
         c for p in _done_pages(imp) if p.page_no != page_no for c in (p.cards or [])
     ]

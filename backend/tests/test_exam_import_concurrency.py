@@ -120,7 +120,8 @@ def test_answer_page_saved_during_ai_call_is_applied(
 
     resp = _send(test_client, teacher, import_id, 1, _png("p1"))
     assert resp.status_code == 200, resp.text
-    assert events == ["ai", "lock"]  # AI 回來後才鎖、才讀最新資料
+    # 搶頁時鎖一次（送 AI 前已 commit 放開）；AI 回來後再鎖、才讀最新資料
+    assert events == ["lock", "ai", "lock"]
 
     cards = resp.json()["page"]["cards"]
     q1, q2 = (c["question"] for c in cards)

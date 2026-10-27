@@ -645,8 +645,10 @@ class ExamPaperService:
                 timeout=AI_CALL_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as e:
+            # 逾時沒有回應、拿不到 usage_metadata：用量記 0 token（實際用量未知，不估算）
             logger.warning(
-                "[exam-paper] page=%s AI call timed out after %ss",
+                "[exam-paper] page=%s AI call timed out after %ss; "
+                "usage recorded as 0 tokens (TIMEOUT_USAGE_UNKNOWN, not estimated)",
                 page_no,
                 AI_CALL_TIMEOUT_SECONDS,
             )
