@@ -178,6 +178,18 @@ class ScenarioStudentFeedbackService:
             "",
             "If the recording has no speech, or you cannot make out any words, use "
             'verdict "improve" and say so kindly in `comment`.',
+            "",
+            # 夥伴 staging 回報：學生看不懂某個字時，會把它**逐字母拼出來**問 AI
+            # （例如把 "spot" 唸成 S-P-O-T），而模型既聽不懂拼讀，也會把那當成一個很差
+            # 的回答來評。這兩句處理這兩件事（#1140 2A）。
+            "If the student spells a word out letter by letter (for example "
+            '"S-P-O-T"), understand it as that word.',
+            "",
+            "Sometimes the student is not answering at all — they are asking what a "
+            "word means, or asking for help. When that happens, do not judge their "
+            'answer: use verdict "improve", tell them what the word means in one '
+            "short sentence, and invite them to try answering. Leave `suggestion` "
+            "out in that case.",
         ]
         return "\n".join(lines)
 

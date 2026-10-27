@@ -279,3 +279,27 @@ class TestOutputBudget:
             MAX_OUTPUT_TOKENS
         )
         assert isinstance(fake.GenerationConfig, MagicMock)
+
+
+class TestStudentAsksInsteadOfAnswering:
+    """夥伴 staging 回報的兩件事（#1140 2A）。
+
+    1. 學生看不懂某個字時會**逐字母拼出來**問 AI（例如把 "spot" 唸成 S-P-O-T）。
+    2. 那不是在回答 —— 照原本的 prompt，模型會把它當成一個很差的回答來評分。
+
+    prompt 層的處理有效果上限（模型對拼讀的辨識本來就不穩），但成本幾乎是零；真正治本
+    的是讓學生不需要問（必用字詞顯示字義）或做一個明確的「問 AI」功能，都另外評估。
+    """
+
+    def test_prompt_tells_the_model_to_read_spelled_out_words(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "letter by letter" in prompt
+        assert "S-P-O-T" in prompt
+
+    def test_prompt_handles_the_student_asking_a_question(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "not answering at all" in prompt
+        # 不要把提問當成差勁的回答來評分
+        assert "do not judge their answer" in prompt
+        # 問單字意思的時候不給「建議說法」（那會答錯方向）
+        assert "Leave `suggestion` out in that case." in prompt

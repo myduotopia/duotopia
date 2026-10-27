@@ -5046,6 +5046,10 @@
     "chat": {
       "typing": "AI is typing",
       "previewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
+      "recordingTooLong": "That recording is too long (max {{seconds}} seconds). Please record a shorter one.",
+      "recordingTooShort": "That recording is too short to hear. Please record again.",
+      "recordingTooLarge": "That recording file is too large. Please record a shorter one.",
+      "uploadFailed": "Could not upload your recording. Please try again.",
       "quotaExhausted": "You've used all the AI feedback for this question. You can still answer the next one.",
       "feedbackFailed": "AI feedback is unavailable right now. Please try again.",
       "questionImages": "Question images",

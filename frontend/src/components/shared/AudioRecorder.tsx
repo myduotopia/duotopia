@@ -447,7 +447,13 @@ export default function AudioRecorder({
         <AudioRecorderChatControls
           isRecording={isRecording}
           isStopping={isStopping}
-          recordingTimeLabel={formatTime(recordingTime)}
+          // 有上限時連上限一起顯示（"0:12 / 2:00"）—— 學生要在**錄的時候**知道
+          // 還剩多久，而不是送出後才被伺服器以 400 擋下來（#1140）
+          recordingTimeLabel={
+            autoStop
+              ? `${formatTime(recordingTime)} / ${formatTime(autoStop)}`
+              : formatTime(recordingTime)
+          }
           audioUrl={localAudioUrl}
           showError={status === "error"}
           errorMessage={errorMessage}

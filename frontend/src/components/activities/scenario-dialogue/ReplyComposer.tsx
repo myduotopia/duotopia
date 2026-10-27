@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { Send, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import AudioRecorder from "@/components/shared/AudioRecorder";
+import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ReplyMode, ScenarioAnswer } from "./types";
@@ -133,6 +134,9 @@ export function ReplyComposer({
         <AudioRecorder
           key={recorderKey}
           variant="chat"
+          // 上限要擋在前端：超過的話上傳端會回 400，而學生只會看到一句看不懂的
+          // 錯誤（夥伴 staging 回報）。到時間自動停，並在計時器上顯示上限。
+          autoStop={SCENARIO_MAX_RECORDING_SECONDS}
           onRecordingComplete={(blob, _url, durationSeconds) => {
             // 自己建一份 URL：AudioRecorder 卸載時會 revoke 它自己的那份
             setPending({
