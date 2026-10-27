@@ -6,6 +6,10 @@
 
 沿用 ``services/image_upload.ImageUploadService`` 的 GCS 認證、bucket、``USE_GCS_STORAGE``
 本機模式設定，不另做一套。
+
+TODO(#1112 清理排程，另議)：目前**沒有**自動清理。超過 30 天的未完成匯入只是不顯示、不擋重新上傳，
+頁圖仍留在 GCS；放棄匯入時刪除失敗也只記 log。之後要加排程：清掉過期匯入的頁圖，並重刪放棄時
+沒刪成功的前綴。
 """
 
 from __future__ import annotations
@@ -39,7 +43,7 @@ def store_page_image(
     """存一頁頁圖，回傳公開網址。同一頁重送會產生新檔（舊網址由呼叫端換掉）。"""
     svc = get_image_upload_service()
     ext = _EXT.get(content_type, "png")
-    filename = f"page_{page_no}_{uuid.uuid4().hex[:8]}.{ext}"
+    filename = f"page_{page_no}_{uuid.uuid4().hex}.{ext}"
     if svc.use_gcs:
         client = svc._get_storage_client()
         if not client:
@@ -75,6 +79,6 @@ def delete_import_images(import_id: int) -> int:
         count = len(os.listdir(folder))
         shutil.rmtree(folder, ignore_errors=True)
         return count
-    except Exception as e:  # 刪不掉不影響放棄；之後的過期清理會再刪一次
+    except Exception as e:  # 刪不掉不影響放棄；目前沒有排程補刪（見模組說明的 TODO）
         logger.warning("[exam-import] delete images failed import=%s: %s", import_id, e)
         return 0

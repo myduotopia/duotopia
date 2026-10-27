@@ -52,6 +52,8 @@ class ExamImportSettings(BaseModel):
     grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
     grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
     source_id: Optional[int] = None
+    # TODO(C4)：教材／單元的擁有權（老師看得到、能掛題目）目前沒驗證，只存在草稿；存入題庫時
+    # 沿用題目建立 API 的 program_links 驗證，驗不過的題目卡留在畫面上標出原因
     program_links: List[ProgramLinkIn] = Field(default_factory=list)
     visibility: Optional[
         Literal["private", "public", "organization_only", "individual_only"]
@@ -272,7 +274,10 @@ def abandon_exam_import(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """放棄這次匯入：刪草稿（各頁題目卡）與該匯入的頁圖；不算進每天 1 本。"""
+    """放棄這次匯入：刪草稿（各頁題目卡）與該匯入的頁圖；不算進每天 1 本。已存入（saved）回 409。"""
     imp = _load(db, teacher, import_id)
-    eis.abandon_import(db, imp)
+    try:
+        eis.abandon_import(db, imp)
+    except eis.ExamImportError as e:
+        raise _raise(e)
     return {"id": imp.id, "status": imp.status}

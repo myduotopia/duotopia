@@ -3,7 +3,7 @@
 
 - **只比對老師自己建立、未刪除的題目**（不含別人的公開題）。
 - 比對前忽略空白、大小寫、標點（全形半形視為相同；克漏字空格 ``{{n}}``／``____`` 一律忽略）。
-- 單題：**題目＋選項**都相同才算相同（選項順序不同也算相同）。
+- 單題：**題目＋選項**都相同才算相同（選項順序不同也算相同：選項排序後再比）。
 - 題組：**題組文字相同＋小題題目集合相同**就算相同，**選項不同也算相同**；只有部分小題相同不算。
   題組文字：對話題組用逐句「說話者: 台詞」串起來；其他用文章段落（題庫端用 ``passage_text``）。
 - 同一份匯入裡也比：題目卡依原卷順序，後出現的標成重複前面那張。
@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from models import Question, QuestionGroup
@@ -82,25 +82,38 @@ def _live(model):
     return [model.is_active.is_(True), model.deleted_at.is_(None)]
 
 
+def _stem_key_sql():
+    """SQL 端的題目比對鍵：``normalized_stem`` 再拿掉空白與底線（對應 ``norm_key``）。"""
+    return func.replace(func.replace(Question.normalized_stem, " ", ""), "_", "")
+
+
+def _has_blank_token_sql():
+    # 題庫題目含 ``{{n}}`` 時，normalized_stem 會留下編號數字（"i 1 a cat"），和卡片的比對鍵
+    # （空格整個忽略）對不上；這類題目另外撈出來在 Python 端用 norm_key 比
+    return Question.stem.like("%{{%")
+
+
 def find_bank_duplicates(
     db: Session, teacher_id: int, cards: List[Dict[str, Any]]
 ) -> Dict[str, Dict[str, Any]]:
-    """回 ``{card_id: duplicate_of}``，只含和自己題庫重複的卡。"""
+    """回 ``{card_id: duplicate_of}``，只含和自己題庫重複的卡。
+
+    先用 SQL 篩候選（題目比對鍵相同、或題目含 ``{{n}}``），再在 Python 端用完整簽章比，
+    不載入老師全部的題目／題組。
+    """
     sigs = {c["card_id"]: card_signature(c) for c in cards}
     result: Dict[str, Dict[str, Any]] = {}
+    stem_key = _stem_key_sql()
 
     single_stems = {s[1] for s in sigs.values() if s and s[0] == CARD_KIND_SINGLE}
     if single_stems:
-        stem_key = func.replace(
-            func.replace(Question.normalized_stem, " ", ""), "_", ""
-        )
         rows = (
             db.query(Question)
             .options(selectinload(Question.options))
             .filter(
                 Question.teacher_id == teacher_id,
                 Question.group_id.is_(None),
-                stem_key.in_(single_stems),
+                or_(stem_key.in_(single_stems), _has_blank_token_sql()),
                 *_live(Question),
             )
             .order_by(Question.id)
@@ -122,14 +135,31 @@ def find_bank_duplicates(
                     "id": bank_singles[sig],
                 }
 
-    if any(s and s[0] == CARD_KIND_GROUP for s in sigs.values()):
+    group_sigs = [s for s in sigs.values() if s and s[0] == CARD_KIND_GROUP]
+    if group_sigs:
+        # 候選題組：至少有一個小題的題目比對鍵出現在卡片小題裡（克漏字小題常是空題幹，鍵為 ""）
+        group_stems = {stem for s in group_sigs for stem in s[2]}
+        candidate_ids = (
+            db.query(Question.group_id)
+            .filter(
+                Question.teacher_id == teacher_id,
+                Question.group_id.isnot(None),
+                or_(stem_key.in_(group_stems), _has_blank_token_sql()),
+                *_live(Question),
+            )
+            .distinct()
+        )
         groups = (
             db.query(QuestionGroup)
             .options(
                 selectinload(QuestionGroup.segments),
                 selectinload(QuestionGroup.questions),
             )
-            .filter(QuestionGroup.teacher_id == teacher_id, *_live(QuestionGroup))
+            .filter(
+                QuestionGroup.teacher_id == teacher_id,
+                QuestionGroup.id.in_(candidate_ids),
+                *_live(QuestionGroup),
+            )
             .order_by(QuestionGroup.id)
             .all()
         )

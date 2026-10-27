@@ -27,23 +27,24 @@ from __future__ import annotations
 import argparse
 import ast
 import asyncio
-import copy
 import html
 import re
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from services.exam_paper_service import merge_group_cards  # noqa: E402
-from services.exam_paper_service import (  # noqa: E402
+from services.exam_paper_cards import (  # noqa: E402
     CARD_KIND_GROUP,
-    PageExtraction,
     apply_answer_key,
-    get_exam_paper_service,
     iter_card_questions,
+    merge_continuations,
+)
+from services.exam_paper_service import (  # noqa: E402
+    PageExtraction,
+    get_exam_paper_service,
 )
 
 MIME = {
@@ -142,7 +143,7 @@ async def run(folder: Path) -> Dict[str, Any]:
         if n not in order:
             await process(n)
 
-    merge_cross_page(results)
+    merge_cross_page(results, numbers, errors)
     return {
         "pages": pages,
         "order": order,
@@ -152,23 +153,17 @@ async def run(folder: Path) -> Dict[str, Any]:
     }
 
 
-def merge_cross_page(results: Dict[int, PageExtraction]) -> None:
-    """同 exam_import_service.merge_continuations，只是作用在記憶體裡的結果。"""
-    for n in sorted(results):
-        cards = results[n].cards
-        if not cards or cards[0].get("kind") != CARD_KIND_GROUP:
-            continue
-        if not cards[0].get("continues_previous"):
-            continue
-        prev = results.get(n - 1)
-        if (
-            prev is None
-            or not prev.cards
-            or prev.cards[-1].get("kind") != CARD_KIND_GROUP
-        ):
-            continue
-        merge_group_cards(prev.cards[-1], copy.deepcopy(cards[0]))
-        results[n].cards = cards[1:]
+def merge_cross_page(
+    results: Dict[int, PageExtraction], numbers: List[int], errors: Dict[int, str]
+) -> None:
+    """跨頁題組合併：與匯入流程共用 ``exam_paper_cards.merge_continuations``（失敗的頁當作
+    還沒處理完，不跨過它合併）。"""
+    pages: Dict[int, Optional[List[Dict[str, Any]]]] = {
+        n: (None if n in errors or n not in results else results[n].cards)
+        for n in numbers
+    }
+    for n in merge_continuations(pages):
+        results[n].cards = pages[n] or []
 
 
 # --------------------------------------------------------------------------- #
