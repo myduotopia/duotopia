@@ -240,3 +240,10 @@ commit `3165df5b` fix(classroom): 批次編輯審查修正——測試補 name�
 - 後端：black（2 檔重新排版後通過）、flake8 `--config=../.flake8`（改動 4 檔 0 錯誤）。
 - 前端：prettier --write 改動檔、`npm run typecheck` 通過；`npx eslint` 改動檔 0 錯誤，僅 `SchoolClassroomsPage.tsx` 既有的 exhaustive-deps 警告（行號因新增 3 行移到 134）。
 - pytest／vitest 未在本機跑（交給 CI）。
+
+### 第二階段審查（2026-10-27，新 code-reviewer）
+結論：通過。權限、AI 不碰資料庫、Vertex 參數、路由衝突、z-index（GradeSelect 是原生 select）、計時器清理、i18n 皆查證無誤。低風險建議（待使用者決定是否修）：
+- L1 AI 等待中或逐列套用中仍可按「儲存」、表格仍可改：套用一半時儲存只會送出已填的部分；儲存失敗後 AI 仍可能繼續填入。建議：儲存時自動停止 AI（`useEffect` on saving → stop，`handleResponse` 遇 saving 直接 return）。
+- L2 `backend/services/classroom_batch_edit_ai.py:103-105` 模型回 `reply: null`／數字 → 整次 502。建議 reply 容錯為空字串；`_clean_grade` 可接受 7.0。
+- L3 `ClassroomRenameAssistantPanel.tsx:261-283` 停止／復原附註多餘的 `error: true`，純整理。
+- Info：面板 495 行接近 500 行門檻。
