@@ -9,7 +9,7 @@
  * 而 429 是會**真的發生**的：伺服器的計數跨工作階段累積，UI 的 attempts 只在記憶體。
  * 學生昨天答過兩次、今天重新打開，畫面以為還有 3 次，伺服器只剩 1 次。
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const scenarioDialogueFeedback = vi.fn();
 
@@ -63,6 +63,13 @@ const ANSWER = {
   audioUrl: "blob:fake",
   durationSec: 4,
 };
+
+const originalFetch = global.fetch;
+
+afterEach(() => {
+  // 這些測試都會換掉 global.fetch；還原免得汙染同檔其他測試（review 第 2 點）
+  global.fetch = originalFetch;
+});
 
 beforeEach(() => {
   scenarioDialogueFeedback.mockReset();
@@ -344,4 +351,93 @@ describe("確定不會成功的 400 不要重試（#1148 review）", () => {
 
     expect(calls).toBe(1);
   });
+});
+
+describe("重試判斷不可以比預設窄也不可以比預設寬（#1148 review）", () => {
+  /**
+   * 我第一版的覆寫是「所有 4xx 都不重試」，於是把預設刻意重試的 408／425／429 也
+   * 擋掉了（上傳端是 upsert，重複上傳安全，所以那三個該退避重試）；同時它讓**任何**
+   * 非 4xx 的錯誤都重試，比預設寬。兩邊都是退步。
+   */
+  const uploadAlwaysFailing = (status: number, detail: string) => {
+    let calls = 0;
+    global.fetch = vi.fn(async (url: unknown) => {
+      if (String(url).startsWith("blob:")) {
+        return { ok: true, blob: async () => new Blob(["x"]) } as never;
+      }
+      calls += 1;
+      return { ok: false, status, json: async () => ({ detail }) } as never;
+    }) as never;
+    return () => calls;
+  };
+
+  /**
+   * 重新載入 `studentAdapters`，讓它拿到**真的** `retryAudioUpload`。
+   *
+   * `vi.resetModules()` 就足夠 —— 我原本還多寫了一個 `vi.doMock(..., importActual)`
+   * 並在 commit 訊息裡說那是必要的；實測拿掉之後 27 條照樣全過，**那句話是錯的**
+   * （PR #1149 review 第 2 點說對了）。
+   */
+  async function freshAdapters() {
+    vi.resetModules();
+    const mod = await import("../studentAdapters");
+    return mod.createStudentScenarioAdapters({ assignmentId: 7 });
+  }
+
+  // RETRYABLE_UPLOAD_STATUSES 有三個值，只測一個等於另外兩個沒人守
+  it.each([[408], [425], [429]])(
+    "%i 要重試 —— 暫時性，而且上傳是 upsert、重複安全",
+    async (status) => {
+      const calls = uploadAlwaysFailing(status, `status ${status}`);
+      const adapters = await freshAdapters();
+      await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+      expect(calls()).toBeGreaterThan(1);
+    },
+    20000,
+  );
+
+  /**
+   * 這條守的是 review 第 2 點修回來的那個退步：我的覆寫一度讓**任何**非 4xx 的錯誤
+   * 都重試（連 TypeError 都算），比預設寬。非 HTTP 的錯誤要沿用預設那套判斷。
+   */
+  it("非 HTTP 錯誤沿用預設判斷：NetworkError 重試、一般 Error 不重試", async () => {
+    for (const [message, expectRetry] of [
+      ["NetworkError: failed", true],
+      ["something went terribly wrong", false],
+    ] as const) {
+      let calls = 0;
+      global.fetch = vi.fn(async (url: unknown) => {
+        if (String(url).startsWith("blob:")) {
+          return { ok: true, blob: async () => new Blob(["x"]) } as never;
+        }
+        calls += 1;
+        throw new Error(message);
+      }) as never;
+
+      const adapters = await freshAdapters();
+      await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+      if (expectRetry) {
+        expect(calls, message).toBeGreaterThan(1);
+      } else {
+        expect(calls, message).toBe(1);
+      }
+    }
+  }, 20000);
+
+  it("400（錄音太長）不重試", async () => {
+    const calls = uploadAlwaysFailing(
+      400,
+      "Recording too long. Maximum duration: 120 seconds",
+    );
+    const adapters = await freshAdapters();
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(calls()).toBe(1);
+  });
+
+  it("500 要重試", async () => {
+    const calls = uploadAlwaysFailing(500, "Internal Server Error");
+    const adapters = await freshAdapters();
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(calls()).toBeGreaterThan(1);
+  }, 20000);
 });
