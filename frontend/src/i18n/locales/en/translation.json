@@ -4927,15 +4927,9 @@
     "dialogTitle": "Add Scenario Dialogue",
     "editTitle": "Edit Scenario Dialogue",
     "badge": "Speaking",
-    "tabs": {
-      "sourceManual": "Write it yourself",
-      "sourceAi": "Generate with AI",
-      "sourceUpload": "Upload image / PDF"
-    },
     "labels": {
       "title": "Title",
       "goal": "Learning Goal",
-      "uploadTitle": "Click or drop files here",
       "rubric": "Scoring Criteria (AI feedback basis)",
       "notSpecified": "Not specified",
       "rubricNote": "Extra note for this question",
@@ -4950,8 +4944,7 @@
       "scenarioContent": "Scenario",
       "articleLevel": "Text difficulty",
       "questionLevel": "Question difficulty",
-      "scenarioText": "Scenario text",
-      "sectionGenerate": "Question settings"
+      "scenarioText": "Scenario text"
     },
     "rubricPresets": {
       "tenseTime": "Time",
@@ -4972,38 +4965,27 @@
     "buttons": {
       "generating": "Generating…",
       "addQuestion": "Add Question",
-      "skipGeneration": "Skip — I'll write my own",
-      "generateAndContinue": "Generate and continue",
-      "editSettings": "Edit settings",
-      "backToSettings": "Back to settings",
+      "editSettings": "Edit in setup",
+      "backToSettings": "Back to setup",
       "viewQuestions": "View questions",
       "generateAnother": "Generate more questions",
       "uploadImage": "Upload",
       "replaceImage": "Replace",
       "removeImage": "Remove",
-      "generateScenario": "Generate scenario",
-      "extractScenario": "Extract from files",
       "generateImage": "Generate",
       "comingSoon": "Coming soon"
     },
     "hints": {
       "rateLimit": "Up to 5 regenerations per minute",
-      "uploadFormats": "Supports JPG, PNG, PDF",
       "itemRange": "min {{min}}, max {{max}} questions",
       "maxReached": "Reached the {{max}}-question limit",
       "referenceAnswer": "Used by the AI to compare language features (tense, structure, vocabulary). Never shown to students; also the basis for suggested answers.",
       "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
       "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it.",
-      "step1Foot": "Generate once you're set, or skip ahead and write your own",
-      "untitled": "Untitled",
       "referenceNote": "Check the questions against the scenario and instructions",
       "noRubricYet": "No instructions yet",
-      "scenarioRequiredForAi": "Required to generate questions with AI",
-      "sourceManual": "Type it in the Scenario text box below",
       "optional": "Optional",
-      "noContextYet": "No scenario yet",
-      "scenarioText": "Edit here after producing it any of the three ways",
-      "sectionGenerate": "Used when AI writes the questions; each one stays editable afterwards"
+      "noContextYet": "No scenario yet"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",
@@ -5018,7 +5000,6 @@
       "imageQuotaExceeded": "You've used all your AI image generations this month — you can upload an image manually",
       "imageBlocked": "This description can't be turned into an image, please try a different one",
       "imageFailed": "Image generation failed, please try again later",
-      "scenarioRequired": "Add the scenario first — AI needs it to write questions",
       "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now",
       "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead"
     },
@@ -5115,6 +5096,47 @@
       "uploadFailed": "{{count}} scenario image(s) failed to upload. You can upload them yourself.",
       "overLimit": "Up to {{max}} scenario images; {{count}} more were skipped.",
       "someNotCropped": "Some pictures couldn't be cropped automatically. You can upload them yourself."
+    },
+    "setup": {
+      "change": "Change",
+      "back": "Back",
+      "next": "Next",
+      "startGenerate": "Start generating",
+      "countOption": "{{count}} questions",
+      "writeArticle": "Ask AI to write it",
+      "writingArticle": "OK, writing a {{level}} scenario about \"{{goal}}\". One moment…",
+      "extracting": "Extracting…",
+      "uploadFile": "Upload image / PDF",
+      "uploadHint": "JPG, PNG or PDF (up to 10MB). Text goes into the box below; pictures in the file are cropped into scenario images.",
+      "directionPlaceholder": "e.g. ask what students usually do on weekends, which sports they like",
+      "materialRequired": "Please give a scenario (text or images) or a direction first, so the AI knows what to ask.",
+      "reaskFallback": "I couldn't tell how to use that. Could you be more specific?",
+      "reopenConfirmTitle": "Change an earlier answer?",
+      "reopenConfirmDescription": "The settings after it will be cleared. Questions already generated are kept.",
+      "reopenConfirm": "Change",
+      "q": {
+        "mode": "Do you need a scenario? If so, students read it before answering.",
+        "goal": "What do you want students to practise? Tell me the goal and pick a passage level, and I'll write a scenario.",
+        "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5).",
+        "scenarioExisting": "Paste the scenario below, or upload an image / PDF and I'll extract the text and pictures (up to 5 scenario images).",
+        "source": "Where do the questions come from?",
+        "direction": "What part of the students' everyday life should I ask about?",
+        "settings": "OK. Check the question settings and press \"Start generating\".",
+        "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\"."
+      },
+      "modes": {
+        "none": "No, ask about everyday life",
+        "existing": "I have one (paste / upload image or PDF)",
+        "ai": "Ask AI to write one"
+      },
+      "sources": {
+        "manual": "I'll type them",
+        "ai": "Ask AI to write them"
+      },
+      "answers": {
+        "goal": "Goal: \"{{goal}}\" (passage level {{level}})",
+        "scenario": "Passage: {{chars}} characters, {{images}} scenario image(s)"
+      }
     }
   },
   "vocabularySet": {

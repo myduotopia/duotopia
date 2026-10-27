@@ -1460,7 +1460,13 @@ class ApiClient {
   async generateScenarioArticle(data: {
     goal: string;
     level?: string;
+    /** #1146：重問句與標題建議用的語言（zh-TW / en） */
+    ui_language?: string;
   }): Promise<{
+    /** #1146 答非所問：false 時不產內容，改看 reask */
+    usable?: boolean;
+    reask?: string;
+    suggested_title?: string;
     content: string;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
@@ -1478,7 +1484,12 @@ class ApiClient {
    * 後端會翻成給模型看的英文描述 —— 不要在這裡先轉成顯示用的中文。
    */
   async generateScenarioQuestions(data: {
+    /** #1146：可為空（不需要情境），此時改用 direction 出題 */
     scenario_content: string;
+    direction?: string;
+    /** 情境圖網址（最多 5 張），AI 出題會看圖 */
+    scenario_images?: string[];
+    ui_language?: string;
     count: number;
     question_level?: string;
     global_tense?: { time: string; aspect: string } | null;
@@ -1488,6 +1499,9 @@ class ApiClient {
     /** 清單上已有的題目，避免再產一批時給重複的 */
     existing_questions?: string[];
   }): Promise<{
+    usable?: boolean;
+    reask?: string;
+    suggested_title?: string;
     questions: Array<{
       question: string;
       translation: string;
@@ -1532,6 +1546,8 @@ class ApiClient {
    */
   async extractScenarioArticle(file: File): Promise<{
     content: string;
+    /** #1146：檔內有意義的圖（page 1-based、box_2d 0–1000），前端裁成情境圖 */
+    figures?: Array<{ page: number; box_2d: number[] }>;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
   }> {

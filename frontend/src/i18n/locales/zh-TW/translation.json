@@ -4946,15 +4946,9 @@
     "dialogTitle": "新增情境對話",
     "editTitle": "編輯情境對話",
     "badge": "口說練習",
-    "tabs": {
-      "sourceManual": "直接輸入情境文章",
-      "sourceAi": "AI 輔助生成",
-      "sourceUpload": "上傳圖片 / PDF"
-    },
     "labels": {
       "title": "標題",
       "goal": "訓練目標",
-      "uploadTitle": "點擊或拖放檔案",
       "rubric": "評分準則（AI 回饋依據）",
       "notSpecified": "不指定",
       "rubricNote": "本題額外說明",
@@ -4969,8 +4963,7 @@
       "scenarioContent": "情境內容",
       "articleLevel": "文章難度",
       "questionLevel": "題目難度",
-      "scenarioText": "情境文章",
-      "sectionGenerate": "出題設定"
+      "scenarioText": "情境文章"
     },
     "rubricPresets": {
       "tenseTime": "時間",
@@ -4991,38 +4984,27 @@
     "buttons": {
       "generating": "產生中…",
       "addQuestion": "新增題目",
-      "skipGeneration": "跳過，我想自己出題",
-      "generateAndContinue": "產生題目並繼續",
-      "editSettings": "回設定修改",
-      "backToSettings": "上一步：設定",
+      "editSettings": "回對話修改",
+      "backToSettings": "上一步：回到對話",
       "viewQuestions": "查看題目清單",
       "generateAnother": "再產一批題目",
       "uploadImage": "上傳圖片",
       "replaceImage": "替換",
       "removeImage": "移除",
-      "generateScenario": "生成情境文章",
-      "extractScenario": "從檔案擷取",
       "generateImage": "AI 生成",
       "comingSoon": "即將推出"
     },
     "hints": {
       "rateLimit": "每分鐘最多重新生成 5 次",
-      "uploadFormats": "支援 JPG、PNG、PDF",
       "itemRange": "最少 {{min}} 題、最多 {{max}} 題",
       "maxReached": "已達 {{max}} 題上限",
       "referenceAnswer": "給 AI 對照語言特徵用（時態、句型、用字），學生看不到；也是回饋「建議答案」的依據",
       "visibleToStudents": "這段文字會提供給 AI 評分，學生作答時也看得到",
       "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目",
-      "step1Foot": "設定完成後產題，或直接跳到清單自己出題",
-      "untitled": "尚未命名",
       "referenceNote": "對照情境與作答指引，確認題目出得合不合適",
       "noRubricYet": "尚未設定作答指引",
-      "scenarioRequiredForAi": "使用 AI 產題時必填",
-      "sourceManual": "在下方「情境文章」直接輸入",
       "optional": "選填",
-      "noContextYet": "尚未設定情境內容",
-      "scenarioText": "三種方式產生後都可以在這裡修改",
-      "sectionGenerate": "AI 產題時使用；產完仍可逐題調整"
+      "noContextYet": "尚未設定情境內容"
     },
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
@@ -5037,7 +5019,6 @@
       "imageQuotaExceeded": "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片",
       "imageBlocked": "這個描述沒辦法生成圖片，請換個描述再試",
       "imageFailed": "圖片生成失敗，請稍後再試",
-      "scenarioRequired": "請先輸入情境內容，AI 才有素材可以出題",
       "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
       "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入"
     },
@@ -5134,6 +5115,47 @@
       "uploadFailed": "{{count}} 張情境圖上傳失敗，可以再自己補傳",
       "overLimit": "情境圖最多 {{max}} 張，其餘 {{count}} 張已略過",
       "someNotCropped": "有些圖沒辦法自動裁下來，可以自己另外上傳"
+    },
+    "setup": {
+      "change": "改選",
+      "back": "回上一步",
+      "next": "下一步",
+      "startGenerate": "開始產生",
+      "countOption": "{{count}} 題",
+      "writeArticle": "請 AI 寫情境",
+      "writingArticle": "好，我依「{{goal}}」寫一篇 {{level}} 程度的情境，請稍等…",
+      "extracting": "擷取中…",
+      "uploadFile": "上傳圖片／PDF",
+      "uploadHint": "支援 JPG、PNG、PDF（10MB 以內）。文字放進下面的情境框，檔案裡的圖會自動裁成情境圖",
+      "directionPlaceholder": "例如：問學生週末通常做什麼、喜歡什麼運動",
+      "materialRequired": "請先提供情境（文字或情境圖）或出題方向，AI 才知道要問什麼",
+      "reaskFallback": "我沒看懂這段要怎麼用，可以再具體一點嗎？",
+      "reopenConfirmTitle": "要改前面的回答嗎？",
+      "reopenConfirmDescription": "後面的設定會清空，已產生的題目保留。",
+      "reopenConfirm": "改選",
+      "q": {
+        "mode": "需要情境嗎？有情境的話，學生會先看情境再回答問題。",
+        "goal": "這次想訓練學生什麼？告訴我訓練目標、選好文章難度，我來寫一篇情境。",
+        "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張）。",
+        "scenarioExisting": "請把情境貼在下面，或上傳圖片／PDF 讓我擷取文字和圖片（情境圖最多 5 張）。",
+        "source": "題目怎麼來？",
+        "direction": "想問學生哪方面的日常生活？",
+        "settings": "好的，請確認出題設定，按「開始產生」我就開始出題。",
+        "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。"
+      },
+      "modes": {
+        "none": "不需要，問日常生活",
+        "existing": "我有現成的（貼上／上傳圖片或 PDF）",
+        "ai": "請 AI 幫我寫"
+      },
+      "sources": {
+        "manual": "我自己輸入",
+        "ai": "請 AI 出題"
+      },
+      "answers": {
+        "goal": "訓練目標：「{{goal}}」（文章難度 {{level}}）",
+        "scenario": "情境文章 {{chars}} 字、情境圖 {{images}} 張"
+      }
     }
   },
   "vocabularySet": {

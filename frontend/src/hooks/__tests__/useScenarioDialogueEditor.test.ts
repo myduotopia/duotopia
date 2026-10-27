@@ -47,6 +47,12 @@ vi.mock("@/lib/api", () => ({
 const saveInput = (): ScenarioSaveInput => ({
   title: "週末活動",
   scenarioContent: "It is Monday morning.",
+  scenarioImages: [],
+  scenarioMode: "existing",
+  questionSource: "manual",
+  goal: "",
+  articleLevel: "",
+  direction: "",
   questionLevel: "B1",
   globalRubric: "",
   globalTense: { time: "past", aspect: "simple" },

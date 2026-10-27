@@ -5,6 +5,8 @@
  */
 import {
   useCallback,
+  useEffect,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -42,11 +44,23 @@ export function useScenarioImages(
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [cropping, setCropping] = useState<ScenarioImage | null>(null);
+  /**
+   * 目前的張數要即時：一次擷取多個檔案時是在同一個 async 流程裡連續新增，閉包裡的
+   * `images.length` 還是開始時的值，會讓總數超過 5 張。新增時同步更新這個 ref。
+   */
+  const countRef = useRef(images.length);
+  countRef.current = Math.max(countRef.current, images.length);
+  useEffect(() => {
+    countRef.current = images.length;
+  }, [images.length]);
 
   /** 共用的收尾：附加到清單末端、報告失敗與略過張數 */
   const append = useCallback(
     (added: ScenarioImage[], failed: number, skipped: number) => {
-      if (added.length) setImages((prev) => [...prev, ...added]);
+      if (added.length) {
+        countRef.current += added.length;
+        setImages((prev) => [...prev, ...added]);
+      }
       if (failed > 0) {
         toast.error(
           t("scenarioDialogue.images.uploadFailed", { count: failed }),
@@ -84,7 +98,7 @@ export function useScenarioImages(
         } = await uploadCrops(
           // 自己上傳的圖整張就是情境圖，原圖也留著讓老師之後可以裁小一點
           valid.map((file) => ({ file, source: { file, box: FULL_BOX } })),
-          MAX_SCENARIO_IMAGES - images.length,
+          MAX_SCENARIO_IMAGES - countRef.current,
           t,
         );
         append(added, failed, skipped);
@@ -92,7 +106,7 @@ export function useScenarioImages(
         setBusy(false);
       }
     },
-    [append, images.length, t],
+    [append, t],
   );
 
   const addExtracted = useCallback(
@@ -114,13 +128,13 @@ export function useScenarioImages(
           images: added,
           failed,
           skipped,
-        } = await uploadCrops(crops, MAX_SCENARIO_IMAGES - images.length, t);
+        } = await uploadCrops(crops, MAX_SCENARIO_IMAGES - countRef.current, t);
         append(added, failed, skipped);
       } finally {
         setBusy(false);
       }
     },
-    [append, images.length, t],
+    [append, t],
   );
 
   const remove = useCallback(
