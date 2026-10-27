@@ -105,6 +105,64 @@ vi.mock("sonner", () => ({
   },
 }));
 
+/**
+ * 設定卡的題數改用標準元件 Select（Radix，#1146 review 5）。Radix 的下拉在 jsdom 裡
+ * 開不起來（pointer／portal 行為不穩，同 QuizScoringMethodField 測試的說明），這裡換成
+ * 原生 select 的替身：一樣用 role=combobox + aria-label 找、用 change 選值，
+ * 驗的是「選了幾題就送幾題」，不是 Radix 本身。
+ */
+vi.mock("@/components/ui/select", async () => {
+  const React = await import("react");
+  type Ctx = {
+    value?: string;
+    onValueChange?: (v: string) => void;
+    label: { current?: string };
+  };
+  const SelectCtx = React.createContext<Ctx>({ label: {} });
+  return {
+    Select: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value?: string;
+      onValueChange?: (v: string) => void;
+      children: ReactNode;
+    }) => {
+      const label = React.useRef<string | undefined>(undefined);
+      return (
+        <SelectCtx.Provider value={{ value, onValueChange, label }}>
+          {children}
+        </SelectCtx.Provider>
+      );
+    },
+    SelectTrigger: (props: { "aria-label"?: string }) => {
+      React.useContext(SelectCtx).label.current = props["aria-label"];
+      return null;
+    },
+    SelectValue: () => null,
+    SelectContent: ({ children }: { children: ReactNode }) => {
+      const ctx = React.useContext(SelectCtx);
+      return (
+        <select
+          aria-label={ctx.label.current}
+          value={ctx.value}
+          onChange={(e) => ctx.onValueChange?.(e.target.value)}
+        >
+          {children}
+        </select>
+      );
+    },
+    SelectItem: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children: ReactNode;
+    }) => <option value={value}>{children}</option>,
+  };
+});
+
 // t 回傳 key 本身，測試就用 key 當選取器
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -523,6 +581,118 @@ describe("ScenarioDialoguePanel 情境來源", () => {
       ),
     );
     expect(extractScenarioArticle).toHaveBeenCalledTimes(2);
+  });
+
+  it("多檔擷取中間一檔失敗：其他檔的文字照樣寫入，最後列出失敗檔名（review 1）", async () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    chooseMode("existing");
+
+    extractScenarioArticle
+      .mockResolvedValueOnce({ content: "Page one." })
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce({ content: "Page three." });
+
+    const fileInput = container.querySelector(
+      'input[accept="image/*,application/pdf"]',
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(["a"], "p1.png", { type: "image/png" }),
+          new File(["b"], "p2.png", { type: "image/png" }),
+          new File(["c"], "p3.png", { type: "image/png" }),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+        "Page one.\n\nPage three.",
+      ),
+    );
+    expect(extractScenarioArticle).toHaveBeenCalledTimes(3);
+    expect(mockToastError).toHaveBeenCalledWith(
+      "scenarioDialogue.messages.extractFailedFiles",
+    );
+  });
+
+  it("擷取回的標題建議在標題空白時填入（使用者決定 5）", async () => {
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    chooseMode("existing");
+    extractScenarioArticle.mockResolvedValueOnce({
+      content: "Extracted passage.",
+      suggested_title: "講義標題",
+    });
+
+    const fileInput = container.querySelector(
+      'input[accept="image/*,application/pdf"]',
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["a"], "p1.png", { type: "image/png" })] },
+    });
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+        "Extracted passage.",
+      ),
+    );
+    expect(extractScenarioArticle).toHaveBeenCalledWith(
+      expect.any(File),
+      "zh-TW",
+    );
+
+    fireEvent.click(screen.getByText(K.next));
+    chooseSource("manual");
+    expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
+      "講義標題",
+    );
+  });
+
+  it("情境框已有文字時改選別的情境來源 → 先確認，取消就保留（review 2）", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "老師貼好的情境。");
+
+    // 「回上一步」不必確認（後面沒有已答步驟）……
+    fireEvent.click(screen.getByText(K.stepBack));
+    expect(screen.queryByText(K.reopenConfirm)).toBeNull();
+
+    // ……但改選別的來源會清掉情境框，要先確認
+    chooseMode("none");
+    expect(
+      screen.getByText("scenarioDialogue.setup.modeChangeConfirmDescription"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
+    );
+
+    // 取消：還停在「需要情境嗎？」，選回原本的來源，文字還在
+    chooseMode("existing");
+    expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+      "老師貼好的情境。",
+    );
+  });
+
+  it("情境框已有文字時改選別的情境來源 → 確認後才清空", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "老師貼好的情境。");
+    fireEvent.click(screen.getByText(K.stepBack));
+
+    chooseMode("ai");
+    fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
+
+    expect(screen.getByPlaceholderText(K.goalPlaceholder)).toBeInTheDocument();
+  });
+
+  it("情境框是空的就直接改選，不跳確認", () => {
+    renderPanel();
+    chooseMode("existing");
+    fireEvent.click(screen.getByText(K.stepBack));
+
+    chooseMode("ai");
+    expect(
+      screen.queryByText("scenarioDialogue.setup.modeChangeConfirmDescription"),
+    ).toBeNull();
+    expect(screen.getByPlaceholderText(K.goalPlaceholder)).toBeInTheDocument();
   });
 
   it("情境內容生成中算 busy，儲存鍵才擋得住", async () => {

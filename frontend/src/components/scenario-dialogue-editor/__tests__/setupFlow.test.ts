@@ -6,6 +6,7 @@ import {
   EMPTY_ANSWERS,
   activeStep,
   answersFromSaved,
+  modeChangeClearsScenario,
   needsReopenConfirm,
   previousStep,
   reopenStep,
@@ -130,5 +131,27 @@ describe("answersFromSaved", () => {
         hasScenario: false,
       }).scenarioMode,
     ).toBe("none");
+  });
+});
+
+describe("modeChangeClearsScenario（review 2）", () => {
+  it("第一次選、選回同一個都不會清", () => {
+    expect(modeChangeClearsScenario(null, "existing", true)).toBe(false);
+    expect(modeChangeClearsScenario("existing", "existing", true)).toBe(false);
+  });
+
+  it("改選不同答案且情境框有東西 → 要確認", () => {
+    expect(modeChangeClearsScenario("existing", "none", true)).toBe(true);
+    expect(modeChangeClearsScenario("ai", "existing", true)).toBe(true);
+  });
+
+  it("情境框是空的就不必確認", () => {
+    expect(modeChangeClearsScenario("existing", "none", false)).toBe(false);
+  });
+
+  it("停在情境那一步、後面沒有已答步驟時，改選的確認擋不到 —— 所以需要這一道", () => {
+    const answers = a({ scenarioMode: "existing" });
+    expect(needsReopenConfirm("mode", answers)).toBe(false);
+    expect(modeChangeClearsScenario("existing", "ai", true)).toBe(true);
   });
 });
