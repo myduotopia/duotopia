@@ -9,7 +9,7 @@
  * 而 429 是會**真的發生**的：伺服器的計數跨工作階段累積，UI 的 attempts 只在記憶體。
  * 學生昨天答過兩次、今天重新打開，畫面以為還有 3 次，伺服器只剩 1 次。
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const scenarioDialogueFeedback = vi.fn();
 
@@ -63,6 +63,13 @@ const ANSWER = {
   audioUrl: "blob:fake",
   durationSec: 4,
 };
+
+const originalFetch = global.fetch;
+
+afterEach(() => {
+  // 這些測試都會換掉 global.fetch；還原免得汙染同檔其他測試（review 第 2 點）
+  global.fetch = originalFetch;
+});
 
 beforeEach(() => {
   scenarioDialogueFeedback.mockReset();
@@ -364,13 +371,15 @@ describe("重試判斷不可以比預設窄也不可以比預設寬（#1148 revi
     return () => calls;
   };
 
+  /**
+   * 重新載入 `studentAdapters`，讓它拿到**真的** `retryAudioUpload`。
+   *
+   * `vi.resetModules()` 就足夠 —— 我原本還多寫了一個 `vi.doMock(..., importActual)`
+   * 並在 commit 訊息裡說那是必要的；實測拿掉之後 27 條照樣全過，**那句話是錯的**
+   * （PR #1149 review 第 2 點說對了）。
+   */
   async function freshAdapters() {
     vi.resetModules();
-    vi.doMock("@/utils/retryHelper", async () => {
-      return await vi.importActual<typeof import("@/utils/retryHelper")>(
-        "@/utils/retryHelper",
-      );
-    });
     const mod = await import("../studentAdapters");
     return mod.createStudentScenarioAdapters({ assignmentId: 7 });
   }
