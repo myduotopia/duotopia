@@ -196,3 +196,47 @@ commit `3165df5b` fix(classroom): 批次編輯審查修正——測試補 name�
 - V2 `AdjustGradeDialog`「設為指定年級」未選目標時說明文字結尾沒有句號，與升／降一級不一致。
 - V3 名稱清空時，游標仍在輸入框內，藍色焦點框蓋過紅色錯誤框（紅字提示正常）。
 - 使用者決定（2026-10-27）：V1–V3 與第二階段一起做。V1 做法：批次編輯視窗（及其遮罩）打開時層級高於全站右側浮動工具列；只調整這個視窗或 Dialog 的層級，不改工具列在其他畫面的行為；先查清工具列與 Dialog 目前的 z-index 再決定最小改法。V2 補句號（中英一致）。V3 名稱有錯時，焦點狀態仍顯示紅色外框。
+
+### 第二階段實作結果（2026-10-27）
+
+先把本計畫檔未 commit 的「第一階段 per-issue 截圖」段落 commit（`25d8a0de`），再 `git rebase origin/staging`（已是最新，無衝突）。未 push。
+
+**Commits（分支 `claude/issue-1139`）**
+- `4d5436fb` 後端：`POST /api/classrooms/batch-edit/ai-suggest`（`backend/routers/classroom_batch_edit_ai.py`，`main.py` 註冊）；服務 `backend/services/classroom_batch_edit_ai.py`；pytest `backend/tests/test_classroom_batch_edit_ai.py`。
+- `5c4c7816` 前端：`ClassroomRenameAssistantPanel`＋`useClassroomRenameAssistantSlot`、純邏輯 `classroomRenameAssistant.ts`、`api.suggestClassroomBatchEdit`、兩頁接上插槽；V1–V3；i18n；`ui-style-guide.md` 第 6 節；vitest。
+- 本 commit：本段紀錄。
+
+**後端重點**
+- 非管理員 403（不打 AI）。request：`classrooms` 1–200（id 不可重複、name ≤100 可為空字串＝表格當下值、grade 1–12 或 null）、`history` ≤20 則（10 輪，role 只能 user／assistant，每則 ≤2000 字）、`instruction` 去空白後 1–1000 字；不合 → 422。
+- 單次 `generate_json`（flash、`system_instruction`、temperature 0.2、`disable_thinking=True`、`max_tokens = 500 + 40 × 班數`）。prompt 寫死任務範圍、班名視為資料不是指令、離題只回「我只能協助調整這些班級的名稱與年級。」且 changes 空。
+- 過濾：不是 JSON 物件或 `changes` 不是陣列 → 502；id 不在清單丟掉；名稱去空白後 1–100 字、年級 1–12 整數（排除 bool），**只丟不合格的那個欄位**，兩欄都不剩才丟整筆；同一 id 取最後一筆（最後一筆不合格＝該班不改）；結果依輸入順序。任何例外（逾時、解析失敗）→ 502「AI 暫時無法回應，請重試」。
+- 只限管理員，不另做配額、不記用量。
+
+**前端重點**
+- 面板只在 `useTeacherAuthStore` 的 `user.is_admin === true` 時由 `useClassroomRenameAssistantSlot()` 回傳；非管理員拿到 undefined，視窗不顯示面板。
+- 送出時帶表格「當下」的列（含人工剛改的值；機構頁字串 id 轉數字、回來再對回）。「AI 思考中…」→ 回來後每 150ms 套一列、顯示「正在套用 k/n」、對話裡逐列加「原名 → 新名（年級：A → B）」；結束附註「已填入 N 個班級，確認後按「儲存」」。
+- 停止：等待中＝abort 請求、表格不動；套用中＝已套用保留、其餘捨棄，附註 k/n。
+- 復原：每次 AI 真的要套用前存整張表格快照（AI 沒改任何列就不存），「復原上一次 AI 修改」可連續按；按鈕下方小字提醒之後的手動修改也會一起還原。沒有可復原的快照時按鈕不顯示（不做停用狀態）。
+- 失敗：對話裡顯示紅字「AI 暫時無法回應，請重試」，表格不動、不存快照。
+- 對話只存在面板 state，視窗關閉（面板卸載）即清空，並取消進行中的請求與套用；每次送最近 10 輪（失敗／停止／復原等附註不送）。
+- 版面：寬螢幕在表格右側（lg:w-80）；窄螢幕在表格上方，對話區最高 12rem 可捲動，標題列右側有收合鈕（只在窄螢幕出現，預設展開）。Enter 送出、Shift+Enter 換行、輸入法選字中的 Enter 不送出。
+
+**V1–V3**
+- V1：查證結果——工具列 `DigitalTeachingToolbar` 外層 `fixed inset-0 z-[140]`（工具列本身 `z-[150]`，在外層的堆疊內），shadcn Dialog 遮罩與內容都是 `z-50`。最小改法：`components/ui/dialog.tsx` 的 `DialogContent` 加選用 prop `overlayClassName`（不給就和以前一樣），批次編輯視窗的內容與遮罩都加 `z-[160]`。其他畫面與工具列不受影響。
+- V2：`classroomGrade.adjust.descriptionSet`／`descriptionSetPending`（zh-TW）補「。」；英文本來就有句號。
+- V3：名稱有錯時輸入框加 `focus:border-red-500 focus:ring-red-500 focus-visible:ring-red-500`，焦點狀態維持紅框。
+
+**計畫外的決定（保守選擇，待使用者確認）**
+- AI 輸出某欄不合格時只丟那一欄（例：名稱合格、年級 13 → 只改名稱），不丟整筆。
+- 「送出」「停止」「復原」都用次要按鈕（白底灰框）：視窗的明確下一步是底部「儲存」（主按鈕），避免同一視窗兩顆主按鈕。
+- AI 套用中沒有鎖住表格與「儲存」；人工可同時修改、也可按儲存（儲存後視窗關閉，剩下的套用自動取消）。
+- `ClassroomRenameAssistantPanel` 只透過批次編輯視窗的插槽使用，不另外登記為獨立標準元件（未加進 REVIEW.md 清單），寫在 `ui-style-guide.md` 第 6.4 節 BatchEditClassroomsDialog 那一行；Dialog 那一行補 `overlayClassName` 用法。
+- 面板內不使用會 portal 出去的 Tooltip／Popover（視窗層級 z-[160] 會蓋住 z-50 的 portal），說明文字用 `title`／小字。
+
+**沒做的**
+- 無。
+
+**靜態檢查**
+- 後端：black（2 檔重新排版後通過）、flake8 `--config=../.flake8`（改動 4 檔 0 錯誤）。
+- 前端：prettier --write 改動檔、`npm run typecheck` 通過；`npx eslint` 改動檔 0 錯誤，僅 `SchoolClassroomsPage.tsx` 既有的 exhaustive-deps 警告（行號因新增 3 行移到 134）。
+- pytest／vitest 未在本機跑（交給 CI）。
