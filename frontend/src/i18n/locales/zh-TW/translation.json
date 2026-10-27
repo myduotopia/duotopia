@@ -5020,7 +5020,9 @@
       "imageBlocked": "這個描述沒辦法生成圖片，請換個描述再試",
       "imageFailed": "圖片生成失敗，請稍後再試",
       "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
-      "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入"
+      "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入",
+      "extractFailedFiles": "這些檔案沒有擷取成功：{{files}}。其他檔案的內容已放進情境框，可以再傳一次失敗的檔案。",
+      "extractTruncated": "檔案內容較長，擷取到的文章結尾可能不完整，請核對情境框。"
     },
     "tenseTimes": {
       "present": "現在",
@@ -5133,6 +5135,8 @@
       "reopenConfirmTitle": "要改前面的回答嗎？",
       "reopenConfirmDescription": "後面的設定會清空，已產生的題目保留。",
       "reopenConfirm": "改選",
+      "modeChangeConfirmTitle": "要改選嗎？",
+      "modeChangeConfirmDescription": "已填的情境文章與情境圖會清空，已產生的題目保留。",
       "q": {
         "mode": "需要情境嗎？有情境的話，學生會先看情境再回答問題。",
         "goal": "這次想訓練學生什麼？告訴我訓練目標、選好文章難度，我來寫一篇情境。",

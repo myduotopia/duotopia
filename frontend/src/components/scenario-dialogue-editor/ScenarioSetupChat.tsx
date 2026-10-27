@@ -23,6 +23,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
 import { CEFR_LEVELS } from "./constants";
 import { ScenarioImageStrip } from "./ScenarioImageStrip";
@@ -46,6 +47,12 @@ export interface ScenarioSetupChatProps {
   /** 重開某一步（已確認過）。面板負責清掉對應資料 */
   onReopen: (step: SetupStep) => void;
   onChooseMode: (mode: ScenarioMode) => void;
+  /**
+   * 選這個答案會不會清掉已填的情境（情境框文字、情境圖）。會的話先跳確認（review 2）
+   * —— 老師停在情境那一步、打好字還沒按下一步就回頭改選時，後面沒有已答步驟，
+   * 只靠「改選」的確認擋不到。
+   */
+  wouldClearScenario: (mode: ScenarioMode) => boolean;
   onChooseSource: (source: QuestionSource) => void;
   onScenarioDone: () => void;
   onDirectionDone: () => void;
@@ -116,6 +123,12 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   const { t } = useTranslation();
   const { answers } = props;
   const [pendingReopen, setPendingReopen] = useState<SetupStep | null>(null);
+  const [pendingMode, setPendingMode] = useState<ScenarioMode | null>(null);
+  /**
+   * 剛確認過「改選需要情境嗎？」（說明已經講了後面會清空）時，接著選不同答案就不再
+   * 問第二次；選完就歸零。
+   */
+  const modeReopenConfirmedRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const steps = stepsFor(answers);
@@ -128,6 +141,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
     if (busy) return;
     if (needsReopenConfirm(step, answers)) setPendingReopen(step);
     else props.onReopen(step);
+  };
+
+  const chooseMode = (mode: ScenarioMode) => {
+    const confirmed = modeReopenConfirmedRef.current;
+    modeReopenConfirmedRef.current = false;
+    if (!confirmed && props.wouldClearScenario(mode)) setPendingMode(mode);
+    else props.onChooseMode(mode);
   };
 
   const question = (step: SetupStep) => {
@@ -174,7 +194,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
               <Button
                 key={mode}
                 variant="outline"
-                onClick={() => props.onChooseMode(mode)}
+                onClick={() => chooseMode(mode)}
               >
                 {t(`scenarioDialogue.setup.modes.${mode}`)}
               </Button>
@@ -186,13 +206,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         return (
           <div className="space-y-3 pl-9">
             {props.goalReask && <BotBubble>{props.goalReask}</BotBubble>}
-            <textarea
+            <Textarea
               value={props.goal}
               onChange={(e) => props.onGoalChange(e.target.value)}
               rows={2}
               placeholder={t("scenarioDialogue.placeholders.goal")}
               aria-label={t("scenarioDialogue.labels.goal")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="min-h-0 resize-y"
             />
             <div>
               <span className="text-xs text-gray-600 mb-1 block">
@@ -274,13 +294,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
                 />
               </div>
             )}
-            <textarea
+            <Textarea
               value={props.scenarioContent}
               onChange={(e) => props.onScenarioContentChange(e.target.value)}
               rows={6}
               placeholder={t("scenarioDialogue.placeholders.scenarioContent")}
               aria-label={t("scenarioDialogue.labels.scenarioText")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="min-h-0 resize-y"
             />
             <ScenarioImageStrip actions={props.imageActions} />
             <div className="flex flex-wrap items-center gap-2">
@@ -316,13 +336,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
             {props.directionReask && (
               <BotBubble>{props.directionReask}</BotBubble>
             )}
-            <textarea
+            <Textarea
               value={props.direction}
               onChange={(e) => props.onDirectionChange(e.target.value)}
               rows={2}
               placeholder={t("scenarioDialogue.setup.directionPlaceholder")}
               aria-label={t("scenarioDialogue.setup.q.direction")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="min-h-0 resize-y"
             />
             <Button
               onClick={props.onDirectionDone}
@@ -406,8 +426,26 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         confirmText={t("scenarioDialogue.setup.reopenConfirm")}
         cancelText={t("contentEditor.buttons.cancel")}
         onConfirm={() => {
-          if (pendingReopen) props.onReopen(pendingReopen);
+          if (pendingReopen) {
+            modeReopenConfirmedRef.current = pendingReopen === "mode";
+            props.onReopen(pendingReopen);
+          }
           setPendingReopen(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingMode !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingMode(null);
+        }}
+        title={t("scenarioDialogue.setup.modeChangeConfirmTitle")}
+        description={t("scenarioDialogue.setup.modeChangeConfirmDescription")}
+        confirmText={t("scenarioDialogue.setup.reopenConfirm")}
+        cancelText={t("contentEditor.buttons.cancel")}
+        onConfirm={() => {
+          if (pendingMode) props.onChooseMode(pendingMode);
+          setPendingMode(null);
         }}
       />
     </div>

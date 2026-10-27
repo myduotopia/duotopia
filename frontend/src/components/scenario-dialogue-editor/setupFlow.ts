@@ -19,6 +19,7 @@
  *
  * 「回頭改」：重開某一步會清掉**它與它之後**的回答（`reopenStep`）。後面有已答步驟時，
  * 面板要先跳確認「後面的設定會清空，已產生的題目保留」（`needsReopenConfirm`）。
+ * 「需要情境嗎？」改選不同答案會清掉已填的情境，另外確認（`modeChangeClearsScenario`）。
  */
 
 export type ScenarioMode = "none" | "existing" | "ai";
@@ -121,6 +122,22 @@ export function needsReopenConfirm(step: SetupStep, a: SetupAnswers): boolean {
   const steps = stepsFor(a);
   const index = steps.indexOf(step);
   return steps.slice(index + 1).some((s) => isAnswered(s, a));
+}
+
+/**
+ * 「需要情境嗎？」改選成不同的答案時，已填的情境（情境框文字、情境圖）會被清空。
+ * `needsReopenConfirm` 只看後面有沒有已答步驟 —— 老師停在情境那一步、文字打好了但還沒
+ * 按下一步時，後面沒有已答步驟，改選就會無聲清掉他打的東西（review 2）。所以選項按下去
+ * 的當下再檢查一次：會清掉東西就先確認。
+ *
+ * `lastMode` 為 null（第一次選）或選回同一個（保留已填情境）都不會清。
+ */
+export function modeChangeClearsScenario(
+  lastMode: ScenarioMode | null,
+  nextMode: ScenarioMode,
+  hasScenarioMaterial: boolean,
+): boolean {
+  return lastMode !== null && lastMode !== nextMode && hasScenarioMaterial;
 }
 
 /**

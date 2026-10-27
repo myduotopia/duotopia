@@ -10,6 +10,14 @@
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { BatchTranslateSettings } from "@/components/shared/BatchTranslateSettings";
 import {
   BatchTTSSettings,
@@ -91,23 +99,29 @@ export function QuestionSettingsCard(props: QuestionSettingsCardProps) {
           </div>
         </div>
 
-        <label className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-semibold text-gray-700">
             {t("scenarioDialogue.labels.generateCount")}
           </span>
-          <select
-            value={props.count}
-            onChange={(e) => props.onCountChange(Number(e.target.value))}
-            className="px-1.5 py-1 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            aria-label={t("scenarioDialogue.labels.generateCount")}
+          <Select
+            value={String(props.count)}
+            onValueChange={(v) => props.onCountChange(Number(v))}
           >
-            {COUNT_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {t("scenarioDialogue.setup.countOption", { count: n })}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger
+              className="h-8 w-28"
+              aria-label={t("scenarioDialogue.labels.generateCount")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COUNT_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {t("scenarioDialogue.setup.countOption", { count: n })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="space-y-1">
@@ -161,12 +175,12 @@ export function QuestionSettingsCard(props: QuestionSettingsCardProps) {
         <p className="text-xs text-gray-500">
           {t("scenarioDialogue.hints.visibleToStudents")}
         </p>
-        <textarea
+        <Textarea
           value={props.globalRubric}
           onChange={(e) => props.onGlobalRubricChange(e.target.value)}
           rows={2}
           placeholder={t("scenarioDialogue.placeholders.globalRubric")}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm resize-y focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          className="min-h-0 resize-y"
         />
       </div>
 

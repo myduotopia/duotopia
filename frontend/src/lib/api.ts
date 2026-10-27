@@ -1544,15 +1544,23 @@ class ApiClient {
    * `Content-Type: application/json`，套在 FormData 上會蓋掉 multipart 的 boundary，
    * 後端就解不出檔案。專案裡其他上傳（uploadImage / uploadAudio）也是這樣繞過。
    */
-  async extractScenarioArticle(file: File): Promise<{
+  async extractScenarioArticle(
+    file: File,
+    uiLanguage?: string,
+  ): Promise<{
     content: string;
     /** #1146：檔內有意義的圖（page 1-based、box_2d 0–1000），前端裁成情境圖 */
     figures?: Array<{ page: number; box_2d: number[] }>;
+    /** #1146：同一次呼叫的標題建議（語言跟 uiLanguage） */
+    suggested_title?: string;
+    /** #1146：輸出被截斷、文章可能缺結尾 */
+    truncated?: boolean;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
   }> {
     const formData = new FormData();
     formData.append("file", file);
+    if (uiLanguage) formData.append("ui_language", uiLanguage);
 
     const currentToken = this.getToken();
     const headers: HeadersInit = {};
@@ -1565,8 +1573,16 @@ class ApiClient {
       { method: "POST", headers, body: formData },
     );
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || `HTTP ${response.status}`);
+      // ApiError 帶 status，面板才分得出 402（本月額度用完）與一般失敗
+      let detail: string = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+        else if (body?.detail?.message) detail = body.detail.message;
+      } catch {
+        // non-JSON error body; keep the default message
+      }
+      throw new ApiError(response.status, detail);
     }
     return response.json();
   }

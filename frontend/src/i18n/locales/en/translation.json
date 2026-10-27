@@ -5001,7 +5001,9 @@
       "imageBlocked": "This description can't be turned into an image, please try a different one",
       "imageFailed": "Image generation failed, please try again later",
       "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now",
-      "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead"
+      "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead",
+      "extractFailedFiles": "Couldn't extract these files: {{files}}. Content from the other files is in the scenario box — you can upload the failed ones again.",
+      "extractTruncated": "This file is long, so the end of the extracted passage may be missing. Please check the scenario box."
     },
     "tenseTimes": {
       "present": "Present",
@@ -5114,6 +5116,8 @@
       "reopenConfirmTitle": "Change an earlier answer?",
       "reopenConfirmDescription": "The settings after it will be cleared. Questions already generated are kept.",
       "reopenConfirm": "Change",
+      "modeChangeConfirmTitle": "Change your answer?",
+      "modeChangeConfirmDescription": "The scenario text and pictures you added will be cleared. Questions already generated are kept.",
       "q": {
         "mode": "Do you need a scenario? If so, students read it before answering.",
         "goal": "What do you want students to practise? Tell me the goal and pick a passage level, and I'll write a scenario.",
