@@ -10,7 +10,12 @@
 
 * :meth:`generate_article` —— 依訓練目標與文章難度生成情境文章
 * :meth:`generate_questions` —— 依情境文章與出題設定產生題目
-* :meth:`extract_article` —— 從老師上傳的圖片 / PDF 擷取情境文章
+* :meth:`extract_article` —— 從老師上傳的圖片 / PDF 擷取情境文章（#1146 起一併回
+  檔內有意義的圖的 ``box_2d``，前端裁成情境圖）
+
+#1146 起 generate_article / generate_questions 會回 ``usable`` / ``reask``（答非所問
+就不產內容、改回一句重問）與 ``suggested_title``（標題建議）；出題也接受「沒有情境、
+只有出題方向（direction）」與情境圖。
 
 沒有做的：**逐題 AI 生圖**。後端目前完全沒有圖片生成能力（不是接線問題，是要從零
 建一個新能力：模型、儲存、成本、配額），與本單要解的問題無關，另案處理。
@@ -73,6 +78,35 @@ _ASPECT_WORDS = {
     "perfect": "perfect",
     "perfectProgressive": "perfect progressive",
 }
+
+
+# ---- #1146 引導式對話 ----
+# 標題建議長度上限（題目清單頁的標題欄），模型偶爾會給一整句
+MAX_TITLE_CHARS = 60
+# 重問句長度上限
+MAX_REASK_CHARS = 300
+# 擷取時最多回傳幾張圖的座標。前端只保留前 5 張（MAX_SCENARIO_IMAGES）並提示
+# 「其餘已略過」，所以這裡要回得比 5 多，前端才知道有沒有被略過。
+MAX_EXTRACT_FIGURES = 20
+BOX_2D_MAX = 1000
+
+# 老師介面語言 → 重問句／標題用的語言。認不得的一律落回繁中（主要使用者）。
+_REASK_LANGUAGES = {"zh-TW": "Traditional Chinese", "en": "English"}
+
+# 模型說 usable=false 卻沒給重問句時的保底（依介面語言）
+_DEFAULT_REASK = {
+    "zh-TW": "我沒看懂這段要怎麼用，可以再具體一點嗎？例如：「這週上課學的交通工具與問路」。",
+    "en": "I couldn't tell how to use that. Could you be more specific? "
+    "For example: transport and asking for directions.",
+}
+
+
+def reask_language(ui_language: Optional[str]) -> str:
+    return _REASK_LANGUAGES.get((ui_language or "").strip(), "Traditional Chinese")
+
+
+def _ui_key(ui_language: Optional[str]) -> str:
+    return "en" if (ui_language or "").strip() == "en" else "zh-TW"
 
 
 class ScenarioDialogueAIError(ValueError):
@@ -169,12 +203,36 @@ class ScenarioDialogueAIService:
             "You always answer with valid JSON only, no commentary."
         )
 
+    @staticmethod
+    def _usable_instructions(field_name: str, ui_language: str) -> List[str]:
+        """答非所問判斷（#1146）。
+
+        老師在對話裡打字只當作「當下那一步」的答案；打了跟這一步無關的東西（打招呼、
+        問別的問題、亂打）時，**同一次呼叫**就判斷出來、不產內容、回一句重問並舉例 ——
+        不額外多打一次 AI。
+        """
+        lang = reask_language(ui_language)
+        return [
+            "",
+            f"First decide whether the {field_name} above is usable for this task.",
+            f"It is NOT usable if it is unrelated to choosing a {field_name} "
+            "(for example a greeting, a question to you, random characters, or a "
+            "request about something else).",
+            'If it is not usable, return {"usable": false, "reask": "<one short '
+            f"sentence in {lang} asking the teacher again, with one concrete "
+            'example>"} and nothing else.',
+        ]
+
     @classmethod
-    def build_article_prompt(cls, goal: str, level: str) -> str:
+    def build_article_prompt(
+        cls, goal: str, level: str, ui_language: str = "zh-TW"
+    ) -> str:
         """情境文章的 prompt。
 
         ``goal`` 是老師寫的訓練目標（例如「這週上課學到的：交通工具與問路」），
         它是這張單的核心 —— 舊的 stub 完全沒用到它，老師才會看到牛頭不對馬嘴的結果。
+
+        #1146：同一次呼叫先判斷 goal 能不能用（答非所問就重問），並一併建議標題。
         """
         goal_text = (goal or "").strip()
         if not goal_text:
@@ -197,8 +255,15 @@ class ScenarioDialogueAIService:
             "- 3 to 6 short paragraphs, at most about 150 words in total.",
             "- Concrete, everyday situation the student can picture.",
             "- Do not include any questions; this is the context only.",
+        ]
+        lines += cls._usable_instructions("teaching goal", ui_language)
+        lines += [
             "",
-            'Return JSON: {"content": "<the passage>"}',
+            "If it is usable, also suggest a short activity title (at most 8 words, "
+            f"in {reask_language(ui_language)}).",
+            "",
+            'Return JSON: {"usable": true, "title": "<title>", '
+            '"content": "<the passage>"}',
         ]
         return "\n".join(lines)
 
@@ -213,15 +278,24 @@ class ScenarioDialogueAIService:
         global_rubric: str = "",
         translate_language: str = "",
         existing_questions: Optional[List[str]] = None,
+        direction: str = "",
+        image_count: int = 0,
+        ui_language: str = "zh-TW",
     ) -> str:
         """產題的 prompt。
 
         老師在面板上填的每一項都要出現在這裡 —— 這正是 #1021 要修的問題。沒指定的
         設定則**整行不放**，而不是放一行空的 ``Tense: ``；空指令只會讓模型多想。
+
+        #1146：情境不再必填 —— 老師選「不需要情境，問日常生活」時改用 ``direction``
+        （想問的方向）當出題依據；情境文字、情境圖、方向至少要有一個。``image_count``
+        是隨 prompt 一起附上的情境圖張數（圖本身由呼叫端當 Part 送）。有 ``direction``
+        時同一次呼叫先判斷它能不能用（答非所問就重問）。
         """
         material = (scenario_content or "").strip()
-        if not material:
-            raise ScenarioDialogueAIError("情境內容不可為空（產題的素材）")
+        focus = (direction or "").strip()
+        if not material and not focus and image_count <= 0:
+            raise ScenarioDialogueAIError("情境內容與出題方向至少要有一個")
         # 下限刻意是 1 而不是 MIN_ITEMS：#864 的「一份 3~10 題」是**內容存檔時**的規則
         # （由 utils.scenario_dialogue.validate_item_count 在存檔路徑把關），不是單次
         # 生成的規則 —— 老師按「重新生成這一題」時要的就是 1 題。上限仍然是 MAX_ITEMS，
@@ -241,16 +315,44 @@ class ScenarioDialogueAIService:
         rubric = (global_rubric or "").strip()
         language = sanitize_free_text(translate_language, MAX_TRANSLATE_LANGUAGE_CHARS)
 
-        lines = [
-            f"Write {count} spoken-response questions about the scenario below.",
-            "",
-            "Scenario:",
-            material,
+        has_scenario = bool(material) or image_count > 0
+        if has_scenario:
+            lines = [
+                f"Write {count} spoken-response questions about the scenario below.",
+            ]
+            if material:
+                lines += ["", "Scenario:", material]
+            if image_count > 0:
+                lines += [
+                    "",
+                    f"The scenario also includes {image_count} picture(s), attached "
+                    "above. Students see these pictures while answering, so "
+                    "questions may refer to what is shown in them.",
+                ]
+            if focus:
+                lines += ["", f"Teacher's direction for the questions: {focus}"]
+        else:
+            lines = [
+                f"Write {count} spoken-response questions that ask the student about "
+                "their own everyday life.",
+                "",
+                f"Teacher's direction for the questions: {focus}",
+            ]
+        lines += [
             "",
             "Requirements:",
             "- Each question must be answerable by speaking a few sentences aloud.",
-            "- Questions must be answerable from the scenario, not general knowledge.",
         ]
+        if has_scenario:
+            lines.append(
+                "- Questions must be answerable from the scenario, not general "
+                "knowledge."
+            )
+        else:
+            lines.append(
+                "- Questions are about the student's own experience, so any honest "
+                "answer is acceptable."
+            )
         if level:
             lines.append(f"- CEFR level of the questions: {level}")
         if tense_text:
@@ -277,8 +379,18 @@ class ScenarioDialogueAIService:
             "- reference_answer: one sample spoken answer (for the teacher and the "
             "AI grader only; the student never sees it)",
             "- image_prompt: a short English description for illustrating the question",
+        ]
+        if focus:
+            lines += cls._usable_instructions(
+                "direction for the questions", ui_language
+            )
+        lines += [
             "",
-            'Return JSON: {"questions": [{"question": "...", "translation": "...", '
+            "Also suggest a short activity title (at most 8 words, in "
+            f"{reask_language(ui_language)}).",
+            "",
+            'Return JSON: {"usable": true, "title": "<title>", '
+            '"questions": [{"question": "...", "translation": "...", '
             '"keywords": ["..."], "reference_answer": "...", "image_prompt": "..."}]}',
         ]
         return "\n".join(lines)
@@ -302,7 +414,19 @@ class ScenarioDialogueAIService:
                 "- If the file contains questions or exercises, ignore them and keep "
                 "only the passage.",
                 "",
-                'Return JSON: {"content": "<the passage>"}',
+                # #1146 情境圖：檔內有意義的圖一併回座標，前端照 box_2d 裁切
+                "Also list the meaningful pictures in the file (photos, "
+                "illustrations, comics, maps, charts) that help a student understand "
+                "the scenario. Skip logos, icons, decorative borders, page "
+                "backgrounds and pictures of plain text.",
+                "- figures[i].page: 1-based page number (always 1 for a single image)",
+                "- figures[i].box_2d: bounding box as [ymin, xmin, ymax, xmax] on a "
+                "0-1000 scale of that page",
+                "- List figures in reading order. If there are none, return an empty "
+                "list.",
+                "",
+                'Return JSON: {"content": "<the passage>", '
+                '"figures": [{"page": 1, "box_2d": [ymin, xmin, ymax, xmax]}]}',
             ]
         )
 
@@ -440,6 +564,77 @@ class ScenarioDialogueAIService:
             raise ScenarioDialogueAIOutputError("AI 這次沒有產出情境內容")
         return content
 
+    @classmethod
+    def normalize_article_or_empty(cls, raw: Any) -> str:
+        try:
+            return cls.normalize_article(raw)
+        except ScenarioDialogueAIOutputError:
+            return ""
+
+    @classmethod
+    def normalize_title(cls, raw: Any) -> str:
+        """AI 建議的標題：壓成單行、限長。沒給就空字串（老師自己填）。"""
+        if not isinstance(raw, dict):
+            return ""
+        return sanitize_free_text(cls._text(raw.get("title")), MAX_TITLE_CHARS)
+
+    @classmethod
+    def read_usable(cls, raw: Any, ui_language: str) -> Optional[str]:
+        """答非所問判斷。可用回 ``None``；不可用回重問句（保證非空）。
+
+        模型沒回 ``usable`` 欄位時當作可用 —— 寧可照常產出讓老師自己看，也不要因為
+        模型漏了一個欄位就把正常的輸入擋下來。
+        """
+        if not isinstance(raw, dict) or raw.get("usable") is not False:
+            return None
+        reask = sanitize_free_text(cls._text(raw.get("reask")), MAX_REASK_CHARS)
+        return reask or _DEFAULT_REASK[_ui_key(ui_language)]
+
+    @staticmethod
+    def _box_2d(raw: Any) -> Optional[List[int]]:
+        """[ymin, xmin, ymax, xmax]，0~1000，且要是有面積的框；不合法回 None。"""
+        if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+            return None
+        box: List[int] = []
+        for v in raw:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return None
+            if v != v:  # NaN
+                return None
+            n = int(round(v))
+            if n < 0 or n > BOX_2D_MAX:
+                return None
+            box.append(n)
+        ymin, xmin, ymax, xmax = box
+        if ymin >= ymax or xmin >= xmax:
+            return None
+        return box
+
+    @classmethod
+    def normalize_figures(cls, raw: Any) -> List[Dict[str, Any]]:
+        """擷取到的情境圖座標（#1146）。座標不合法整項丟掉（裁不出圖）。
+
+        做法同題庫 ``magic_paste_service._normalize_figures``，但情境圖不需要排版資訊
+        （after_paragraph / placement / width），只留頁碼與框。
+        """
+        items = raw.get("figures") if isinstance(raw, dict) else None
+        if not isinstance(items, list):
+            return []
+        out: List[Dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            box = cls._box_2d(item.get("box_2d"))
+            if box is None:
+                continue
+            page = item.get("page")
+            if isinstance(page, bool) or not isinstance(page, (int, float)):
+                page = 1
+            out.append({"page": max(1, int(page)), "box_2d": box})
+            if len(out) >= MAX_EXTRACT_FIGURES:
+                break
+        return out
+
     @staticmethod
     def estimate_cost(usage: Dict[str, int], model: str = FLASH_MODEL) -> float:
         return estimate_cost_usd(model, usage)
@@ -467,6 +662,7 @@ class ScenarioDialogueAIService:
         prompt: str,
         max_output_tokens: int,
         file_part: Any = None,
+        extra_parts: Optional[List[Any]] = None,
     ) -> Tuple[Any, Dict[str, int]]:
         from vertexai.generative_models import GenerationConfig, GenerativeModel
         from services.vertex_ai import get_vertex_ai_service
@@ -483,7 +679,10 @@ class ScenarioDialogueAIService:
             temperature=0.7,
             response_mime_type="application/json",
         )
-        contents = [file_part, prompt] if file_part is not None else prompt
+        parts = list(extra_parts or [])
+        if file_part is not None:
+            parts.insert(0, file_part)
+        contents = [*parts, prompt] if parts else prompt
         response = await model.generate_content_async(
             contents, generation_config=config
         )
@@ -501,14 +700,34 @@ class ScenarioDialogueAIService:
         )
         return cost
 
-    async def generate_article(self, goal: str, level: str = "") -> Dict[str, Any]:
-        prompt = self.build_article_prompt(goal, level)
+    async def generate_article(
+        self, goal: str, level: str = "", ui_language: str = "zh-TW"
+    ) -> Dict[str, Any]:
+        """回傳 ``usable`` / ``reask`` / ``suggested_title`` / ``content``。
+
+        ``usable=False`` 時 ``content`` 為空、``reask`` 是給老師的重問句（#1146）。
+        """
+        prompt = self.build_article_prompt(goal, level, ui_language)
         response, usage = await self._call_vertex(prompt, ARTICLE_MAX_OUTPUT_TOKENS)
-        content = self.normalize_article(self.parse_json(response.text))
+        cost = self._log_usage("article", usage)
+        raw = self.parse_json(response.text)
+        reask = self.read_usable(raw, ui_language)
+        if reask is not None:
+            return {
+                "usable": False,
+                "reask": reask,
+                "suggested_title": "",
+                "content": "",
+                "usage": usage,
+                "estimated_cost_usd": cost,
+            }
         return {
-            "content": content,
+            "usable": True,
+            "reask": "",
+            "suggested_title": self.normalize_title(raw),
+            "content": self.normalize_article(raw),
             "usage": usage,
-            "estimated_cost_usd": self._log_usage("article", usage),
+            "estimated_cost_usd": cost,
         }
 
     async def generate_questions(
@@ -521,7 +740,14 @@ class ScenarioDialogueAIService:
         global_rubric: str = "",
         translate_language: str = "",
         existing_questions: Optional[List[str]] = None,
+        direction: str = "",
+        scenario_images: Optional[List[str]] = None,
+        ui_language: str = "zh-TW",
     ) -> Dict[str, Any]:
+        """回傳 ``usable`` / ``reask`` / ``suggested_title`` / ``questions``（#1146）。"""
+        from services.scenario_context_images import build_image_parts
+
+        image_parts = build_image_parts(scenario_images)
         prompt = self.build_question_prompt(
             scenario_content=scenario_content,
             count=count,
@@ -531,17 +757,40 @@ class ScenarioDialogueAIService:
             global_rubric=global_rubric,
             translate_language=translate_language,
             existing_questions=existing_questions,
+            direction=direction,
+            image_count=len(image_parts),
+            ui_language=ui_language,
         )
-        response, usage = await self._call_vertex(prompt, MAX_OUTPUT_TOKENS)
+        response, usage = await self._call_vertex(
+            prompt, MAX_OUTPUT_TOKENS, extra_parts=image_parts
+        )
+        cost = self._log_usage("questions", usage)
+        raw = self.parse_json(response.text)
+        # 只有老師打了「出題方向」才有答非所問可言；純情境出題沒有自由輸入可判斷
+        reask = (
+            self.read_usable(raw, ui_language) if (direction or "").strip() else None
+        )
+        if reask is not None:
+            return {
+                "usable": False,
+                "reask": reask,
+                "suggested_title": "",
+                "questions": [],
+                "usage": usage,
+                "estimated_cost_usd": cost,
+            }
         questions = self.normalize_questions(
-            self.parse_json(response.text),
+            raw,
             count=count,
             existing_questions=existing_questions,
         )
         return {
+            "usable": True,
+            "reask": "",
+            "suggested_title": self.normalize_title(raw),
             "questions": questions,
             "usage": usage,
-            "estimated_cost_usd": self._log_usage("questions", usage),
+            "estimated_cost_usd": cost,
         }
 
     async def extract_article(
@@ -555,9 +804,17 @@ class ScenarioDialogueAIService:
         response, usage = await self._call_vertex(
             self.build_extract_prompt(), ARTICLE_MAX_OUTPUT_TOKENS, file_part=part
         )
-        content = self.normalize_article(self.parse_json(response.text))
+        raw = self.parse_json(response.text)
+        figures = self.normalize_figures(raw)
+        # 只有圖、沒有文字的檔案（例如一張情境插畫）也是合法的情境來源（#1146）：
+        # 有圖就不因為文字空白而整包失敗。兩者都沒有才算這次沒產出。
+        if figures:
+            content = self.normalize_article_or_empty(raw)
+        else:
+            content = self.normalize_article(raw)
         return {
             "content": content,
+            "figures": figures,
             "usage": usage,
             "estimated_cost_usd": self._log_usage("extract", usage),
         }

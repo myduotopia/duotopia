@@ -4,6 +4,10 @@
 - POST /api/teachers/scenario-dialogue/generate-questions 依情境文章與出題設定產題
 - POST /api/teachers/scenario-dialogue/extract-article    從圖片/PDF 擷取情境文章
 
+#1146：generate-article / generate-questions 多回 ``usable`` / ``reask`` /
+``suggested_title``（答非所問不產內容、不扣額度）；generate-questions 接受無情境＋
+``direction`` 與 ``scenario_images``；extract-article 多回 ``figures``（box_2d）。
+
 三個端點都**不寫 DB**：產出來的東西先回前端給老師看、能改，按儲存才走
 `/api/teachers/lessons/{id}/contents`（#1013）存起來。
 
@@ -39,6 +43,7 @@ from services.scenario_dialogue_image import (
     ScenarioImageError,
     get_scenario_dialogue_image_service,
 )
+from utils.scenario_dialogue import MAX_IMAGE_URL_CHARS, MAX_SCENARIO_IMAGES
 from services.scenario_dialogue_ai import (
     MAX_TRANSLATE_LANGUAGE_CHARS,
     ScenarioDialogueAIError,
@@ -66,6 +71,10 @@ MAX_EXISTING_QUESTION_CHARS = 1000
 # 與服務層同一個來源 —— 兩邊各寫一次 1000 的話，改了 Pydantic 上限卻忘了改截斷
 # 上限（或反過來）不會有人發現（PR #1027 review）
 MAX_IMAGE_PROMPT_CHARS = ScenarioDialogueImageService.MAX_PROMPT_CHARS
+# #1146 無情境出題時的「想問的方向」—— 與訓練目標同級的自由文字
+MAX_DIRECTION_CHARS = MAX_GOAL_CHARS
+# 介面語言代碼（zh-TW / en），決定重問句與標題建議用什麼語言
+MAX_UI_LANGUAGE_CHARS = 10
 
 
 class GenerateArticleRequest(BaseModel):
@@ -74,6 +83,8 @@ class GenerateArticleRequest(BaseModel):
     goal: str = Field(max_length=MAX_GOAL_CHARS)
     # 文章難度，空字串 = 不指定（CEFR 代碼，服務層驗證）
     level: str = Field(default="", max_length=MAX_LEVEL_CHARS)
+    # #1146 老師介面語言：答非所問時的重問句與標題建議用這個語言
+    ui_language: str = Field(default="zh-TW", max_length=MAX_UI_LANGUAGE_CHARS)
 
 
 class GenerateImageRequest(BaseModel):
@@ -95,7 +106,15 @@ class GenerateImageRequest(BaseModel):
 
 
 class GenerateQuestionsRequest(BaseModel):
-    scenario_content: str = Field(max_length=MAX_SCENARIO_CHARS)
+    # #1146：情境不再必填 —— 「不需要情境，問日常生活」改用 direction 當出題依據。
+    # 兩者（加上情境圖）至少要有一個，由服務層把關。
+    scenario_content: str = Field(default="", max_length=MAX_SCENARIO_CHARS)
+    direction: str = Field(default="", max_length=MAX_DIRECTION_CHARS)
+    # 情境圖網址（最多 5 張）。服務層只讀本站 bucket / 本機 static 的圖（防 SSRF）
+    scenario_images: List[
+        Annotated[str, StringConstraints(max_length=MAX_IMAGE_URL_CHARS)]
+    ] = Field(default_factory=list, max_length=MAX_SCENARIO_IMAGES)
+    ui_language: str = Field(default="zh-TW", max_length=MAX_UI_LANGUAGE_CHARS)
     count: int
     question_level: str = Field(default="", max_length=MAX_LEVEL_CHARS)
     # 穩定代碼，例如 {"time": "past", "aspect": "simple"}；服務層會翻成英文描述
@@ -159,7 +178,9 @@ async def _with_text_quota(
     delivered = False
     try:
         result = await run()
-        delivered = True
+        # #1146 答非所問（usable=False）時沒有產出任何內容，只回一句重問 ——
+        # 同樣算「沒把東西交到老師手上」，退款。
+        delivered = result.get("usable") is not False
         return {**result, "quota": charge}
     finally:
         # 沒把東西交到老師手上就退款（參數錯、模型沒產出、中途取消都算）——
@@ -212,7 +233,9 @@ async def generate_article(
     async def run():
         try:
             return await service.generate_article(
-                goal=payload.goal, level=payload.level
+                goal=payload.goal,
+                level=payload.level,
+                ui_language=payload.ui_language,
             )
         except ScenarioDialogueAIOutputError as e:
             # 呼叫成功但模型沒給出可用的東西 —— 不是老師填錯，回 502「請稍後再試」。
@@ -251,6 +274,9 @@ async def generate_questions(
                 global_rubric=payload.global_rubric,
                 translate_language=payload.translate_language,
                 existing_questions=payload.existing_questions,
+                direction=payload.direction,
+                scenario_images=payload.scenario_images,
+                ui_language=payload.ui_language,
             )
         except ScenarioDialogueAIOutputError as e:
             raise _ai_failed("generate-questions", e)

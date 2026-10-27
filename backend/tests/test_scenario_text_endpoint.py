@@ -268,3 +268,40 @@ def test_refunded_failure_is_logged_as_not_consumed(
     assert "delivered=False" in quota_logs[-1]
     # 退款後是 0，不是 1
     assert "used=0/" in quota_logs[-1]
+
+
+# ---------------------------------------------------------------- #1146 答非所問
+
+
+@pytest.mark.parametrize("which", ["article", "questions"])
+def test_unusable_input_does_not_burn_quota(
+    test_client, auth_headers_teacher, monkeypatch, which
+):
+    """答非所問（usable=False）沒有產出內容，只回一句重問 —— 不該扣額度。"""
+
+    async def reask(self, **kwargs):
+        return {
+            "usable": False,
+            "reask": "可以再具體一點嗎？例如：交通工具與問路。",
+            "suggested_title": "",
+            "content": "",
+            "questions": [],
+            "usage": {},
+            "estimated_cost_usd": 0,
+        }
+
+    from services import scenario_dialogue_ai as mod
+
+    method = "generate_article" if which == "article" else "generate_questions"
+    monkeypatch.setattr(mod.ScenarioDialogueAIService, method, reask)
+
+    url, body = (
+        (ARTICLE_URL, ARTICLE_BODY)
+        if which == "article"
+        else (QUESTIONS_URL, {"direction": "hello", "count": 5})
+    )
+    resp = test_client.post(url, headers=auth_headers_teacher, json=body)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["usable"] is False
+    assert resp.json()["reask"]
+    assert test_client.get(QUOTA_URL, headers=auth_headers_teacher).json()["used"] == 0
