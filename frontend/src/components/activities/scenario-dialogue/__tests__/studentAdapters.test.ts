@@ -345,3 +345,57 @@ describe("確定不會成功的 400 不要重試（#1148 review）", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("重試判斷不可以比預設窄也不可以比預設寬（#1148 review）", () => {
+  /**
+   * 我第一版的覆寫是「所有 4xx 都不重試」，於是把預設刻意重試的 408／425／429 也
+   * 擋掉了（上傳端是 upsert，重複上傳安全，所以那三個該退避重試）；同時它讓**任何**
+   * 非 4xx 的錯誤都重試，比預設寬。兩邊都是退步。
+   */
+  const uploadAlwaysFailing = (status: number, detail: string) => {
+    let calls = 0;
+    global.fetch = vi.fn(async (url: unknown) => {
+      if (String(url).startsWith("blob:")) {
+        return { ok: true, blob: async () => new Blob(["x"]) } as never;
+      }
+      calls += 1;
+      return { ok: false, status, json: async () => ({ detail }) } as never;
+    }) as never;
+    return () => calls;
+  };
+
+  async function freshAdapters() {
+    vi.resetModules();
+    vi.doMock("@/utils/retryHelper", async () => {
+      return await vi.importActual<typeof import("@/utils/retryHelper")>(
+        "@/utils/retryHelper",
+      );
+    });
+    const mod = await import("../studentAdapters");
+    return mod.createStudentScenarioAdapters({ assignmentId: 7 });
+  }
+
+  it("429（限流）要重試 —— 上傳是 upsert，重複安全", async () => {
+    const calls = uploadAlwaysFailing(429, "Too Many Requests");
+    const adapters = await freshAdapters();
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(calls()).toBeGreaterThan(1);
+  }, 20000);
+
+  it("400（錄音太長）不重試", async () => {
+    const calls = uploadAlwaysFailing(
+      400,
+      "Recording too long. Maximum duration: 120 seconds",
+    );
+    const adapters = await freshAdapters();
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(calls()).toBe(1);
+  });
+
+  it("500 要重試", async () => {
+    const calls = uploadAlwaysFailing(500, "Internal Server Error");
+    const adapters = await freshAdapters();
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(calls()).toBeGreaterThan(1);
+  }, 20000);
+});

@@ -34,7 +34,11 @@ import i18n from "i18next";
 import { ApiError, apiClient } from "@/lib/api";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
-import { retryAudioUpload } from "@/utils/retryHelper";
+import {
+  RETRYABLE_UPLOAD_STATUSES,
+  isRetryableUploadError,
+  retryAudioUpload,
+} from "@/utils/retryHelper";
 import { speakEnglish } from "@/utils/speakEnglish";
 
 import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
@@ -163,15 +167,20 @@ export async function uploadAnswerRecording(params: {
     (attempt, error) => {
       console.warn(`情境對話錄音上傳重試 (${attempt}):`, error);
     },
-    // **4xx 不重試。** 「錄音太長／太短／太大」重試幾次都一樣，只會讓學生多等
-    // （1s+2s+4s）才看到訊息。而預設那套是比對錯誤訊息字串，後端「太短」的訊息裡
-    // 剛好有 "500"（`Must be at least 500 bytes`），會被誤判成可重試的伺服器錯誤。
-    (error) =>
-      !(
-        error instanceof RecordingUploadError &&
-        error.status >= 400 &&
-        error.status < 500
-      ),
+    // **確定不會成功的 4xx 不重試**：「錄音太長／太短／太大」重試幾次都一樣，只會讓
+    // 學生多等（1s+2s+4s）才看到訊息。而預設那套是比對錯誤訊息字串，後端「太短」的
+    // 訊息裡剛好有 "500"（`Must be at least 500 bytes`），會被誤判成伺服器錯誤。
+    //
+    // 但 408／425／429 是暫時性的，預設刻意重試它們（上傳是 upsert，重複安全），
+    // 覆寫時不可以一併擋掉。非 HTTP 的錯誤（網路、timeout）沿用預設那套判斷 ——
+    // 兩者都是 PR #1148 review 抓到的退步，我原本的覆寫比預設寬也比預設窄。
+    (error) => {
+      if (error instanceof RecordingUploadError) {
+        if (RETRYABLE_UPLOAD_STATUSES.has(error.status)) return true;
+        return error.status >= 500;
+      }
+      return isRetryableUploadError(error);
+    },
   );
 
   const progressId = result?.progress_id;

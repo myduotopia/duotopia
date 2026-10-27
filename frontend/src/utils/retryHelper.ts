@@ -94,33 +94,50 @@ export async function retryAudioUpload<T>(
         onRetry(attempt, error);
       }
     },
-    shouldRetry:
-      shouldRetry ??
-      ((error) => {
-        // 只有網路錯誤或暫時性錯誤才重試
-        // 408/425/429 are retried because the backend's recording-upload endpoint
-        // upserts on (student_assignment_id, content_item_id), so duplicate uploads are safe.
-        const retryableErrors = [
-          "NetworkError",
-          "TimeoutError",
-          "AbortError",
-          "408", // Request Timeout
-          "425", // Too Early (server not ready)
-          "429", // Too Many Requests (rate limit)
-          "500",
-          "502",
-          "503",
-          "504",
-          "ECONNRESET",
-          "ETIMEDOUT",
-        ];
-
-        const errorMessage = error.message || "";
-        return retryableErrors.some((retryableError) =>
-          errorMessage.includes(retryableError),
-        );
-      }),
+    shouldRetry: shouldRetry ?? isRetryableUploadError,
   });
+}
+
+/**
+ * 上傳時「值得重試」的 4xx。
+ *
+ * 其餘 4xx（錄音太長／太短／太大）重試幾次都一樣。這三個是暫時性的，而上傳端對
+ * (student_assignment_id, content_item_id) 是 upsert、重複上傳安全 —— 所以傳
+ * `shouldRetry` 覆寫時**不可以把它們一併擋掉**（PR #1148 review 第 1 點：我原本的
+ * 覆寫就是對所有 4xx 都回 false，把這三個也擋了）。
+ */
+export const RETRYABLE_UPLOAD_STATUSES: ReadonlySet<number> = new Set([
+  408, // Request Timeout
+  425, // Too Early (server not ready)
+  429, // Too Many Requests (rate limit)
+]);
+
+/**
+ * 預設的「這個上傳錯誤值不值得重試」—— 比對錯誤訊息字串。
+ *
+ * 匯出是為了讓覆寫 `shouldRetry` 的呼叫端能**對非 HTTP 錯誤沿用這一套**，而不是自己
+ * 寫一個更寬的版本（review 第 2 點：我的覆寫一度讓任何非 4xx 的錯誤都重試）。
+ */
+export function isRetryableUploadError(error: Error): boolean {
+  // 只有網路錯誤或暫時性錯誤才重試
+  const retryableErrors = [
+    "NetworkError",
+    "TimeoutError",
+    "AbortError",
+    "408",
+    "425",
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "ECONNRESET",
+    "ETIMEDOUT",
+  ];
+  const errorMessage = error.message || "";
+  return retryableErrors.some((retryableError) =>
+    errorMessage.includes(retryableError),
+  );
 }
 
 /**
