@@ -37,6 +37,8 @@ import { appendAudioToFormData } from "@/utils/audioFormatDetection";
 import { retryAudioUpload } from "@/utils/retryHelper";
 import { speakEnglish } from "@/utils/speakEnglish";
 
+import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
+
 import type {
   ScenarioAnswer,
   ScenarioChatAdapters,
@@ -52,6 +54,60 @@ export interface StudentAdapterOptions {
   assignmentId: number;
   /** 錯誤要讓學生知道（hook 只會還原狀態，不會說話）。 */
   onError?: (message: string) => void;
+}
+
+/**
+ * 上傳失敗，帶著伺服器講的原因。
+ *
+ * 上傳與「要 AI 建議」是兩件事，失敗原因對學生的意義完全不同：
+ * 「錄音太長（最多 2 分鐘）」他可以自己修正，「AI 暫時拿不到」只能重試。
+ * 收成同一句話就是在騙他。
+ */
+export class RecordingUploadError extends Error {
+  constructor(
+    public status: number,
+    public detail: string,
+  ) {
+    super(detail || `Upload failed: ${status}`);
+    this.name = "RecordingUploadError";
+  }
+}
+
+/** 讀出 FastAPI 的 `detail`；拿不到就回空字串（不要讓讀錯誤本身又炸一次）。 */
+async function readDetail(resp: Response): Promise<string> {
+  try {
+    const body = await resp.json();
+    const detail = body?.detail;
+    if (typeof detail === "string") return detail;
+    if (
+      detail &&
+      typeof detail === "object" &&
+      typeof detail.message === "string"
+    ) {
+      return detail.message;
+    }
+  } catch {
+    // 非 JSON 的錯誤 body
+  }
+  return "";
+}
+
+/**
+ * 上傳錯誤 → 給學生看的訊息 key。
+ *
+ * 伺服器的 detail 是英文的開發訊息（"Recording too long. Maximum duration: 120
+ * seconds"），不能直接丟給學生看，所以對映成 i18n key；認不出來的才回泛用那句。
+ */
+export function uploadErrorMessageKey(error: unknown): string | null {
+  if (!(error instanceof RecordingUploadError)) return null;
+  const detail = error.detail.toLowerCase();
+  if (detail.includes("too long"))
+    return "scenarioDialogue.chat.recordingTooLong";
+  if (detail.includes("too small"))
+    return "scenarioDialogue.chat.recordingTooShort";
+  if (detail.includes("too large"))
+    return "scenarioDialogue.chat.recordingTooLarge";
+  return "scenarioDialogue.chat.uploadFailed";
 }
 
 /** 這次作答有沒有可上傳的錄音。文字作答目前沒有開放（見 `scenarioChatSettings`）。 */
@@ -96,12 +152,26 @@ export async function uploadAnswerRecording(params: {
         headers: { Authorization: `Bearer ${token}` },
         body: form,
       });
-      if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
+      if (!resp.ok) {
+        // **把伺服器講的原因帶出來。** 原本這裡只丟 `Upload failed: 400`，於是
+        // 「錄音太長」「錄音太短」都被上層收成一句「AI 建議暫時拿不到」—— 訊息在
+        // 說謊，夥伴回報時完全查不出方向（#1140 1a）。
+        throw new RecordingUploadError(resp.status, await readDetail(resp));
+      }
       return resp.json();
     },
     (attempt, error) => {
       console.warn(`情境對話錄音上傳重試 (${attempt}):`, error);
     },
+    // **4xx 不重試。** 「錄音太長／太短／太大」重試幾次都一樣，只會讓學生多等
+    // （1s+2s+4s）才看到訊息。而預設那套是比對錯誤訊息字串，後端「太短」的訊息裡
+    // 剛好有 "500"（`Must be at least 500 bytes`），會被誤判成可重試的伺服器錯誤。
+    (error) =>
+      !(
+        error instanceof RecordingUploadError &&
+        error.status >= 400 &&
+        error.status < 500
+      ),
   );
 
   const progressId = result?.progress_id;
@@ -226,7 +296,13 @@ export function createStudentScenarioAdapters({
             comment: i18n.t("scenarioDialogue.chat.quotaExhausted"),
           };
         }
-        onError?.(i18n.t("scenarioDialogue.chat.feedbackFailed"));
+        // 上傳失敗與 AI 失敗要分開講 —— 前者學生自己修正得了（例如錄太長）
+        const uploadKey = uploadErrorMessageKey(error);
+        onError?.(
+          i18n.t(uploadKey ?? "scenarioDialogue.chat.feedbackFailed", {
+            seconds: SCENARIO_MAX_RECORDING_SECONDS,
+          }),
+        );
         throw error;
       }
     },

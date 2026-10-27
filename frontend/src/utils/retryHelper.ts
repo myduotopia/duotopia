@@ -72,6 +72,16 @@ export async function retryWithBackoff<T>(
 export async function retryAudioUpload<T>(
   uploadFn: () => Promise<T>,
   onRetry?: (attempt: number, error: Error) => void,
+  /**
+   * 覆寫「要不要重試」。
+   *
+   * 預設那套是比對**錯誤訊息字串**（含 "500"、"503"… 就重試），而那會誤判：後端
+   * 「錄音太短」的訊息是 `Must be at least 500 bytes`，裡面就有 "500" —— 一個確定不會
+   * 成功的 400 會被重試 3 次（1s+2s+4s），學生白等才看到訊息（#1140 PR #1148 review）。
+   *
+   * 呼叫端若拿得到 HTTP status，就用這個參數依 status 判斷，不要靠訊息猜。
+   */
+  shouldRetry?: (error: Error) => boolean,
 ): Promise<T> {
   return retryWithBackoff(uploadFn, {
     maxRetries: 3,
@@ -84,30 +94,32 @@ export async function retryAudioUpload<T>(
         onRetry(attempt, error);
       }
     },
-    shouldRetry: (error) => {
-      // 只有網路錯誤或暫時性錯誤才重試
-      // 408/425/429 are retried because the backend's recording-upload endpoint
-      // upserts on (student_assignment_id, content_item_id), so duplicate uploads are safe.
-      const retryableErrors = [
-        "NetworkError",
-        "TimeoutError",
-        "AbortError",
-        "408", // Request Timeout
-        "425", // Too Early (server not ready)
-        "429", // Too Many Requests (rate limit)
-        "500",
-        "502",
-        "503",
-        "504",
-        "ECONNRESET",
-        "ETIMEDOUT",
-      ];
+    shouldRetry:
+      shouldRetry ??
+      ((error) => {
+        // 只有網路錯誤或暫時性錯誤才重試
+        // 408/425/429 are retried because the backend's recording-upload endpoint
+        // upserts on (student_assignment_id, content_item_id), so duplicate uploads are safe.
+        const retryableErrors = [
+          "NetworkError",
+          "TimeoutError",
+          "AbortError",
+          "408", // Request Timeout
+          "425", // Too Early (server not ready)
+          "429", // Too Many Requests (rate limit)
+          "500",
+          "502",
+          "503",
+          "504",
+          "ECONNRESET",
+          "ETIMEDOUT",
+        ];
 
-      const errorMessage = error.message || "";
-      return retryableErrors.some((retryableError) =>
-        errorMessage.includes(retryableError),
-      );
-    },
+        const errorMessage = error.message || "";
+        return retryableErrors.some((retryableError) =>
+          errorMessage.includes(retryableError),
+        );
+      }),
   });
 }
 

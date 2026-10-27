@@ -158,6 +158,18 @@ class TestNormalizeResult:
             "suggestion": "I went to the park with my family.",
         }
 
+    def test_improve_without_suggestion_parses(self):
+        """學生是在問單字而不是回答時，prompt 要求模型省略 `suggestion`（#1140 2A）。
+
+        所以 verdict=improve 但沒有 suggestion 是**正常輸出**，不是壞資料 ——
+        若解析把它當必填就會整包失敗（PR #1148 review 第 3 點）。
+        """
+        out = Svc.normalize_result(
+            {"verdict": "improve", "comment": "spot 是「地點」的意思，試著回答看看！"}
+        )
+        assert out["verdict"] == "improve"
+        assert out["suggestion"] is None
+
     def test_great_needs_no_suggestion(self):
         out = Svc.normalize_result({"verdict": "great", "comment": "很棒！"})
         assert out["verdict"] == "great"
@@ -279,3 +291,27 @@ class TestOutputBudget:
             MAX_OUTPUT_TOKENS
         )
         assert isinstance(fake.GenerationConfig, MagicMock)
+
+
+class TestStudentAsksInsteadOfAnswering:
+    """夥伴 staging 回報的兩件事（#1140 2A）。
+
+    1. 學生看不懂某個字時會**逐字母拼出來**問 AI（例如把 "spot" 唸成 S-P-O-T）。
+    2. 那不是在回答 —— 照原本的 prompt，模型會把它當成一個很差的回答來評分。
+
+    prompt 層的處理有效果上限（模型對拼讀的辨識本來就不穩），但成本幾乎是零；真正治本
+    的是讓學生不需要問（必用字詞顯示字義）或做一個明確的「問 AI」功能，都另外評估。
+    """
+
+    def test_prompt_tells_the_model_to_read_spelled_out_words(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "letter by letter" in prompt
+        assert "S-P-O-T" in prompt
+
+    def test_prompt_handles_the_student_asking_a_question(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "not answering at all" in prompt
+        # 不要把提問當成差勁的回答來評分
+        assert "do not judge their answer" in prompt
+        # 問單字意思的時候不給「建議說法」（那會答錯方向）
+        assert "Leave `suggestion` out in that case." in prompt

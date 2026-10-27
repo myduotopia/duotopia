@@ -54,6 +54,7 @@ import {
   createStudentScenarioAdapters,
   isQuotaExhausted,
   toScenarioFeedback,
+  uploadErrorMessageKey,
 } from "../studentAdapters";
 
 const ITEM = { id: 9001, text: "Q?", keywords: [], images: [] };
@@ -235,5 +236,112 @@ describe("createPreviewScenarioAdapters — 預覽完全不碰網路", () => {
     const adapters = createPreviewScenarioAdapters("（預覽）會出現 AI 建議");
     const fb = await adapters.getFeedback(ITEM, ANSWER, 0);
     expect(fb.comment).toBe("（預覽）會出現 AI 建議");
+  });
+});
+
+describe("上傳失敗要講真話（#1140 1a）", () => {
+  /**
+   * 夥伴 staging 回報「AI 建議暫時拿不到」查了半天，最後發現是**上傳**被擋
+   * （錄音超過 30 秒 → 400），而 adapter 把上傳與 AI 失敗收成同一句話。
+   *
+   * 兩者對學生的意義完全不同：「錄音太長」他自己修正得了，「AI 拿不到」只能重試。
+   */
+  const uploadFailing = (status: number, detail: string) => {
+    global.fetch = vi.fn(async (url: unknown) => {
+      if (String(url).startsWith("blob:")) {
+        return { ok: true, blob: async () => new Blob(["x"]) } as never;
+      }
+      return {
+        ok: false,
+        status,
+        json: async () => ({ detail }),
+      } as never;
+    }) as never;
+  };
+
+  it("錄音太長 → 專屬訊息，而且沒去打 AI", async () => {
+    uploadFailing(400, "Recording too long. Maximum duration: 120 seconds");
+    const onError = vi.fn();
+    const adapters = createStudentScenarioAdapters({
+      assignmentId: 7,
+      onError,
+    });
+
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(onError).toHaveBeenCalledWith(
+      "scenarioDialogue.chat.recordingTooLong",
+    );
+    expect(scenarioDialogueFeedback).not.toHaveBeenCalled();
+  });
+
+  it("錄音太短 → 專屬訊息", async () => {
+    uploadFailing(400, "Recording file too small (0 bytes).");
+    const onError = vi.fn();
+    const adapters = createStudentScenarioAdapters({
+      assignmentId: 7,
+      onError,
+    });
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(onError).toHaveBeenCalledWith(
+      "scenarioDialogue.chat.recordingTooShort",
+    );
+  });
+
+  it("認不出來的上傳錯誤 → 上傳失敗（不是「AI 拿不到」）", async () => {
+    uploadFailing(500, "boom");
+    const onError = vi.fn();
+    const adapters = createStudentScenarioAdapters({
+      assignmentId: 7,
+      onError,
+    });
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+    expect(onError).toHaveBeenCalledWith("scenarioDialogue.chat.uploadFailed");
+  });
+
+  it("uploadErrorMessageKey 對非上傳錯誤回 null（才會落到 AI 那句）", () => {
+    expect(uploadErrorMessageKey(new Error("boom"))).toBeNull();
+    expect(uploadErrorMessageKey(new MockApiError(503, {}))).toBeNull();
+  });
+});
+
+describe("確定不會成功的 400 不要重試（#1148 review）", () => {
+  /**
+   * 預設的 `retryAudioUpload` 是比對**錯誤訊息字串**決定要不要重試（含 "500"、
+   * "503"… 就重試）。而後端「錄音太短」的訊息是 `Must be at least 500 bytes` ——
+   * 裡面就有 "500"，於是一個確定不會成功的 400 會被重試 3 次（1s+2s+4s），學生白等
+   * 才看到訊息。
+   *
+   * 這組刻意**用真的 retryAudioUpload**（不 mock），才驗得到「沒有重試」。
+   */
+  it("太短（訊息裡有 500）只打一次，不重試", async () => {
+    vi.resetModules();
+    vi.doMock("@/utils/retryHelper", async () => {
+      const actual = await vi.importActual<
+        typeof import("@/utils/retryHelper")
+      >("@/utils/retryHelper");
+      return actual;
+    });
+
+    let calls = 0;
+    global.fetch = vi.fn(async (url: unknown) => {
+      if (String(url).startsWith("blob:")) {
+        return { ok: true, blob: async () => new Blob(["x"]) } as never;
+      }
+      calls += 1;
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({
+          detail:
+            "Recording file too small (0 bytes). Must be at least 500 bytes for valid audio.",
+        }),
+      } as never;
+    }) as never;
+
+    const mod = await import("../studentAdapters");
+    const adapters = mod.createStudentScenarioAdapters({ assignmentId: 7 });
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+
+    expect(calls).toBe(1);
   });
 });
