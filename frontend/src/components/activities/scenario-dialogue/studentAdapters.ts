@@ -163,6 +163,15 @@ export async function uploadAnswerRecording(params: {
     (attempt, error) => {
       console.warn(`情境對話錄音上傳重試 (${attempt}):`, error);
     },
+    // **4xx 不重試。** 「錄音太長／太短／太大」重試幾次都一樣，只會讓學生多等
+    // （1s+2s+4s）才看到訊息。而預設那套是比對錯誤訊息字串，後端「太短」的訊息裡
+    // 剛好有 "500"（`Must be at least 500 bytes`），會被誤判成可重試的伺服器錯誤。
+    (error) =>
+      !(
+        error instanceof RecordingUploadError &&
+        error.status >= 400 &&
+        error.status < 500
+      ),
   );
 
   const progressId = result?.progress_id;

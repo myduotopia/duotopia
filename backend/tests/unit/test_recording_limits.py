@@ -8,6 +8,8 @@
 1. **只放寬情境對話**，其他模式照舊（為一個模式改掉全站行為與成本是不對的）。
 2. 檔案大小要跟著放寬 —— 不然只是把 400 從「太長」換成「太大」。
 """
+import pytest
+
 from services.audio_upload import (
     MAX_DURATION_SECONDS_DEFAULT,
     MAX_FILE_SIZE_DEFAULT,
@@ -44,3 +46,76 @@ class TestRecordingLimits:
         # 以 128kbps 估：120s × 128kbps ÷ 8 ≈ 1.92MB，上限要明顯高於它
         assert size > 2 * 1024 * 1024
         assert size >= seconds * 128 * 1024 / 8
+
+
+class TestUploadActuallyHonoursTheLimits:
+    """查表對、呼叫端對，**不代表中間接上了**。
+
+    #1036 就是這個形狀的 bug：`mime_type_for_recording` 算得對、`_audio_part` 收得對，
+    中間卻寫死 `audio/webm`。review 指出這裡同樣只測了查表函式，沒測 `upload_audio`
+    真的用了傳進去的上限。
+    """
+
+    @staticmethod
+    def _fake_file(content: bytes = b"x" * 1000):
+        from unittest.mock import AsyncMock, MagicMock
+
+        f = MagicMock()
+        f.content_type = "audio/webm"
+        f.filename = "a.webm"
+        f.read = AsyncMock(return_value=content)
+        return f
+
+    @pytest.mark.asyncio
+    async def test_duration_beyond_the_given_limit_is_rejected(self):
+        from fastapi import HTTPException
+
+        from services.audio_upload import AudioUploadService
+
+        with pytest.raises(HTTPException) as exc:
+            await AudioUploadService().upload_audio(
+                self._fake_file(),
+                duration_seconds=121,
+                max_duration_seconds=120,
+            )
+        assert exc.value.status_code == 400
+        assert "120 seconds" in str(exc.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_duration_within_the_given_limit_passes_the_check(self):
+        """60 秒在舊的 30 秒上限下會被擋；給 120 就不該擋。
+
+        這條只驗「長度檢查沒有擋下來」—— 後面真的上傳 GCS 會因為沒有憑證而失敗，
+        那不是這條測試的範圍，所以只確認錯誤不是長度那一個。
+        """
+        from fastapi import HTTPException
+
+        from services.audio_upload import AudioUploadService
+
+        try:
+            await AudioUploadService().upload_audio(
+                self._fake_file(),
+                duration_seconds=60,
+                max_duration_seconds=120,
+            )
+        except HTTPException as e:  # pragma: no cover - 視環境而定
+            assert "Recording too long" not in str(e.detail)
+        except Exception:
+            # GCS／憑證相關的失敗：長度檢查已經過了，這條測試的目的達成
+            pass
+
+    @pytest.mark.asyncio
+    async def test_file_size_limit_is_also_honoured(self):
+        from fastapi import HTTPException
+
+        from services.audio_upload import AudioUploadService
+
+        with pytest.raises(HTTPException) as exc:
+            await AudioUploadService().upload_audio(
+                self._fake_file(b"x" * 3000),
+                duration_seconds=10,
+                max_duration_seconds=120,
+                max_file_size=2000,
+            )
+        assert exc.value.status_code == 400
+        assert "too large" in str(exc.value.detail).lower()

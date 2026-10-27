@@ -303,3 +303,45 @@ describe("上傳失敗要講真話（#1140 1a）", () => {
     expect(uploadErrorMessageKey(new MockApiError(503, {}))).toBeNull();
   });
 });
+
+describe("確定不會成功的 400 不要重試（#1148 review）", () => {
+  /**
+   * 預設的 `retryAudioUpload` 是比對**錯誤訊息字串**決定要不要重試（含 "500"、
+   * "503"… 就重試）。而後端「錄音太短」的訊息是 `Must be at least 500 bytes` ——
+   * 裡面就有 "500"，於是一個確定不會成功的 400 會被重試 3 次（1s+2s+4s），學生白等
+   * 才看到訊息。
+   *
+   * 這組刻意**用真的 retryAudioUpload**（不 mock），才驗得到「沒有重試」。
+   */
+  it("太短（訊息裡有 500）只打一次，不重試", async () => {
+    vi.resetModules();
+    vi.doMock("@/utils/retryHelper", async () => {
+      const actual = await vi.importActual<
+        typeof import("@/utils/retryHelper")
+      >("@/utils/retryHelper");
+      return actual;
+    });
+
+    let calls = 0;
+    global.fetch = vi.fn(async (url: unknown) => {
+      if (String(url).startsWith("blob:")) {
+        return { ok: true, blob: async () => new Blob(["x"]) } as never;
+      }
+      calls += 1;
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({
+          detail:
+            "Recording file too small (0 bytes). Must be at least 500 bytes for valid audio.",
+        }),
+      } as never;
+    }) as never;
+
+    const mod = await import("../studentAdapters");
+    const adapters = mod.createStudentScenarioAdapters({ assignmentId: 7 });
+    await expect(adapters.getFeedback(ITEM, ANSWER, 0)).rejects.toBeTruthy();
+
+    expect(calls).toBe(1);
+  });
+});

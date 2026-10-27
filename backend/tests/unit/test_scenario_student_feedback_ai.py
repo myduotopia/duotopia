@@ -158,6 +158,18 @@ class TestNormalizeResult:
             "suggestion": "I went to the park with my family.",
         }
 
+    def test_improve_without_suggestion_parses(self):
+        """學生是在問單字而不是回答時，prompt 要求模型省略 `suggestion`（#1140 2A）。
+
+        所以 verdict=improve 但沒有 suggestion 是**正常輸出**，不是壞資料 ——
+        若解析把它當必填就會整包失敗（PR #1148 review 第 3 點）。
+        """
+        out = Svc.normalize_result(
+            {"verdict": "improve", "comment": "spot 是「地點」的意思，試著回答看看！"}
+        )
+        assert out["verdict"] == "improve"
+        assert out["suggestion"] is None
+
     def test_great_needs_no_suggestion(self):
         out = Svc.normalize_result({"verdict": "great", "comment": "很棒！"})
         assert out["verdict"] == "great"
