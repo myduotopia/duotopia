@@ -12,7 +12,8 @@
 Vertex 認證（見 project_local_dev_setup）。
 
 輸出一份 HTML：每頁題目卡（題號、題型、題目、選項、答案與來源、考點、角色）、答案頁判定、
-每次呼叫的 token（input／output／thinking）與估算美元、總計。
+每次呼叫的 token（input／output／thinking）與估算美元、總計。克漏字空格編號與草稿一致（每頁
+``renumber_cloze_cards`` 重編 1..k，跨頁合併後再整組重編）。
 
 用法（在 backend/ 下）::
 
@@ -41,6 +42,7 @@ from services.exam_paper_cards import (  # noqa: E402
     apply_answer_key,
     iter_card_questions,
     merge_continuations,
+    renumber_cloze_cards,
 )
 from services.exam_paper_service import (  # noqa: E402
     PageExtraction,
@@ -120,6 +122,8 @@ async def run(folder: Path) -> Dict[str, Any]:
                 results[n] = PageExtraction(n, False, {}, [], usage)
             print(f"第 {n} 頁失敗：{errors[n]}")
             return
+        # 與匯入草稿一致：單頁克漏字寫入時就把空格重編成 1..k
+        renumber_cloze_cards(result.cards)
         results[n] = result
         if result.answer_key:
             known.update(result.answer_key)

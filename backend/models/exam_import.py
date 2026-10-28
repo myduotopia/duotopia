@@ -3,7 +3,7 @@
 
 - ``ExamImport``       一份上傳的題本（老師、檔名、檔案雜湊、頁數、整份設定、口音選擇、狀態、
                        已知答案對照、用量加總）
-- ``ExamImportPage``   題本的一頁（狀態、頁圖 URL、是否答案頁、題目卡 JSONB）
+- ``ExamImportPage``   題本的一頁（狀態、頁圖 URL、是否答案頁、題目卡 JSONB；``blank_skipped`` 空白頁略過）
 - ``ExamImportUsage``  每次 AI 呼叫一列（類型、模型、input／output／thinking token、估算美元）
 
 流程與規則見 docs/design/question-bank-exam-import.md；資料表見
@@ -58,6 +58,10 @@ PAGE_STATUSES = (
     PAGE_STATUS_DONE,
     PAGE_STATUS_FAILED,
 )
+
+# 空白頁略過（C3）：瀏覽器判斷是空白的頁不送 AI，存頁圖後標 done＋0 張卡，``error`` 放這個代碼當
+# 標記（狀態 CHECK 只允許上面四種，不加 migration）。見 services/exam_import_blank.py
+PAGE_ERROR_BLANK_SKIPPED = "BLANK_SKIPPED"
 
 # 一份題本最多 20 頁（DB CHECK 同值）
 EXAM_IMPORT_MAX_PAGES = 20
@@ -140,6 +144,7 @@ class ExamImportPage(Base):
     answer_key = Column(JSONB, nullable=True)
     # 題目卡陣列（形狀見 services/exam_paper_service.py 模組說明）
     cards = Column(JSONB, nullable=False, default=list)
+    # 失敗原因（白話）；空白頁略過時放 PAGE_ERROR_BLANK_SKIPPED 當標記
     error = Column(Text, nullable=True)
     # 正在處理這一頁的那次請求的識別值（搶到 processing 時寫入）：AI 回來後確認仍是自己搶到的
     # 才寫結果，避免卡太久被重搶後舊請求把結果寫進去或把頁標失敗
@@ -152,6 +157,13 @@ class ExamImportPage(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     exam_import = relationship("ExamImport", back_populates="pages")
+
+    @property
+    def blank_skipped(self) -> bool:
+        """空白頁略過（done＋``error=BLANK_SKIPPED``，沒送 AI）。"""
+        return (
+            self.status == PAGE_STATUS_DONE and self.error == PAGE_ERROR_BLANK_SKIPPED
+        )
 
     def __repr__(self):
         return f"<ExamImportPage {self.import_id}#{self.page_no} {self.status}>"

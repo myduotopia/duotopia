@@ -6,13 +6,16 @@
 - GET    /api/question-bank/exam-imports/{id}                            匯入（含所有頁與題目卡）
 - POST   /api/question-bank/exam-imports/{id}/pages/{page_no}            送一頁頁圖擷取
 - POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/retry      重讀單一題（card_id 或題號，bbox 只輔助）
+- POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/blank      標為空白頁（附頁圖；不呼叫 AI、不記用量）
+- POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/send-blank 空白頁「仍要送出這一頁」（用存好的頁圖、不算重送）
 - DELETE /api/question-bank/exam-imports/{id}                            放棄匯入（刪草稿與頁圖）
 
 本檔的 ``router`` 不帶 prefix／tags，由 ``routers/question_bank.py`` ``include_router`` 掛上
 （同 question_bank_groups／question_bank_ai_routes 的拆檔慣例），``main.py`` 不需改。
 
 用量只記不扣：不佔 magic paste 每月額度、不扣點數。存入題庫（全部儲存／略過核對）在 C4。
-業務規則在 ``services/exam_import_service.py``。
+業務規則在 ``services/exam_import_service.py``（空白頁在 ``exam_import_blank.py``、重試在
+``exam_import_retry.py``）。
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from routers.question_bank_common import _parse_uuid, _require_bank_membership
 from routers.question_bank_schemas import ProgramLinkIn
 from routers.teachers import get_current_teacher
 from services import exam_import_service as eis
+from services.exam_import_blank import mark_blank_page, send_blank_page
 from services.exam_import_retry import retry_question
 from services import question_bank_service as qbs
 from services.exam_paper_service import (
@@ -237,6 +241,52 @@ async def extract_exam_import_page(
         raise _ai_failed("page", e)
     except Exception as e:  # AI 供應商錯誤
         raise _ai_failed("page", e)
+    return {"page": eis.serialize_page(page), "import": eis.serialize_import(imp)}
+
+
+@router.post("/exam-imports/{import_id}/pages/{page_no}/blank")
+async def mark_exam_import_blank_page(
+    import_id: int,
+    page_no: int,
+    file: UploadFile = File(...),
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """瀏覽器判斷是空白的頁：存頁圖、標成已處理（0 張卡，``blank_skipped``），不呼叫 AI、不記用量。
+    只接受還沒處理的頁（否則 409 ``EXAM_IMPORT_PAGE_BUSY``）；已標過的再標一次直接回傳。"""
+    imp = _load(db, teacher, import_id)
+    data = await _read_page_file(file)
+    try:
+        page = mark_blank_page(db, imp, page_no, data, file.content_type)
+    except eis.ExamImportError as e:
+        raise _raise(e)
+    except (ExamPaperError, MagicPasteError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {"page": eis.serialize_page(page), "import": eis.serialize_import(imp)}
+
+
+@router.post("/exam-imports/{import_id}/pages/{page_no}/send-blank")
+async def send_exam_import_blank_page(
+    import_id: int,
+    page_no: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """空白頁「仍要送出這一頁」：用存好的頁圖送 AI 擷取（不必重選檔案），**不算整頁重送次數**。
+    不是略過的空白頁回 409 ``EXAM_IMPORT_NOT_BLANK``；其餘錯誤同送一頁。"""
+    imp = _load(db, teacher, import_id)
+    try:
+        page = await send_blank_page(db, imp, page_no)
+    except eis.ExamImportError as e:
+        raise _raise(e)
+    except (ExamPaperError, MagicPasteError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ExamPaperTimeoutError:
+        raise _ai_timeout("這一頁已標為失敗，可以重送整頁")
+    except ExamPaperOutputError as e:
+        raise _ai_failed("send-blank", e)
+    except Exception as e:  # AI 供應商錯誤
+        raise _ai_failed("send-blank", e)
     return {"page": eis.serialize_page(page), "import": eis.serialize_import(imp)}
 
 

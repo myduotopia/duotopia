@@ -4,6 +4,8 @@
 每頁圖片送出擷取時就存起來（續做、整頁對照、單題截圖用），路徑含匯入 id：
 ``exam_imports/{environment}/{import_id}/page_{n}_{uuid}.{ext}``。放棄匯入時依前綴整批刪除。
 
+「空白頁仍要送出這一頁」用 ``read_page_image`` 讀回存好的頁圖（只讀這份匯入前綴下的檔）。
+
 沿用 ``services/image_upload.ImageUploadService`` 的 GCS 認證、bucket、``USE_GCS_STORAGE``
 本機模式設定，不另做一套。
 
@@ -18,12 +20,15 @@ import logging
 import os
 import shutil
 import uuid
+from typing import Optional, Tuple
+from urllib.parse import unquote, urlparse
 
 from services.image_upload import get_image_upload_service
 
 logger = logging.getLogger(__name__)
 
 _EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+_MIME = {ext: mime for mime, ext in _EXT.items()}
 _PREFIX = "exam_imports"
 
 
@@ -58,6 +63,37 @@ def store_page_image(
         f.write(content)
     backend_url = svc.backend_url or "http://localhost:8080"
     return f"{backend_url}/static/images/{_PREFIX}/{import_id}/{filename}"
+
+
+def read_page_image(import_id: int, image_url: str) -> Optional[Tuple[bytes, str]]:
+    """讀回存好的頁圖（空白頁「仍要送出這一頁」用，不必請老師重選檔案）。回傳 (內容, mime)；
+    網址不屬於這份匯入、或檔案不見了回 None。"""
+    svc = get_image_upload_service()
+    filename = os.path.basename(unquote(urlparse(image_url or "").path))
+    mime = _MIME.get(filename.rsplit(".", 1)[-1].lower()) if filename else None
+    if not mime or not filename.startswith("page_"):
+        return None
+    try:
+        if svc.use_gcs:
+            client = svc._get_storage_client()
+            if not client:
+                return None
+            blob = client.bucket(svc.bucket_name).blob(
+                _gcs_prefix(import_id) + filename
+            )
+            if not blob.exists():
+                return None
+            return blob.download_as_bytes(), mime
+        path = os.path.join(_local_dir(import_id), filename)
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as f:
+            return f.read(), mime
+    except Exception as e:
+        logger.warning(
+            "[exam-import] read page image failed import=%s: %s", import_id, e
+        )
+        return None
 
 
 def delete_import_images(import_id: int) -> int:

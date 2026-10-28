@@ -29,6 +29,8 @@
   抽中後固定；「延續上一頁題組」的卡不算進次數。
 - **用量**：每次 AI 呼叫寫一列 ``exam_import_usage``，``exam_imports`` 同步加總；AI 回應無法解析時
   也照記（token 已經花掉）。
+- **空白頁略過**（C3）：瀏覽器判斷是空白的頁不送 AI，由 ``services/exam_import_blank.py`` 標成
+  done＋0 張卡＋``error=BLANK_SKIPPED``；「仍要送出這一頁」用存好的頁圖走 ``run_claimed_page``。
 - **存入題庫（全部儲存／略過核對）不在 C2**：見 ``backfill_saved_questions`` 的 TODO（C4）。
 """
 
@@ -653,15 +655,36 @@ async def process_page(
     mime = service.validate_page_image(image_bytes, mime_type)
     import_id, page_id = imp.id, page.id
     claim_id = _claim_page(db, import_id, page_id, page_no)
+    return await run_claimed_page(
+        db, import_id, page_id, page_no, claim_id, image_bytes, mime, service, rng
+    )
 
+
+async def run_claimed_page(
+    db: Session,
+    import_id: int,
+    page_id: int,
+    page_no: int,
+    claim_id: str,
+    image_bytes: bytes,
+    mime: str,
+    service: ExamPaperService,
+    rng: Optional[random.Random] = None,
+    *,
+    store_image: bool = True,
+) -> ExamImportPage:
+    """已搶到 processing 之後：存頁圖、送 AI、鎖內寫入。空白頁「仍要送出」也走這裡（頁圖已存好，
+    ``store_image=False``；見 ``exam_import_blank``）。"""
     try:
-        image_url = exam_import_storage.store_page_image(
-            import_id, page_no, image_bytes, mime
-        )
-        db.query(ExamImportPage).filter(
-            ExamImportPage.id == page_id, ExamImportPage.claim_id == claim_id
-        ).update({ExamImportPage.image_url: image_url}, synchronize_session=False)
+        if store_image:
+            image_url = exam_import_storage.store_page_image(
+                import_id, page_no, image_bytes, mime
+            )
+            db.query(ExamImportPage).filter(
+                ExamImportPage.id == page_id, ExamImportPage.claim_id == claim_id
+            ).update({ExamImportPage.image_url: image_url}, synchronize_session=False)
         catalog, code_to_id = exam_point_catalog(db)
+        imp = db.get(ExamImport, import_id)
         known = dict(imp.known_answers or {})
         db.commit()  # 送 AI 前結束交易、把連線還給連線池（AI 最多等 2 分鐘）
         result = await service.extract_page(
@@ -769,6 +792,8 @@ def serialize_import(imp: ExamImport, include_pages: bool = False) -> Dict[str, 
         "question_count": imp.question_count or 0,
         "pages_done": done,
         "pages_failed": sum(1 for p in pages if p.status == PAGE_STATUS_FAILED),
+        # 空白頁略過（瀏覽器判斷、沒送 AI）也算在 pages_done 裡；前端顯示「含 N 頁空白」
+        "pages_blank": sum(1 for p in pages if p.blank_skipped),
         "created_at": imp.created_at.isoformat() if imp.created_at else None,
         "updated_at": imp.updated_at.isoformat() if imp.updated_at else None,
     }
@@ -792,6 +817,7 @@ def serialize_page(page: ExamImportPage) -> Dict[str, Any]:
         "answer_key": page.answer_key or {},
         "cards": page.cards or [],
         "error": page.error,
+        "blank_skipped": page.blank_skipped,  # 空白頁略過（見 exam_import_blank）
         "resend_count": page.resend_count or 0,
         "processed_at": page.processed_at.isoformat() if page.processed_at else None,
     }
@@ -830,6 +856,7 @@ __all__ = [
     "list_unfinished",
     "lock_import",
     "process_page",
+    "run_claimed_page",
     "record_usage",
     "serialize_import",
     "serialize_page",

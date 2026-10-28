@@ -13,6 +13,9 @@
 ``EXAM_IMPORT_RETRY_LIMIT``，不再呼叫 AI，請老師「手動補這一題」。跨頁合併過的題組整張卡共用
 同一個次數。AI 供應商錯誤（連線失敗、5xx 等）也已經先記上，同樣算一次。
 
+**用量**：AI 有回應就記一筆；結果換進卡片才記成功，被丟掉（匯入已結束、沒讀到這一題、
+卡片找不到、跨頁題組比不到題號）記失敗。
+
 **連線**：檢查與加次數後先 ``commit`` 釋放 DB 連線再等 AI（最多 2 分鐘），AI 回來後重新
 ``lock_import`` 寫入；鎖內整理出錯 → rollback → 重新上鎖記用量（失敗）再丟出。
 """
@@ -279,17 +282,22 @@ def _apply_retry_result(
     card_id: Optional[str],
     question_no: Optional[str],
 ) -> Dict[str, Any]:
-    """鎖內：記用量、把重讀結果換進目標卡。業務錯誤先 commit 用量再丟出。"""
-    eis.record_usage(
-        db,
-        imp,
-        call_type=USAGE_CALL_RETRY_QUESTION,
-        usage=result.usage,
-        page_no=page_no,
-    )
+    """鎖內：把重讀結果換進目標卡並記用量。結果被丟掉（業務錯誤）時用量記成失敗、先 commit
+    再丟出；換進卡片才記成功。"""
+
+    def record(succeeded: bool) -> None:
+        eis.record_usage(
+            db,
+            imp,
+            call_type=USAGE_CALL_RETRY_QUESTION,
+            usage=result.usage,
+            page_no=page_no,
+            succeeded=succeeded,
+        )
 
     def fail(status_code: int, code: str, message: str) -> ExamImportError:
-        db.commit()  # 用量照記
+        record(succeeded=False)
+        db.commit()  # 用量照記（結果丟掉 → 失敗）
         return ExamImportError(status_code, code, message)
 
     if imp.status not in eis.UNFINISHED_STATUSES:
@@ -320,6 +328,7 @@ def _apply_retry_result(
         cards[index] = new_card
         target = new_card
     apply_answer_key([target], known)
+    record(succeeded=True)
     owner.cards = cards
     eis._touch(owner)
     target_id = target["card_id"]
