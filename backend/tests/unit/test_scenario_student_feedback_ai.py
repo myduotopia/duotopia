@@ -136,7 +136,7 @@ class TestBuildPrompt:
         """
         prompt = Svc.build_prompt(CRITERIA, "zh-TW")
         shape_start = prompt.index("Reply with JSON only")
-        shape_end = prompt.index('Use "great" when')
+        shape_end = prompt.index('Use "great" only when')
         json_shape = prompt[shape_start:shape_end].lower()
         assert "score" not in json_shape
         assert "overall" not in json_shape
@@ -315,3 +315,57 @@ class TestStudentAsksInsteadOfAnswering:
         assert "do not judge their answer" in prompt
         # 問單字意思的時候不給「建議說法」（那會答錯方向）
         assert "Leave `suggestion` out in that case." in prompt
+
+
+class TestLanguageAccuracyIsNotWaivedByClearMeaning:
+    """夥伴 staging 回報：`many food` 被放過關（#1140）。
+
+    `food` 不可數，所以 `much food`（或強調種類時 `many foods`）才對。模型卻給了
+    「很棒」。
+
+    原因是**我自己寫的 prompt**：為了防止「答得跟範例不同就被判低分」（#864 規格 3-3），
+    我寫了「NEVER compare word-for-word… a different answer is not a wrong answer」，
+    而模型把它從「內容可以不同」推廣成「用詞錯了也算對」。我沒有把兩件事分開講。
+
+    這支守的就是那條界線。
+    """
+
+    def test_content_freedom_is_scoped_to_what_not_how(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        # 「不要逐字比對」要留著（那是 #864 的要求）
+        assert "NEVER compare" in prompt
+        # 但必須明確限定在「說什麼」，不是「說得對不對」
+        assert "WHAT the student chooses to say" in prompt
+        assert "HOW CORRECTLY" in prompt
+        assert "saying it ungrammatically is not" in prompt
+
+    def test_clear_meaning_does_not_earn_a_pass(self):
+        """意思懂了但英文錯了，仍然是 improve —— 這正是被放過關的那個情況。"""
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "AND has no language error a teacher would correct" in prompt
+        assert "does not excuse a wrong form" in prompt
+
+    def test_countability_is_the_first_thing_checked(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        checks = prompt[prompt.index("Check these, in this order") :]
+        # 可數／不可數要排在最前面（夥伴踩到的就是這一類）
+        assert checks.index("countable vs uncountable") < checks.index("prepositions")
+        assert "much / many / a lot of" in checks
+
+    def test_the_reported_case_is_in_the_prompt_as_a_worked_example(self):
+        """抽象規則模型容易打折，具體對照穩定得多，所以把回報的案例寫進去。"""
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert '"many food" is wrong' in prompt
+        assert '"much food" is correct' in prompt
+        assert "many KINDS of food" in prompt
+
+    def test_it_must_name_the_wrong_word_and_the_correct_form(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "Name the exact word or phrase that was wrong" in prompt
+
+    def test_but_it_must_not_turn_into_a_nitpicker(self):
+        """嚴格的反面風險是過度糾正，那會把學生講話的意願殺掉。"""
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "at most the two most important errors" in prompt
+        assert "not a proofreading exercise" in prompt
+        assert "Do not invent errors" in prompt

@@ -139,6 +139,13 @@ class ScenarioStudentFeedbackService:
                 "the student's answer to it word-for-word: an open-ended speaking "
                 "question has many correct answers, and a different answer is not a "
                 "wrong answer.",
+                "",
+                # 夥伴 staging 回報：`many food` 被放過關。上面那段「不要逐字比對」是
+                # 為了防止「答得跟範例不同就被判低分」（#864 規格 3-3），但模型把它從
+                # 「內容可以不同」推廣成「用詞錯了也算對」。這一句把兩件事切開。
+                "That freedom is about WHAT the student chooses to say, not about "
+                "HOW CORRECTLY they say it. Saying something different from the "
+                "example is fine; saying it ungrammatically is not.",
             ]
 
         if keywords:
@@ -163,9 +170,35 @@ class ScenarioStudentFeedbackService:
             '  "suggestion": "..."',
             "}",
             "",
-            'Use "great" when the answer already does what the question asked. Use '
-            '"improve" when it can be clearer, more complete, or closer to the '
-            "target language features.",
+            'Use "great" only when the answer does what the question asked '
+            "AND has no language error a teacher would correct. If the meaning "
+            'comes across but the English is wrong, that is still "improve" '
+            "— a clear meaning does not excuse a wrong form.",
+            "",
+            "Check these, in this order of importance:",
+            "- countable vs uncountable nouns (much / many / a lot of, and "
+            "whether the noun takes -s)",
+            "- verb tense and subject-verb agreement",
+            "- word choice and collocation (does an English speaker say it "
+            "that way?)",
+            "- articles (a / an / the) and plurals",
+            "- prepositions",
+            "",
+            # 夥伴回報的那個案例直接寫成範例 —— 抽象規則模型容易打折，
+            # 具體對照（much food / many foods / many food）效果穩定得多。
+            'Worked example of the standard: for "I bought a lot of food", '
+            '"much food" is correct, "many foods" is correct when the '
+            'student means many KINDS of food, and "many food" is wrong — '
+            'food is uncountable, so it cannot take "many" without the '
+            'plural. An answer like that is "improve", with the correct form '
+            "named in `comment`.",
+            "",
+            "Name the exact word or phrase that was wrong and the correct form. "
+            "Mention at most the two most important errors — this is spoken "
+            "practice, not a proofreading exercise, and the student should leave "
+            "knowing one thing to fix. Do not invent errors: if the sentence is "
+            "correct English for the student's level, say so and use "
+            '"great".',
             "",
             f"Write `comment` in {language}, in two short sentences at most, speaking "
             "to the student directly. Say what worked before what to change, and name "
