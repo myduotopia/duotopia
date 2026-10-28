@@ -1,5 +1,9 @@
 /**
  * API Client for Duotopia
+ *
+ * - 錯誤一律丟 `ApiError`（status ＋ 後端 `detail`；網路錯誤 status = 0），401 經
+ *   `handleUnauthorized` 導回登入頁。
+ * - 成功回應 204 或空 body 回 `undefined`，不解析 JSON（`parseSuccessBody`，#1112）。
  */
 
 import { API_URL } from "../config/api";
@@ -60,6 +64,21 @@ function handleUnauthorized(status: number, endpoint: string): void {
   setTimeout(() => {
     isRedirectingToLogin = false;
   }, 3000);
+}
+
+/**
+ * 成功回應的 body：204 或空 body（`Content-Length: 0`）回 `undefined`，其餘照常解析 JSON。
+ * 刪除 API 回 204，原本一律 `response.json()` 會丟 SyntaxError、被當成失敗（#1112）。
+ * `request` 與 `postForm` 共用。`headers` 用 optional chaining：測試的假回應常沒有 headers。
+ */
+function parseSuccessBody<T>(response: Response): Promise<T> {
+  if (
+    response.status === 204 ||
+    response.headers?.get("content-length") === "0"
+  ) {
+    return Promise.resolve(undefined as T);
+  }
+  return response.json() as Promise<T>;
 }
 
 /**
@@ -401,8 +420,7 @@ class ApiClient {
         throw new ApiError(response.status, detail, error);
       }
 
-      const result = await response.json();
-      return result;
+      return await parseSuccessBody<T>(response);
     } catch (err) {
       // If it's already an ApiError, re-throw it
       if (err instanceof ApiError) {
@@ -528,7 +546,7 @@ class ApiClient {
       handleUnauthorized(response.status, endpoint);
       throw new ApiError(response.status, detail, error);
     }
-    return response.json() as Promise<T>;
+    return parseSuccessBody<T>(response);
   }
 
   getCurrentUser() {
