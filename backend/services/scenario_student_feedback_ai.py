@@ -194,11 +194,19 @@ class ScenarioStudentFeedbackService:
             "named in `comment`.",
             "",
             "Name the exact word or phrase that was wrong and the correct form. "
-            "Mention at most the two most important errors — this is spoken "
-            "practice, not a proofreading exercise, and the student should leave "
-            "knowing one thing to fix. Do not invent errors: if the sentence is "
-            "correct English for the student's level, say so and use "
-            '"great".',
+            "Put **one** main error in `comment` — this is spoken practice, not a "
+            "proofreading exercise, and the student should leave knowing one thing "
+            "to fix. The corrected sentence in `suggestion` can carry any further "
+            "fixes, so `comment` does not have to list them all. Do not invent "
+            "errors: if the sentence is correct English for the student's level, "
+            'say so and use "great".',
+            "",
+            # review #1152 第 2 點：原本寫「最多兩個錯」＋「評語最多兩句」＋「先講
+            # 優點」，三者塞不進去，模型只能自己亂取捨 —— 而最可能被犧牲的正是錯誤
+            # 細節，也就是這次要修的東西。改成「評語一個主錯、其餘交給建議說法」。
+            "Everything in `comment` must fit the two-sentence limit below. If the "
+            "praise plus the correction will not fit, keep the correction and make "
+            "the praise shorter.",
             "",
             f"Write `comment` in {language}, in two short sentences at most, speaking "
             "to the student directly. Say what worked before what to change, and name "

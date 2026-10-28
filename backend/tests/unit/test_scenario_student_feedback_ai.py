@@ -366,6 +366,30 @@ class TestLanguageAccuracyIsNotWaivedByClearMeaning:
     def test_but_it_must_not_turn_into_a_nitpicker(self):
         """嚴格的反面風險是過度糾正，那會把學生講話的意願殺掉。"""
         prompt = Svc.build_prompt(CRITERIA, "zh-TW")
-        assert "at most the two most important errors" in prompt
         assert "not a proofreading exercise" in prompt
         assert "Do not invent errors" in prompt
+
+    def test_comment_asks_for_one_main_error_not_a_list(self):
+        """原本「最多兩個錯」＋「評語最多兩句」＋「先講優點」是自相矛盾的指令。
+
+        塞不進去的時候模型只能自己取捨，而最可能被犧牲的就是錯誤細節 —— 正好是這次
+        要修的東西（PR #1152 review 第 2 點）。
+        """
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "one** main error in `comment`" in prompt
+        # 其餘修正交給「建議說法」那一句，不要硬塞進評語
+        assert "`suggestion` can carry any further" in prompt
+        assert "must fit the two-sentence limit" in prompt
+
+    def test_accuracy_rules_apply_even_without_a_reference_answer(self):
+        """老師沒寫參考答案時，語言正確性的要求仍然要在。
+
+        「內容可以不同」那段寫在「有參考答案」的條件區塊裡（review 第 4 點），所以
+        要確認嚴格度不是跟著那個區塊一起消失的。
+        """
+        no_ref = {**CRITERIA, "reference_answer": ""}
+        prompt = Svc.build_prompt(no_ref, "zh-TW")
+        assert "NEVER compare" not in prompt  # 沒有範例可比，這段本來就不該出現
+        assert "AND has no language error a teacher would correct" in prompt
+        assert "countable vs uncountable" in prompt
+        assert '"many food" is wrong' in prompt
