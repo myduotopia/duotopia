@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   render,
   screen,
@@ -8,6 +8,12 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DigitalTeachingToolbar from "../DigitalTeachingToolbar";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 // Mock i18n useTranslation hook
 vi.mock("react-i18next", () => ({
@@ -251,4 +257,76 @@ describe("DigitalTeachingToolbar", () => {
   });
 
   // i18n tests for drawing tools removed; remaining tools use labels as expected.
+
+  // #1146 第 3b 輪：工具列疊在 Radix Sheet 上方，Radix 在 document 聽 pointerdown
+  // 判斷「點到外面」就關 sheet。工具列自己的控制項要擋下 pointerdown。
+  describe("Sheet 開著時操作工具列", () => {
+    const renderWithSheet = async () => {
+      // 不讓說明對話框自動跳出（它本身也是一個 Radix Dialog，會干擾判斷）
+      localStorage.setItem("duotopia_help_dismissed", "true");
+      localStorage.setItem("duotopia-toolbar-collapsed", "false");
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Sheet open onOpenChange={onOpenChange}>
+            <SheetContent>
+              <SheetTitle>Sheet title</SheetTitle>
+              <SheetDescription>Sheet body</SheetDescription>
+            </SheetContent>
+          </Sheet>
+          <div data-testid="outside">outside</div>
+          <DigitalTeachingToolbar />
+        </>,
+      );
+      // Radix 掛上 document 的 pointerdown 監聽是在 setTimeout(0) 之後
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      return onOpenChange;
+    };
+
+    afterEach(() => {
+      localStorage.removeItem("duotopia_help_dismissed");
+      localStorage.removeItem("duotopia-toolbar-collapsed");
+    });
+
+    it("對照組：點 sheet 外面的一般元素，sheet 會關（確認測試抓得到外部點擊）", async () => {
+      const onOpenChange = await renderWithSheet();
+      fireEvent.pointerDown(screen.getByTestId("outside"));
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("按收起鈕：工具列收起，sheet 不關", async () => {
+      const onOpenChange = await renderWithSheet();
+      const collapse = screen.getByLabelText("Collapse toolbar");
+      fireEvent.pointerDown(collapse);
+      fireEvent.click(collapse);
+
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(screen.getByText("Sheet body")).toBeInTheDocument();
+      expect(screen.getByLabelText("Expand toolbar")).toBeInTheDocument();
+    });
+
+    it("按展開鈕：sheet 不關", async () => {
+      const onOpenChange = await renderWithSheet();
+      fireEvent.click(screen.getByLabelText("Collapse toolbar"));
+
+      const expand = screen.getByLabelText("Expand toolbar");
+      fireEvent.pointerDown(expand);
+      fireEvent.click(expand);
+
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText("Expand toolbar")).toBeNull();
+    });
+
+    it("按住拖動把手：sheet 不關", async () => {
+      const onOpenChange = await renderWithSheet();
+      const handle = screen.getByTitle("拖曳上下移動");
+      fireEvent.pointerDown(handle);
+      fireEvent.mouseDown(handle, { clientY: 300 });
+      fireEvent.mouseUp(window);
+
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+  });
 });

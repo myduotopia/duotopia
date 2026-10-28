@@ -1511,7 +1511,13 @@ class ApiClient {
   async generateScenarioArticle(data: {
     goal: string;
     level?: string;
+    /** #1146：重問句與標題建議用的語言（zh-TW / en） */
+    ui_language?: string;
   }): Promise<{
+    /** #1146 答非所問：false 時不產內容，改看 reask */
+    usable?: boolean;
+    reask?: string;
+    suggested_title?: string;
     content: string;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
@@ -1529,7 +1535,12 @@ class ApiClient {
    * 後端會翻成給模型看的英文描述 —— 不要在這裡先轉成顯示用的中文。
    */
   async generateScenarioQuestions(data: {
+    /** #1146：可為空（不需要情境），此時改用 direction 出題 */
     scenario_content: string;
+    direction?: string;
+    /** 情境圖網址（最多 5 張），AI 出題會看圖 */
+    scenario_images?: string[];
+    ui_language?: string;
     count: number;
     question_level?: string;
     global_tense?: { time: string; aspect: string } | null;
@@ -1539,6 +1550,9 @@ class ApiClient {
     /** 清單上已有的題目，避免再產一批時給重複的 */
     existing_questions?: string[];
   }): Promise<{
+    usable?: boolean;
+    reask?: string;
+    suggested_title?: string;
     questions: Array<{
       question: string;
       translation: string;
@@ -1581,13 +1595,23 @@ class ApiClient {
    * `Content-Type: application/json`，套在 FormData 上會蓋掉 multipart 的 boundary，
    * 後端就解不出檔案。專案裡其他上傳（uploadImage / uploadAudio）也是這樣繞過。
    */
-  async extractScenarioArticle(file: File): Promise<{
+  async extractScenarioArticle(
+    file: File,
+    uiLanguage?: string,
+  ): Promise<{
     content: string;
+    /** #1146：檔內有意義的圖（page 1-based、box_2d 0–1000），前端裁成情境圖 */
+    figures?: Array<{ page: number; box_2d: number[] }>;
+    /** #1146：同一次呼叫的標題建議（語言跟 uiLanguage） */
+    suggested_title?: string;
+    /** #1146：輸出被截斷、文章可能缺結尾 */
+    truncated?: boolean;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
   }> {
     const formData = new FormData();
     formData.append("file", file);
+    if (uiLanguage) formData.append("ui_language", uiLanguage);
 
     const currentToken = this.getToken();
     const headers: HeadersInit = {};
@@ -1600,8 +1624,16 @@ class ApiClient {
       { method: "POST", headers, body: formData },
     );
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || `HTTP ${response.status}`);
+      // ApiError 帶 status，面板才分得出 402（本月額度用完）與一般失敗
+      let detail: string = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+        else if (body?.detail?.message) detail = body.detail.message;
+      } catch {
+        // non-JSON error body; keep the default message
+      }
+      throw new ApiError(response.status, detail);
     }
     return response.json();
   }

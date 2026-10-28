@@ -56,6 +56,10 @@ MODEL = settings.VERTEX_AI_FLASH_MODEL
 # 逐字稿 + 四個面向 + 回饋，抓寬一點避免截斷
 MAX_OUTPUT_TOKENS = 2048
 
+# 情境文章送進評分 prompt 的長度上限（#1146）。存檔端沒有上限，這裡截一刀避免
+# 異常長的情境讓每一題評分都燒大量 token。出題端點的上限是 8000，這裡同值。
+MAX_SCENARIO_CHARS_FOR_GRADING = 8000
+
 # 音檔輸入也計在 input tokens。
 # 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
 # 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
@@ -214,9 +218,30 @@ class ScenarioGradingService:
         rubric_note = (criteria.get("rubric_note") or "").strip()
         global_rubric = (criteria.get("global_rubric") or "").strip()
         level = (criteria.get("question_level") or "").strip()
+        scenario = (criteria.get("scenario_content") or "").strip()[
+            :MAX_SCENARIO_CHARS_FOR_GRADING
+        ]
+        image_count = int(criteria.get("scenario_image_count") or 0)
 
         lines = [
             "Listen to the student's recorded answer and grade it.",
+        ]
+        # #1146：題目常是「圖中的人在做什麼？」這類離開情境就答不出來的問題，評分端
+        # 看不到情境的話只能瞎猜學生答得對不對。情境文字與情境圖都是學生作答時看得到
+        # 的東西，所以拿來當判斷「有沒有答到問題」的依據。
+        if scenario:
+            lines += [
+                "",
+                "Scenario the student read before answering:",
+                scenario,
+            ]
+        if image_count > 0:
+            lines += [
+                "",
+                f"The student also saw {image_count} scenario picture(s), attached "
+                "above. Use them to judge whether the answer fits the scenario.",
+            ]
+        lines += [
             "",
             f"Question the student was answering: {question}",
         ]
@@ -377,7 +402,14 @@ class ScenarioGradingService:
         if not recording_url:
             raise ScenarioGradingInputError("這一題沒有錄音，無法評分")
 
-        prompt = self.build_prompt(criteria)
+        # #1146 情境圖：讀不到的圖略過（見 scenario_context_images），張數以實際
+        # 送出的為準寫進 prompt，避免叫模型看一張不存在的圖。
+        from services.scenario_context_images import build_image_parts
+
+        image_parts = build_image_parts(criteria.get("scenario_images"))
+        prompt = self.build_prompt(
+            {**criteria, "scenario_image_count": len(image_parts)}
+        )
 
         from vertexai.generative_models import GenerationConfig, GenerativeModel
         from services.vertex_ai import get_vertex_ai_service
@@ -393,6 +425,7 @@ class ScenarioGradingService:
         )
         response = await model.generate_content_async(
             [
+                *image_parts,
                 await self._audio_part(
                     recording_url, mime_type_for_recording(recording_url)
                 ),
