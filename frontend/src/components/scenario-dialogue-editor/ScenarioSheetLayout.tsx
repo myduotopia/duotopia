@@ -7,7 +7,9 @@
  *   固定列是它的 flex 兄弟（不是疊在上面的 sticky／absolute），捲動區的高度本來就已經
  *   扣掉固定列，最後的內容不會被蓋住；底部 `pb-6` 只是留白。
  * - `ScenarioActionBar`：`shrink-0`，白底＋上方細分隔線，固定在 sheet 最底端、不隨內容捲動。
- *   左＝回上一步，右＝當前步驟主要動作（由呼叫端決定按鈕與層級）。
+ *   左＝回上一步，右＝當前步驟主要動作（由呼叫端決定按鈕與層級）。底部內距至少留
+ *   `env(safe-area-inset-bottom)`，瀏海機 home bar 不蓋到按鈕（第 4b 輪；sheet 外框同時改
+ *   `100dvh`，手機瀏覽器工具列不蓋到操作列）。
  *
  * 右側留白 `pr-8 sm:pr-16`（＝ sheet 原本的 p-6 再加 pr-2 / sm:pr-10）：老師後台的數位教學
  * 工具列（DigitalTeachingToolbar）固定在視窗右緣、約 54px 寬、疊在 sheet 上面；不留白的話
@@ -77,6 +79,8 @@ export function ScenarioActionBar({
       role="group"
       aria-label={t("scenarioDialogue.setup.actionBar")}
       className="flex shrink-0 items-center gap-2 border-t border-gray-200 bg-white px-6 py-3 pr-8 sm:pr-16"
+      // 瀏海機 home bar：底部至少留 safe-area（第 4b 輪，比照學生端 ReplyComposer）
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       {left}
       <span className="flex-1" />

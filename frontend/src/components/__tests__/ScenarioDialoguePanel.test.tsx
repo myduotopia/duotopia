@@ -2056,6 +2056,38 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
     expect(screen.queryByTitle("contentEditor.tooltips.duplicate")).toBeNull();
   });
 
+  it("滿 10 題回到設定卡：產生鈕停用，手機也看得到原因小字（第 4b 輪）", async () => {
+    generateScenarioQuestions.mockImplementationOnce(async () => ({
+      usable: true,
+      reask: "",
+      suggested_title: "AI 建議的標題",
+      questions: Array.from({ length: 10 }, (_, i) => fakeQuestion(100 + i)),
+    }));
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    fireEvent.click(screen.getByText(K.back));
+
+    expect(
+      screen.getByRole("button", { name: K.generateAnother }),
+    ).toBeDisabled();
+    // 操作列那行只在 sm 以上顯示；手機改在捲動區設定卡下方顯示 sm:hidden 小字
+    const mobile = screen.getByTestId("generate-blocked-reason-mobile");
+    expect(mobile).toHaveTextContent("scenarioDialogue.hints.maxReached");
+    expect(mobile).toHaveClass("sm:hidden");
+    expect(screen.getByTestId("scenario-scroll-area").contains(mobile)).toBe(
+      true,
+    );
+  });
+
+  it("未滿 10 題時不顯示手機版的不能產生原因", () => {
+    renderPanel();
+    fillRequiredForGenerate();
+
+    expect(screen.queryByTestId("generate-blocked-reason-mobile")).toBeNull();
+  });
+
   it("題目卡的複製鍵有正確的提示文字", () => {
     renderPanel();
     goToListManually();

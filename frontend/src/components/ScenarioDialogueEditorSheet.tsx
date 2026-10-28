@@ -13,6 +13,10 @@
  * 面板裡面自己分「捲動區＋固定在底端的操作列」（#1146 修正第 4 輪，見
  * `scenario-dialogue-editor/ScenarioSheetLayout`）。外框若再 overflow-auto，操作列就會
  * 跟著內容一起捲走。
+ *
+ * 側滑面板高度用 `h-[100dvh]`（第 4b 輪，比照學生端 `ScenarioChatActivity`）：手機瀏覽器的
+ * 網址列／工具列會吃掉 `100vh` 的一截，用 `h-screen` 時固定在底端的操作列會被蓋住。
+ * 瀏海機 home bar 的 safe-area 內距由操作列自己留（`ScenarioActionBar`）。
  */
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -116,7 +120,7 @@ export function ScenarioDialogueEditorSheet({
 
   return (
     <div
-      className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+      className="editor-panel fixed top-0 right-0 h-[100dvh] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
       style={{ left: `${sidebarWidth}px` }}
     >
       {header}

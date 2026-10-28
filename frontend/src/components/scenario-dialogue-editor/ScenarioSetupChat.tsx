@@ -14,7 +14,8 @@
  *   「再產一批」降為次要（第 3 輪）。從清單回來時把捲動區捲到最新一步的開頭（操作列固定
  *   在底端本來就看得到，第 4 輪）。
  * - 對話內容從上往下排（不做由下往上堆）；內容短時中間留白。AI 額度提示小字放在捲動區
- *   設定卡下方，不塞進操作列。
+ *   設定卡下方，不塞進操作列。「已滿 10 題」不能再產的原因：sm 以上放操作列主按鈕左邊，
+ *   手機放捲動區額度提示旁（`sm:hidden`，第 4b 輪），停用的按鈕在兩種寬度都有說明。
  * - 選項型步驟用直排選項卡（`ChoiceCards`，第 3 輪）：等寬、左對齊、粗體主句＋可選灰色
  *   說明行（說明以 aria-describedby 掛上，按鈕名稱＝主句）；老師泡泡只顯示主句。
  * - 版面：對話區撐滿 sheet 寬，老師泡泡貼右（像一般聊天）；每一步的輸入區另限 `max-w-3xl`，
@@ -439,6 +440,18 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         return (
           <div className="max-w-3xl space-y-2 sm:pl-9">
             {props.settingsCard}
+            {/*
+              手機上操作列放不下「已滿 10 題」這行原因（sm 以上才顯示在主按鈕左邊），
+              改在這裡額度提示旁邊顯示，停用的產生鈕才有說明（第 4b 輪）
+            */}
+            {props.generateBlockedReason && (
+              <p
+                data-testid="generate-blocked-reason-mobile"
+                className="text-right text-xs text-gray-500 sm:hidden"
+              >
+                {props.generateBlockedReason}
+              </p>
+            )}
             {/* 額度提示放捲動區（不塞進固定操作列，手機上操作列才維持一排） */}
             <p className="text-right text-xs text-gray-400">
               {t("scenarioDialogue.hints.rateLimit")}

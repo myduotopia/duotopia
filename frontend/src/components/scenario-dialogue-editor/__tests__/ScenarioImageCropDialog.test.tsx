@@ -3,9 +3,10 @@
  *
  * 驗：開啟時畫出目前的裁切框、拖拉換算成 box_2d、套用送出新框、沒有原圖時不能套用、
  * 處理中不能關。圖的實際位置用替身（jsdom 不排版）。
+ * jsdom 沒有 URL.createObjectURL／revokeObjectURL，每個測試先換成替身，結束時先卸載再還原。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import type { ScenarioImage } from "../scenarioImages";
 import { ScenarioImageCropDialog } from "../ScenarioImageCropDialog";
@@ -60,6 +61,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // 先卸載再還原：元件卸載時會呼叫 revokeObjectURL，jsdom 本身沒有這個函式。
+  // RTL 的自動 cleanup 排在這個 afterEach 之後，不先手動卸載就會在還原後才呼叫而失敗。
+  cleanup();
   URL.createObjectURL = originalCreate;
   URL.revokeObjectURL = originalRevoke;
   rectSpy.mockRestore();
