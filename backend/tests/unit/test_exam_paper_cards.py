@@ -226,6 +226,22 @@ def test_unmerge_and_remerge_when_skipped_page_gets_cards():
     assert all(not k.startswith("_merge") for k in strip_merge_records([merged])[0])
 
 
+def test_skipped_page_failed_or_processing_keeps_merge():
+    """跨過的頁變成失敗或處理中（``None``，沒有卡片）：維持原合併，不拆（C3 再審 2）。"""
+    pages = {
+        1: [_group_card(1, ["Part one."], [_q("2")], group_type="reading")],
+        2: [],
+        3: [
+            _group_card(3, ["Part three."], [_q("4")], cont=True, group_type="reading")
+        ],
+    }
+    merge_continuations(pages, record=True)
+    pages[2] = None
+    assert unmerge_invalid_continuations(pages) == set()
+    assert pages[1][0]["pages"] == [1, 3]
+    assert pages[3] == []
+
+
 def test_merge_without_record_leaves_no_bookkeeping():
     pages = {
         1: [_group_card(1, ["Part one."], [_q("2")], group_type="reading")],

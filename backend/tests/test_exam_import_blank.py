@@ -304,6 +304,80 @@ def test_send_blank_remerges_cross_page_group_in_page_order(
     assert all(not k.startswith("_merge") for c in cards for k in c)
 
 
+def test_send_blank_ai_failure_keeps_existing_merge(
+    test_client, shared_test_session, teacher, fake_ai, storage, monkeypatch
+):
+    """第 3 頁已越過空白的第 2 頁併到第 1 頁；第 2 頁「仍要送出」後 AI 失敗（中間頁變失敗、沒有卡片），
+    之後別頁處理完觸發重算，已合好的題組維持原合併、不拆開（C3 再審 2）。"""
+    imp = _create(test_client, teacher, pages=4).json()
+    fake_ai.on(_png("p1"), _page(_reading_group("1", "Who?", text="Part one.")))
+    fake_ai.on(
+        _png("p3"), _page(_reading_group("3", "When?", cont=True, text="Part three."))
+    )
+    fake_ai.on(_png("p4"), _page(_single("4", "After?", ["a", "b"], ai=[0])))
+    _send(test_client, teacher, imp["id"], 3, _png("p3"))
+    _send(test_client, teacher, imp["id"], 1, _png("p1"))
+    assert _blank(test_client, teacher, imp["id"], 2, _png("faint")).status_code == 200
+    assert _get(test_client, teacher, imp["id"])["pages"][0]["cards"][-1]["pages"] == [
+        1,
+        3,
+    ]
+
+    original = ExamPaperService._call_model
+
+    async def broken(self, image_bytes, mime_type, prompt):
+        return "not json", CallUsage(model="gemini-3.5-flash", input_tokens=10)
+
+    monkeypatch.setattr(ExamPaperService, "_call_model", broken)
+    assert _send_blank(test_client, teacher, imp["id"], 2).status_code == 502
+    assert _page_row(shared_test_session, imp["id"], 2).status == "failed"
+
+    # 別頁處理完會重算跨頁合併：中間頁失敗不算「有卡片」，不拆
+    monkeypatch.setattr(ExamPaperService, "_call_model", original)
+    assert _send(test_client, teacher, imp["id"], 4, _png("p4")).status_code == 200
+    data = _get(test_client, teacher, imp["id"])
+    group = data["pages"][0]["cards"][-1]
+    assert group["pages"] == [1, 3]
+    assert [q["source_question_no"] for q in group["group"]["questions"]] == [
+        "1",
+        "3",
+    ]
+    assert group["group"]["stimulus"]["paragraphs"] == ["Part one.", "Part three."]
+    assert data["pages"][2]["cards"] == []
+
+
+def test_retry_in_cross_page_group_response_has_no_merge_records(
+    test_client, teacher, fake_ai, storage
+):
+    """跨頁題組裡重試一題：回應的卡片不帶 _merge_pre／_merge_parts（只供後端重算）。"""
+    imp = _create(test_client, teacher, pages=2).json()
+    fake_ai.on(_png("p1"), _page(_reading_group("1", "Who?", text="Part one.")))
+    fake_ai.on(
+        _png("p2"), _page(_reading_group("2", "Where?", cont=True, text="Part two."))
+    )
+    _send(test_client, teacher, imp["id"], 1, _png("p1"))
+    _send(test_client, teacher, imp["id"], 2, _png("p2"))
+    merged = _get(test_client, teacher, imp["id"])["pages"][0]["cards"][-1]
+    assert merged["pages"] == [1, 2]
+
+    retry_img = _png("p2-retry")
+    fake_ai.on(
+        retry_img,
+        _page(_reading_group("2", "Where now?", cont=True, text="Part two.")),
+    )
+    resp = test_client.post(
+        f"{BASE}/{imp['id']}/pages/2/retry",
+        files={"file": ("page.png", retry_img, "image/png")},
+        data={"card_id": merged["card_id"], "question_no": "2"},
+        headers=_headers(teacher),
+    )
+    assert resp.status_code == 200, resp.text
+    card = resp.json()["card"]
+    assert card["card_id"] == merged["card_id"]
+    assert card["group"]["questions"][1]["stem"] == "Where now?"
+    assert all(not k.startswith("_merge") for k in card)
+
+
 def test_send_blank_on_normal_pending_page_is_rejected(
     test_client, teacher, fake_ai, storage
 ):

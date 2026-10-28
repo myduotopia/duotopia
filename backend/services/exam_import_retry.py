@@ -37,6 +37,7 @@ from services.exam_paper_cards import (
     iter_card_questions,
     normalize_question_no,
     renumber_cloze_cards,
+    strip_merge_records,
 )
 from services.exam_paper_service import (
     ExamPaperOutputError,
@@ -337,7 +338,8 @@ def _apply_retry_result(
     db.commit()
     for c in eis._all_cards(imp):
         if c.get("card_id") == target_id:
-            return copy.deepcopy(c)
+            # 合併紀錄（_merge_pre／_merge_parts）只供後端重算，不回給前端
+            return copy.deepcopy(strip_merge_records([c])[0])
     raise ExamImportError(404, "EXAM_IMPORT_CARD_NOT_FOUND", "找不到這張題目卡")
 
 

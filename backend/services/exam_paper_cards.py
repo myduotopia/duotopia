@@ -7,7 +7,7 @@
 
 跨頁合併可以**拆回來重算**（C3 review 4）：匯入流程合併時（``record=True``）在目標題組卡留下
 合併前的樣子（``MERGE_PRE_KEY``）與併進來的原卡（``MERGE_PARTS_KEY``）。之後若當初跨過的頁不再
-是「已處理、沒有卡片」（例如空白頁略過後老師按「仍要送出這一頁」、擷取到題目），
+沒有卡片（例如空白頁略過後老師按「仍要送出這一頁」、擷取到題目；失敗或處理中不算），
 ``unmerge_invalid_continuations`` 把那張題組卡拆回各頁，再跑一次 ``merge_continuations``，題組
 內容就依頁碼順序重新接起來。這兩個欄位只供後端重算，API 輸出時用 ``strip_merge_records`` 拿掉。
 """
@@ -350,14 +350,18 @@ def merge_continuations(
 def _merge_span_valid(
     pages: Mapping[int, Optional[List[Dict[str, Any]]]], target_no: int, part_no: int
 ) -> bool:
-    """當初從第 part_no 頁併到第 target_no 頁時，中間的頁都是「已處理、沒有卡片」；現在還是嗎？"""
-    return all(pages.get(p) == [] for p in range(target_no + 1, part_no))
+    """當初從第 part_no 頁併到第 target_no 頁時，中間的頁沒有卡片；現在還是嗎？
+
+    只有中間頁「真的有卡片」才算失效（要拆回重算）。中間頁失敗或處理中（``None``）時維持原合併：
+    例如空白頁按「仍要送出」後 AI 失敗，已合好的題組不該被拆開。
+    """
+    return not any(pages.get(p) for p in range(target_no + 1, part_no))
 
 
 def unmerge_invalid_continuations(
     pages: MutableMapping[int, Optional[List[Dict[str, Any]]]],
 ) -> Set[int]:
-    """把「跨過的頁現在有卡片或還沒處理完」的合併拆回各頁（就地修改 ``pages``），回傳有改動的頁碼。
+    """把「跨過的頁現在有卡片」的合併拆回各頁（就地修改 ``pages``），回傳有改動的頁碼。
 
     拆法：目標題組卡換回合併前的樣子，併進來的原卡依序放回各自那一頁的最前面。原卡本身也合併過
     別頁（多次合併）時，下一輪再檢查它。併進來的頁目前不是「已處理」（``None``）就不拆（放不回去）。

@@ -385,6 +385,12 @@ export function useExamImport(enabled: boolean) {
       if (cached) {
         URL.revokeObjectURL(cached.thumbUrl);
         localRef.current.delete(pageNo);
+        // 縮圖網址已釋放：一併拿掉，改顯示後端存的頁圖（避免破圖）；重畫後 sendOne 會再補上
+        setThumbs((prev) => {
+          const next = { ...prev };
+          delete next[pageNo];
+          return next;
+        });
       }
       try {
         const result = await sendOne(detail.id, pageNo, "resend");
