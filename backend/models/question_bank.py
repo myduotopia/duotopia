@@ -429,6 +429,9 @@ class QuestionSourceLink(Base):
         ForeignKey("question_sources.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    # 原卷題號（#1112）：這一題在該份原卷上印的題號，例如 "12"、"40"；自己出題時為 NULL。
+    # 記在單題或題組小題上；(question_id, source_id) 已存在時只更新這一欄。
+    source_question_no = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     question = relationship("Question", back_populates="source_links")
