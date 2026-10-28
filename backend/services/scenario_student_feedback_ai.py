@@ -140,7 +140,7 @@ class ScenarioStudentFeedbackService:
                 "question has many correct answers, and a different answer is not a "
                 "wrong answer.",
                 "",
-                # 夥伴 staging 回報：`many food` 被放過關。上面那段「不要逐字比對」是
+                # #1140：夥伴 staging 回報 `many food` 被放過關。上面那段「不要逐字比對」是
                 # 為了防止「答得跟範例不同就被判低分」（#864 規格 3-3），但模型把它從
                 # 「內容可以不同」推廣成「用詞錯了也算對」。這一句把兩件事切開。
                 "That freedom is about WHAT the student chooses to say, not about "
@@ -184,7 +184,7 @@ class ScenarioStudentFeedbackService:
             "- articles (a / an / the) and plurals",
             "- prepositions",
             "",
-            # 夥伴回報的那個案例直接寫成範例 —— 抽象規則模型容易打折，
+            # #1140：夥伴回報的案例直接寫成範例 —— 抽象規則模型容易打折，
             # 具體對照（much food / many foods / many food）效果穩定得多。
             'Worked example of the standard: for "I bought a lot of food", '
             '"much food" is correct, "many foods" is correct when the '
@@ -201,12 +201,13 @@ class ScenarioStudentFeedbackService:
             "errors: if the sentence is correct English for the student's level, "
             'say so and use "great".',
             "",
-            # review #1152 第 2 點：原本寫「最多兩個錯」＋「評語最多兩句」＋「先講
+            # #1140 / PR #1152 review 第 2 點：原本寫「最多兩個錯」＋「評語最多兩句」＋「先講
             # 優點」，三者塞不進去，模型只能自己亂取捨 —— 而最可能被犧牲的正是錯誤
             # 細節，也就是這次要修的東西。改成「評語一個主錯、其餘交給建議說法」。
-            "Everything in `comment` must fit the two-sentence limit below. If the "
-            "praise plus the correction will not fit, keep the correction and make "
-            "the praise shorter.",
+            "Everything in `comment` must fit the two-sentence limit below. When "
+            "there is an error, the SECOND sentence must be the correction — do not "
+            "spend both sentences on praise. If praise plus correction will not fit, "
+            "keep the correction and make the praise shorter.",
             "",
             f"Write `comment` in {language}, in two short sentences at most, speaking "
             "to the student directly. Say what worked before what to change, and name "
@@ -220,7 +221,7 @@ class ScenarioStudentFeedbackService:
             "If the recording has no speech, or you cannot make out any words, use "
             'verdict "improve" and say so kindly in `comment`.',
             "",
-            # 夥伴 staging 回報：學生看不懂某個字時，會把它**逐字母拼出來**問 AI
+            # #1140 2A：學生看不懂某個字時，會把它**逐字母拼出來**問 AI
             # （例如把 "spot" 唸成 S-P-O-T），而模型既聽不懂拼讀，也會把那當成一個很差
             # 的回答來評。這兩句處理這兩件事（#1140 2A）。
             "If the student spells a word out letter by letter (for example "
