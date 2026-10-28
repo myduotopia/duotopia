@@ -165,7 +165,8 @@ export function useExamImport(enabled: boolean) {
   }, []);
 
   /**
-   * 送一頁（擷取或標空白）。回傳 "stop" 代表整份不能再處理（已結束、找不到、網路中斷）。
+   * 送一頁（擷取或標空白），之後重抓整份並回傳；"stop" 代表整份不能再處理（已結束、找不到、
+   * 網路中斷）。
    * `skip` 收進這一輪不再自動送的頁（送不出去、仍是待處理）。
    */
   const sendOne = useCallback(
@@ -174,7 +175,7 @@ export function useExamImport(enabled: boolean) {
       pageNo: number,
       action: "auto" | "resend" | "sendBlank",
       skip?: Set<number>,
-    ): Promise<"ok" | "stop"> => {
+    ): Promise<ExamImportDetail | "stop"> => {
       setActivePage(pageNo);
       notePage(pageNo, null);
       try {
@@ -211,12 +212,11 @@ export function useExamImport(enabled: boolean) {
         if (mountedRef.current) setActivePage(null);
       }
       try {
-        await fetchDetail(id);
+        return await fetchDetail(id);
       } catch (err) {
         setRunError({ key: errorInfo(err).key });
         return "stop";
       }
-      return "ok";
     },
     [fetchDetail, notePage, renderLocal],
   );
@@ -241,7 +241,7 @@ export function useExamImport(enabled: boolean) {
           const result = await sendOne(id, next, "auto", skip);
           if (result === "stop") return;
           if (generation !== generationRef.current) return;
-          d = await fetchDetail(id);
+          d = result;
         }
       } catch (err) {
         if (generation === generationRef.current)
@@ -360,7 +360,7 @@ export function useExamImport(enabled: boolean) {
       try {
         const result = await sendOne(detail.id, pageNo, "resend");
         // 之前因故停下的頁（例如網路中斷時還沒送）接著送
-        if (result === "ok") {
+        if (result !== "stop") {
           runningRef.current = false;
           await runQueue(detail.id);
         }

@@ -30,6 +30,7 @@ const updateQuestion = vi.fn();
 const deleteQuestion = vi.fn();
 const updateQuestionGroup = vi.fn();
 const deleteQuestionGroup = vi.fn();
+const apiGet = vi.fn().mockResolvedValue({ items: [] });
 vi.mock("@/lib/api", () => ({
   apiClient: {
     listQuestions: (...args: unknown[]) => listQuestions(...args),
@@ -39,6 +40,8 @@ vi.mock("@/lib/api", () => ({
     deleteQuestionGroup: (...args: unknown[]) => deleteQuestionGroup(...args),
     listSources: vi.fn().mockResolvedValue({ items: [] }),
     createSource: vi.fn(),
+    // 上傳題本（#1112）：未完成的匯入列表
+    get: (...args: unknown[]) => apiGet(...args),
     listExamPoints: vi.fn().mockResolvedValue({
       items: [
         {
@@ -362,6 +365,48 @@ describe("QuestionBankTab", () => {
 
     await user.click(cloze);
     expect(onCreate).toHaveBeenCalledWith("cloze");
+  });
+
+  it("「新增題目」下拉：上傳題本在我的題庫可點、AI 出題停用；沒有未完成的匯入不顯示提示列（#1112）", async () => {
+    listQuestions.mockResolvedValue(respond([]));
+    const user = userEvent.setup();
+    renderTab(<QuestionBankTab scope="mine" />);
+    await screen.findByTestId("question-bank-empty");
+    expect(apiGet).toHaveBeenCalledWith("/api/question-bank/exam-imports");
+    expect(screen.queryByTestId("exam-import-banner")).toBeNull();
+
+    await user.click(screen.getByTestId("question-bank-add"));
+    const upload = await screen.findByTestId("question-bank-add-exam-import");
+    expect(upload.getAttribute("data-disabled")).toBeNull();
+    const ai = screen.getByTestId("question-bank-add-ai-generate");
+    expect(ai.getAttribute("data-disabled")).not.toBeNull();
+  });
+
+  it("有未完成的匯入時，我的題庫上方顯示提示列（#1112）", async () => {
+    listQuestions.mockResolvedValue(respond([]));
+    apiGet.mockResolvedValueOnce({
+      items: [
+        {
+          id: 5,
+          file_name: "paper.pdf",
+          file_hash: "a".repeat(64),
+          page_count: 16,
+          status: "processing",
+          settings: {},
+          tts_accents: ["American English"],
+          question_count: 30,
+          pages_done: 12,
+          pages_failed: 0,
+          pages_blank: 0,
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+    });
+    renderTab(<QuestionBankTab scope="mine" />);
+    expect(await screen.findByTestId("exam-import-banner")).toBeTruthy();
+    expect(screen.getByTestId("exam-banner-continue-5")).toBeTruthy();
+    expect(screen.getByTestId("exam-banner-abandon-5")).toBeTruthy();
   });
 
   it("沒傳 onCreateQuestion 時點選擇題顯示提示", async () => {
