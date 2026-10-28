@@ -40,6 +40,29 @@ const DEBUG = false; // 暫時關閉以便追蹤其他問題
 let isRedirectingToLogin = false;
 
 /**
+ * 401（token 過期／無效）→ 清登入資料並導回登入頁；`/auth/` 端點除外。
+ * `request` 與 `postForm` 共用（#1112）。
+ */
+function handleUnauthorized(status: number, endpoint: string): void {
+  if (status !== 401 || endpoint.includes("/auth/")) return;
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  // Preserve the in-progress URL across this hard navigation.
+  saveRedirectTarget(
+    window.location.pathname + window.location.search + window.location.hash,
+  );
+  clearAllAuth();
+  const loginPath = window.location.pathname.startsWith("/student")
+    ? "/student/login"
+    : "/teacher/login";
+  window.location.href = loginPath;
+  // Reset flag after a short delay so future 401s can still redirect
+  setTimeout(() => {
+    isRedirectingToLogin = false;
+  }, 3000);
+}
+
+/**
  * Custom API Error class for better error handling
  */
 export class ApiError extends Error {
@@ -372,26 +395,7 @@ class ApiClient {
             : `HTTP ${response.status} Error`;
 
         // Auto-logout on 401 (expired/invalid token)
-        if (response.status === 401 && !endpoint.includes("/auth/")) {
-          if (!isRedirectingToLogin) {
-            isRedirectingToLogin = true;
-            // Preserve the in-progress URL across this hard navigation.
-            saveRedirectTarget(
-              window.location.pathname +
-                window.location.search +
-                window.location.hash,
-            );
-            clearAllAuth();
-            const loginPath = window.location.pathname.startsWith("/student")
-              ? "/student/login"
-              : "/teacher/login";
-            window.location.href = loginPath;
-            // Reset flag after a short delay so future 401s can still redirect
-            setTimeout(() => {
-              isRedirectingToLogin = false;
-            }, 3000);
-          }
-        }
+        handleUnauthorized(response.status, endpoint);
 
         // Throw ApiError instead of generic Error
         throw new ApiError(response.status, detail, error);
@@ -493,6 +497,7 @@ class ApiClient {
    * multipart/form-data POST（上傳題本逐頁送頁圖，#1112）。不經 `request`：它固定加
    * `Content-Type: application/json`，會蓋掉 multipart 的 boundary。錯誤一樣丟 `ApiError`，
    * 保留後端結構化的 `detail`（例如 `{ error, message }`）；網路錯誤 status = 0。
+   * 401 與 `request` 相同，經 `handleUnauthorized` 導回登入頁。
    */
   async postForm<T>(endpoint: string, formData: FormData): Promise<T> {
     const currentToken = this.getToken();
@@ -520,6 +525,7 @@ class ApiClient {
         typeof error === "object" && error !== null && "detail" in error
           ? error.detail
           : `HTTP ${response.status} Error`;
+      handleUnauthorized(response.status, endpoint);
       throw new ApiError(response.status, detail, error);
     }
     return response.json() as Promise<T>;

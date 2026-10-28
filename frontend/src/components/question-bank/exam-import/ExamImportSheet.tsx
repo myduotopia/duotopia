@@ -4,6 +4,7 @@
  * 另外顯示「放棄這次匯入」的 ConfirmDialog（提示列與進度畫面共用）。
  *
  * 不新增路由、不塞進 QuestionSheet.tsx。狀態都在 `useExamImport`（關掉 Sheet 不停止處理）。
+ * 由「我的教材」頁（TeacherTemplatePrograms）在分頁外渲染，切到「教材」分頁也不卸載（C3 review 3）。
  */
 import { useTranslation } from "react-i18next";
 

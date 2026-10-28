@@ -10,8 +10,10 @@
  * - 送出前用同一張整頁圖判斷空白頁（`blankPage.ts`）。
  * - **檔案雜湊**：SHA-256（`crypto.subtle`）；多張照片依選取順序把內容串起來算。用來擋同一份
  *   題本重複匯入，以及「繼續」時確認老師重選的是同一份。
- * - PDF 和照片不能混選；最多 `EXAM_IMPORT_MAX_PAGES`（20）頁，超過整批擋下。錯誤丟
+ * - PDF 和照片不能混選；最多 `EXAM_IMPORT_MAX_PAGES`（20）頁，超過整批擋下。PDF 或任一張照片
+ *   原始檔超過 `MAX_SOURCE_FILE_BYTES`（100MB）也擋下（避免整個讀進記憶體）。錯誤丟
  *   `ClientError`（白話提示見 examImportErrors.ts）。
+ * - pdfjs 關掉 `isEvalSupported`（不讓 PDF 內容觸發 eval／new Function）。
  * 頁面只在需要時才畫（`render(n)`），畫過的結果由呼叫端快取。
  */
 import { ClientError } from "./examImportErrors";
@@ -19,6 +21,9 @@ import { isBlankPixels } from "./blankPage";
 
 export const EXAM_IMPORT_MAX_PAGES = 20;
 export const MAX_PAGE_BYTES = 9 * 1024 * 1024;
+/** 原始檔上限（PDF 一個或照片一張），單位 MB */
+export const MAX_SOURCE_FILE_MB = 100;
+export const MAX_SOURCE_FILE_BYTES = MAX_SOURCE_FILE_MB * 1024 * 1024;
 const PDF_TARGET_LONG_SIDE = 2000;
 const PDF_MAX_SCALE = 3;
 const PHOTO_MAX_LONG_SIDE = 2400;
@@ -117,8 +122,10 @@ async function pdfSource(file: File): Promise<PageSource> {
   let doc: Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>;
   try {
     // getDocument 會把 buffer 轉給 worker，給它一份複本
-    doc = await pdfjs.getDocument({ data: new Uint8Array(buffer.slice(0)) })
-      .promise;
+    doc = await pdfjs.getDocument({
+      data: new Uint8Array(buffer.slice(0)),
+      isEvalSupported: false,
+    }).promise;
   } catch {
     throw new ClientError("pdfUnreadable");
   }
@@ -197,6 +204,13 @@ async function imagesSource(files: File[]): Promise<PageSource> {
 /** 老師選的檔案 → 頁面來源。PDF 只能一個；照片可以多張；兩種不能混。 */
 export async function preparePageSource(files: File[]): Promise<PageSource> {
   if (files.length === 0) throw new ClientError("noFile");
+  const tooLarge = files.find((f) => f.size > MAX_SOURCE_FILE_BYTES);
+  if (tooLarge) {
+    throw new ClientError("fileTooLarge", {
+      name: tooLarge.name,
+      max: MAX_SOURCE_FILE_MB,
+    });
+  }
   const pdfs = files.filter(isPdf);
   if (pdfs.length > 0 && pdfs.length < files.length) {
     throw new ClientError("mixedFiles");

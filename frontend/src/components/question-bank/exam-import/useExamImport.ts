@@ -1,18 +1,24 @@
 /**
- * 上傳題本（#1112 C3）的狀態與流程：由 QuestionBankTab（「我的題庫」）呼叫一次，
- * 提示列（ExamImportBanner）與上傳／進度 Sheet（ExamImportSheet）共用這份狀態。
+ * 上傳題本（#1112 C3）的狀態與流程：由「我的教材」頁（TeacherTemplatePrograms）呼叫一次，
+ * 不放在題庫分頁裡——切到「教材」分頁時題庫分頁會卸載，處理要繼續（C3 review 3）。
+ * 提示列（ExamImportBanner，在題庫分頁）與上傳／進度 Sheet（ExamImportSheet，在頁面層）共用這份狀態。
  *
- * - **Sheet 開關與處理分開**：關掉 Sheet 不會停止處理（網頁開著就繼續送）；提示列顯示進度。
- *   網頁關掉才會停，下次從提示列「繼續」。
+ * - **Sheet 開關與處理分開**：關掉 Sheet、切到教材分頁都不會停止處理；提示列顯示進度。
+ *   關掉網頁或離開「我的教材」頁才會停，下次從提示列「繼續」。
+ * - **一次只處理一份**：處理中 `start` 直接丟 `anotherRunning`（不建立新匯入）；工具列的
+ *   「上傳題本」也依 `running` 停用並說明原因。
  * - **開始擷取**：建立匯入（409 重複 → 提示＋「打開那次匯入」；429 每天 1 本）→ 換成進度畫面 →
  *   依 `sendOrder.nextPageToSend` 一次送一頁：空白頁呼叫「標為空白頁」（不送 AI），其他頁送擷取；
  *   每送完一頁重抓整份（答案頁會回填別頁）。
  * - **錯誤**：409 PAGE_BUSY → 維持處理中，之後每 5 秒重抓，處理中超過 3 分鐘才給「重送這一頁」；
  *   PAGE_DONE → 重抓；RETRY_LIMIT → 標「這一頁讀不出來，請手動補題」；504／502 → 後端已把頁標失敗，
- *   重抓後有重送次數就給「重送這一頁」；400（圖片過大／格式）→ 這一頁留在待處理並標原因，這一輪
- *   不再自動送；CLOSED／404／網路中斷 → 停止並提示。
+ *   重抓後有重送次數就給「重送這一頁」；400（圖片過大／格式）、畫不出來 → 這一頁留在待處理並標原因，
+ *   這一輪不再自動送，進度畫面給「重送這一頁」（重畫一次再送）；CLOSED／404／網路中斷 → 停止並提示。
+ * - **停下後接著送**：沒在處理、有檔案、還有待處理的頁（`canResume`）時，進度畫面有「繼續處理」
+ *   （`resume`：清掉這一輪略過的頁、重新跑送出迴圈）。
  * - **繼續**（提示列）：還有待處理或失敗的頁才請老師重選檔案（雜湊、頁數相符才繼續，否則
- *   「不是同一份題本」）；全部處理完的直接看進度。空白頁「仍要送出這一頁」用後端存好的頁圖，不必重選。
+ *   「不是同一份題本」）；打開的是同一份、檔案還在，就直接接著送。全部處理完的直接看進度。
+ *   空白頁「仍要送出這一頁」用後端存好的頁圖，不必重選。
  * - **放棄**：`requestAbandon` 先記下要放棄哪一份，ExamImportSheet 顯示 ConfirmDialog，確認後
   `confirmAbandon` 才呼叫 DELETE（停止處理、刪草稿）。
  */
@@ -274,7 +280,7 @@ export function useExamImport(enabled: boolean) {
     setOpen(true);
   }, []);
 
-  /** 打開一份匯入的進度（提示列「繼續」、重複匯入的「打開那次匯入」） */
+  /** 打開一份匯入的進度（提示列「繼續」、重複匯入的「打開那次匯入」）；同一份、檔案還在就接著送 */
   const openImport = useCallback(
     async (id: number) => {
       if (runningRef.current && importIdRef.current !== id) {
@@ -293,20 +299,29 @@ export function useExamImport(enabled: boolean) {
       setView("progress");
       setOpen(true);
       setLoadingDetail(true);
+      let loaded = false;
       try {
         await fetchDetail(id);
+        loaded = true;
       } catch (err) {
         setRunError({ key: errorInfo(err).key });
       } finally {
-        setLoadingDetail(false);
+        if (mountedRef.current) setLoadingDetail(false);
       }
+      // 同一份、這次的檔案還在（例如網路中斷停下）：接著送沒處理的頁
+      if (loaded && sourceRef.current && !runningRef.current) void runQueue(id);
     },
-    [clearLocal, fetchDetail, t],
+    [clearLocal, fetchDetail, runQueue, t],
   );
 
-  /** 開始擷取：建立匯入後換成進度畫面並開始送。失敗丟出錯誤（上傳畫面顯示）。 */
+  /**
+   * 開始擷取：建立匯入後換成進度畫面並開始送。失敗丟出錯誤（上傳畫面顯示）。
+   * 已經有一份在處理：不建立新匯入，丟 `anotherRunning`。
+   */
   const start = useCallback(
     async ({ source, accents, settings }: StartInput) => {
+      // 上傳畫面會把錯誤顯示在送出鈕旁
+      if (runningRef.current) throw new ClientError("anotherRunning");
       const created = await examImportApi.create({
         file_name: source.fileName,
         file_hash: source.hash,
@@ -330,6 +345,12 @@ export function useExamImport(enabled: boolean) {
     [clearLocal, refreshList, runQueue],
   );
 
+  /** 「繼續處理」：停下（網路中斷、圖片被擋）後，清掉這一輪略過的頁，接著送 */
+  const resume = useCallback(() => {
+    if (!detail || !sourceRef.current || runningRef.current) return;
+    void runQueue(detail.id);
+  }, [detail, runQueue]);
+
   /** 「繼續」時重選檔案：雜湊與頁數相符才接上並接著送 */
   const attachFiles = useCallback(
     async (files: File[]) => {
@@ -351,12 +372,20 @@ export function useExamImport(enabled: boolean) {
     [clearLocal, detail, runQueue],
   );
 
-  /** 失敗頁（或處理中超過 3 分鐘的頁）重送；需要頁圖（沒有就先請老師重選檔案） */
+  /**
+   * 失敗頁（或處理中超過 3 分鐘的頁、被 400 擋下仍待處理的頁）重送；需要頁圖（沒有就先請老師
+   * 重選檔案）。本機畫好的頁圖丟掉重畫一次（畫壞、壓縮過大時有機會不同）。
+   */
   const resendPage = useCallback(
     async (pageNo: number) => {
       if (!detail || runningRef.current) return;
       runningRef.current = true;
       setRunning(true);
+      const cached = localRef.current.get(pageNo);
+      if (cached) {
+        URL.revokeObjectURL(cached.thumbUrl);
+        localRef.current.delete(pageNo);
+      }
       try {
         const result = await sendOne(detail.id, pageNo, "resend");
         // 之前因故停下的頁（例如網路中斷時還沒送）接著送
@@ -443,6 +472,13 @@ export function useExamImport(enabled: boolean) {
     !hasSource &&
     detail.pages.some((p) => p.status === "pending" || p.status === "failed");
 
+  // 停下了但還有待處理的頁、檔案也還在：給「繼續處理」
+  const canResume =
+    !!detail &&
+    hasSource &&
+    !running &&
+    detail.pages.some((p) => p.status === "pending");
+
   return {
     open,
     view,
@@ -456,10 +492,12 @@ export function useExamImport(enabled: boolean) {
     thumbs,
     hasSource,
     needsFile,
+    canResume,
     staleProcessing,
     openUpload,
     openImport,
     start,
+    resume,
     attachFiles,
     resendPage,
     sendBlankPage,

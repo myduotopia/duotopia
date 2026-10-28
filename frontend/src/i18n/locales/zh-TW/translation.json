@@ -6333,7 +6333,8 @@
       "menu": {
         "upload": "上傳題本",
         "uploadHint": "上傳考卷、習作（PDF 或照片），AI 一次擷取整份題目",
-        "uploadMineOnly": "目前只能在「我的題庫」上傳題本",
+        "uploadComingSoon": "即將推出",
+        "uploadBusy": "目前有一份題本正在處理，處理完才能再上傳",
         "aiGenerate": "AI 出題",
         "selfAuthored": "自己出題"
       },
@@ -6377,7 +6378,7 @@
         "count": "{{done}}／{{total}} 頁",
         "countWithBlank": "{{done}}／{{total}} 頁（含 {{blank}} 頁空白）",
         "failedCount": "{{count}} 頁失敗",
-        "keepOpen": "網頁開著才會繼續處理；關掉這個面板不會中斷，關掉網頁的話下次從「我的題庫」上方繼續。",
+        "keepOpen": "網頁開著才會繼續處理；關掉這個面板、切到「教材」分頁都不會中斷。關掉網頁或離開「我的教材」頁的話，下次從「我的題庫」上方繼續。",
         "allDone": "每一頁都處理過了，共擷取 {{count}} 題。",
         "pageNo": "第 {{n}} 頁",
         "answerPage": "答案頁",
@@ -6392,6 +6393,8 @@
         "sendBlank": "仍要送出這一頁",
         "resend": "重送這一頁",
         "manualFill": "這一頁讀不出來，請手動補題",
+        "stopped": "處理停下來了，還有 {{count}} 頁沒送出。",
+        "resume": "繼續處理",
         "reselect": "請再選一次〈{{name}}〉以繼續處理",
         "reselectPhotos": "如果是照片，請照第一次的順序選取。",
         "reselectButton": "選擇檔案",
@@ -6433,9 +6436,9 @@
         "retryEmpty": "AI 沒有讀到這一題，請手動補這一題。",
         "retryMerged": "跨頁題組裡找不到這一題，請手動補這一題。",
         "cardNotFound": "找不到這一題，漏掉的題請手動補。",
-        "badImage": "頁面圖片太大或格式不支援（只收 PNG、JPEG、WebP）。",
+        "badImage": "頁面圖片太大或格式不支援（只收 PNG、JPEG、WebP），這一頁先跳過。可以按「重送這一頁」再試一次；仍然不行就之後手動補題。",
         "invalid": "資料格式不正確，請重新整理後再試。",
-        "network": "網路連線中斷，請確認網路後再按「繼續」。",
+        "network": "網路連線中斷，請確認網路後再按「繼續處理」。",
         "unknown": "發生錯誤，請稍後再試。",
         "noFile": "請選擇檔案。",
         "mixedFiles": "PDF 和照片不能混在一起上傳，請只選一種。",
@@ -6443,13 +6446,15 @@
         "tooManyPages": "這個 PDF 有 {{count}} 頁，超過 {{max}} 頁上限，請拆成幾份再上傳。",
         "tooManyPhotos": "選了 {{count}} 張照片，超過 {{max}} 張上限，請分成幾份上傳。",
         "unsupportedFile": "只能上傳 PDF，或 PNG、JPEG、WebP 照片。",
+        "fileTooLarge": "〈{{name}}〉超過 {{max}}MB，請壓縮或拆成幾份再上傳。",
         "pdfUnreadable": "這個 PDF 打不開（可能有密碼或已損壞）。",
         "imageUnreadable": "這張照片讀不出來，請換一張再試。",
         "renderFailed": "這一頁轉成圖片時失敗，請重新選檔案再試。",
         "pageTooLarge": "這一頁的圖片壓縮後仍然太大，無法送出。",
         "hashUnavailable": "瀏覽器不支援檔案比對，請改用最新版的 Chrome、Edge 或 Safari。",
         "hashMismatch": "這不是同一份題本（內容或頁數不同）。請選第一次上傳的那個檔案。",
-        "needFile": "請先重新選擇檔案。"
+        "needFile": "請先重新選擇檔案。",
+        "anotherRunning": "目前有一份題本正在處理，請等它處理完再上傳。"
       }
     }
   },

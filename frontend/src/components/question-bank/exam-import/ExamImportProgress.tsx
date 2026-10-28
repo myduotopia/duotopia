@@ -6,7 +6,9 @@
  * - 每頁一行 Card：頁碼、小縮圖（本機畫好的頁圖，沒有就用後端存的頁圖）、Badge 狀態
  *   （等待中／處理中／完成·擷取 N 題／空白頁略過／失敗），答案頁另標一個 Badge
  * - 失敗頁「重送這一頁」（還有重送次數才有；用完改寫「這一頁讀不出來，請手動補題」）；處理中超過
- *   3 分鐘也給「重送這一頁」；空白頁略過「仍要送出這一頁」（用後端存好的頁圖）
+ *   3 分鐘、被擋下仍待處理（400 圖片過大／格式、畫不出來）的頁也給「重送這一頁」；空白頁略過
+ *   「仍要送出這一頁」（用後端存好的頁圖）
+ * - 處理停下（網路中斷、有頁被擋下）而還有待處理的頁：上方 Alert「處理停下來了」＋「繼續處理」
  * - 還有沒處理完的頁、但這次沒有檔案（從提示列繼續）→ 上方請老師「再選一次〈檔名〉」，照片要和
  *   第一次同樣順序；雜湊不符提示「不是同一份題本」
  * - 頁尾：放棄這次匯入（紅字次要鈕，ConfirmDialog 由外層處理）、關閉、「開始核對」（停用，即將推出）
@@ -46,6 +48,7 @@ export default function ExamImportProgress({
     thumbs,
     hasSource,
     needsFile,
+    canResume,
     staleProcessing,
   } = controller;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -140,7 +143,9 @@ export default function ExamImportProgress({
       );
     const canResend =
       p.status === "failed" ||
-      (p.status === "processing" && staleProcessing(p.page_no));
+      (p.status === "processing" && staleProcessing(p.page_no)) ||
+      // 被擋下（400、畫不出來）仍待處理、這一輪不再自動送的頁
+      (p.status === "pending" && !!pageNotes[p.page_no] && !running);
     if (!canResend) return null;
     if (p.resend_count >= pageLimit)
       return (
@@ -259,6 +264,27 @@ export default function ExamImportProgress({
                 {t(errorKey(attachError.key), attachError.params)}
               </p>
             )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {canResume && (
+        <Alert className="mb-3" data-testid="exam-progress-stopped">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {t("questionBank.examImport.progress.stopped", {
+                count: detail.pages.filter((p) => p.status === "pending")
+                  .length,
+              })}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              onClick={controller.resume}
+              data-testid="exam-progress-resume"
+            >
+              {t("questionBank.examImport.progress.resume")}
+            </Button>
           </AlertDescription>
         </Alert>
       )}
