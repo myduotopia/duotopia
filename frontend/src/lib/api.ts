@@ -489,6 +489,42 @@ class ApiClient {
     });
   }
 
+  /**
+   * multipart/form-data POST（上傳題本逐頁送頁圖，#1112）。不經 `request`：它固定加
+   * `Content-Type: application/json`，會蓋掉 multipart 的 boundary。錯誤一樣丟 `ApiError`，
+   * 保留後端結構化的 `detail`（例如 `{ error, message }`）；網路錯誤 status = 0。
+   */
+  async postForm<T>(endpoint: string, formData: FormData): Promise<T> {
+    const currentToken = this.getToken();
+    const headers: HeadersInit = {};
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    } catch (err) {
+      throw new ApiError(
+        0,
+        err instanceof Error ? err.message : "Network error occurred",
+        err,
+      );
+    }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const detail =
+        typeof error === "object" && error !== null && "detail" in error
+          ? error.detail
+          : `HTTP ${response.status} Error`;
+      throw new ApiError(response.status, detail, error);
+    }
+    return response.json() as Promise<T>;
+  }
+
   getCurrentUser() {
     const userStr = localStorage.getItem("user");
     return userStr ? JSON.parse(userStr) : null;
