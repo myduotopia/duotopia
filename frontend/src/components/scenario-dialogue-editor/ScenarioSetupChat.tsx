@@ -8,15 +8,21 @@
  * - 底部列（修正第 2 輪）：左＝「回上一步」，右＝目前這一步的主要動作（請 AI 寫情境／
  *   下一步／開始產生，同一時間只有一個主按鈕）。選項型步驟（需要情境嗎？、題目怎麼來？）
  *   沒有主要動作，右側只在已有題目時放「查看題目清單」。
+ *   已有題目、停在設定卡（從題目清單回來改設定）或全部答完時，主按鈕＝「查看題目清單」，
+ *   「再產一批」降為次要（第 3 輪）；從清單回來時自動捲到底部列。
+ * - 選項型步驟用直排選項卡（`ChoiceCards`，第 3 輪）：等寬、左對齊、粗體主句＋可選灰色
+ *   說明行（說明以 aria-describedby 掛上，按鈕名稱＝主句）；老師泡泡只顯示主句。
  * - 版面：對話區撐滿 sheet 寬，老師泡泡貼右（像一般聊天）；每一步的輸入區另限 `max-w-3xl`，
- *   免得文字框在寬螢幕被拉得太長。右側浮動工具列的留白由面板（`ScenarioDialoguePanel`）處理。
+ *   免得文字框在寬螢幕被拉得太長。sm 以上輸入區內縮 `pl-9` 對齊機器人泡泡，手機不內縮
+ *   （第 3 輪，免得欄位被擠窄）。情境框依內容自動長高，上限 60vh 之後內捲。
+ *   右側浮動工具列的留白由面板（`ScenarioDialoguePanel`）處理。
  * - 答非所問：AI 寫情境（訓練目標）與 AI 出題（出題方向）由同一次 AI 呼叫判斷，不可用就
  *   在該步驟顯示重問句（`goalReask` / `directionReask`），不產內容。
  * - 產生前的確認句帶出老師原話。
  *
  * state 全部由面板持有（存檔、題目清單都要用），這個元件只負責畫與回報老師的選擇。
  */
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -128,6 +134,58 @@ function TeacherBubble({
   );
 }
 
+/** 有灰色說明行的情境選項（其餘選項只有主句） */
+const MODE_HINTS: ReadonlySet<ScenarioMode> = new Set(["existing"]);
+
+interface ChoiceOption<T extends string> {
+  value: T;
+  /** 粗體主句 —— 也是按鈕的無障礙名稱，選完後老師泡泡只顯示這一句 */
+  label: string;
+  /** 選填的灰色說明行（以 aria-describedby 掛上，不併入按鈕名稱） */
+  hint?: string;
+}
+
+/**
+ * 選項型步驟的直排選項卡（第 3 輪）：等寬、左對齊、粗體主句＋可選灰色說明行。
+ * 選項文字變長後橫排按鈕會換行換得很亂，直排比較好讀。
+ * 「需要情境嗎？」與「題目怎麼來？」共用，兩步的外觀一致。
+ */
+function ChoiceCards<T extends string>({
+  options,
+  onChoose,
+}: {
+  options: ChoiceOption<T>[];
+  onChoose: (value: T) => void;
+}) {
+  const idPrefix = useId();
+  return (
+    <div className="flex max-w-xl flex-col gap-2 sm:pl-9">
+      {options.map((opt) => {
+        const hintId = opt.hint ? `${idPrefix}-${opt.value}` : undefined;
+        return (
+          <Button
+            key={opt.value}
+            variant="outline"
+            aria-label={opt.label}
+            aria-describedby={hintId}
+            onClick={() => onChoose(opt.value)}
+            className="h-auto w-full flex-col items-start justify-start gap-0.5 whitespace-normal px-4 py-3 text-left"
+          >
+            <span className="text-sm font-semibold text-gray-800">
+              {opt.label}
+            </span>
+            {opt.hint && (
+              <span id={hintId} className="text-xs font-normal text-gray-500">
+                {opt.hint}
+              </span>
+            )}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   const { t } = useTranslation();
   const { answers } = props;
@@ -139,6 +197,25 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
    */
   const modeReopenConfirmedRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  /** 情境框依內容自動長高（上限 60vh 由 CSS 限制，超過才內捲） */
+  const scenarioBoxRef = useRef<HTMLTextAreaElement>(null);
+  /** 底部列：從題目清單回到對話時捲到這裡，老師不必自己往下找按鈕 */
+  const bottomBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scenarioBoxRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [props.scenarioContent, answers.scenarioMode, answers.scenarioDone]);
+
+  // 只在掛載時跑：已有題目＝老師是從題目清單按「上一步」回來的
+  useEffect(() => {
+    if (props.hasQuestions) {
+      bottomBarRef.current?.scrollIntoView?.({ block: "end" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const steps = stepsFor(answers);
   const current = activeStep(answers);
@@ -198,22 +275,21 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
     switch (step) {
       case "mode":
         return (
-          <div className="flex flex-wrap gap-2 pl-9">
-            {SCENARIO_MODES.map((mode) => (
-              <Button
-                key={mode}
-                variant="outline"
-                onClick={() => chooseMode(mode)}
-              >
-                {t(`scenarioDialogue.setup.modes.${mode}`)}
-              </Button>
-            ))}
-          </div>
+          <ChoiceCards
+            options={SCENARIO_MODES.map((mode) => ({
+              value: mode,
+              label: t(`scenarioDialogue.setup.modes.${mode}`),
+              hint: MODE_HINTS.has(mode)
+                ? t(`scenarioDialogue.setup.modeHints.${mode}`)
+                : undefined,
+            }))}
+            onChoose={chooseMode}
+          />
         );
 
       case "goal":
         return (
-          <div className="max-w-3xl space-y-3 pl-9">
+          <div className="max-w-3xl space-y-3 sm:pl-9">
             {props.goalReask && <BotBubble>{props.goalReask}</BotBubble>}
             <Textarea
               value={props.goal}
@@ -261,7 +337,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
 
       case "scenario":
         return (
-          <div className="max-w-3xl space-y-3 pl-9">
+          <div className="max-w-3xl space-y-3 sm:pl-9">
             {answers.scenarioMode === "existing" && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -297,12 +373,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
               </div>
             )}
             <Textarea
+              ref={scenarioBoxRef}
               value={props.scenarioContent}
               onChange={(e) => props.onScenarioContentChange(e.target.value)}
               rows={6}
               placeholder={t("scenarioDialogue.placeholders.scenarioContent")}
               aria-label={t("scenarioDialogue.labels.scenarioText")}
-              className="min-h-0 resize-y"
+              className="min-h-0 max-h-[60vh] resize-y overflow-y-auto"
             />
             <ScenarioImageStrip actions={props.imageActions} />
           </div>
@@ -310,22 +387,18 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
 
       case "source":
         return (
-          <div className="flex flex-wrap gap-2 pl-9">
-            {QUESTION_SOURCES.map((source) => (
-              <Button
-                key={source}
-                variant="outline"
-                onClick={() => props.onChooseSource(source)}
-              >
-                {t(`scenarioDialogue.setup.sources.${source}`)}
-              </Button>
-            ))}
-          </div>
+          <ChoiceCards
+            options={QUESTION_SOURCES.map((source) => ({
+              value: source,
+              label: t(`scenarioDialogue.setup.sources.${source}`),
+            }))}
+            onChoose={props.onChooseSource}
+          />
         );
 
       case "direction":
         return (
-          <div className="max-w-3xl space-y-3 pl-9">
+          <div className="max-w-3xl space-y-3 sm:pl-9">
             {props.directionReask && (
               <BotBubble>{props.directionReask}</BotBubble>
             )}
@@ -341,9 +414,16 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         );
 
       case "settings":
-        return <div className="max-w-3xl pl-9">{props.settingsCard}</div>;
+        return <div className="max-w-3xl sm:pl-9">{props.settingsCard}</div>;
     }
   };
+
+  /**
+   * 「查看題目清單」是不是這一刻的主按鈕（第 3 輪）：全部答完（自己出題），或已經有題目、
+   * 停在設定卡（從題目清單回來改設定）。這時「再產一批」降為次要，同時只有一個主按鈕。
+   */
+  const listIsPrimary =
+    current === null || (current === "settings" && props.hasQuestions);
 
   /** 底部列右側：目前這一步的主要動作（同一時間只有一個主按鈕） */
   const renderPrimaryAction = () => {
@@ -381,6 +461,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
       case "settings":
         return (
           <Button
+            variant={listIsPrimary ? "outline" : "default"}
             onClick={props.onGenerate}
             disabled={props.generating || !!props.generateBlockedReason}
             title={props.generateBlockedReason ?? undefined}
@@ -432,7 +513,10 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
           );
         })}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-4">
+        <div
+          ref={bottomBarRef}
+          className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-4"
+        >
           {prev && current && (
             <Button
               variant="outline"
@@ -450,10 +534,12 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
                 {props.generateBlockedReason}
               </span>
             )}
+            {/* 主按鈕一律放最右：清單是主按鈕時，「再產一批」排在它左邊 */}
+            {listIsPrimary && renderPrimaryAction()}
             {/* 回到對話改設定後，不必重產也要能回題目清單（已產生的題目保留） */}
             {(props.hasQuestions || current === null) && (
               <Button
-                variant={current === null ? "default" : "outline"}
+                variant={listIsPrimary ? "default" : "outline"}
                 onClick={props.onViewList}
                 disabled={busy}
               >
@@ -461,7 +547,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             )}
-            {renderPrimaryAction()}
+            {!listIsPrimary && renderPrimaryAction()}
           </div>
           {current === "settings" && (
             <p className="w-full text-right text-xs text-gray-400">

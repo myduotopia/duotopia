@@ -4973,7 +4973,9 @@
       "replaceImage": "Replace",
       "removeImage": "Remove",
       "generateImage": "Generate",
-      "comingSoon": "Coming soon"
+      "comingSoon": "Coming soon",
+      "expandScenario": "Show all",
+      "collapseScenario": "Show less"
     },
     "hints": {
       "rateLimit": "Up to 5 regenerations per minute",
@@ -4990,7 +4992,9 @@
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",
       "generateAudio": "Generate audio",
-      "resetToGlobal": "Reset to the shared scoring criteria"
+      "resetToGlobal": "Reset to the shared scoring criteria",
+      "deleteDisabled": "Keep at least 1 question; this one can't be deleted",
+      "generateAudioDisabled": "Type the question first to generate audio"
     },
     "messages": {
       "generateFailed": "AI generation failed, please try again later",
@@ -5111,7 +5115,7 @@
       "extracting": "Extracting…",
       "uploadFile": "Upload image / PDF",
       "uploadHint": "JPG, PNG or PDF (up to 10MB). Text goes into the box below; pictures in the file are cropped into scenario images.",
-      "directionPlaceholder": "e.g. ask what students usually do on weekends, which sports they like",
+      "directionPlaceholder": "e.g. what they do on weekends, their views on phones in class",
       "materialRequired": "Please give a scenario (text or images) or a direction first, so the AI knows what to ask.",
       "reaskFallback": "I couldn't tell how to use that. Could you be more specific?",
       "reopenConfirmTitle": "Change an earlier answer?",
@@ -5120,19 +5124,22 @@
       "modeChangeConfirmTitle": "Change your answer?",
       "modeChangeConfirmDescription": "The scenario text and pictures you added will be cleared. Questions already generated are kept.",
       "q": {
-        "mode": "Do you need a scenario? If so, students read it before answering.",
+        "mode": "Do you want to give students a passage or pictures as the context for the questions?",
         "goal": "What do you want students to practise? Tell me the goal and pick a passage level, and I'll write a scenario.",
         "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5).",
         "scenarioExisting": "Paste the scenario below, or upload an image / PDF and I'll extract the text and pictures (up to 5 scenario images).",
         "source": "Where do the questions come from?",
-        "direction": "What part of the students' everyday life should I ask about?",
+        "direction": "What do you want to ask students? Give me a topic or direction and I'll write questions on it.",
         "settings": "OK. Check the question settings and press \"Start generating\".",
         "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\"."
       },
       "modes": {
-        "none": "No, ask about everyday life",
-        "existing": "I have one (paste / upload image or PDF)",
-        "ai": "Ask AI to write one"
+        "none": "No context, I just want to ask students questions",
+        "existing": "I have existing material to use as the context",
+        "ai": "I need AI to write a passage as the context"
+      },
+      "modeHints": {
+        "existing": "Upload text, images or a PDF"
       },
       "sources": {
         "manual": "I'll type them",

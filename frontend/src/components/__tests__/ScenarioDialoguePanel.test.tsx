@@ -1101,7 +1101,9 @@ describe("ScenarioDialoguePanel 單題情境圖片", () => {
     gotoList();
 
     upload(imageInputs(container)[0], "a.png");
-    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.copy")[0]);
+    fireEvent.click(
+      screen.getAllByTitle("contentEditor.tooltips.duplicate")[0],
+    );
 
     const shared = Array.from(container.querySelectorAll("img")).filter(
       (img) => img.getAttribute("src") === "blob:mock-1",
@@ -1138,7 +1140,9 @@ describe("ScenarioDialoguePanel 單題情境圖片", () => {
     gotoList();
 
     upload(imageInputs(container)[0], "a.png");
-    fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.copy")[0]);
+    fireEvent.click(
+      screen.getAllByTitle("contentEditor.tooltips.duplicate")[0],
+    );
     expect(container.querySelectorAll('img[src="blob:mock-1"]').length).toBe(2);
 
     fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.delete")[0]);
@@ -1935,5 +1939,128 @@ describe("ScenarioDialoguePanel 文字 AI 額度用完（#1025）", () => {
     expect(screen.getByPlaceholderText(K.rubricPlaceholder)).toHaveValue(
       "請用完整句子回答",
     );
+  });
+});
+
+describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
+  it("「需要情境嗎？」是直排選項卡：主句當按鈕名稱，說明行另外掛上", () => {
+    renderPanel();
+
+    const existing = screen.getByRole("button", { name: K.mode("existing") });
+    expect(existing).toHaveAccessibleDescription(
+      "scenarioDialogue.setup.modeHints.existing",
+    );
+    // 沒有說明的選項不掛說明
+    expect(
+      screen.getByRole("button", { name: K.mode("none") }),
+    ).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("「題目怎麼來？」用同一種選項卡", () => {
+    renderPanel();
+    chooseMode("none");
+
+    const manual = screen.getByRole("button", { name: K.source("manual") });
+    const ai = screen.getByRole("button", { name: K.source("ai") });
+    expect(manual.className).toBe(ai.className);
+    expect(manual).toHaveClass("w-full", "text-left");
+  });
+
+  it("選完後老師泡泡只顯示主句，不含說明行", () => {
+    renderPanel();
+    chooseMode("existing");
+
+    expect(screen.getByText(K.mode("existing"))).toBeInTheDocument();
+    expect(
+      screen.queryByText("scenarioDialogue.setup.modeHints.existing"),
+    ).toBeNull();
+  });
+
+  it("從題目清單回到設定卡：「查看題目清單」是主按鈕，「再產一批」是次要", async () => {
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    fireEvent.click(screen.getByText(K.back));
+
+    const view = screen.getByRole("button", { name: K.viewQuestions });
+    const again = screen.getByRole("button", { name: K.generateAnother });
+    // outline 變體帶 border-input；主按鈕（預設變體）沒有
+    expect(again).toHaveClass("border-input");
+    expect(view).not.toHaveClass("border-input");
+  });
+
+  it("題目卡的複製鍵有正確的提示文字", () => {
+    renderPanel();
+    goToListManually();
+
+    expect(
+      screen.getByTitle("contentEditor.tooltips.duplicate"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTitle("contentEditor.tooltips.copy")).toBeNull();
+  });
+
+  it("停用的刪除與生成語音會說明原因", () => {
+    renderPanel();
+    goToListManually();
+
+    // 只有 1 題：刪除停用，提示說明至少要留 1 題
+    const del = screen.getByTitle("scenarioDialogue.tooltips.deleteDisabled");
+    expect(del).toBeDisabled();
+    // 還沒打題目：生成語音停用，提示說明要先輸入題目
+    const audio = screen.getByTitle(
+      "scenarioDialogue.tooltips.generateAudioDisabled",
+    );
+    expect(audio).toBeDisabled();
+
+    type(K.questionPlaceholder, "What did you do last weekend?");
+    expect(
+      screen.getByTitle("scenarioDialogue.tooltips.generateAudio"),
+    ).not.toBeDisabled();
+
+    fireEvent.click(screen.getByText(K.addQuestion));
+    expect(
+      screen.getAllByTitle("contentEditor.tooltips.delete")[0],
+    ).not.toBeDisabled();
+  });
+
+  it("題目清單的情境文章：長文在窄寬度先收合，可展開", async () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "It is Monday morning. ".repeat(20));
+    fireEvent.click(screen.getByText(K.next));
+    chooseSource("manual");
+
+    const text = screen.getByTestId("reference-scenario-text");
+    expect(text).toHaveClass("line-clamp-4");
+    const toggle = screen.getByRole("button", {
+      name: "scenarioDialogue.buttons.expandScenario",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+    expect(text).not.toHaveClass("line-clamp-4");
+    expect(
+      screen.getByRole("button", {
+        name: "scenarioDialogue.buttons.collapseScenario",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("短的情境文章不收合、也沒有展開鍵", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "It is Monday.");
+    fireEvent.click(screen.getByText(K.next));
+    chooseSource("manual");
+
+    expect(screen.getByTestId("reference-scenario-text")).not.toHaveClass(
+      "line-clamp-4",
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "scenarioDialogue.buttons.expandScenario",
+      }),
+    ).toBeNull();
   });
 });

@@ -4,6 +4,9 @@
  * 支援兩種 variant：
  * - "card"：帶 checkbox 開關 + 摺疊面板（用於左側面板）
  * - "section"：純設定區塊（用於 dialog）
+ *
+ * card 變體在窄寬度（< sm，手機）時標題行可換行，語言下拉自成一整列、撐滿寬度
+ * （#1146 第 3 輪）；sm 以上外觀不變（內嵌標題行右側、最寬 140px）。
  */
 import { useTranslation } from "react-i18next";
 import { Globe } from "lucide-react";
@@ -88,7 +91,7 @@ export function BatchTranslateSettings({
     enabled && supportsCustomLanguage && selectedLanguage === "other";
   return (
     <div className="bg-green-50/60 rounded-lg border border-green-200">
-      <div className="flex items-center gap-2 p-2.5">
+      <div className="flex flex-wrap items-center gap-2 p-2.5 sm:flex-nowrap">
         <input
           type="checkbox"
           checked={enabled}
@@ -103,7 +106,7 @@ export function BatchTranslateSettings({
           <select
             value={selectedLanguage}
             onChange={(e) => onLanguageChange(e.target.value)}
-            className="ml-auto max-w-[140px] px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="ml-auto w-full sm:w-auto sm:max-w-[140px] px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           >
             <option value="">{t("contentEditor.labels.selectLanguage")}</option>
             {languages.map((lang) => (

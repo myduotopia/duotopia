@@ -683,11 +683,16 @@ const ScenarioDialoguePanel = forwardRef<
 
   return (
     /*
-      右側留白 pr-10：老師後台的數位教學工具列（DigitalTeachingToolbar）固定在視窗右緣、
+      右側留白 sm:pr-10：老師後台的數位教學工具列（DigitalTeachingToolbar）固定在視窗右緣、
       約 54px 寬、疊在 sheet 上面，所有寬度都會出現（可收合、可上下拖）。不留白的話，
       貼右的老師泡泡和題目卡右側的按鈕會被它蓋住（#1146 修正第 2 輪）。
+      手機（< sm）只留 pr-2（第 3 輪）：390px 寬再讓出 40px，題目卡與設定卡會被擠得太窄；
+      手機上工具列可收合成右緣小把手、也能上下拖開，蓋到時老師可以自己移開。
+
+      min-h-full（不是 h-full）＋ pb-6：內容比 sheet 高時要撐開捲動區，底部列下方才有留白，
+      不會貼著 sheet 底邊（第 3 輪）。
     */
-    <div className="flex flex-col h-full min-h-0 pr-10">
+    <div className="flex flex-col min-h-full pb-6 pr-2 sm:pr-10">
       {/* ===== 引導式對話（#1146，取代舊的 Step 1 設定頁）===== */}
       {step === 1 && (
         <ScenarioSetupChat

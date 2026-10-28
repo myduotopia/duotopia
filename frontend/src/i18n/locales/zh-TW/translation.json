@@ -4992,7 +4992,9 @@
       "replaceImage": "替換",
       "removeImage": "移除",
       "generateImage": "AI 生成",
-      "comingSoon": "即將推出"
+      "comingSoon": "即將推出",
+      "expandScenario": "展開全文",
+      "collapseScenario": "收合"
     },
     "hints": {
       "rateLimit": "每分鐘最多重新生成 5 次",
@@ -5009,7 +5011,9 @@
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
       "generateAudio": "生成語音",
-      "resetToGlobal": "改回沿用整體評分標準"
+      "resetToGlobal": "改回沿用整體評分標準",
+      "deleteDisabled": "至少要保留 1 題，無法刪除",
+      "generateAudioDisabled": "請先輸入題目，才能生成語音"
     },
     "messages": {
       "generateFailed": "AI 產生失敗，請稍後再試",
@@ -5130,7 +5134,7 @@
       "extracting": "擷取中…",
       "uploadFile": "上傳圖片／PDF",
       "uploadHint": "支援 JPG、PNG、PDF（10MB 以內）。文字放進下面的情境框，檔案裡的圖會自動裁成情境圖",
-      "directionPlaceholder": "例如：問學生週末通常做什麼、喜歡什麼運動",
+      "directionPlaceholder": "例如：週末做什麼、對手機進教室的看法",
       "materialRequired": "請先提供情境（文字或情境圖）或出題方向，AI 才知道要問什麼",
       "reaskFallback": "我沒看懂這段要怎麼用，可以再具體一點嗎？",
       "reopenConfirmTitle": "要改前面的回答嗎？",
@@ -5139,19 +5143,22 @@
       "modeChangeConfirmTitle": "要改選嗎？",
       "modeChangeConfirmDescription": "已填的情境文章與情境圖會清空，已產生的題目保留。",
       "q": {
-        "mode": "需要情境嗎？有情境的話，學生會先看情境再回答問題。",
+        "mode": "需要提供給學生一段文章或圖片，作為問答情境嗎？",
         "goal": "這次想訓練學生什麼？告訴我訓練目標、選好文章難度，我來寫一篇情境。",
         "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張）。",
         "scenarioExisting": "請把情境貼在下面，或上傳圖片／PDF 讓我擷取文字和圖片（情境圖最多 5 張）。",
         "source": "題目怎麼來？",
-        "direction": "想問學生哪方面的日常生活？",
+        "direction": "想問學生什麼呢？說個主題或方向，我來照著出題",
         "settings": "好的，請確認出題設定，按「開始產生」我就開始出題。",
         "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。"
       },
       "modes": {
-        "none": "不需要，問日常生活",
-        "existing": "我有現成的（貼上／上傳圖片或 PDF）",
-        "ai": "請 AI 幫我寫"
+        "none": "我不需要情境，想直接問學生問題",
+        "existing": "有既有的教材作為情境",
+        "ai": "我需要 AI 幫我生成文章作為情境"
+      },
+      "modeHints": {
+        "existing": "上傳文字、圖片或 PDF 檔"
       },
       "sources": {
         "manual": "我自己輸入",

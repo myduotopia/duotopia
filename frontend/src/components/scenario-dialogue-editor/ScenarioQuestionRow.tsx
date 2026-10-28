@@ -5,6 +5,10 @@
  * - `SortableRow`：題目、翻譯、參考答案／補充說明、單題評分標準（預設＋覆寫）、題目圖、題目語音。
  * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標）。
  * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：題目清單左欄也會用到。
+ *
+ * 窄寬度（< sm，第 3 輪）：題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
+ * 輸入佔整列，不會超出卡片；評分準則標頭可換行。sm 以上維持圖左、欄位右。
+ * 停用的刪除（至少留 1 題）與生成語音（還沒輸入題目）用 `title` 說明原因。
  */
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -345,7 +349,7 @@ export function SortableRow({
             type="button"
             onClick={onDuplicate}
             className="p-1 rounded hover:bg-gray-200"
-            title={t("contentEditor.tooltips.copy")}
+            title={t("contentEditor.tooltips.duplicate")}
           >
             <Copy className="h-4 w-4 text-gray-600" />
           </button>
@@ -354,7 +358,11 @@ export function SortableRow({
             onClick={onDelete}
             disabled={!canDelete}
             className="p-1 rounded hover:bg-gray-200 disabled:hover:bg-transparent"
-            title={t("contentEditor.tooltips.delete")}
+            title={
+              canDelete
+                ? t("contentEditor.tooltips.delete")
+                : t("scenarioDialogue.tooltips.deleteDisabled")
+            }
           >
             <Trash2
               className={`h-4 w-4 ${canDelete ? "text-gray-600" : "text-gray-300"}`}
@@ -363,7 +371,7 @@ export function SortableRow({
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <ScenarioImageSlot
           imageUrl={row.imageUrl}
           loading={imageLoading}
@@ -407,7 +415,12 @@ export function SortableRow({
                       ? "text-blue-600 hover:bg-blue-100"
                       : "text-gray-600 bg-yellow-100 hover:bg-yellow-200"
                   }`}
-                  title={t("scenarioDialogue.tooltips.generateAudio")}
+                  title={
+                    // 還沒輸入題目而停用時要說原因；產生中的暫時停用不必
+                    !audioLoading && !row.question.trim()
+                      ? t("scenarioDialogue.tooltips.generateAudioDisabled")
+                      : t("scenarioDialogue.tooltips.generateAudio")
+                  }
                 >
                   {audioLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -498,8 +511,8 @@ export function SortableRow({
 
             {/* 評分準則：接在題目下方，單題設定一路往下讀 */}
             <div className="bg-white rounded-md border border-gray-200 divide-y divide-gray-100">
-              <div className="flex items-center justify-between gap-2 px-2.5 py-2">
-                <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2.5 py-2">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <Sparkles className="h-3 w-3 text-gray-500" />
                   <span className="text-xs font-semibold text-gray-600">
                     {t("scenarioDialogue.labels.rubric")}
@@ -510,14 +523,14 @@ export function SortableRow({
                   <button
                     type="button"
                     onClick={resetToGlobal}
-                    className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                    className="flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-blue-600 hover:underline"
                     title={t("scenarioDialogue.tooltips.resetToGlobal")}
                   >
                     <RotateCcw className="h-3 w-3" />
                     {t("scenarioDialogue.labels.overridden")}
                   </button>
                 ) : (
-                  <span className="text-xs text-gray-400">
+                  <span className="whitespace-nowrap text-xs text-gray-400">
                     {t("scenarioDialogue.labels.inherited")}
                   </span>
                 )}
@@ -530,7 +543,7 @@ export function SortableRow({
                   onTenseChange={overrideTense}
                   onVoiceChange={overrideVoice}
                 />
-                <label className="flex flex-col gap-1 flex-1 min-w-[140px]">
+                <label className="flex flex-col gap-1 flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[140px]">
                   <span className="text-xs text-gray-500">
                     {t("scenarioDialogue.rubricPresets.keywords")}
                   </span>

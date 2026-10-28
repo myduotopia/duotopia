@@ -5,6 +5,9 @@
  * 支援兩種 variant：
  * - "card"：帶 checkbox 開關 + 摺疊面板（用於左側面板）
  * - "section"：純設定區塊，不帶開關（用於 dialog 內已有外部 checkbox 的場景）
+ *
+ * card 變體在窄寬度（< sm，手機）時三個下拉改兩欄：口音佔一整列（選項字最長），
+ * 性別／語速並排（#1146 第 3 輪）；sm 以上外觀不變（三欄一行）。
  */
 import { useTranslation } from "react-i18next";
 import { Volume2 } from "lucide-react";
@@ -131,8 +134,8 @@ export function BatchTTSSettings({
         </span>
       </div>
       {enabled && (
-        <div className="grid grid-cols-3 gap-1.5 px-2.5 pb-2.5">
-          <div>
+        <div className="grid grid-cols-2 gap-1.5 px-2.5 pb-2.5 sm:grid-cols-3">
+          <div className="col-span-2 sm:col-span-1">
             <label className={compactLabel}>
               {t("contentEditor.ttsSettings.accent")}
             </label>
