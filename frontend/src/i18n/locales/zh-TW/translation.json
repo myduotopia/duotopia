@@ -6355,6 +6355,7 @@
         "pageCount": "共 {{count}} 頁",
         "settingsHint": "整份設定只填一次，會套用到這份題本的全部題目。",
         "grade": "年段",
+        "gradeEmpty": "請拖曳選擇年段",
         "source": "考題來源",
         "program": "教材與單元（選填）",
         "visibility": "是否公開",

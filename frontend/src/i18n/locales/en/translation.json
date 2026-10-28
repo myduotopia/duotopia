@@ -6313,6 +6313,7 @@
         "pageCount_other": "{{count}} pages",
         "settingsHint": "Fill in these settings once; they apply to every question in this paper.",
         "grade": "Grade range",
+        "gradeEmpty": "Drag to choose a grade range",
         "source": "Question source",
         "program": "Program and lesson (optional)",
         "visibility": "Sharing",

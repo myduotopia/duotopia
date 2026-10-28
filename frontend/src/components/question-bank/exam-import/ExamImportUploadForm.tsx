@@ -4,7 +4,8 @@
  * 寬版 Sheet 內：左邊上傳區、右邊整份設定，頁尾「開始擷取」。
  * - 上傳區：PDF 一個，或照片多張（PNG／JPEG／WebP），兩種不能混；最多 20 頁（上傳區直接寫出）；
  *   選好後顯示「共 N 頁」。拆頁、雜湊在 `pageSource.ts`。
- * - 整份設定（每份只填一次）：年段（GradeRangeSlider，必選）、考題來源（CreatableCombobox，必填、
+ * - 整份設定（每份只填一次）：年段（GradeRangeSlider，必選；還沒選時顯示「請拖曳選擇年段」，
+ *   不顯示「不限」）、考題來源（CreatableCombobox，必填、
  *   只取一個）、教材與單元（ProgramLessonPicker，選填）、公開（VisibilitySelect，必選、無預設）、
  *   朗讀口音（Checkbox 多選、至少一種、**預設全不選、不記預設**）。
  * - 沒填完時「開始擷取」停用，旁邊寫出還缺哪幾項。
@@ -244,6 +245,7 @@ export default function ExamImportUploadForm({
                 value={grade}
                 onChange={setGrade}
                 disabled={submitting}
+                emptyLabel={t("questionBank.examImport.upload.gradeEmpty")}
                 data-testid="exam-upload-grade"
               />
             </div>

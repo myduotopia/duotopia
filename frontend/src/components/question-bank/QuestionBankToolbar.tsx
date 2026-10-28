@@ -7,7 +7,8 @@
  * 「新增題目 ▽」三條路徑（#1112 C3，docs/design/question-bank-exam-import.md 第一節）：
  * 1. 上傳題本（第一項，附一行說明）→ `onUploadExam`。停用時小字說明原因：沒傳（機構題庫，C4 開放）
  *    →「即將推出」；`uploadExamBusy`（已有一份題本正在處理）→「目前有一份題本正在處理」
- * 2. AI 出題（#1114）：停用，標「即將推出」
+ * 2. AI 出題（#1114）：停用，標「即將推出」（不換行：選單寬 w-72，英文
+ *    「AI-generated questions Coming soon」放得下一行）
  * 3. 分隔線下「自己出題」：現有題型清單（單一題型畫面 QuestionSheet）
  */
 
@@ -131,7 +132,7 @@ export default function QuestionBankToolbar({
                 <ChevronDown size={14} />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuContent align="end" className="w-72">
               <DropdownMenuItem
                 disabled={uploadDisabledReason !== null}
                 onSelect={() => onUploadExam?.()}
@@ -153,6 +154,7 @@ export default function QuestionBankToolbar({
               {/* AI 出題（#1114）：還沒做，停用＋「即將推出」 */}
               <DropdownMenuItem
                 disabled
+                className="whitespace-nowrap"
                 data-testid="question-bank-add-ai-generate"
               >
                 {t("questionBank.examImport.menu.aiGenerate")}
