@@ -2,6 +2,11 @@
 Classroom-School Relationship API Routes
 
 Manages the linking of classrooms to schools within the organization hierarchy.
+
+批次端點（權限皆為 has_school_materials_permission，全有或全無）：
+- POST /api/schools/{school_id}/classrooms/batch-grade：只改年級（#1097）
+- POST /api/schools/{school_id}/classrooms/batch-update：名稱／年級（機構後台「批次編輯」，#1139）；
+  名稱去頭尾空白後 1–100 字（ClassroomName），回傳 {updated:[{id,name,grade}], count}
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -32,6 +37,7 @@ from routers.schemas.classroom import (
     SchoolClassroomUpdate,
     AssignTeacherRequest,
     BatchClassroomGradeRequest,
+    SchoolBatchClassroomUpdateRequest,
 )
 from utils.classroom_grade import grade_to_storage, parse_grade
 
@@ -581,6 +587,65 @@ async def batch_set_school_classroom_grades(
         ],
         "count": len(payload.items),
     }
+
+
+@router.post("/api/schools/{school_id}/classrooms/batch-update")
+async def batch_update_school_classrooms(
+    school_id: uuid.UUID,
+    payload: SchoolBatchClassroomUpdateRequest,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """
+    Batch edit name / grade of classrooms in a school (#1139).
+    權限、404、上限與全有或全無規則比照 batch-grade：
+    任一班級不在本校（或已刪除）→ 404，全部通過才單次 commit。
+    停用（未刪除）的班級也可編輯。
+    """
+    if not has_school_materials_permission(teacher.id, school_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to update classroom",
+        )
+
+    classroom_ids = [item.classroom_id for item in payload.items]
+
+    classrooms = (
+        db.query(Classroom)
+        .join(ClassroomSchool, ClassroomSchool.classroom_id == Classroom.id)
+        .filter(
+            ClassroomSchool.school_id == school_id,
+            ClassroomSchool.is_active.is_(True),
+            Classroom.id.in_(classroom_ids),
+            Classroom.deleted_at.is_(None),
+        )
+        .all()
+    )
+    classroom_map = {c.id: c for c in classrooms}
+    if len(classroom_map) != len(classroom_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Classroom not found in this school",
+        )
+
+    for item in payload.items:
+        classroom = classroom_map[item.classroom_id]
+        if item.name is not None:
+            classroom.name = item.name
+        if item.grade is not None:
+            classroom.grade = grade_to_storage(item.grade)
+
+    # commit 前組好回應，避免 commit 後屬性過期而逐列重新查詢
+    updated = [
+        {
+            "id": classroom_map[item.classroom_id].id,
+            "name": classroom_map[item.classroom_id].name,
+            "grade": parse_grade(classroom_map[item.classroom_id].grade),
+        }
+        for item in payload.items
+    ]
+    db.commit()
+    return {"updated": updated, "count": len(updated)}
 
 
 @router.put("/api/classrooms/{classroom_id}/teacher", response_model=ClassroomInfo)

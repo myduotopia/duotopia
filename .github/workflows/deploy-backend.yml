@@ -325,6 +325,8 @@ jobs:
               'exam_points', 'exam_point_aliases', 'question_sources',
               'question_groups', 'question_group_segments', 'questions', 'question_options',
               'question_exam_points', 'question_source_links', 'question_program_links',
+              -- 上傳題本匯入草稿與用量（#1112，JWT auth 業務表）
+              'exam_imports', 'exam_import_pages', 'exam_import_usage',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',

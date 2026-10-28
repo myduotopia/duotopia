@@ -29,6 +29,38 @@ RECORDING_CONTENT_TYPE_TO_EXT = {
 }
 
 
+#: 錄音長度與檔案大小的上限 —— **依練習模式**，集中在這裡。
+#:
+#: 原本是寫死的「30 秒 / 2MB」，那是為「朗讀一個單字或一個例句」訂的。情境對話
+#: （#1140）是開放式口說，學生要講完整的回答，30 秒遠遠不夠 —— 夥伴在 staging 就撞到
+#: 了：超過 30 秒的錄音被上傳端擋下回 400，而前端把它顯示成「AI 建議暫時拿不到」。
+#:
+#: **只放寬情境對話，其他模式照舊** —— 把全站的上限一起改掉，等於為了一個模式改變
+#: 所有模式的行為（以及成本）。
+#:
+#: 檔案大小要跟著放寬：Safari 用 AAC 128kbps 錄 2 分鐘約 1.9MB，剛好貼著舊的 2MB
+#: 上限，不放寬就只是把 400 從「太長」換成「太大」。
+MAX_DURATION_SECONDS_DEFAULT = 30
+MAX_FILE_SIZE_DEFAULT = 2 * 1024 * 1024  # 2MB
+
+_LIMITS_BY_PRACTICE_MODE = {
+    # 情境對話：2 分鐘（#1140，使用者定的），檔案給到 8MB 留餘裕
+    "scenario_dialogue": (120, 8 * 1024 * 1024),
+}
+
+
+def recording_limits_for_mode(practice_mode: Optional[str]) -> tuple:
+    """``practice_mode`` → ``(最長秒數, 最大位元數)``；未知模式回預設。
+
+    未知模式走預設而不是丟錯：這條路徑是學生在交作業，不該因為多了一個還沒登記的
+    模式就讓他交不出來。
+    """
+    return _LIMITS_BY_PRACTICE_MODE.get(
+        (practice_mode or "").strip(),
+        (MAX_DURATION_SECONDS_DEFAULT, MAX_FILE_SIZE_DEFAULT),
+    )
+
+
 class AudioUploadService:
     def __init__(self):
         # GCS 設定
@@ -118,6 +150,8 @@ class AudioUploadService:
         assignment_id: int = None,
         student_id: int = None,
         user_agent: Optional[str] = None,
+        max_duration_seconds: int = MAX_DURATION_SECONDS_DEFAULT,
+        max_file_size: Optional[int] = None,
     ) -> str:
         """
         上傳音檔到 GCS
@@ -188,17 +222,23 @@ class AudioUploadService:
                     ),
                 )
 
-            if len(content) > self.max_file_size:
+            size_limit = (
+                max_file_size if max_file_size is not None else self.max_file_size
+            )
+            if len(content) > size_limit:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File too large. Maximum size: {self.max_file_size / 1024 / 1024}MB",
+                    detail=f"File too large. Maximum size: {size_limit / 1024 / 1024}MB",
                 )
 
-            # 檢查錄音長度
-            if duration_seconds > 30:
+            # 檢查錄音長度（上限依練習模式，見 recording_limits_for_mode）
+            if duration_seconds > max_duration_seconds:
                 raise HTTPException(
                     status_code=400,
-                    detail="Recording too long. Maximum duration: 30 seconds",
+                    detail=(
+                        "Recording too long. Maximum duration: "
+                        f"{max_duration_seconds} seconds"
+                    ),
                 )
 
             # 生成唯一檔名（包含 content_id 和 item_index 以便追蹤）

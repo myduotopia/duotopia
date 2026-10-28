@@ -139,6 +139,13 @@ class ScenarioStudentFeedbackService:
                 "the student's answer to it word-for-word: an open-ended speaking "
                 "question has many correct answers, and a different answer is not a "
                 "wrong answer.",
+                "",
+                # #1140：夥伴 staging 回報 `many food` 被放過關。上面那段「不要逐字比對」是
+                # 為了防止「答得跟範例不同就被判低分」（#864 規格 3-3），但模型把它從
+                # 「內容可以不同」推廣成「用詞錯了也算對」。這一句把兩件事切開。
+                "That freedom is about WHAT the student chooses to say, not about "
+                "HOW CORRECTLY they say it. Saying something different from the "
+                "example is fine; saying it ungrammatically is not.",
             ]
 
         if keywords:
@@ -163,13 +170,58 @@ class ScenarioStudentFeedbackService:
             '  "suggestion": "..."',
             "}",
             "",
-            'Use "great" when the answer already does what the question asked. Use '
-            '"improve" when it can be clearer, more complete, or closer to the '
-            "target language features.",
+            'Use "great" only when the answer does what the question asked '
+            "AND has no language error a teacher would correct. If the meaning "
+            'comes across but the English is wrong, that is still "improve" '
+            "— a clear meaning does not excuse a wrong form.",
+            "",
+            "Check these, in this order of importance:",
+            "- countable vs uncountable nouns (much / many / a lot of, and "
+            "whether the noun takes -s)",
+            "- verb tense and subject-verb agreement",
+            "- word choice and collocation (does an English speaker say it "
+            "that way?)",
+            "- articles (a / an / the) and plurals",
+            "- prepositions",
+            "",
+            # #1140：夥伴回報的案例直接寫成範例 —— 抽象規則模型容易打折，
+            # 具體對照（much food / many foods / many food）效果穩定得多。
+            'Worked example of the standard: for "I bought a lot of food", '
+            '"much food" is correct, "many foods" is correct when the '
+            'student means many KINDS of food, and "many food" is wrong — '
+            'food is uncountable, so it cannot take "many" without the '
+            'plural. An answer like that is "improve", with the correct form '
+            "named in `comment`.",
+            "",
+            "Name the exact word or phrase that was wrong and the correct form. "
+            "Put **one** main error in `comment` — this is spoken practice, not a "
+            "proofreading exercise, and the student should leave knowing one thing "
+            "to fix. The corrected sentence in `suggestion` can carry any further "
+            "fixes, so `comment` does not have to list them all. Do not invent "
+            "errors: if the sentence is correct English for the student's level, "
+            'say so and use "great".',
+            "",
+            # PR #1152 review 第 2 點：輸入是**口說**的錄音，不是寫出來的句子。
+            # 嚴格度拉高之後，缺標點、沒大寫這類逐字稿本來就有的特徵很容易被當成錯誤
+            # 回報給學生 —— 那對口說練習毫無意義，而且會讓學生覺得被刁難。
+            "The student is SPEAKING, not writing. Never treat missing punctuation, "
+            "capitalisation, or filler words (um, uh, like) as errors. Judge only "
+            "what would still be wrong if a fluent speaker said the same sentence "
+            "out loud.",
+            "",
             "",
             f"Write `comment` in {language}, in two short sentences at most, speaking "
             "to the student directly. Say what worked before what to change, and name "
             "one concrete thing to try. Never mention scores, grades or percentages.",
+            "",
+            # #1140 / PR #1152 review：原本寫「最多兩個錯」＋「評語最多兩句」＋「先講
+            # 優點」，三者塞不進去，模型只能自己亂取捨 —— 而最可能被犧牲的正是錯誤
+            # 細節，也就是這次要修的東西。改成「評語一個主錯、其餘交給建議說法」。
+            # 這段原本放在前面、前向參照「下面的兩句限制」，移到這裡才讀得順。
+            "When there is an error, the SECOND of those two sentences must be the "
+            "correction — do not spend both sentences on praise. If praise plus "
+            "correction will not fit, keep the correction and make the praise "
+            "shorter.",
             "",
             "Put a full sentence the student could say in `suggestion`, in English, "
             'when verdict is "improve". It must answer this question, use the asked-for '
@@ -178,6 +230,18 @@ class ScenarioStudentFeedbackService:
             "",
             "If the recording has no speech, or you cannot make out any words, use "
             'verdict "improve" and say so kindly in `comment`.',
+            "",
+            # #1140 2A：學生看不懂某個字時，會把它**逐字母拼出來**問 AI
+            # （例如把 "spot" 唸成 S-P-O-T），而模型既聽不懂拼讀，也會把那當成一個很差
+            # 的回答來評。這兩句處理這兩件事（#1140 2A）。
+            "If the student spells a word out letter by letter (for example "
+            '"S-P-O-T"), understand it as that word.',
+            "",
+            "Sometimes the student is not answering at all — they are asking what a "
+            "word means, or asking for help. When that happens, do not judge their "
+            'answer: use verdict "improve", tell them what the word means in one '
+            "short sentence, and invite them to try answering. Leave `suggestion` "
+            "out in that case.",
         ]
         return "\n".join(lines)
 

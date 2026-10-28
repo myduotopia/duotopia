@@ -136,9 +136,11 @@ export interface BatchClassroomGradeResponse {
   count: number;
 }
 
-/** 批次更新個人班級（年級／等級／啟用狀態）的單筆內容（#1097）；每筆至少帶一個欄位 */
+/** 批次更新個人班級（名稱／年級／等級／啟用狀態）的單筆內容（#1097；名稱 #1139）；每筆至少帶一個欄位 */
 export interface BatchClassroomUpdateItem {
   classroom_id: number;
+  /** 去頭尾空白後 1–100 字（後端再驗一次） */
+  name?: string;
   grade?: number;
   level?: string;
   is_active?: boolean;
@@ -147,11 +149,37 @@ export interface BatchClassroomUpdateItem {
 export interface BatchClassroomUpdateResponse {
   updated: {
     id: number;
+    name: string;
     grade: number | null;
     level: string | null;
     is_active: boolean;
   }[];
   count: number;
+}
+
+/** 批次編輯學校班級（名稱／年級，#1139）的單筆內容；每筆至少帶一個欄位 */
+export interface SchoolBatchClassroomUpdateItem {
+  classroom_id: number;
+  name?: string;
+  grade?: number;
+}
+
+export interface SchoolBatchClassroomUpdateResponse {
+  updated: { id: number; name: string; grade: number | null }[];
+  count: number;
+}
+
+/** 批次編輯 AI 助手（#1139）：送出視窗裡那幾班的當下名稱／年級＋最近 10 輪對話＋本次指示 */
+export interface ClassroomBatchEditAiRequest {
+  classrooms: { id: number; name: string; grade: number | null }[];
+  history: { role: "user" | "assistant"; content: string }[];
+  instruction: string;
+}
+
+/** AI 建議：只含名稱／年級，後端已過濾不在清單的 id、超長名稱、越界年級 */
+export interface ClassroomBatchEditAiResponse {
+  reply: string;
+  changes: { id: number; name?: string; grade?: number }[];
 }
 
 export interface LoginRequest {
@@ -873,7 +901,7 @@ class ApiClient {
     });
   }
 
-  /** 批次更新個人班級的年級／等級／啟用狀態（#1097）；全有或全無，最多 200 筆 */
+  /** 批次更新個人班級的名稱／年級／等級／啟用狀態（#1097；名稱 #1139）；全有或全無，最多 200 筆 */
   async batchUpdateClassrooms(
     items: BatchClassroomUpdateItem[],
   ): Promise<BatchClassroomUpdateResponse> {
@@ -908,6 +936,29 @@ class ApiClient {
     return this.request(`/api/schools/${schoolId}/classrooms/batch-grade`, {
       method: "POST",
       body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次編輯學校班級的名稱／年級（#1139）；全有或全無，最多 200 筆 */
+  async batchUpdateSchoolClassrooms(
+    schoolId: string,
+    items: SchoolBatchClassroomUpdateItem[],
+  ): Promise<SchoolBatchClassroomUpdateResponse> {
+    return this.request(`/api/schools/${schoolId}/classrooms/batch-update`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次編輯 AI 助手（#1139）：只限平台管理員；只回建議、不寫入資料庫；signal 用來「停止」 */
+  async suggestClassroomBatchEdit(
+    payload: ClassroomBatchEditAiRequest,
+    signal?: AbortSignal,
+  ): Promise<ClassroomBatchEditAiResponse> {
+    return this.request("/api/classrooms/batch-edit/ai-suggest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
     });
   }
 

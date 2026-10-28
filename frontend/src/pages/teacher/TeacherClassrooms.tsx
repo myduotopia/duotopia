@@ -3,7 +3,10 @@
  *
  * 班級清單（桌機表格、手機卡片）＋等級／年級／狀態篩選與搜尋、排序、建立班級、列內直接編輯（編輯中不顯示批次操作列）。
  * 勾選班級後底部浮現標準批次操作列 BulkActionBar（components/shared，#1097、#1116）：
- * 「調整年級」「調整等級」同一樣式（半透明白底、不分主次）、停用／啟用為開關；
+ * 「調整年級」「調整等級」「批次編輯」同一樣式（半透明白底、不分主次）、停用／啟用為開關；
+ * 「批次編輯」開 BatchEditClassroomsDialog，一次改多班名稱＋年級，走 batch-update（#1139），
+ * 失敗訊息用批次編輯專屬文字（batchGradeErrorMessageKey(…, "batchEdit")）；
+ * 平台管理員在批次編輯視窗另有 AI 助手面板（useClassroomRenameAssistantSlot，#1139 第二階段）；
  * 浮動列出現時列表底部預留 pb-24。按鈕層級見 docs/design/ui-style-guide.md 第 3 節。
  */
 import React, {
@@ -55,6 +58,7 @@ import { CloudDownload } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   GRADE_FILTER_ALL,
+  batchGradeErrorMessageKey,
   formatGradeLabel,
   isValidGrade,
   matchesGradeFilter,
@@ -71,6 +75,9 @@ import { GradeFilterSelect } from "@/components/classroom/GradeFilterSelect";
 import { MissingGradeBanner } from "@/components/classroom/MissingGradeBanner";
 import { MissingGradeDialog } from "@/components/classroom/MissingGradeDialog";
 import { AdjustGradeDialog } from "@/components/classroom/AdjustGradeDialog";
+import { BatchEditClassroomsDialog } from "@/components/classroom/BatchEditClassroomsDialog";
+import { useClassroomRenameAssistantSlot } from "@/components/classroom/ClassroomRenameAssistantPanel";
+import type { BatchEditUpdateItem } from "@/components/classroom/batchEditClassrooms";
 import {
   AdjustLevelDialog,
   type LevelUpdateItem,
@@ -133,6 +140,9 @@ export default function TeacherClassrooms() {
   // 開啟確認時凍結「會變更的班級數」，關閉動畫期間不重算
   const [bulkStatusCount, setBulkStatusCount] = useState(0);
   const [showAdjustLevel, setShowAdjustLevel] = useState(false);
+  const [showBatchEdit, setShowBatchEdit] = useState(false);
+  // 批次編輯的 AI 助手面板：只有平台管理員拿得到（#1139 D3）
+  const renderRenameAssistant = useClassroomRenameAssistantSlot<number>();
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createFormData, setCreateFormData] = useState<{
@@ -393,6 +403,24 @@ export default function TeacherClassrooms() {
     );
     if (ok) {
       setShowAdjustLevel(false);
+      setSelectedIds(new Set());
+    }
+    return ok;
+  };
+
+  // 批次編輯名稱＋年級（#1139）：成功先關對話框再清勾選；失敗視窗不關、保留輸入。
+  // 403／404／422 經 batchGradeErrorMessageKey(…, "batchEdit") 顯示批次編輯文字
+  // （403 → 權限提示，其餘 → 一般失敗）
+  const handleBatchEdit = async (
+    items: BatchEditUpdateItem<number>[],
+  ): Promise<boolean> => {
+    const ok = await statusActions.runBatchUpdate(
+      items.map(({ id, name, grade }) => ({ classroom_id: id, name, grade })),
+      "classroomGrade.batchEdit.saveSuccess",
+      (error) => batchGradeErrorMessageKey(error, "batchEdit"),
+    );
+    if (ok) {
+      setShowBatchEdit(false);
       setSelectedIds(new Set());
     }
     return ok;
@@ -866,6 +894,12 @@ export default function TeacherClassrooms() {
             label: t("classroomGrade.level.button"),
             icon: <Signal className="h-4 w-4" aria-hidden="true" />,
             onClick: () => setShowAdjustLevel(true),
+          },
+          {
+            key: "batch-edit",
+            label: t("classroomGrade.batchEdit.button"),
+            icon: <Edit className="h-4 w-4" aria-hidden="true" />,
+            onClick: () => setShowBatchEdit(true),
           },
           // 停用／啟用開關：勾選的班全部啟用才是「開」（軌道寫停用，撥 → 全部停用）；
           // 有任一停用就是「關」（寫啟用，撥 → 全部啟用）。撥動走既有確認流程。
@@ -1476,6 +1510,13 @@ export default function TeacherClassrooms() {
         onOpenChange={setShowAdjustGrade}
         classrooms={selectedClassrooms}
         onConfirm={handleAdjustGrades}
+      />
+      <BatchEditClassroomsDialog
+        open={showBatchEdit}
+        onOpenChange={setShowBatchEdit}
+        classrooms={selectedClassrooms}
+        onSave={handleBatchEdit}
+        renderSidePanel={renderRenameAssistant}
       />
       <AdjustLevelDialog
         open={showAdjustLevel}

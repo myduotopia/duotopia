@@ -2,7 +2,7 @@
 
 涵蓋：
 - utils.classroom_grade.classroom_display_name 組合班名規則
-- POST /api/teachers/classrooms/batch-update（年級／等級／啟用狀態）
+- POST /api/teachers/classrooms/batch-update（年級／等級／啟用狀態；回傳每列含 name，#1139）
 - 老師 DELETE 設 deleted_at；老師列表排除已刪除、照常列出停用班級並回傳 is_active
 - 學生端（validate、my-classrooms、me、作業列表）看不到停用／已刪除班級，並回傳 grade
 - 公開 teacher-classrooms 回傳 grade、排除停用／已刪除
@@ -344,6 +344,7 @@ class TestTeacherBatchUpdate:
         assert response.status_code == 200
         assert response.json()["updated"][0] == {
             "id": c1.id,
+            "name": c1.name,
             "grade": 4,
             "level": "A2",
             "is_active": False,

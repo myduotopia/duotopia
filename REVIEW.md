@@ -12,7 +12,7 @@
   - `components/ui/`（shadcn）：Accordion、Alert、Badge、Button、Calendar、Card、Checkbox、Dialog、DropdownMenu、Input、Label、Popover、Progress、ScrollArea、Select、Separator、Sheet、Switch、Table、Tabs、TagInput、Textarea、Tooltip
   - `components/shared/`：AIScoreDisplay、AudioPlayer、AudioRecorder、BatchPasteArea、BatchTranslateSettings、BatchTTSSettings、BatchWorkPanel、BatchSettingCard、**BulkActionBar**（列表勾選後的批次操作列）、CreatableCombobox、ExamPointPicker、GradeRangeSlider、LabeledSwitch、MagicPasteDialog、MagicPasteInput、MaterialsPageTabs、MaterialsToolbar、ProgramFolderView、ProgramLessonPicker、ProgramTreeView、RecursiveTreeAccordion、RefSaveButton、ResourceFolderView、SchoolProgramCreateDialog、TTSSettingsDialog、VisibilitySelect
   - `components/activities/shared/`：ActivitySettingsPanel、CardNavArrow、ClozeBlankText、CountdownRing、DrawingCanvas、HandwritingCanvas、MultipleChoiceOptions、PreviewDemoDoneView、PrintPdfSheet、ProgressIndicator、PronunciationScoreChart、QuizAnswerInput、QuizOptionChip、QuizReviewView、ScoreOverlay、VirtualKeyboard、WordActivityCard、WordCard、WordChoicePanel、WordSelectionOptionButton
-  - 其他跨功能元件：AssignmentDialog、ProgramVisibilitySelector、AdjustGradeDialog、GradeFilterSelect、GradeSelect、LevelBadge、MissingGradeBanner、MissingGradeDialog、ConfirmDialog、OneCampusBindSection、StudentLoginQRShare、ZoomableImage、ImageCarousel
+  - 其他跨功能元件：AssignmentDialog、ProgramVisibilitySelector、AdjustGradeDialog、BatchEditClassroomsDialog、GradeFilterSelect、GradeSelect、LevelBadge、MissingGradeBanner、MissingGradeDialog、ConfirmDialog、OneCampusBindSection、StudentLoginQRShare、ZoomableImage、ImageCarousel
 - 改了標準元件的外觀或用法：提醒作者確認產品負責人已同意，並同步更新 `ui-style-guide.md` 第 6 節。
 
 **顏色**
