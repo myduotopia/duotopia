@@ -22,6 +22,10 @@
  * 批次刪除含題組（deleteQuestionGroup）、列尾「刪除題組」Dialog 確認；批次編輯／派發只對單題。
  * 題型篩選與題組列的題型顯示「閱讀題組」（groupTypeLabel），新增清單仍顯示「閱讀測驗」。
  *
+ * 上傳題本（#1112 C3，只在 scope="mine"）：最上方未完成匯入提示列（ExamImportBanner）、
+ * 「新增題目 ▽ → 上傳題本」開上傳／進度 Sheet（ExamImportSheet）；狀態在 useExamImport
+ * （exam-import/ 資料夾）。機構題庫的「上傳題本」停用。
+ *
  * 拆檔（#1082）：QuestionBankToolbar（工具列）、QuestionRow（單題列）、GroupRow（題組列）、
  * QuestionBankPagination（分頁列）、listCells（共用格子）。此檔只持有狀態與資料流。
  */
@@ -53,6 +57,10 @@ import QuestionRow, { type RowEdit } from "./QuestionRow";
 import GroupRow from "./GroupRow";
 import { examPointsFromQuestion } from "./questionDraft";
 import { makeCreateSource, sourceToItem } from "./sourcesCombobox";
+import ExamImportBanner from "./exam-import/ExamImportBanner";
+import ExamImportSheet from "./exam-import/ExamImportSheet";
+import { useExamImport } from "./exam-import/useExamImport";
+import type { Program } from "@/types";
 
 function editFromQuestion(q: Question): RowEdit {
   return {
@@ -78,6 +86,8 @@ export interface QuestionBankTabProps {
   onDispatch?: (questions: Question[]) => void;
   /** 勾選的題型全相同時的批次編輯（開編輯面板多張卡） */
   onBulkEdit?: (questions: Question[]) => void;
+  /** 上傳題本的「教材與單元」選單用（#1112） */
+  programs?: Program[];
 }
 
 export default function QuestionBankTab({
@@ -90,8 +100,11 @@ export default function QuestionBankTab({
   refreshKey = 0,
   onDispatch,
   onBulkEdit,
+  programs = [],
 }: QuestionBankTabProps) {
   const { t } = useTranslation();
+  // 上傳題本只在「我的題庫」（提示列也只在這裡顯示）
+  const examImport = useExamImport(scope === "mine");
   // 列表列：單題 + 題組列（#1082）。題組列可勾選、快速改公開、批次刪除；
   // 批次編輯／派發仍只對單題（題組整組操作在面板內）
   const [items, setItems] = useState<QuestionListItem[]>([]);
@@ -480,10 +493,12 @@ export default function QuestionBankTab({
 
   return (
     <div className="space-y-4 pb-24" data-testid="question-bank-tab">
+      {scope === "mine" && <ExamImportBanner controller={examImport} />}
       <QuestionBankToolbar
         scope={scope}
         canCreate={canCreate}
         onCreate={handleCreate}
+        onUploadExam={scope === "mine" ? examImport.openUpload : undefined}
         typeLabel={typeLabel}
         filterTypeLabel={groupTypeLabel}
         search={search}
@@ -675,6 +690,10 @@ export default function QuestionBankTab({
         }}
         busy={bulkBusy}
       />
+
+      {scope === "mine" && (
+        <ExamImportSheet controller={examImport} programs={programs} />
+      )}
     </div>
   );
 }

@@ -1,8 +1,13 @@
 /**
  * 題庫列表工具列（#1082 自 QuestionBankTab 拆出）。
  *
- * 新增題目 ▽（題型清單）、搜尋（題幹＋來源）、題型下拉、考點多選（OR）、只看自己的。
+ * 新增題目 ▽、搜尋（題幹＋來源）、題型下拉、考點多選（OR）、只看自己的。
  * 狀態都由 QuestionBankTab 持有（URL query），這裡只渲染與回呼。
+ *
+ * 「新增題目 ▽」三條路徑（#1112 C3，docs/design/question-bank-exam-import.md 第一節）：
+ * 1. 上傳題本（第一項，附一行說明）→ `onUploadExam`；沒傳（機構題庫）時停用並說明原因
+ * 2. AI 出題（#1114）：停用，標「即將推出」
+ * 3. 分隔線下「自己出題」：現有題型清單（單一題型畫面 QuestionSheet）
  */
 
 import { useTranslation } from "react-i18next";
@@ -22,6 +27,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ExamPointPicker from "@/components/shared/ExamPointPicker";
@@ -56,6 +63,8 @@ export interface QuestionBankToolbarProps {
   scope: "mine" | "organization";
   canCreate: boolean;
   onCreate: (type: QuestionType) => void;
+  /** 上傳題本（#1112）；沒傳＝停用（目前只開放在「我的題庫」） */
+  onUploadExam?: () => void;
   typeLabel: (type: QuestionType) => string;
   /** 題型篩選的顯示名稱（題組類題型顯示「閱讀題組」） */
   filterTypeLabel: (type: QuestionType) => string;
@@ -75,6 +84,7 @@ export default function QuestionBankToolbar({
   scope,
   canCreate,
   onCreate,
+  onUploadExam,
   typeLabel,
   filterTypeLabel,
   search,
@@ -111,7 +121,41 @@ export default function QuestionBankToolbar({
                 <ChevronDown size={14} />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem
+                disabled={!onUploadExam}
+                onSelect={() => onUploadExam?.()}
+                className="flex-col items-start gap-0.5"
+                title={
+                  onUploadExam
+                    ? undefined
+                    : t("questionBank.examImport.menu.uploadMineOnly")
+                }
+                data-testid="question-bank-add-exam-import"
+              >
+                <span className="font-medium">
+                  {t("questionBank.examImport.menu.upload")}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {onUploadExam
+                    ? t("questionBank.examImport.menu.uploadHint")
+                    : t("questionBank.examImport.menu.uploadMineOnly")}
+                </span>
+              </DropdownMenuItem>
+              {/* AI 出題（#1114）：還沒做，停用＋「即將推出」 */}
+              <DropdownMenuItem
+                disabled
+                data-testid="question-bank-add-ai-generate"
+              >
+                {t("questionBank.examImport.menu.aiGenerate")}
+                <span className="ml-2 text-xs text-gray-400">
+                  {t("questionBank.comingSoon")}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-normal text-gray-500">
+                {t("questionBank.examImport.menu.selfAuthored")}
+              </DropdownMenuLabel>
               {CREATE_TYPES.map(({ type, enabled }) => (
                 <DropdownMenuItem
                   key={type}

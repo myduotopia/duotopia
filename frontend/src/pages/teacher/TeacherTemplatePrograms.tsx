@@ -809,6 +809,7 @@ function TeacherTemplateProgramsInner() {
           <QuestionBankTab
             scope="mine"
             refreshKey={questionRefreshKey}
+            programs={programs}
             onCreateQuestion={(type) =>
               setQuestionDialog({
                 open: true,
