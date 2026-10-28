@@ -9,6 +9,7 @@
  * 窄寬度（< sm，第 3 輪）：題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
  * 輸入佔整列，不會超出卡片；評分準則標頭可換行。sm 以上維持圖左、欄位右。
  * 停用的刪除（至少留 1 題）與生成語音（還沒輸入題目）用 `title` 說明原因。
+ * 複製鍵在題數已滿時停用，`title` 改成上限說明（`duplicateBlockedReason`，第 3b 輪）。
  */
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -221,6 +222,8 @@ interface RowProps {
   imageLoading: boolean;
   onChange: (patch: Partial<ScenarioDialogueRow>) => void;
   onDuplicate: () => void;
+  /** 不能複製時的原因（例如題數已滿）；null＝可以複製 */
+  duplicateBlockedReason: string | null;
   onDelete: () => void;
   onRegenerate: () => void;
   onPickImage: (file: File) => void;
@@ -246,6 +249,7 @@ export function SortableRow({
   imageLoading,
   onChange,
   onDuplicate,
+  duplicateBlockedReason,
   onDelete,
   onRegenerate,
   onPickImage,
@@ -348,10 +352,15 @@ export function SortableRow({
           <button
             type="button"
             onClick={onDuplicate}
-            className="p-1 rounded hover:bg-gray-200"
-            title={t("contentEditor.tooltips.duplicate")}
+            disabled={!!duplicateBlockedReason}
+            className="p-1 rounded hover:bg-gray-200 disabled:hover:bg-transparent"
+            title={
+              duplicateBlockedReason ?? t("contentEditor.tooltips.duplicate")
+            }
           >
-            <Copy className="h-4 w-4 text-gray-600" />
+            <Copy
+              className={`h-4 w-4 ${duplicateBlockedReason ? "text-gray-300" : "text-gray-600"}`}
+            />
           </button>
           <button
             type="button"

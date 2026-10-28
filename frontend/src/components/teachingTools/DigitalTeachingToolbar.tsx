@@ -1,3 +1,12 @@
+/**
+ * DigitalTeachingToolbar — 老師端右側浮動的數位教具列（計時器、骰子、猜拳、學生登入分享、
+ * 說明），可上下拖曳、可收起成右緣的小把手。
+ *
+ * 工具列是全站浮動的，常常疊在 Radix 的 Sheet／Dialog 上方。Radix 在 document 上聽
+ * pointerdown 判斷「點到外面」就關閉，所以**會在 sheet 開著時被按的控制項**（拖動把手、
+ * 收起／展開鈕、分享、說明）都在 onPointerDown 呼叫 stopPropagation，免得一按就把底下的
+ * sheet 關掉（#1146 第 3b 輪補上把手與收起／展開鈕）。pointerdown 同時涵蓋滑鼠與觸控。
+ */
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Timer,
@@ -252,6 +261,7 @@ const DigitalTeachingToolbar: React.FC = () => {
         {/* Drag handle */}
         <div
           className="flex justify-center py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors"
+          onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={handleToolbarDrag}
           onTouchStart={handleToolbarDrag}
           title="拖曳上下移動"
@@ -346,6 +356,7 @@ const DigitalTeachingToolbar: React.FC = () => {
 
         <div className="mx-1 border-t border-gray-200" />
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={toggleCollapse}
           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-all duration-300"
           aria-label="Collapse toolbar"
@@ -362,6 +373,7 @@ const DigitalTeachingToolbar: React.FC = () => {
             top: `${toolbarY ?? window.innerHeight / 2}px`,
             transform: "translateY(-50%)",
           }}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={toggleCollapse}
           aria-label="Expand toolbar"
         >

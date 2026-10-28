@@ -18,7 +18,8 @@
  *   - 左欄 280px（sticky）是對話結果的**唯讀對照**：情境內容、情境圖、作答指引、整體
  *     評分標準，外加「回對話修改」。
  *   - 右欄最上面是**標題**（AI 寫情境或出題時建議，老師可改），其下是可拖曳排序的
- *     題目卡、新增題目、題數計數、上一步（回對話）。
+ *     題目卡、新增題目、題數計數、上一步（回對話）。題數滿 10 題時新增鍵與每張卡的
+ *     複製鍵都停用並說明上限（`hints.maxReached`）。
  *
  * 兩個畫面共用同一份 state，只是切換顯示 —— 回對話改設定不會弄丟已產生的題目。
  * 編輯既有內容時直接落在題目清單；按「上一步」回到對話時，已答步驟由已存資料還原
@@ -844,6 +845,13 @@ const ScenarioDialoguePanel = forwardRef<
                                 ...prev.slice(index + 1),
                               ],
                         )
+                      }
+                      duplicateBlockedReason={
+                        rows.length >= MAX_ITEMS
+                          ? t("scenarioDialogue.hints.maxReached", {
+                              max: MAX_ITEMS,
+                            })
+                          : null
                       }
                       onDelete={() => deleteRow(row.id)}
                       onRegenerate={() => regenerateRow(row.id)}

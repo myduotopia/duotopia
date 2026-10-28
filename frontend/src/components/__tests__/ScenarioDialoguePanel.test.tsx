@@ -1985,9 +1985,67 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
 
     const view = screen.getByRole("button", { name: K.viewQuestions });
     const again = screen.getByRole("button", { name: K.generateAnother });
-    // outline 變體帶 border-input；主按鈕（預設變體）沒有
-    expect(again).toHaveClass("border-input");
-    expect(view).not.toHaveClass("border-input");
+    // 主按鈕＝預設變體（藍底）；次要＝outline 變體（灰框、不帶藍底）。
+    // 不能用 shadcn 原本的 border-input 判斷：本專案 outline 變體是 border-gray-300。
+    expect(view).toHaveClass("bg-blue-600");
+    expect(again).toHaveClass("border-gray-300");
+    expect(again).not.toHaveClass("bg-blue-600");
+  });
+
+  it("從題目清單回到設定卡：主按鈕在最右，「再產一批」排在它左邊", async () => {
+    renderPanel();
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    fireEvent.click(screen.getByText(K.back));
+
+    const view = screen.getByRole("button", { name: K.viewQuestions });
+    const again = screen.getByRole("button", { name: K.generateAnother });
+    // 同一排裡 DOM 順序就是左到右
+    expect(
+      again.compareDocumentPosition(view) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(view.parentElement?.lastElementChild).toBe(view);
+  });
+
+  it("從題目清單回到對話時，自動捲到底部列", async () => {
+    const original = Element.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderPanel();
+      fillRequiredForGenerate();
+      await runGenerate(K.generate);
+      scrollIntoView.mockClear();
+
+      fireEvent.click(screen.getByText(K.back));
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "end" });
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("還沒有題目時：設定卡的「開始產生」是主按鈕，沒有「查看題目清單」", () => {
+    renderPanel();
+    fillRequiredForGenerate();
+
+    const start = screen.getByRole("button", { name: K.generate });
+    expect(start).toHaveClass("bg-blue-600");
+    expect(screen.queryByRole("button", { name: K.viewQuestions })).toBeNull();
+  });
+
+  it("滿 10 題時題目卡的複製鍵停用，並說明已達上限", () => {
+    renderPanel();
+    goToListManually();
+    for (let i = 0; i < 9; i++) {
+      fireEvent.click(screen.getByText(K.addQuestion));
+    }
+
+    const copies = screen.getAllByTitle("scenarioDialogue.hints.maxReached");
+    expect(copies).toHaveLength(10);
+    for (const btn of copies) expect(btn).toBeDisabled();
+    expect(screen.queryByTitle("contentEditor.tooltips.duplicate")).toBeNull();
   });
 
   it("題目卡的複製鍵有正確的提示文字", () => {

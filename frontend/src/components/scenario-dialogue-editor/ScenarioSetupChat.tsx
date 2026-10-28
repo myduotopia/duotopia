@@ -14,7 +14,8 @@
  *   說明行（說明以 aria-describedby 掛上，按鈕名稱＝主句）；老師泡泡只顯示主句。
  * - 版面：對話區撐滿 sheet 寬，老師泡泡貼右（像一般聊天）；每一步的輸入區另限 `max-w-3xl`，
  *   免得文字框在寬螢幕被拉得太長。sm 以上輸入區內縮 `pl-9` 對齊機器人泡泡，手機不內縮
- *   （第 3 輪，免得欄位被擠窄）。情境框依內容自動長高，上限 60vh 之後內捲。
+ *   （第 3 輪，免得欄位被擠窄）。情境框依內容自動長高，上限 60vh 之後內捲
+ *   （高度含上下邊框；只在內容變時重算，不掛 ResizeObserver，第 3b 輪）。
  *   右側浮動工具列的留白由面板（`ScenarioDialoguePanel`）處理。
  * - 答非所問：AI 寫情境（訓練目標）與 AI 出題（出題方向）由同一次 AI 呼叫判斷，不可用就
  *   在該步驟顯示重問句（`goalReask` / `directionReask`），不產內容。
@@ -22,7 +23,14 @@
  *
  * state 全部由面板持有（存檔、題目清單都要用），這個元件只負責畫與回報老師的選擇。
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -202,11 +210,16 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   /** 底部列：從題目清單回到對話時捲到這裡，老師不必自己往下找按鈕 */
   const bottomBarRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // 用 useLayoutEffect：在瀏覽器畫出來之前量好高度，打字時不會先閃一下捲軸。
+  // scrollHeight 不含邊框，而 Textarea 是 border-box，所以要補上
+  // offsetHeight - clientHeight（上下邊框），否則末行會被切掉、提早出現捲軸。
+  // 刻意只在內容（或情境框重新出現）時重算，不掛 ResizeObserver：視窗寬度改變造成的
+  // 換行差異，老師下一次打字就會修正，不值得為此多一個常駐監聽。
+  useLayoutEffect(() => {
     const el = scenarioBoxRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   }, [props.scenarioContent, answers.scenarioMode, answers.scenarioDone]);
 
   // 只在掛載時跑：已有題目＝老師是從題目清單按「上一步」回來的
