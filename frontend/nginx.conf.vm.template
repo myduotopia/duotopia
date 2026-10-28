@@ -14,6 +14,21 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
 
+    # .mjs (ES module) must be served as JavaScript (#1112): nginx:alpine's
+    # mime.types has no mjs entry, so it falls back to application/octet-stream,
+    # and with nosniff the browser refuses to load it as a module worker (e.g.
+    # the pdf.js worker). The build already renames .mjs assets to .js; this is
+    # a safety net. `types {}` is scoped to this location only (never at server
+    # level, which would wipe every other MIME type). add_header does NOT inherit
+    # into a location that has its own add_header, so re-declare security headers.
+    location ~* \.mjs$ {
+        types { }
+        default_type text/javascript;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+    }
+
     # Gzip compression
     gzip on;
     gzip_vary on;

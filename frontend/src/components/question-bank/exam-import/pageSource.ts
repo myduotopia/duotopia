@@ -14,8 +14,13 @@
  *   原始檔超過 `MAX_SOURCE_FILE_BYTES`（100MB）也擋下（避免整個讀進記憶體）。錯誤丟
  *   `ClientError`（白話提示見 examImportErrors.ts）。
  * - pdfjs 關掉 `isEvalSupported`（不讓 PDF 內容觸發 eval／new Function）。
+ * - pdf.js worker 用 `?url` 引入；build 時 vite 設定把 .mjs 產出改名成 .js（nginx:alpine 不認得
+ *   .mjs，會回 octet-stream 讓 module worker 載入失敗）。
+ * - PDF 開不了時依 pdfjs 例外分流（`pdfErrorKey`）：有密碼／損壞或不是 PDF／元件載入失敗（請重新
+ *   整理），並 `console.error` 原始錯誤。動態載入 pdfjs 也在同一段 try 裡。
  * 頁面只在需要時才畫（`render(n)`），畫過的結果由呼叫端快取。
  */
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ClientError } from "./examImportErrors";
 import { isBlankPixels } from "./blankPage";
 
@@ -112,22 +117,41 @@ async function finishPage(canvas: HTMLCanvasElement): Promise<RenderedPage> {
   throw new ClientError("pageTooLarge");
 }
 
+/**
+ * pdfjs 開檔失敗 → errors 底下的 key（依例外的 `name` 分流）：
+ * 有密碼 → `pdfPassword`；損壞或不是 PDF → `pdfInvalid`；其他（pdfjs 元件或 worker 載不進來、
+ * 網路中斷…）→ `pdfLoaderFailed`（請重新整理）。
+ */
+export function pdfErrorKey(err: unknown): string {
+  const name =
+    err && typeof err === "object" && "name" in err
+      ? String((err as { name: unknown }).name)
+      : "";
+  if (name === "PasswordException") return "pdfPassword";
+  if (name === "InvalidPDFException" || name === "MissingPDFException") {
+    return "pdfInvalid";
+  }
+  return "pdfLoaderFailed";
+}
+
 async function pdfSource(file: File): Promise<PageSource> {
   const buffer = await file.arrayBuffer();
   const hash = await sha256Hex([buffer]);
-  const pdfjs = await import("pdfjs-dist");
-  const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url"))
-    .default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  let doc: Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>;
+  let doc: PDFDocumentProxy;
   try {
+    // 動態載入 pdfjs 與 worker 也放在 try 裡：載不進來一樣要給白話提示
+    const pdfjs = await import("pdfjs-dist");
+    const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url"))
+      .default;
+    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
     // getDocument 會把 buffer 轉給 worker，給它一份複本
     doc = await pdfjs.getDocument({
       data: new Uint8Array(buffer.slice(0)),
       isEvalSupported: false,
     }).promise;
-  } catch {
-    throw new ClientError("pdfUnreadable");
+  } catch (err) {
+    console.error("[exam-import] PDF 開檔失敗", err);
+    throw new ClientError(pdfErrorKey(err));
   }
   if (doc.numPages > EXAM_IMPORT_MAX_PAGES) {
     void doc.destroy();
