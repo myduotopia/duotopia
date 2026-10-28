@@ -80,7 +80,9 @@ describe("preparePageSource：PDF 開檔失敗", () => {
     ["Error", "pdfLoaderFailed"],
   ])("%s → ClientError(%s)，並 console.error 原始錯誤", async (name, key) => {
     const original = namedError(name);
-    getDocument.mockReturnValue({ promise: Promise.reject(original) });
+    getDocument.mockImplementation(() => ({
+      promise: Promise.reject(original),
+    }));
 
     const err = await preparePageSource([fakePdf()]).catch((e: unknown) => e);
 
