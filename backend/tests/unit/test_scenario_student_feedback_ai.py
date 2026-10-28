@@ -379,9 +379,19 @@ class TestLanguageAccuracyIsNotWaivedByClearMeaning:
         assert "one** main error in `comment`" in prompt
         # 其餘修正交給「建議說法」那一句，不要硬塞進評語
         assert "`suggestion` can carry any further" in prompt
-        assert "must fit the two-sentence limit" in prompt
         # 有錯時第二句必須是更正 —— 否則模型可能兩句都拿去稱讚（review 第 1 點）
-        assert "SECOND sentence must be the correction" in prompt
+        assert "SECOND of those two sentences must be the correction" in prompt
+
+    def test_spoken_transcript_artifacts_are_not_errors(self):
+        """輸入是口說錄音，不是寫出來的句子。
+
+        嚴格度拉高之後，缺標點、沒大寫這類逐字稿本來就有的特徵很容易被當成錯誤回報
+        —— 那對口說練習沒有意義，而且會讓學生覺得被刁難（PR #1152 review 第 2 點）。
+        """
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "The student is SPEAKING, not writing" in prompt
+        assert "Never treat missing punctuation" in prompt
+        assert "filler words" in prompt
 
     def test_accuracy_rules_apply_even_without_a_reference_answer(self):
         """老師沒寫參考答案時，語言正確性的要求仍然要在。

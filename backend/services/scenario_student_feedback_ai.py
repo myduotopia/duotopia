@@ -201,17 +201,27 @@ class ScenarioStudentFeedbackService:
             "errors: if the sentence is correct English for the student's level, "
             'say so and use "great".',
             "",
-            # #1140 / PR #1152 review 第 2 點：原本寫「最多兩個錯」＋「評語最多兩句」＋「先講
-            # 優點」，三者塞不進去，模型只能自己亂取捨 —— 而最可能被犧牲的正是錯誤
-            # 細節，也就是這次要修的東西。改成「評語一個主錯、其餘交給建議說法」。
-            "Everything in `comment` must fit the two-sentence limit below. When "
-            "there is an error, the SECOND sentence must be the correction — do not "
-            "spend both sentences on praise. If praise plus correction will not fit, "
-            "keep the correction and make the praise shorter.",
+            # PR #1152 review 第 2 點：輸入是**口說**的錄音，不是寫出來的句子。
+            # 嚴格度拉高之後，缺標點、沒大寫這類逐字稿本來就有的特徵很容易被當成錯誤
+            # 回報給學生 —— 那對口說練習毫無意義，而且會讓學生覺得被刁難。
+            "The student is SPEAKING, not writing. Never treat missing punctuation, "
+            "capitalisation, or filler words (um, uh, like) as errors. Judge only "
+            "what would still be wrong if a fluent speaker said the same sentence "
+            "out loud.",
+            "",
             "",
             f"Write `comment` in {language}, in two short sentences at most, speaking "
             "to the student directly. Say what worked before what to change, and name "
             "one concrete thing to try. Never mention scores, grades or percentages.",
+            "",
+            # #1140 / PR #1152 review：原本寫「最多兩個錯」＋「評語最多兩句」＋「先講
+            # 優點」，三者塞不進去，模型只能自己亂取捨 —— 而最可能被犧牲的正是錯誤
+            # 細節，也就是這次要修的東西。改成「評語一個主錯、其餘交給建議說法」。
+            # 這段原本放在前面、前向參照「下面的兩句限制」，移到這裡才讀得順。
+            "When there is an error, the SECOND of those two sentences must be the "
+            "correction — do not spend both sentences on praise. If praise plus "
+            "correction will not fit, keep the correction and make the praise "
+            "shorter.",
             "",
             "Put a full sentence the student could say in `suggestion`, in English, "
             'when verdict is "improve". It must answer this question, use the asked-for '
