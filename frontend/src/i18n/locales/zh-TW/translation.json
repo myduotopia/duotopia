@@ -6383,12 +6383,17 @@
         "allDone": "每一頁都處理過了，共擷取 {{count}} 題。",
         "pageNo": "第 {{n}} 頁",
         "answerPage": "答案頁",
+        "pageOrderHint": "頁碼是 PDF 檔的頁序，可能和題本上印的頁碼不同",
         "status": {
           "pending": "等待中",
           "processing": "處理中",
           "done": "完成・擷取 {{count}} 題",
           "blank": "空白頁略過",
-          "failed": "失敗"
+          "failed": "失敗",
+          "merged": "已併入第 {{target}} 頁的題組（第 {{range}} 題）",
+          "mergedNoRange": "已併入第 {{target}} 頁的題組",
+          "doneSpan": "完成・擷取 {{count}} 題（跨第 {{from}}–{{to}} 頁）",
+          "empty": "沒有題目"
         },
         "blankHint": "看起來是空白頁，沒有送去擷取。如果其實有題目，請按「仍要送出這一頁」。",
         "sendBlank": "仍要送出這一頁",

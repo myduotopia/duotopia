@@ -1533,7 +1533,11 @@ function TeacherTemplateProgramsInner() {
       />
 
       {/* 上傳題本（#1112 C3）：放在分頁外，切到教材分頁也不卸載 */}
-      <ExamImportSheet controller={examImport} programs={programs} />
+      <ExamImportSheet
+        controller={examImport}
+        programs={programs}
+        sidebarWidth={sidebarWidth}
+      />
 
       <ProgramDialog
         program={selectedProgram}

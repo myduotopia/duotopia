@@ -3,8 +3,12 @@
  *
  * 與上傳畫面同一個 Sheet，按「開始擷取」或從提示列「繼續」後換成這裡。只用標準元件：
  * - Progress：整份進度（已完成＝處理完的頁，含空白頁略過；「12／16 頁（含 2 頁空白）」，失敗另標）
- * - 每頁一行 Card：頁碼、小縮圖（本機畫好的頁圖，沒有就用後端存的頁圖）、Badge 狀態
- *   （等待中／處理中／完成·擷取 N 題／空白頁略過／失敗），答案頁另標一個 Badge
+ * - 列表上方灰色小字：頁碼是 PDF 檔的頁序，可能和題本上印的頁碼不同
+ * - 每頁一行 Card：頁碼、小縮圖（本機畫好的頁圖，沒有就用後端存的頁圖；ZoomableImage 點開放大）、
+ *   Badge 狀態（等待中／處理中／完成·擷取 N 題／空白頁略過／失敗），答案頁另標一個 Badge。
+ *   完成的頁再依 `pageMergeInfo` 細分：0 題且被併入前面題組 →「已併入第 N 頁的題組（第 a–b 題）」
+ *   （題號取不到就省略括號）；有題且題組跨頁 →「完成・擷取 N 題（跨第 a–b 頁）」；
+ *   其他 0 題（封面、封底）→「沒有題目」
  * - 失敗頁「重送這一頁」（還有重送次數才有；用完改寫「這一頁讀不出來，請手動補題」）；處理中超過
  *   3 分鐘、被擋下仍待處理（400 圖片過大／格式、畫不出來）的頁也給「重送這一頁」；空白頁略過
  *   「仍要送出這一頁」（用後端存好的頁圖）
@@ -13,7 +17,7 @@
  *   第一次同樣順序；雜湊不符提示「不是同一份題本」
  * - 頁尾：放棄這次匯入（紅字次要鈕，ConfirmDialog 由外層處理）、關閉、「開始核對」（停用，即將推出）
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileUp, Loader2 } from "lucide-react";
 
@@ -22,9 +26,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { ZoomableImage } from "../LayoutRenderer";
 import { errorInfo, errorKey } from "./examImportErrors";
 import type { ExamImportController, PageNote } from "./useExamImport";
-import { pageQuestionCount, type ExamImportPage } from "./types";
+import { pageMergeInfo, pageQuestionCount, type ExamImportPage } from "./types";
 
 interface ExamImportProgressProps {
   controller: ExamImportController;
@@ -54,6 +59,7 @@ export default function ExamImportProgress({
   const inputRef = useRef<HTMLInputElement>(null);
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<PageNote | null>(null);
+  const mergeInfo = useMemo(() => pageMergeInfo(detail?.pages ?? []), [detail]);
 
   if (!detail) {
     return (
@@ -105,14 +111,55 @@ export default function ExamImportProgress({
           {t("questionBank.examImport.progress.status.blank")}
         </Badge>
       );
-    if (p.status === "done")
+    if (p.status === "done") {
+      const count = pageQuestionCount(p);
+      const merge = mergeInfo.get(p.page_no);
+      if (count === 0 && merge?.kind === "merged")
+        return (
+          <Badge
+            variant="outline"
+            className="text-gray-600"
+            data-testid={`exam-page-${p.page_no}-merged`}
+          >
+            {merge.from !== undefined && merge.to !== undefined
+              ? t("questionBank.examImport.progress.status.merged", {
+                  target: merge.target,
+                  range:
+                    merge.from === merge.to
+                      ? `${merge.from}`
+                      : `${merge.from}–${merge.to}`,
+                })
+              : t("questionBank.examImport.progress.status.mergedNoRange", {
+                  target: merge.target,
+                })}
+          </Badge>
+        );
+      if (count === 0)
+        return (
+          <Badge
+            variant="outline"
+            className="text-gray-600"
+            data-testid={`exam-page-${p.page_no}-empty`}
+          >
+            {t("questionBank.examImport.progress.status.empty")}
+          </Badge>
+        );
+      if (merge?.kind === "span")
+        return (
+          <Badge variant="success" data-testid={`exam-page-${p.page_no}-span`}>
+            {t("questionBank.examImport.progress.status.doneSpan", {
+              count,
+              from: merge.from,
+              to: merge.to,
+            })}
+          </Badge>
+        );
       return (
         <Badge variant="success">
-          {t("questionBank.examImport.progress.status.done", {
-            count: pageQuestionCount(p),
-          })}
+          {t("questionBank.examImport.progress.status.done", { count })}
         </Badge>
       );
+    }
     if (p.status === "failed")
       return (
         <Badge variant="destructive">
@@ -301,6 +348,12 @@ export default function ExamImportProgress({
         </Alert>
       )}
 
+      <p
+        className="mb-2 text-xs text-gray-500"
+        data-testid="exam-progress-page-order-hint"
+      >
+        {t("questionBank.examImport.progress.pageOrderHint")}
+      </p>
       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
         {[...detail.pages]
           .sort((a, b) => a.page_no - b.page_no)
@@ -316,12 +369,14 @@ export default function ExamImportProgress({
               >
                 <div className="h-16 w-12 shrink-0 overflow-hidden rounded border border-gray-200 bg-gray-50">
                   {thumb && (
-                    <img
+                    <ZoomableImage
                       src={thumb}
                       alt={t("questionBank.examImport.progress.pageNo", {
                         n: p.page_no,
                       })}
+                      buttonClassName="block h-full w-full"
                       className="h-full w-full object-cover object-top"
+                      testId={`exam-page-${p.page_no}-thumb`}
                     />
                   )}
                 </div>

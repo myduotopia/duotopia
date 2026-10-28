@@ -6343,13 +6343,19 @@
         "allDone_other": "Every page has been processed: {{count}} questions extracted.",
         "pageNo": "Page {{n}}",
         "answerPage": "Answer page",
+        "pageOrderHint": "Page numbers follow the order of pages in the PDF file and may differ from the numbers printed on the paper.",
         "status": {
           "pending": "Waiting",
           "processing": "Processing",
           "done_one": "Done · {{count}} question",
           "done_other": "Done · {{count}} questions",
           "blank": "Blank, skipped",
-          "failed": "Failed"
+          "failed": "Failed",
+          "merged": "Part of the question group on page {{target}} (Q{{range}})",
+          "mergedNoRange": "Part of the question group on page {{target}}",
+          "doneSpan_one": "Done · {{count}} question (spans pages {{from}}–{{to}})",
+          "doneSpan_other": "Done · {{count}} questions (spans pages {{from}}–{{to}})",
+          "empty": "No questions"
         },
         "blankHint": "This page looks blank, so it wasn't sent for extraction. If it does have questions, choose \"Send this page anyway\".",
         "sendBlank": "Send this page anyway",

@@ -3,13 +3,14 @@
  *
  * 老師預覽＝學生端＝考卷共用的 renderer，這裡鎖住：
  * 段落開頭與換行後的空格照原樣（whitespace-pre-wrap）。
+ * ZoomableImage 的 `buttonClassName`（#1112 第五輪）：套在外層放大按鈕、和預設 class 合併；不傳時不變。
  */
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import LayoutRenderer from "../LayoutRenderer";
+import LayoutRenderer, { ZoomableImage } from "../LayoutRenderer";
 import type { LayoutDoc } from "@/types/questionBank";
 
 vi.mock("react-i18next", () => ({
@@ -170,5 +171,40 @@ describe("LayoutRenderer", () => {
         name: "questionBank.group.render.zoomImage",
       }),
     ).toBeNull();
+  });
+});
+
+describe("ZoomableImage buttonClassName", () => {
+  it("buttonClassName 套在外層按鈕並保留 cursor-zoom-in；className 只在圖上", async () => {
+    const user = userEvent.setup();
+    render(
+      <ZoomableImage
+        src="/thumb.png"
+        alt="第 1 頁"
+        buttonClassName="block h-full w-full"
+        className="h-full w-full object-cover"
+        testId="thumb"
+      />,
+    );
+    const button = screen.getByRole("button", {
+      name: "questionBank.group.render.zoomImage",
+    });
+    expect(button.className).toContain("cursor-zoom-in");
+    expect(button.className).toContain("block");
+    expect(button.className).toContain("h-full");
+    expect(button.className).toContain("w-full");
+    const img = screen.getByTestId("thumb");
+    expect(img.className).toContain("object-cover");
+    expect(button.className).not.toContain("object-cover");
+    await user.click(button);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("不傳 buttonClassName：按鈕只有 cursor-zoom-in", () => {
+    render(<ZoomableImage src="/a.png" alt="a" />);
+    const button = screen.getByRole("button", {
+      name: "questionBank.group.render.zoomImage",
+    });
+    expect(button.className).toBe("cursor-zoom-in");
   });
 });

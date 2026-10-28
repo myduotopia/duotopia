@@ -287,7 +287,7 @@
 | ConfirmDialog | `frontend/src/components/organization/ConfirmDialog.tsx` | 確認對話框（可設危險樣式） |
 | OneCampusBindSection | `frontend/src/components/settings/OneCampusBindSection.tsx` | 1Campus 綁定與信箱驗證狀態 |
 | StudentLoginQRShare | `frontend/src/components/teacher/StudentLoginQRShare.tsx` | 分享學生登入 QR code |
-| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。目前只有題庫用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出 |
+| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。目前只有題庫用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出。`className` 套在圖上；選用 `buttonClassName` 套在外層放大按鈕上（例如固定大小的縮圖框傳 `block h-full w-full` 讓按鈕撐滿），不傳時不變 |
 
 ### 6.5 淘汰中
 
