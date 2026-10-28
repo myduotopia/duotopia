@@ -4,7 +4,8 @@
 1. 標為空白頁：存頁圖、done、0 張卡、``blank_skipped``、不呼叫 AI、不記用量；只接受 pending；冪等；
    跨老師 404；空白頁算進已完成（整份可變 ready）；跨頁題組可以越過空白頁合併
 2. 「仍要送出這一頁」：用存好的頁圖送 AI、不算重送次數；不是空白頁 409 ``EXAM_IMPORT_NOT_BLANK``；
-   頁圖不見 409 ``EXAM_IMPORT_PAGE_IMAGE_MISSING``；送出後失敗就是一般失敗頁（再送才算重送）
+   頁圖不見 409 ``EXAM_IMPORT_PAGE_IMAGE_MISSING``；送出後失敗就是一般失敗頁（再送才算重送）；
+   跨過空白頁合併過的題組，空白頁送出後拆回重算、依頁碼順序（C3 review 4），合併紀錄不輸出
 3. C2 剩下的低度修正：重試結果被丟掉時用量記失敗、換進卡片才記成功；報告腳本單頁克漏字重編 1..k
 """
 
@@ -235,6 +236,72 @@ def test_send_blank_uses_stored_image_and_does_not_count_resend(
     resp = _send_blank(test_client, teacher, imp["id"], 1)
     assert resp.status_code == 409
     assert resp.json()["detail"]["error"] == "EXAM_IMPORT_NOT_BLANK"
+
+
+def _reading_group(no, stem, *, cont=False, text="Text."):
+    card = {
+        "kind": "group",
+        "group_type": "reading",
+        "box_2d": [0, 50, 990, 950],
+        "stimulus": {"kind": "text", "paragraphs": [text]},
+        "questions": [_q(no, stem, ["a", "b"], ai=[0])],
+    }
+    if cont:
+        card["continues_previous"] = True
+    else:
+        card["title"] = "Story"
+    return card
+
+
+def test_send_blank_remerges_cross_page_group_in_page_order(
+    test_client, teacher, fake_ai, storage
+):
+    """第 2 頁誤判空白、第 3 頁已越過它併到第 1 頁；第 2 頁「仍要送出」後整組依 1→2→3 重新合併，
+    之後才到的答案頁答案也要留著。"""
+    imp = _create(test_client, teacher, pages=4).json()
+    blank_image = _png("faint-2")
+    fake_ai.on(_png("p1"), _page(_reading_group("1", "Who?", text="Part one.")))
+    fake_ai.on(
+        _png("p3"), _page(_reading_group("3", "When?", cont=True, text="Part three."))
+    )
+    fake_ai.on(
+        _png("p4"),
+        _page(answer_key=[{"no": "1", "answer": "B"}], is_answer_page=True),
+    )
+    fake_ai.on(
+        blank_image,
+        _page(_reading_group("2", "Where?", cont=True, text="Part two.")),
+    )
+    _send(test_client, teacher, imp["id"], 3, _png("p3"))
+    _send(test_client, teacher, imp["id"], 1, _png("p1"))
+    assert _blank(test_client, teacher, imp["id"], 2, blank_image).status_code == 200
+    _send(test_client, teacher, imp["id"], 4, _png("p4"))
+    merged = _get(test_client, teacher, imp["id"])["pages"][0]["cards"][-1]
+    assert merged["pages"] == [1, 3]
+
+    resp = _send_blank(test_client, teacher, imp["id"], 2)
+    assert resp.status_code == 200, resp.text
+    data = _get(test_client, teacher, imp["id"])
+    cards = [c for p in data["pages"] for c in p["cards"]]
+    assert len(cards) == 1
+    group = data["pages"][0]["cards"][0]
+    assert group["pages"] == [1, 2, 3]
+    assert [q["source_question_no"] for q in group["group"]["questions"]] == [
+        "1",
+        "2",
+        "3",
+    ]
+    assert group["group"]["stimulus"]["paragraphs"] == [
+        "Part one.",
+        "Part two.",
+        "Part three.",
+    ]
+    first = group["group"]["questions"][0]
+    assert first["correct_indexes"] == [1]
+    assert first["answer_source"] == "answer_page"
+    assert data["question_count"] == 3
+    # 合併紀錄只在後端
+    assert all(not k.startswith("_merge") for c in cards for k in c)
 
 
 def test_send_blank_on_normal_pending_page_is_rejected(

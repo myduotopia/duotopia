@@ -4,6 +4,12 @@
 **不碰 DB、不呼叫 AI**。``services/exam_paper_service.py``（擷取）、``services/exam_import_service.py``
 （匯入流程）與驗證報告腳本 ``scripts/exam_import_report.py`` 共用這裡的函式，確保跨頁合併等規則
 只有一份。題目卡 JSON 形狀見 ``exam_paper_service`` 模組說明。
+
+跨頁合併可以**拆回來重算**（C3 review 4）：匯入流程合併時（``record=True``）在目標題組卡留下
+合併前的樣子（``MERGE_PRE_KEY``）與併進來的原卡（``MERGE_PARTS_KEY``）。之後若當初跨過的頁不再
+是「已處理、沒有卡片」（例如空白頁略過後老師按「仍要送出這一頁」、擷取到題目），
+``unmerge_invalid_continuations`` 把那張題組卡拆回各頁，再跑一次 ``merge_continuations``，題組
+內容就依頁碼順序重新接起來。這兩個欄位只供後端重算，API 輸出時用 ``strip_merge_records`` 拿掉。
 """
 
 from __future__ import annotations
@@ -28,6 +34,10 @@ STATUS_OK = "ok"
 STATUS_FAILED = "failed"
 
 SOURCE_QUESTION_NO_MAX_CHARS = 20  # 對齊 question_source_links.source_question_no
+
+# 跨頁合併的紀錄（只存在匯入草稿，API 不輸出）
+MERGE_PRE_KEY = "_merge_pre"
+MERGE_PARTS_KEY = "_merge_parts"
 
 BLANK_TOKEN_RE = re.compile(r"\{\{(\d+)\}\}")
 # 選項標籤 → 0-based index（答案頁印的是標籤）
@@ -289,12 +299,17 @@ def merge_group_cards(target: Dict[str, Any], cont: Dict[str, Any]) -> None:
 
 def merge_continuations(
     pages: MutableMapping[int, Optional[List[Dict[str, Any]]]],
+    *,
+    record: bool = False,
 ) -> Set[int]:
     """依頁碼掃一遍，把「延續上一頁題組」的第一張卡併進前面的題組（就地修改 ``pages``）。
 
     ``pages``：頁碼 → 該頁題目卡（``None`` = 還沒處理完）。往前找**最近一個有卡片**的已處理頁
-    （中間整頁都是延續、合併後變空的頁直接跳過，所以跨三頁以上的題組也能接上）；途中遇到還沒
-    處理完的頁就先不併，等那一頁處理完再併。回傳有改動的頁碼。
+    （中間整頁都是延續、合併後變空的頁、空白頁略過的頁直接跳過，所以跨三頁以上的題組也能接上）；
+    途中遇到還沒處理完的頁就先不併，等那一頁處理完再併。回傳有改動的頁碼。
+
+    ``record=True``（匯入流程）：在目標題組卡記下合併前的樣子與併進來的原卡，之後可用
+    ``unmerge_invalid_continuations`` 拆回來重算。
     """
     changed: Set[int] = set()
     for n in sorted(pages):
@@ -317,12 +332,72 @@ def merge_continuations(
         if target_no is None:
             continue
         target_cards = pages[target_no]
-        if target_cards[-1].get("kind") != CARD_KIND_GROUP:
+        target = target_cards[-1]
+        if target.get("kind") != CARD_KIND_GROUP:
             continue
-        merge_group_cards(target_cards[-1], copy.deepcopy(first))
+        if record:
+            if MERGE_PRE_KEY not in target:
+                target[MERGE_PRE_KEY] = copy.deepcopy(target)
+            target.setdefault(MERGE_PARTS_KEY, []).append(
+                {"page_no": n, "card": copy.deepcopy(first)}
+            )
+        merge_group_cards(target, copy.deepcopy(first))
         pages[n] = cards[1:]
         changed.update({n, target_no})
     return changed
+
+
+def _merge_span_valid(
+    pages: Mapping[int, Optional[List[Dict[str, Any]]]], target_no: int, part_no: int
+) -> bool:
+    """當初從第 part_no 頁併到第 target_no 頁時，中間的頁都是「已處理、沒有卡片」；現在還是嗎？"""
+    return all(pages.get(p) == [] for p in range(target_no + 1, part_no))
+
+
+def unmerge_invalid_continuations(
+    pages: MutableMapping[int, Optional[List[Dict[str, Any]]]],
+) -> Set[int]:
+    """把「跨過的頁現在有卡片或還沒處理完」的合併拆回各頁（就地修改 ``pages``），回傳有改動的頁碼。
+
+    拆法：目標題組卡換回合併前的樣子，併進來的原卡依序放回各自那一頁的最前面。原卡本身也合併過
+    別頁（多次合併）時，下一輪再檢查它。併進來的頁目前不是「已處理」（``None``）就不拆（放不回去）。
+    拆完由呼叫端再跑一次 ``merge_continuations``，依頁碼順序重新合併。
+    """
+    changed: Set[int] = set()
+    again = True
+    while again:
+        again = False
+        for n in sorted(pages):
+            cards = pages[n]
+            if not cards:
+                continue
+            for i, card in enumerate(cards):
+                parts = card.get(MERGE_PARTS_KEY) or []
+                if not parts or MERGE_PRE_KEY not in card:
+                    continue
+                if any(pages.get(part["page_no"]) is None for part in parts):
+                    continue
+                if all(_merge_span_valid(pages, n, part["page_no"]) for part in parts):
+                    continue
+                cards[i] = card[MERGE_PRE_KEY]
+                for part in reversed(parts):
+                    src = part["page_no"]
+                    pages[src] = [part["card"]] + list(pages[src] or [])
+                    changed.add(src)
+                changed.add(n)
+                again = True
+                break
+            if again:
+                break
+    return changed
+
+
+def strip_merge_records(cards: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """API 輸出用：拿掉跨頁合併的紀錄欄位（只供後端重算）。"""
+    return [
+        {k: v for k, v in card.items() if k not in (MERGE_PRE_KEY, MERGE_PARTS_KEY)}
+        for card in cards
+    ]
 
 
 __all__ = [
@@ -332,6 +407,8 @@ __all__ = [
     "BLANK_TOKEN_RE",
     "CARD_KIND_GROUP",
     "CARD_KIND_SINGLE",
+    "MERGE_PARTS_KEY",
+    "MERGE_PRE_KEY",
     "GROUP_TYPE_CLOZE",
     "GROUP_TYPE_READING",
     "SOURCE_QUESTION_NO_MAX_CHARS",
@@ -350,4 +427,6 @@ __all__ = [
     "normalize_question_no",
     "renumber_cloze_blanks",
     "renumber_cloze_cards",
+    "strip_merge_records",
+    "unmerge_invalid_continuations",
 ]

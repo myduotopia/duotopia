@@ -12,7 +12,9 @@
   每頁擷取時帶入已知答案；答案頁晚到時回填已處理頁中「答案來源是 AI、老師沒改過」的題。
 - **跨頁題組**：某頁第一張卡標「延續上一頁題組」→ 併進前面最近一個有卡片的已處理頁的最後一張
   題組卡（跨三頁以上也接得上；克漏字空格編號接續）。中間有頁還沒處理就先留著，處理完再併。
-  規則在 ``exam_paper_cards.merge_continuations``（報告腳本共用）。
+  規則在 ``exam_paper_cards.merge_continuations``（報告腳本共用）。合併時留下紀錄；當初跨過的頁
+  後來有了卡片（空白頁略過後「仍要送出這一頁」）就把那張題組卡拆回各頁、整份依頁碼重新合併，
+  再套一次已知答案（C3 review 4）。合併紀錄不輸出到 API（``serialize_page``）。
 - **並發**：先 ``lock_import`` 鎖住匯入列，再用條件式 UPDATE 搶 processing（同頁同時送兩次只有
   一個成功），並寫入這次請求的 ``claim_id``；送 AI 前 ``commit`` 釋放 DB 連線（AI 最多等 2 分鐘，不佔著連線）；AI 回來後
   ``lock_import`` 鎖住匯入列、讀最新資料，**確認這一頁仍是自己搶到的**（``claim_id`` 相同、仍在
@@ -78,6 +80,8 @@ from services.exam_paper_cards import (
     iter_card_questions,
     merge_continuations,
     renumber_cloze_cards,
+    strip_merge_records,
+    unmerge_invalid_continuations,
 )
 from services.exam_paper_service import (
     CallUsage,
@@ -374,14 +378,22 @@ def assign_accents(
 
 
 def _merge_continuations(imp: ExamImport) -> None:
-    """跨頁題組合併（規則在 ``exam_paper_cards.merge_continuations``，報告腳本共用）。"""
+    """跨頁題組合併（規則在 ``exam_paper_cards.merge_continuations``，報告腳本共用）。
+
+    先把「跨過的頁現在有卡片」的合併拆回各頁（``unmerge_invalid_continuations``），再整份依頁碼
+    合併；有拆過就再套一次已知答案（拆回來的是合併當時的樣子，之後到的答案頁要補上）。
+    """
     pages = {
         p.page_no: (
             copy.deepcopy(p.cards or []) if p.status == PAGE_STATUS_DONE else None
         )
         for p in imp.pages
     }
-    changed = merge_continuations(pages)
+    unmerged = unmerge_invalid_continuations(pages)
+    changed = unmerged | merge_continuations(pages, record=True)
+    if unmerged and imp.known_answers:
+        for n in changed:
+            apply_answer_key(pages[n] or [], imp.known_answers)
     for p in imp.pages:
         if p.page_no in changed:
             p.cards = pages[p.page_no]
@@ -817,7 +829,7 @@ def serialize_page(page: ExamImportPage) -> Dict[str, Any]:
         "image_url": page.image_url,
         "is_answer_page": bool(page.is_answer_page),
         "answer_key": page.answer_key or {},
-        "cards": page.cards or [],
+        "cards": strip_merge_records(page.cards or []),
         "error": page.error,
         "blank_skipped": page.blank_skipped,  # 空白頁略過（見 exam_import_blank）
         "resend_count": page.resend_count or 0,

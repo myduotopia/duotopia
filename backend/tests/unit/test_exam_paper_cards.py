@@ -1,6 +1,7 @@
 """
 上傳題本題目卡純函式測試（Issue #1112 C2 review 修正）：跨頁合併（克漏字空格編號、跨三頁）、
-口音計數排除延續卡、AI 回應被擋時照記用量。不打 Vertex、不碰 DB。
+口音計數排除延續卡、AI 回應被擋時照記用量；跨過的頁後來有了卡片時拆回重算（C3 review 4）。
+不打 Vertex、不碰 DB。
 """
 
 import random
@@ -9,10 +10,14 @@ import pytest
 
 from services.exam_import_service import assign_accents
 from services.exam_paper_cards import (
+    MERGE_PARTS_KEY,
+    MERGE_PRE_KEY,
     merge_continuations,
     merge_group_cards,
     renumber_cloze_blanks,
     renumber_cloze_cards,
+    strip_merge_records,
+    unmerge_invalid_continuations,
 )
 from services.exam_paper_service import (
     ExamPaperOutputError,
@@ -184,6 +189,50 @@ def test_group_spanning_three_pages_is_merged_into_first_page():
     ]
     assert pages[2] == []
     assert [c["kind"] for c in pages[3]] == ["single"]
+
+
+def test_unmerge_and_remerge_when_skipped_page_gets_cards():
+    """第 2 頁原本是空的（空白頁略過），第 3 頁越過它併到第 1 頁；第 2 頁後來擷取到延續卡 →
+    拆回各頁再合併，題組順序 1→2→3。"""
+    pages = {
+        1: [_group_card(1, ["Part one."], [_q("2")], group_type="reading")],
+        2: [],
+        3: [
+            _group_card(3, ["Part three."], [_q("4")], cont=True, group_type="reading"),
+            _single_card(3, "5"),
+        ],
+    }
+    assert merge_continuations(pages, record=True) == {1, 3}
+    assert MERGE_PRE_KEY in pages[1][0] and MERGE_PARTS_KEY in pages[1][0]
+    # 跨過的頁還是空的：不拆
+    assert unmerge_invalid_continuations(pages) == set()
+
+    pages[2] = [
+        _group_card(2, ["Part two."], [_q("3")], cont=True, group_type="reading")
+    ]
+    assert unmerge_invalid_continuations(pages) == {1, 3}
+    assert pages[1][0]["group"]["stimulus"]["paragraphs"] == ["Part one."]
+    assert [c["kind"] for c in pages[3]] == ["group", "single"]
+
+    merge_continuations(pages, record=True)
+    merged = pages[1][0]
+    assert merged["pages"] == [1, 2, 3]
+    assert [q["source_question_no"] for q in merged["group"]["questions"]] == [
+        "2",
+        "3",
+        "4",
+    ]
+    assert pages[2] == [] and [c["kind"] for c in pages[3]] == ["single"]
+    assert all(not k.startswith("_merge") for k in strip_merge_records([merged])[0])
+
+
+def test_merge_without_record_leaves_no_bookkeeping():
+    pages = {
+        1: [_group_card(1, ["Part one."], [_q("2")], group_type="reading")],
+        2: [_group_card(2, ["Part two."], [_q("3")], cont=True, group_type="reading")],
+    }
+    merge_continuations(pages)
+    assert MERGE_PRE_KEY not in pages[1][0] and MERGE_PARTS_KEY not in pages[1][0]
 
 
 def test_continuation_waits_for_unprocessed_middle_page():
