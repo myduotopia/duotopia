@@ -21,6 +21,7 @@ from services.exam_paper_service import CallUsage, ExamPaperService, PageExtract
 from tests.test_exam_import_api import (  # noqa: F401  (fixtures)
     BASE,
     _create,
+    _hash,
     _headers,
     _page,
     _png,
@@ -108,6 +109,8 @@ def test_mark_blank_page_skips_ai_and_usage(
 
     summary = resp.json()["import"]
     assert summary["pages_done"] == 1 and summary["pages_blank"] == 1
+    # 繼續匯入時前端比對雜湊用
+    assert summary["file_hash"] == _hash("paper")
     assert summary["status"] == "processing"
 
     # 另一頁處理完 → 整份 ready（空白頁算已完成）

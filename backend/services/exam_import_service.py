@@ -785,6 +785,8 @@ def serialize_import(imp: ExamImport, include_pages: bool = False) -> Dict[str, 
     out: Dict[str, Any] = {
         "id": imp.id,
         "file_name": imp.file_name,
+        # 繼續未完成的匯入時，前端請老師重選檔案、比對雜湊相符才接著送（C3）
+        "file_hash": imp.file_hash,
         "page_count": imp.page_count,
         "status": imp.status,
         "settings": imp.settings or {},
