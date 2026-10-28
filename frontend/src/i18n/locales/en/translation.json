@@ -5109,6 +5109,7 @@
       "back": "Back",
       "next": "Next",
       "startGenerate": "Start generating",
+      "actionBar": "Actions",
       "countOption": "{{count}} questions",
       "writeArticle": "Ask AI to write it",
       "writingArticle": "OK, writing a {{level}} scenario about \"{{goal}}\". One moment…",

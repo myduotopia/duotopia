@@ -18,8 +18,12 @@
  *   - 左欄 280px（sticky）是對話結果的**唯讀對照**：情境內容、情境圖、作答指引、整體
  *     評分標準，外加「回對話修改」。
  *   - 右欄最上面是**標題**（AI 寫情境或出題時建議，老師可改），其下是可拖曳排序的
- *     題目卡、新增題目、題數計數、上一步（回對話）。題數滿 10 題時新增鍵與每張卡的
+ *     題目卡、新增題目、題數計數。題數滿 10 題時新增鍵與每張卡的
  *     複製鍵都停用並說明上限（`hints.maxReached`）。
+ *   - 「上一步：回到對話」（與手機的取消）在固定於 sheet 底端的操作列。
+ *
+ * - **版面**（修正第 4 輪）：兩個畫面都是「捲動區＋固定在 sheet 底端的操作列」
+ *   （`ScenarioSheetLayout`），操作列位置一致、不隨內容捲動；對話內容從上往下排。
  *
  * 兩個畫面共用同一份 state，只是切換顯示 —— 回對話改設定不會弄丟已產生的題目。
  * 編輯既有內容時直接落在題目清單；按「上一步」回到對話時，已答步驟由已存資料還原
@@ -92,6 +96,10 @@ import {
 import { QuestionSettingsCard } from "@/components/scenario-dialogue-editor/QuestionSettingsCard";
 import { ScenarioSetupChat } from "@/components/scenario-dialogue-editor/ScenarioSetupChat";
 import { ScenarioReferenceAside } from "@/components/scenario-dialogue-editor/ScenarioReferenceAside";
+import {
+  ScenarioActionBar,
+  ScenarioScrollArea,
+} from "@/components/scenario-dialogue-editor/ScenarioSheetLayout";
 import { SortableRow } from "@/components/scenario-dialogue-editor/ScenarioQuestionRow";
 import {
   textAiErrorKey,
@@ -684,16 +692,13 @@ const ScenarioDialoguePanel = forwardRef<
 
   return (
     /*
-      右側留白 sm:pr-10：老師後台的數位教學工具列（DigitalTeachingToolbar）固定在視窗右緣、
-      約 54px 寬、疊在 sheet 上面，所有寬度都會出現（可收合、可上下拖）。不留白的話，
-      貼右的老師泡泡和題目卡右側的按鈕會被它蓋住（#1146 修正第 2 輪）。
-      手機（< sm）只留 pr-2（第 3 輪）：390px 寬再讓出 40px，題目卡與設定卡會被擠得太窄；
-      手機上工具列可收合成右緣小把手、也能上下拖開，蓋到時老師可以自己移開。
-
-      min-h-full（不是 h-full）＋ pb-6：內容比 sheet 高時要撐開捲動區，底部列下方才有留白，
-      不會貼著 sheet 底邊（第 3 輪）。
+      版面（#1146 修正第 4 輪）：面板撐滿 sheet 的剩餘高度，兩個畫面都是
+      「捲動區（ScenarioScrollArea）＋固定在底端的操作列（ScenarioActionBar）」，
+      操作列是捲動區的 flex 兄弟，捲動區高度本來就扣掉了它，最後的內容不會被蓋住。
+      右側工具列留白、手機鍵盤的欄位捲動都在 ScenarioSheetLayout。
+      外框（ScenarioDialogueEditorSheet）不再捲動、也不加內距，交給這裡。
     */
-    <div className="flex flex-col min-h-full pb-6 pr-2 sm:pr-10">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* ===== 引導式對話（#1146，取代舊的 Step 1 設定頁）===== */}
       {step === 1 && (
         <ScenarioSetupChat
@@ -760,147 +765,156 @@ const ScenarioDialoguePanel = forwardRef<
 
       {/* ===== Step 2：題目清單 ===== */}
       {step === 2 && (
-        <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
-          {/* 左欄：對話結果的唯讀對照，讓老師邊看情境與作答指引邊確認題目 */}
-          <ScenarioReferenceAside
-            scenarioContent={setup.scenarioContent}
-            imageActions={imageActions}
-            globalRubric={setup.globalRubric}
-            globalTense={setup.globalTense}
-            globalVoice={setup.globalVoice}
-            onEditSettings={() => setStep(1)}
-          />
+        <>
+          <ScenarioScrollArea>
+            <div className="min-w-0 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
+              {/* 左欄：對話結果的唯讀對照，讓老師邊看情境與作答指引邊確認題目 */}
+              <ScenarioReferenceAside
+                scenarioContent={setup.scenarioContent}
+                imageActions={imageActions}
+                globalRubric={setup.globalRubric}
+                globalTense={setup.globalTense}
+                globalVoice={setup.globalVoice}
+                onEditSettings={() => setStep(1)}
+              />
 
-          {/* 右欄：標題＋題目清單 */}
-          <div className="min-w-0">
-            {/*
+              {/* 右欄：標題＋題目清單 */}
+              <div className="min-w-0">
+                {/*
               標題（#1146 從設定頁搬來）：AI 寫情境或出題時已先填好建議，老師在這裡改。
               缺標題存檔時游標會被帶到這裡。
             */}
-            <div className="mb-3 space-y-1.5">
-              <label
-                className="text-xs font-semibold text-gray-700 block"
-                htmlFor="sd-title"
-              >
-                {t("scenarioDialogue.labels.title")}
-                <span className="text-red-500 ml-0.5">*</span>
-              </label>
-              <input
-                id="sd-title"
-                ref={titleRef}
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={t("scenarioDialogue.placeholders.title")}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="mb-3 flex justify-end">
-              <button
-                type="button"
-                onClick={() => handleGenerate(false)}
-                disabled={generateDisabled}
-                className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {isGenerating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                {t("scenarioDialogue.buttons.generateAnother")}
-              </button>
-            </div>
-
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={rows.map((r) => r.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-3 pr-1">
-                  {rows.map((row, index) => (
-                    <SortableRow
-                      key={`${row.id}:${row.revision}`}
-                      row={row}
-                      index={index}
-                      langLabel={setup.langLabel}
-                      hasLanguage={setup.hasLanguage}
-                      globalTense={setup.globalTense}
-                      globalVoice={setup.globalVoice}
-                      canDelete={rows.length > 1}
-                      regenerating={regeneratingId === row.id}
-                      imageLoading={imageLoadingId === row.id}
-                      onChange={(patch) => patchRow(row.id, patch)}
-                      onDuplicate={() =>
-                        setRows((prev) =>
-                          prev.length >= MAX_ITEMS
-                            ? prev
-                            : [
-                                ...prev.slice(0, index + 1),
-                                createRow({ ...row, id: nextRowId() }),
-                                ...prev.slice(index + 1),
-                              ],
-                        )
-                      }
-                      duplicateBlockedReason={
-                        rows.length >= MAX_ITEMS
-                          ? t("scenarioDialogue.hints.maxReached", {
-                              max: MAX_ITEMS,
-                            })
-                          : null
-                      }
-                      onDelete={() => deleteRow(row.id)}
-                      onRegenerate={() => regenerateRow(row.id)}
-                      onPickImage={(file) => pickRowImage(row.id, file)}
-                      onRemoveImage={() => removeRowImage(row.id)}
-                      onGenerateImage={() => generateRowImage(row.id)}
-                      onGenerateAudio={() => setAudioDialogRowId(row.id)}
-                      onPlayAudio={() => playRowAudio(row.id)}
-                      audioLoading={audioLoadingId === row.id}
-                    />
-                  ))}
+                <div className="mb-3 space-y-1.5">
+                  <label
+                    className="text-xs font-semibold text-gray-700 block"
+                    htmlFor="sd-title"
+                  >
+                    {t("scenarioDialogue.labels.title")}
+                    <span className="text-red-500 ml-0.5">*</span>
+                  </label>
+                  <input
+                    id="sd-title"
+                    ref={titleRef}
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder={t("scenarioDialogue.placeholders.title")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              </SortableContext>
-            </DndContext>
 
-            <button
-              type="button"
-              onClick={addRow}
-              disabled={rows.length >= MAX_ITEMS}
-              className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-600"
-            >
-              <Plus className="h-5 w-5" />
-              {rows.length >= MAX_ITEMS
-                ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
-                : t("scenarioDialogue.buttons.addQuestion")}
-            </button>
+                <div className="mb-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleGenerate(false)}
+                    disabled={generateDisabled}
+                    className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    {t("scenarioDialogue.buttons.generateAnother")}
+                  </button>
+                </div>
 
-            {/* 題目計數：對著題目看才有意義，所以跟著清單走而不是留在設定頁 */}
-            <div
-              className={`mt-3 text-xs tabular-nums ${
-                overLimit || underLimit
-                  ? "text-red-500 font-medium"
-                  : "text-gray-500"
-              }`}
-            >
-              {filledCount} {t("contentEditor.messages.items")}
-              {` / ${MAX_ITEMS}`}
-              {` (${t("scenarioDialogue.hints.itemRange", {
-                min: MIN_ITEMS,
-                max: MAX_ITEMS,
-              })})`}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={rows.map((r) => r.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-3 pr-1">
+                      {rows.map((row, index) => (
+                        <SortableRow
+                          key={`${row.id}:${row.revision}`}
+                          row={row}
+                          index={index}
+                          langLabel={setup.langLabel}
+                          hasLanguage={setup.hasLanguage}
+                          globalTense={setup.globalTense}
+                          globalVoice={setup.globalVoice}
+                          canDelete={rows.length > 1}
+                          regenerating={regeneratingId === row.id}
+                          imageLoading={imageLoadingId === row.id}
+                          onChange={(patch) => patchRow(row.id, patch)}
+                          onDuplicate={() =>
+                            setRows((prev) =>
+                              prev.length >= MAX_ITEMS
+                                ? prev
+                                : [
+                                    ...prev.slice(0, index + 1),
+                                    createRow({ ...row, id: nextRowId() }),
+                                    ...prev.slice(index + 1),
+                                  ],
+                            )
+                          }
+                          duplicateBlockedReason={
+                            rows.length >= MAX_ITEMS
+                              ? t("scenarioDialogue.hints.maxReached", {
+                                  max: MAX_ITEMS,
+                                })
+                              : null
+                          }
+                          onDelete={() => deleteRow(row.id)}
+                          onRegenerate={() => regenerateRow(row.id)}
+                          onPickImage={(file) => pickRowImage(row.id, file)}
+                          onRemoveImage={() => removeRowImage(row.id)}
+                          onGenerateImage={() => generateRowImage(row.id)}
+                          onGenerateAudio={() => setAudioDialogRowId(row.id)}
+                          onPlayAudio={() => playRowAudio(row.id)}
+                          audioLoading={audioLoadingId === row.id}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+
+                <button
+                  type="button"
+                  onClick={addRow}
+                  disabled={rows.length >= MAX_ITEMS}
+                  className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-600"
+                >
+                  <Plus className="h-5 w-5" />
+                  {rows.length >= MAX_ITEMS
+                    ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
+                    : t("scenarioDialogue.buttons.addQuestion")}
+                </button>
+
+                {/* 題目計數：對著題目看才有意義，所以跟著清單走而不是留在設定頁 */}
+                <div
+                  className={`mt-3 text-xs tabular-nums ${
+                    overLimit || underLimit
+                      ? "text-red-500 font-medium"
+                      : "text-gray-500"
+                  }`}
+                >
+                  {filledCount} {t("contentEditor.messages.items")}
+                  {` / ${MAX_ITEMS}`}
+                  {` (${t("scenarioDialogue.hints.itemRange", {
+                    min: MIN_ITEMS,
+                    max: MAX_ITEMS,
+                  })})`}
+                </div>
+              </div>
             </div>
+          </ScenarioScrollArea>
 
-            <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center gap-3">
+          {/* 固定在 sheet 最底端的操作列，位置與引導式對話一致（第 4 輪） */}
+          <ScenarioActionBar
+            left={
               <Button variant="outline" onClick={() => setStep(1)}>
                 <ArrowLeft className="mr-1 h-4 w-4" />
                 {t("scenarioDialogue.buttons.backToSettings")}
               </Button>
-              {onCancel && (
+            }
+            right={
+              onCancel && (
                 <Button
                   variant="outline"
                   className="md:hidden"
@@ -908,10 +922,10 @@ const ScenarioDialoguePanel = forwardRef<
                 >
                   {t("contentEditor.buttons.cancel")}
                 </Button>
-              )}
-            </div>
-          </div>
-        </div>
+              )
+            }
+          />
+        </>
       )}
 
       {/* 單題語音設定（Issue #1051） */}

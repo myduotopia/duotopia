@@ -5,18 +5,23 @@
  *
  * - 已答的步驟顯示成「問句＋老師的回答」，旁邊有「改選」。後面還有已答步驟時先跳確認
  *   「後面的設定會清空，已產生的題目保留」（`ConfirmDialog`）。
- * - 底部列（修正第 2 輪）：左＝「回上一步」，右＝目前這一步的主要動作（請 AI 寫情境／
- *   下一步／開始產生，同一時間只有一個主按鈕）。選項型步驟（需要情境嗎？、題目怎麼來？）
- *   沒有主要動作，右側只在已有題目時放「查看題目清單」。
+ * - 底部操作列（修正第 2 輪；第 4 輪起固定在 sheet 最底端，見 `ScenarioSheetLayout`）：
+ *   左＝「回上一步」，右＝目前這一步的主要動作（請 AI 寫情境／下一步／開始產生，同一時間
+ *   只有一個主按鈕）。選項型步驟（需要情境嗎？、題目怎麼來？）沒有主要動作，右側只在已有
+ *   題目時放「查看題目清單」；左右都沒有按鈕時（第一步）不畫操作列。手機上「回上一步」
+ *   只留圖示（名稱放 aria-label），讓操作列維持一排。
  *   已有題目、停在設定卡（從題目清單回來改設定）或全部答完時，主按鈕＝「查看題目清單」，
- *   「再產一批」降為次要（第 3 輪）；從清單回來時自動捲到底部列。
+ *   「再產一批」降為次要（第 3 輪）。從清單回來時把捲動區捲到最新一步的開頭（操作列固定
+ *   在底端本來就看得到，第 4 輪）。
+ * - 對話內容從上往下排（不做由下往上堆）；內容短時中間留白。AI 額度提示小字放在捲動區
+ *   設定卡下方，不塞進操作列。
  * - 選項型步驟用直排選項卡（`ChoiceCards`，第 3 輪）：等寬、左對齊、粗體主句＋可選灰色
  *   說明行（說明以 aria-describedby 掛上，按鈕名稱＝主句）；老師泡泡只顯示主句。
  * - 版面：對話區撐滿 sheet 寬，老師泡泡貼右（像一般聊天）；每一步的輸入區另限 `max-w-3xl`，
  *   免得文字框在寬螢幕被拉得太長。sm 以上輸入區內縮 `pl-9` 對齊機器人泡泡，手機不內縮
  *   （第 3 輪，免得欄位被擠窄）。情境框依內容自動長高，上限 60vh 之後內捲
  *   （高度含上下邊框；只在內容變時重算，不掛 ResizeObserver，第 3b 輪）。
- *   右側浮動工具列的留白由面板（`ScenarioDialoguePanel`）處理。
+ *   右側浮動工具列的留白與手機鍵盤跳出時的欄位捲動由 `ScenarioSheetLayout` 處理。
  * - 答非所問：AI 寫情境（訓練目標）與 AI 出題（出題方向）由同一次 AI 呼叫判斷，不可用就
  *   在該步驟顯示重問句（`goalReask` / `directionReask`），不產內容。
  * - 產生前的確認句帶出老師原話。
@@ -45,6 +50,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
 import { CEFR_LEVELS } from "./constants";
 import { ScenarioImageStrip } from "./ScenarioImageStrip";
+import { ScenarioActionBar, ScenarioScrollArea } from "./ScenarioSheetLayout";
 import type { ScenarioImageActions } from "./useScenarioImages";
 import {
   QUESTION_SOURCES,
@@ -207,8 +213,8 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   /** 情境框依內容自動長高（上限 60vh 由 CSS 限制，超過才內捲） */
   const scenarioBoxRef = useRef<HTMLTextAreaElement>(null);
-  /** 底部列：從題目清單回到對話時捲到這裡，老師不必自己往下找按鈕 */
-  const bottomBarRef = useRef<HTMLDivElement>(null);
+  /** 捲動區：從題目清單回到對話時，捲到最新一步的開頭 */
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // 用 useLayoutEffect：在瀏覽器畫出來之前量好高度，打字時不會先閃一下捲軸。
   // scrollHeight 不含邊框，而 Textarea 是 border-box，所以要補上
@@ -222,10 +228,13 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   }, [props.scenarioContent, answers.scenarioMode, answers.scenarioDone]);
 
-  // 只在掛載時跑：已有題目＝老師是從題目清單按「上一步」回來的
+  // 只在掛載時跑：已有題目＝老師是從題目清單按「上一步」回來的。
+  // 操作列固定在底端本來就看得到，所以捲到最新一步（通常是設定卡）的開頭，
+  // 老師一眼看到問句與要改的欄位（第 4 輪）。
   useEffect(() => {
     if (props.hasQuestions) {
-      bottomBarRef.current?.scrollIntoView?.({ block: "end" });
+      const blocks = scrollRef.current?.querySelectorAll("[data-step]");
+      blocks?.[blocks.length - 1]?.scrollIntoView?.({ block: "start" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -427,7 +436,15 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         );
 
       case "settings":
-        return <div className="max-w-3xl sm:pl-9">{props.settingsCard}</div>;
+        return (
+          <div className="max-w-3xl space-y-2 sm:pl-9">
+            {props.settingsCard}
+            {/* 額度提示放捲動區（不塞進固定操作列，手機上操作列才維持一排） */}
+            <p className="text-right text-xs text-gray-400">
+              {t("scenarioDialogue.hints.rateLimit")}
+            </p>
+          </div>
+        );
     }
   };
 
@@ -503,72 +520,81 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         })
       : t("scenarioDialogue.setup.q.settings");
 
-  return (
-    <div className="flex-1 min-h-0">
-      <div className="space-y-4" data-testid="scenario-setup-chat">
-        {steps.map((step) => {
-          const answered = isAnswered(step, answers);
-          const isCurrent = step === current;
-          if (!answered && !isCurrent) return null;
-          return (
-            <div key={step} className="space-y-2" data-step={step}>
-              <BotBubble>
-                {step === "settings" ? settingsIntro : question(step)}
-              </BotBubble>
-              {answered ? (
-                <TeacherBubble onChange={() => requestReopen(step)}>
-                  {answerText(step)}
-                </TeacherBubble>
-              ) : (
-                renderActive(step)
-              )}
-            </div>
-          );
-        })}
+  const showBack = !!(prev && current);
+  const showList = props.hasQuestions || current === null;
+  const primaryAction = renderPrimaryAction();
 
-        <div
-          ref={bottomBarRef}
-          className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-4"
-        >
-          {prev && current && (
-            <Button
-              variant="outline"
-              onClick={() => requestReopen(prev)}
-              disabled={busy}
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              {t("scenarioDialogue.setup.back")}
-            </Button>
-          )}
-          <span className="flex-1" />
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {current === "settings" && props.generateBlockedReason && (
-              <span className="text-xs text-gray-500">
-                {props.generateBlockedReason}
-              </span>
-            )}
-            {/* 主按鈕一律放最右：清單是主按鈕時，「再產一批」排在它左邊 */}
-            {listIsPrimary && renderPrimaryAction()}
-            {/* 回到對話改設定後，不必重產也要能回題目清單（已產生的題目保留） */}
-            {(props.hasQuestions || current === null) && (
-              <Button
-                variant={listIsPrimary ? "default" : "outline"}
-                onClick={props.onViewList}
-                disabled={busy}
-              >
-                {t("scenarioDialogue.buttons.viewQuestions")}
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            )}
-            {!listIsPrimary && renderPrimaryAction()}
-          </div>
-          {current === "settings" && (
-            <p className="w-full text-right text-xs text-gray-400">
-              {t("scenarioDialogue.hints.rateLimit")}
-            </p>
-          )}
+  return (
+    <>
+      <ScenarioScrollArea ref={scrollRef}>
+        <div className="space-y-4" data-testid="scenario-setup-chat">
+          {steps.map((step) => {
+            const answered = isAnswered(step, answers);
+            const isCurrent = step === current;
+            if (!answered && !isCurrent) return null;
+            return (
+              <div key={step} className="space-y-2" data-step={step}>
+                <BotBubble>
+                  {step === "settings" ? settingsIntro : question(step)}
+                </BotBubble>
+                {answered ? (
+                  <TeacherBubble onChange={() => requestReopen(step)}>
+                    {answerText(step)}
+                  </TeacherBubble>
+                ) : (
+                  renderActive(step)
+                )}
+              </div>
+            );
+          })}
         </div>
-      </div>
+      </ScenarioScrollArea>
+
+      {/* 固定在 sheet 最底端的操作列（第 4 輪）；左右都沒有按鈕時不畫 */}
+      {(showBack || showList || primaryAction) && (
+        <ScenarioActionBar
+          left={
+            showBack &&
+            prev && (
+              <Button
+                variant="outline"
+                onClick={() => requestReopen(prev)}
+                disabled={busy}
+                aria-label={t("scenarioDialogue.setup.back")}
+              >
+                <ArrowLeft className="h-4 w-4 sm:mr-1" />
+                {/* 手機只留圖示，操作列維持一排 */}
+                <span className="hidden sm:inline">
+                  {t("scenarioDialogue.setup.back")}
+                </span>
+              </Button>
+            )
+          }
+          right={
+            <>
+              {current === "settings" && props.generateBlockedReason && (
+                <span className="hidden text-xs text-gray-500 sm:inline">
+                  {props.generateBlockedReason}
+                </span>
+              )}
+              {/* 主按鈕一律放最右：清單是主按鈕時，「再產一批」排在它左邊 */}
+              {listIsPrimary && primaryAction}
+              {/* 回到對話改設定後，不必重產也要能回題目清單（已產生的題目保留） */}
+              {showList && (
+                <Button
+                  variant={listIsPrimary ? "default" : "outline"}
+                  onClick={props.onViewList}
+                  disabled={busy}
+                >
+                  {t("scenarioDialogue.buttons.viewQuestions")}
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              )}
+              {!listIsPrimary && primaryAction}
+            </>
+          }
+        />
+      )}
 
       <ConfirmDialog
         open={pendingReopen !== null}
@@ -607,6 +633,6 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
           setPendingMode(null);
         }}
       />
-    </div>
+    </>
   );
 }

@@ -8,6 +8,11 @@
  * 兩種呈現方式是照現況分的，不是新發明：教材頁（我的／機構／學校／班級）用的是
  * 從右側滑出、避開側邊欄的面板；`ProgramTreeView` 用的是置中 modal。硬要統一會動到
  * 其他題型在那些頁面的既有版面，不在這張單的範圍。
+ *
+ * 面板外框只負責撐出 header 以下的高度（`flex-1 min-h-0 flex flex-col`），**不捲動、不加內距**：
+ * 面板裡面自己分「捲動區＋固定在底端的操作列」（#1146 修正第 4 輪，見
+ * `scenario-dialogue-editor/ScenarioSheetLayout`）。外框若再 overflow-auto，操作列就會
+ * 跟著內容一起捲走。
  */
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -80,7 +85,7 @@ export function ScenarioDialogueEditorSheet({
   );
 
   const panel = (
-    <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-col">
       <ScenarioDialoguePanel
         /**
          * #1013: key 綁內容 id —— 面板把 initialData 當初值（lazy initializer），

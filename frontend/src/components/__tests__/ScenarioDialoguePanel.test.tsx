@@ -2008,19 +2008,27 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
     expect(view.parentElement?.lastElementChild).toBe(view);
   });
 
-  it("從題目清單回到對話時，自動捲到底部列", async () => {
+  it("從題目清單回到對話時，捲到最新一步（設定卡）的開頭", async () => {
     const original = Element.prototype.scrollIntoView;
-    const scrollIntoView = vi.fn();
+    const targets: Element[] = [];
+    const scrollIntoView = vi.fn(function (this: Element) {
+      targets.push(this);
+    });
     Element.prototype.scrollIntoView = scrollIntoView;
     try {
       renderPanel();
       fillRequiredForGenerate();
       await runGenerate(K.generate);
       scrollIntoView.mockClear();
+      targets.length = 0;
 
       fireEvent.click(screen.getByText(K.back));
 
-      expect(scrollIntoView).toHaveBeenCalledWith({ block: "end" });
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+      expect(targets[targets.length - 1]).toHaveAttribute(
+        "data-step",
+        "settings",
+      );
     } finally {
       Element.prototype.scrollIntoView = original;
     }
@@ -2120,5 +2128,118 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
         name: "scenarioDialogue.buttons.expandScenario",
       }),
     ).toBeNull();
+  });
+});
+
+describe("ScenarioDialoguePanel 修正第 4 輪：操作列固定在 sheet 底端（#1146）", () => {
+  const actionBar = () =>
+    screen.getByRole("group", { name: "scenarioDialogue.setup.actionBar" });
+
+  /** 固定列不在捲動區裡面（不會跟著內容捲走），而是捲動區後面的兄弟 */
+  const expectPinnedBelowScrollArea = (bar: HTMLElement) => {
+    const scroll = screen.getByTestId("scenario-scroll-area");
+    expect(scroll).toHaveClass("overflow-y-auto", "flex-1", "min-h-0");
+    expect(scroll.contains(bar)).toBe(false);
+    expect(bar.parentElement).toBe(scroll.parentElement);
+    expect(
+      scroll.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(bar).toHaveClass("shrink-0", "border-t", "bg-white");
+  };
+
+  it("對話：固定列在捲動區外，左＝回上一步、右＝目前這一步的主要動作", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "你和同學在星期一早上聊天。");
+
+    const bar = actionBar();
+    expectPinnedBelowScrollArea(bar);
+    const back = within(bar).getByRole("button", { name: K.stepBack });
+    const next = within(bar).getByRole("button", { name: K.next });
+    expect(
+      back.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(next).toHaveClass("bg-blue-600");
+    expect(back).not.toHaveClass("bg-blue-600");
+  });
+
+  it("對話：步驟往下走、內容變長，固定列仍在捲動區外", () => {
+    renderPanel();
+    fillRequiredForGenerate();
+
+    const bar = actionBar();
+    expectPinnedBelowScrollArea(bar);
+    expect(
+      within(bar).getByRole("button", { name: K.generate }),
+    ).toBeInTheDocument();
+    // 設定卡與額度提示在捲動區，不在固定列
+    const scroll = screen.getByTestId("scenario-scroll-area");
+    expect(
+      within(scroll).getByText("scenarioDialogue.hints.rateLimit"),
+    ).toBeInTheDocument();
+    expect(
+      within(bar).queryByText("scenarioDialogue.hints.rateLimit"),
+    ).toBeNull();
+  });
+
+  it("對話第一步沒有任何按鈕時不畫固定列", () => {
+    renderPanel();
+    expect(
+      screen.queryByRole("group", { name: "scenarioDialogue.setup.actionBar" }),
+    ).toBeNull();
+  });
+
+  it("題目清單：「上一步：回到對話」在同一條固定列的左側", () => {
+    renderPanel({ onCancel: vi.fn() });
+    goToListManually();
+
+    const bar = actionBar();
+    expectPinnedBelowScrollArea(bar);
+    const back = within(bar).getByRole("button", { name: K.back });
+    const cancel = within(bar).getByRole("button", {
+      name: "contentEditor.buttons.cancel",
+    });
+    expect(
+      back.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // 題目與新增鍵在捲動區
+    const scroll = screen.getByTestId("scenario-scroll-area");
+    expect(within(scroll).getByText(K.addQuestion)).toBeInTheDocument();
+
+    fireEvent.click(back);
+    expect(onQuestionList()).toBe(false);
+  });
+
+  it("觸控裝置上輸入欄位 focus 後捲到可見處（避免被鍵盤擋住）", async () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalScroll = Element.prototype.scrollIntoView;
+    const targets: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      targets.push(this);
+    });
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      onchange: null,
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    try {
+      renderPanel();
+      chooseMode("existing");
+      const box = screen.getByPlaceholderText(K.scenarioPlaceholder);
+      box.focus();
+
+      await waitFor(() => expect(targets).toContain(box));
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+        block: "center",
+      });
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      Element.prototype.scrollIntoView = originalScroll;
+    }
   });
 });

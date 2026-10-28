@@ -5128,6 +5128,7 @@
       "back": "回上一步",
       "next": "下一步",
       "startGenerate": "開始產生",
+      "actionBar": "操作",
       "countOption": "{{count}} 題",
       "writeArticle": "請 AI 寫情境",
       "writingArticle": "好，我依「{{goal}}」寫一篇 {{level}} 程度的情境，請稍等…",
