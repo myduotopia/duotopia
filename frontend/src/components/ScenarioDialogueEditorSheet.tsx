@@ -8,6 +8,15 @@
  * 兩種呈現方式是照現況分的，不是新發明：教材頁（我的／機構／學校／班級）用的是
  * 從右側滑出、避開側邊欄的面板；`ProgramTreeView` 用的是置中 modal。硬要統一會動到
  * 其他題型在那些頁面的既有版面，不在這張單的範圍。
+ *
+ * 面板外框只負責撐出 header 以下的高度（`flex-1 min-h-0 flex flex-col`），**不捲動、不加內距**：
+ * 面板裡面自己分「捲動區＋固定在底端的操作列」（#1146 修正第 4 輪，見
+ * `scenario-dialogue-editor/ScenarioSheetLayout`）。外框若再 overflow-auto，操作列就會
+ * 跟著內容一起捲走。
+ *
+ * 側滑面板高度用 `h-[100dvh]`（第 4b 輪，比照學生端 `ScenarioChatActivity`）：手機瀏覽器的
+ * 網址列／工具列會吃掉 `100vh` 的一截，用 `h-screen` 時固定在底端的操作列會被蓋住。
+ * 瀏海機 home bar 的 safe-area 內距由操作列自己留（`ScenarioActionBar`）。
  */
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -80,7 +89,7 @@ export function ScenarioDialogueEditorSheet({
   );
 
   const panel = (
-    <div className="flex-1 overflow-auto p-6 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-col">
       <ScenarioDialoguePanel
         /**
          * #1013: key 綁內容 id —— 面板把 initialData 當初值（lazy initializer），
@@ -111,7 +120,7 @@ export function ScenarioDialogueEditorSheet({
 
   return (
     <div
-      className="editor-panel fixed top-0 right-0 h-screen bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
+      className="editor-panel fixed top-0 right-0 h-[100dvh] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
       style={{ left: `${sidebarWidth}px` }}
     >
       {header}

@@ -178,9 +178,11 @@ export interface BatchClassroomGradeResponse {
   count: number;
 }
 
-/** 批次更新個人班級（年級／等級／啟用狀態）的單筆內容（#1097）；每筆至少帶一個欄位 */
+/** 批次更新個人班級（名稱／年級／等級／啟用狀態）的單筆內容（#1097；名稱 #1139）；每筆至少帶一個欄位 */
 export interface BatchClassroomUpdateItem {
   classroom_id: number;
+  /** 去頭尾空白後 1–100 字（後端再驗一次） */
+  name?: string;
   grade?: number;
   level?: string;
   is_active?: boolean;
@@ -189,11 +191,37 @@ export interface BatchClassroomUpdateItem {
 export interface BatchClassroomUpdateResponse {
   updated: {
     id: number;
+    name: string;
     grade: number | null;
     level: string | null;
     is_active: boolean;
   }[];
   count: number;
+}
+
+/** 批次編輯學校班級（名稱／年級，#1139）的單筆內容；每筆至少帶一個欄位 */
+export interface SchoolBatchClassroomUpdateItem {
+  classroom_id: number;
+  name?: string;
+  grade?: number;
+}
+
+export interface SchoolBatchClassroomUpdateResponse {
+  updated: { id: number; name: string; grade: number | null }[];
+  count: number;
+}
+
+/** 批次編輯 AI 助手（#1139）：送出視窗裡那幾班的當下名稱／年級＋最近 10 輪對話＋本次指示 */
+export interface ClassroomBatchEditAiRequest {
+  classrooms: { id: number; name: string; grade: number | null }[];
+  history: { role: "user" | "assistant"; content: string }[];
+  instruction: string;
+}
+
+/** AI 建議：只含名稱／年級，後端已過濾不在清單的 id、超長名稱、越界年級 */
+export interface ClassroomBatchEditAiResponse {
+  reply: string;
+  changes: { id: number; name?: string; grade?: number }[];
 }
 
 export interface LoginRequest {
@@ -933,7 +961,7 @@ class ApiClient {
     });
   }
 
-  /** 批次更新個人班級的年級／等級／啟用狀態（#1097）；全有或全無，最多 200 筆 */
+  /** 批次更新個人班級的名稱／年級／等級／啟用狀態（#1097；名稱 #1139）；全有或全無，最多 200 筆 */
   async batchUpdateClassrooms(
     items: BatchClassroomUpdateItem[],
   ): Promise<BatchClassroomUpdateResponse> {
@@ -968,6 +996,29 @@ class ApiClient {
     return this.request(`/api/schools/${schoolId}/classrooms/batch-grade`, {
       method: "POST",
       body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次編輯學校班級的名稱／年級（#1139）；全有或全無，最多 200 筆 */
+  async batchUpdateSchoolClassrooms(
+    schoolId: string,
+    items: SchoolBatchClassroomUpdateItem[],
+  ): Promise<SchoolBatchClassroomUpdateResponse> {
+    return this.request(`/api/schools/${schoolId}/classrooms/batch-update`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  /** 批次編輯 AI 助手（#1139）：只限平台管理員；只回建議、不寫入資料庫；signal 用來「停止」 */
+  async suggestClassroomBatchEdit(
+    payload: ClassroomBatchEditAiRequest,
+    signal?: AbortSignal,
+  ): Promise<ClassroomBatchEditAiResponse> {
+    return this.request("/api/classrooms/batch-edit/ai-suggest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
     });
   }
 
@@ -1487,6 +1538,32 @@ class ApiClient {
     });
   }
 
+  /**
+   * 情境對話：學生答完一題拿 AI 建議（#1140）。
+   *
+   * 錄音要先上傳（`/api/students/upload-recording` 會回 `progress_id`），這支只負責
+   * 「聽那一題已經存好的錄音、回一則建議」。
+   *
+   * 配額是**伺服器端**每題 3 次（與批改頁的 Azure 分析同一個計數）：用完回 429、
+   * 帶 `detail.code = "AI_ANALYSIS_QUOTA_EXCEEDED"`。
+   */
+  async scenarioDialogueFeedback(data: {
+    item_progress_id: number;
+    ui_language?: string;
+  }): Promise<{
+    verdict: "improve" | "great";
+    comment: string;
+    suggestion?: string | null;
+    ai_analysis_count: number;
+    ai_analysis_remaining: number;
+    max_attempts: number;
+  }> {
+    return this.request("/api/students/scenario-dialogue/feedback", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   // ===== Issue #1021: 情境對話 AI =====
   // 三個端點都不寫 DB —— 產出來的東西先回前端給老師改，按儲存才走 createContent。
 
@@ -1494,7 +1571,13 @@ class ApiClient {
   async generateScenarioArticle(data: {
     goal: string;
     level?: string;
+    /** #1146：重問句與標題建議用的語言（zh-TW / en） */
+    ui_language?: string;
   }): Promise<{
+    /** #1146 答非所問：false 時不產內容，改看 reask */
+    usable?: boolean;
+    reask?: string;
+    suggested_title?: string;
     content: string;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
@@ -1512,7 +1595,12 @@ class ApiClient {
    * 後端會翻成給模型看的英文描述 —— 不要在這裡先轉成顯示用的中文。
    */
   async generateScenarioQuestions(data: {
+    /** #1146：可為空（不需要情境），此時改用 direction 出題 */
     scenario_content: string;
+    direction?: string;
+    /** 情境圖網址（最多 5 張），AI 出題會看圖 */
+    scenario_images?: string[];
+    ui_language?: string;
     count: number;
     question_level?: string;
     global_tense?: { time: string; aspect: string } | null;
@@ -1522,6 +1610,9 @@ class ApiClient {
     /** 清單上已有的題目，避免再產一批時給重複的 */
     existing_questions?: string[];
   }): Promise<{
+    usable?: boolean;
+    reask?: string;
+    suggested_title?: string;
     questions: Array<{
       question: string;
       translation: string;
@@ -1564,13 +1655,23 @@ class ApiClient {
    * `Content-Type: application/json`，套在 FormData 上會蓋掉 multipart 的 boundary，
    * 後端就解不出檔案。專案裡其他上傳（uploadImage / uploadAudio）也是這樣繞過。
    */
-  async extractScenarioArticle(file: File): Promise<{
+  async extractScenarioArticle(
+    file: File,
+    uiLanguage?: string,
+  ): Promise<{
     content: string;
+    /** #1146：檔內有意義的圖（page 1-based、box_2d 0–1000），前端裁成情境圖 */
+    figures?: Array<{ page: number; box_2d: number[] }>;
+    /** #1146：同一次呼叫的標題建議（語言跟 uiLanguage） */
+    suggested_title?: string;
+    /** #1146：輸出被截斷、文章可能缺結尾 */
+    truncated?: boolean;
     usage?: { input_tokens: number; output_tokens: number };
     estimated_cost_usd?: number;
   }> {
     const formData = new FormData();
     formData.append("file", file);
+    if (uiLanguage) formData.append("ui_language", uiLanguage);
 
     const currentToken = this.getToken();
     const headers: HeadersInit = {};
@@ -1583,8 +1684,16 @@ class ApiClient {
       { method: "POST", headers, body: formData },
     );
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || `HTTP ${response.status}`);
+      // ApiError 帶 status，面板才分得出 402（本月額度用完）與一般失敗
+      let detail: string = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+        else if (body?.detail?.message) detail = body.detail.message;
+      } catch {
+        // non-JSON error body; keep the default message
+      }
+      throw new ApiError(response.status, detail);
     }
     return response.json();
   }

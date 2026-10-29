@@ -1,5 +1,5 @@
 // Test workflow trigger: 2025-11-10
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { StudentProtectedRoute } from "./components/StudentProtectedRoute";
@@ -46,7 +46,10 @@ import CreateOrganization from "./pages/admin/CreateOrganization";
 import AdminOrgMonthlyBilling from "./pages/admin/AdminOrgMonthlyBilling";
 import AdminInstitutionInvoices from "./pages/admin/AdminInstitutionInvoices";
 import GroupBuyOpenPage from "./pages/teacher/GroupBuyOpenPage";
-import { ENABLE_GROUP_BUY } from "./config/featureFlags";
+import {
+  ENABLE_GROUP_BUY,
+  ENABLE_SCENARIO_DIALOGUE,
+} from "./config/featureFlags";
 import BlogListPage from "./pages/BlogListPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import AdminBlogPage from "./pages/admin/AdminBlogPage";
@@ -64,6 +67,11 @@ import TugOfWarSample from "./pages/sample/TugOfWarSample";
 import { Toaster } from "sonner";
 import { useCrossTabAuthSync } from "./hooks/useCrossTabAuthSync";
 import { useAnalyticsPageView } from "./hooks/useAnalyticsPageView";
+
+// #1133 設計稿含大量 mock 資料：lazy 載入，不打包進主程式（功能開關關閉時也不會被載入）
+const ScenarioDialogueSample = lazy(
+  () => import("./pages/sample/ScenarioDialogueSample"),
+);
 
 /**
  * Custom hook to detect mobile screen size
@@ -468,6 +476,17 @@ function App() {
           path="/sample/vocabulary-set/word-card"
           element={<WordCardSample />}
         />
+        {/* #1133 情境對話訊息式 UI 設計稿 —— 跟著情境對話功能開關，production 不註冊 */}
+        {ENABLE_SCENARIO_DIALOGUE && (
+          <Route
+            path="/sample/scenario-dialogue"
+            element={
+              <Suspense fallback={null}>
+                <ScenarioDialogueSample />
+              </Suspense>
+            }
+          />
+        )}
 
         {/* Test Pages */}
         <Route

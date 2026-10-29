@@ -3,8 +3,9 @@
 老師端面板 ``frontend/src/components/ScenarioDialoguePanel.tsx`` 比其他題型多出
 兩層資料，這個模組是它們「怎麼存」的**唯一**判定處：
 
-* **整份設定** —— 情境內容、題目難度（CEFR）、作答指引、整體評分標準（時態／
-  語態）、翻譯語言、TTS 設定。存進 ``contents.scenario_settings``（JSONB）。
+* **整份設定** —— 情境內容、情境圖（最多 5 張，#1146）、題目難度（CEFR）、作答
+  指引、整體評分標準（時態／語態）、翻譯語言、TTS 設定，以及引導式對話的回答
+  （#1146，供「上一步」還原）。存進 ``contents.scenario_settings``（JSONB）。
 * **逐題資料** —— 時態／語態覆寫、必用字詞、參考答案、評分備註、圖片 prompt。
   存進 ``content_items.item_metadata['scenario_dialogue']``。
 
@@ -47,7 +48,9 @@ reference_answer 不得外流到學生端
 ``VOICES`` 一一對應，老師切換介面語言不會改變存進資料庫的值。未知代碼一律擋下
 （丟 ``ValueError``），避免前端／AI 產題送進髒資料後才在評分階段爆掉。
 """
-from typing import Any, Dict, List, Optional
+import os
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 # item_metadata 底下的命名空間 key
 SCENARIO_ITEM_KEY = "scenario_dialogue"
@@ -61,6 +64,16 @@ TENSE_TIMES = frozenset({"present", "past", "future"})
 TENSE_ASPECTS = frozenset({"simple", "progressive", "perfect", "perfectProgressive"})
 VOICES = frozenset({"active", "passive"})
 CEFR_LEVELS = frozenset({"A1", "A2", "B1", "B2", "C1", "C2"})
+
+# ---- #1146 引導式對話 ----
+# 「需要情境嗎？」的回答：不需要（問日常生活）／我有現成的／請 AI 幫我寫
+SCENARIO_MODES = frozenset({"none", "existing", "ai"})
+# 「題目怎麼來？」的回答：自己輸入／請 AI 出題
+QUESTION_SOURCES = frozenset({"manual", "ai"})
+# 一份情境最多幾張情境圖（前端 MAX_SCENARIO_IMAGES 同值）。題目圖仍是每題 1 張，不在此列。
+MAX_SCENARIO_IMAGES = 5
+# 單一網址長度上限 —— 正常的 GCS 公開網址遠低於此，只是擋異常 payload
+MAX_IMAGE_URL_CHARS = 2048
 
 # 「不指定」的時態 —— 整份設定沒有「沿用」的上層，所以缺值時落在這裡而不是 None
 EMPTY_TENSE: Dict[str, str] = {"time": "", "aspect": ""}
@@ -129,6 +142,90 @@ def _normalize_tts_settings(raw: Any) -> Optional[Dict[str, str]]:
     }
 
 
+_GCS_HOST = "storage.googleapis.com"
+# 圖片上傳服務（services/image_upload.py）存 GCS 時的路徑前綴：images/<環境>/<檔名>
+_GCS_IMAGE_PREFIX = "images/"
+# 本機開發（USE_GCS_STORAGE != true）時圖片存在 backend/static/images/
+_LOCAL_IMAGE_PREFIX = "/static/images/"
+
+
+def own_image_storage() -> Tuple[str, bool]:
+    """本站圖片存放設定 ``(bucket_name, use_gcs)``，與 ImageUploadService 讀同一組環境變數。
+
+    不直接 new ImageUploadService：它的建構子會建目錄、讀 GCS 設定，存檔正規化用不到。
+    """
+    bucket = os.getenv("GCS_BUCKET_NAME", "duotopia-audio")
+    use_gcs = os.getenv("USE_GCS_STORAGE", "false").lower() == "true"
+    return bucket, use_gcs
+
+
+def classify_own_image_url(
+    url: Any, bucket_name: str, use_gcs: bool
+) -> Optional[Tuple[str, str]]:
+    """判斷情境圖網址是不是「我們自己存的圖」（#1146 review 3）。
+
+    回傳 ``("gcs", "gs://bucket/images/...")``、``("local", "<檔名>")`` 或 ``None``。
+
+    * GCS：只收 ``https://storage.googleapis.com/<本站 bucket>/images/...``。
+      同 bucket 底下還有音檔等其他東西，只開放圖片上傳服務寫入的 ``images/`` 前綴。
+    * 本機 static：只在**沒有**用 GCS（本機開發）時接受。正式環境不會有 static 圖，
+      若仍收的話，任何人都能塞一個 ``http://任意主機/static/images/x.png`` 進來。
+
+    純函式：存檔正規化（本檔）與 AI 讀圖（services/scenario_context_images）共用同一規則。
+    """
+    if not url or not isinstance(url, str):
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme == "https" and parsed.netloc == _GCS_HOST:
+        path = parsed.path.lstrip("/")
+        bucket, _, blob = path.partition("/")
+        if (
+            bucket
+            and bucket == bucket_name
+            and blob.startswith(_GCS_IMAGE_PREFIX)
+            and ".." not in blob
+        ):
+            return ("gcs", f"gs://{bucket}/{blob}")
+        return None
+    if (
+        not use_gcs
+        and parsed.scheme in ("http", "https")
+        and parsed.path.startswith(_LOCAL_IMAGE_PREFIX)
+    ):
+        filename = parsed.path[len(_LOCAL_IMAGE_PREFIX) :]
+        # 只收單純檔名，擋掉 ../ 之類的路徑穿越
+        if filename and filename == os.path.basename(filename) and ".." not in filename:
+            return ("local", filename)
+    return None
+
+
+def normalize_scenario_images(raw: Any) -> List[str]:
+    """情境圖網址清單（#1146）。去掉空白項與非本站網址；超過上限直接擋下，不靜靜截斷。
+
+    非本站網址（別的網站、別的 bucket、正式環境的 static 路徑）直接丟棄 —— 前端只會
+    送上傳服務回來的網址，其他來源不是 bug 就是有人手動打 API，存進去也只會在
+    學生端顯示外部圖片、在 AI 讀圖時被略過（review 3）。
+
+    靜靜截斷的話，老師以為存了 6 張、學生只看到 5 張，而且他完全不知道少了哪一張 ——
+    前端擷取時已經「保留前 5 張並提示」，送到這裡還超過就是前端的 bug，該讓它爆出來。
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"scenario_images 需為陣列，收到 {type(raw).__name__}")
+    bucket_name, use_gcs = own_image_storage()
+    urls = [
+        u
+        for u in (_text(x).strip() for x in raw)
+        if u
+        and len(u) <= MAX_IMAGE_URL_CHARS
+        and classify_own_image_url(u, bucket_name, use_gcs) is not None
+    ]
+    if len(urls) > MAX_SCENARIO_IMAGES:
+        raise ValueError(f"情境圖最多 {MAX_SCENARIO_IMAGES} 張，收到 {len(urls)} 張")
+    return urls
+
+
 def normalize_settings(raw: Any) -> Optional[Dict[str, Any]]:
     """整份設定正規化，回傳可直接寫進 ``contents.scenario_settings`` 的 dict。
 
@@ -154,6 +251,18 @@ def normalize_settings(raw: Any) -> Optional[Dict[str, Any]]:
         "global_voice": "" if global_voice is None else global_voice,
         "translate_language": _text(raw.get("translate_language")),
         "tts_settings": _normalize_tts_settings(raw.get("tts_settings")),
+        # ---- #1146 引導式對話：題目清單頁按「上一步」回到對話時，靠這幾項還原已答
+        # 步驟。舊資料沒有它們 → 一律落成空值，前端再由情境文章有無推斷。
+        "scenario_mode": _code(
+            raw.get("scenario_mode"), SCENARIO_MODES, "scenario_mode"
+        ),
+        "question_source": _code(
+            raw.get("question_source"), QUESTION_SOURCES, "question_source"
+        ),
+        "goal": _text(raw.get("goal")),
+        "article_level": _code(raw.get("article_level"), CEFR_LEVELS, "article_level"),
+        "direction": _text(raw.get("direction")),
+        "scenario_images": normalize_scenario_images(raw.get("scenario_images")),
     }
 
 
@@ -292,21 +401,34 @@ def grading_criteria(
 
     刻意**不含** ``image_prompt`` —— 生圖用的描述不是評分依據，餵進 prompt 只會
     讓模型拿畫面內容去要求學生。
+
+    #1146 起帶上**情境文章與情境圖**：題目常是「圖中的人在做什麼？」這類只看題目
+    本文答不出來的問題，評分端看不到情境就只能瞎猜學生答得對不對。代價是每次評分的
+    input token 變多（圖片尤其明顯），這是使用者確認過的取捨。
     """
     settings = settings or {}
+    images = settings.get("scenario_images")
     return {
         **teacher_item_view(item_block, settings),
         "question": question,
         "global_rubric": settings.get("global_rubric", ""),
         "question_level": settings.get("question_level", ""),
+        "scenario_content": settings.get("scenario_content", "") or "",
+        "scenario_images": list(images) if isinstance(images, list) else [],
     }
 
 
 def public_settings_view(settings: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """學生端安全版的整份設定：情境內容與作答指引學生看得到，其餘是出題端的事。"""
+    """學生端安全版的整份設定：情境內容、情境圖與作答指引學生看得到，其餘是出題端的事。
+
+    ``goal`` / ``direction`` / ``scenario_mode`` 等 #1146 新增的對話紀錄是老師出題時
+    的內部筆記，**不給學生**。
+    """
     settings = settings or {}
+    images = settings.get("scenario_images")
     return {
         "scenario_content": settings.get("scenario_content", ""),
+        "scenario_images": list(images) if isinstance(images, list) else [],
         "global_rubric": settings.get("global_rubric", ""),
         "translate_language": settings.get("translate_language", ""),
     }

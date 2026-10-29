@@ -22,6 +22,7 @@ from . import (
     assignments,
     quiz_assignments,
     recordings,
+    scenario_dialogue,
     email_verification,
     account_management,
 )
@@ -43,6 +44,9 @@ router.include_router(
     quiz_assignments.router, tags=["students-quiz"], dependencies=_assignment_guards
 )
 router.include_router(recordings.router, tags=["students-recordings"])
+# #1140: 情境對話逐題 AI 建議。作業 id 不在路徑上（body 帶 item_progress_id），
+# 所以不套 _assignment_guards，端點內自行呼叫 ensure_assignment_classroom_visible。
+router.include_router(scenario_dialogue.router, tags=["students-scenario-dialogue"])
 router.include_router(email_verification.router, tags=["students-email"])
 router.include_router(account_management.router, tags=["students-accounts"])
 

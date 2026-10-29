@@ -1,12 +1,15 @@
 """
 Pydantic models/schemas for teachers API validation.
+
+ClassroomUpdate.name 用共用的 ClassroomName：去頭尾空白後 1–100 字（#1139），
+與機構端單班 PUT、兩個批次編輯端點一致。
 """
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import date
 
 from models.question_bank import GRADE_MAX, GRADE_MIN
-from routers.schemas.classroom import normalize_program_level
+from routers.schemas.classroom import ClassroomName, normalize_program_level
 
 
 class TeacherProfile(BaseModel):
@@ -131,7 +134,8 @@ class ClassroomCreate(BaseModel):
 
 
 class ClassroomUpdate(BaseModel):
-    name: Optional[str] = None
+    # 去頭尾空白後 1–100 字；超長原本會在 DB 層 500（#1139）
+    name: Optional[ClassroomName] = None
     description: Optional[str] = None
     level: Optional[str] = None
     grade: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)

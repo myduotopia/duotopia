@@ -196,7 +196,7 @@
 | Calendar | `frontend/src/components/ui/calendar.tsx` | 選日期 |
 | Card | `frontend/src/components/ui/card.tsx` | 卡片外框 |
 | Checkbox | `frontend/src/components/ui/checkbox.tsx` | 勾選框 |
-| Dialog | `frontend/src/components/ui/dialog.tsx` | 對話框 |
+| Dialog | `frontend/src/components/ui/dialog.tsx` | 對話框；`DialogContent` 的 `overlayClassName` 可調遮罩 class（例如要蓋過全站右側浮動工具列時，視窗與遮罩一起加 `z-[160]`，#1139） |
 | DropdownMenu | `frontend/src/components/ui/dropdown-menu.tsx` | 「⋯」選單 |
 | Input | `frontend/src/components/ui/input.tsx` | 單行輸入 |
 | Label | `frontend/src/components/ui/label.tsx` | 表單標籤 |
@@ -218,11 +218,11 @@
 | 元件 | 路徑 | 什麼情況用 |
 |---|---|---|
 | AIScoreDisplay | `frontend/src/components/shared/AIScoreDisplay.tsx` | 顯示 AI 發音評分 |
-| AudioPlayer | `frontend/src/components/shared/AudioPlayer.tsx` | 播放音檔（含時間顯示） |
-| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音 |
+| AudioPlayer | `frontend/src/components/shared/AudioPlayer.tsx` | 播放音檔（含時間顯示）。`tone="onPrimary"`（#1133，只影響 `compact`）：放在主色藍底上用的淺色樣式（無綠底、半透明白按鈕、白色進度條），例如情境對話的學生回答氣泡；預設為原本綠色外觀。`fallbackDuration`（#1133，行為擴充、非外觀）：讀不到音檔時長時改顯示傳入的秒數（例如錄音秒數），不傳時照舊顯示 `--:--` |
+| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音。`variant="chat"`（#1133 情境對話）：大圓麥克風、點一下開始／再點停止（秒數＋聲波）→ 試聽／重錄，不包 Card、不跳完成 toast（畫面在同資料夾 `AudioRecorderChatControls.tsx`，只給 AudioRecorder 內部用） |
 | BatchPasteArea | `frontend/src/components/shared/BatchPasteArea.tsx` | 帶行號的批次貼上文字區 |
-| BatchTranslateSettings | `frontend/src/components/shared/BatchTranslateSettings.tsx` | 批次翻譯語言設定 |
-| BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速） |
+| BatchTranslateSettings | `frontend/src/components/shared/BatchTranslateSettings.tsx` | 批次翻譯語言設定。card 變體在手機（< sm）語言下拉自成一列、撐滿寬度；sm 以上不變（#1146） |
+| BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速）。card 變體在手機（< sm）改兩欄（口音整列、性別／語速並排）；sm 以上三欄一行（#1146） |
 | BatchWorkPanel | `frontend/src/components/shared/BatchWorkPanel.tsx` | 桌面版左側批次工作區（組合貼上、翻譯、語音） |
 | BatchSettingCard | `frontend/src/components/shared/batch/BatchSettingCard.tsx` | 左側批次工作區的卡片外框 |
 | **批次操作列** BulkActionBar | `frontend/src/components/shared/BulkActionBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」、機構班級管理、題庫列表。呼叫端傳完整計數句子（`countLabel`）與動作；動作可設 `variant: "danger"`（不寫＝一般，膠囊上不分主次）、`disabledReason`、`disabledBadge`、`loading`、`testId`，計數旁可加 `countNote` 附註 |
@@ -278,16 +278,18 @@
 |---|---|---|
 | AssignmentDialog | `frontend/src/components/AssignmentDialog.tsx` | 派發作業對話框 |
 | ProgramVisibilitySelector | `frontend/src/components/ProgramVisibilitySelector.tsx` | 教材公開設定 |
-| AdjustGradeDialog | `frontend/src/components/classroom/AdjustGradeDialog.tsx` | 班級批次升／降一個年級 |
+| AdjustGradeDialog | `frontend/src/components/classroom/AdjustGradeDialog.tsx` | 班級批次升／降一個年級，或設為指定年級（含未設定年級的班，#1139） |
+| BatchEditClassroomsDialog | `frontend/src/components/classroom/BatchEditClassroomsDialog.tsx` | 班級批次編輯名稱＋年級（每班一列、全部年級設為、只送變動列）；`renderSidePanel` 是右側面板插槽，平台管理員放 AI 助手 `ClassroomRenameAssistantPanel`（頁面用 `useClassroomRenameAssistantSlot()` 取得，非管理員拿到 undefined）；視窗與遮罩在全站浮動工具列之上（`z-[160]`） |
 | GradeFilterSelect | `frontend/src/components/classroom/GradeFilterSelect.tsx` | 班級清單的年級篩選 |
-| GradeSelect | `frontend/src/components/classroom/GradeSelect.tsx` | 班級表單的年級下拉 |
+| GradeSelect | `frontend/src/components/classroom/GradeSelect.tsx` | 班級表單的年級下拉；`allowEmpty={false}` 時已有年級就不給空白選項（不能清回未設定） |
 | LevelBadge | `frontend/src/components/classroom/LevelBadge.tsx` | 班級 CEFR 等級徽章 |
 | MissingGradeBanner | `frontend/src/components/classroom/MissingGradeBanner.tsx` | 「有 N 個班級尚未設定年級」提醒 |
 | MissingGradeDialog | `frontend/src/components/classroom/MissingGradeDialog.tsx` | 逐班補填年級 |
 | ConfirmDialog | `frontend/src/components/organization/ConfirmDialog.tsx` | 確認對話框（可設危險樣式） |
 | OneCampusBindSection | `frontend/src/components/settings/OneCampusBindSection.tsx` | 1Campus 綁定與信箱驗證狀態 |
 | StudentLoginQRShare | `frontend/src/components/teacher/StudentLoginQRShare.tsx` | 分享學生登入 QR code |
-| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。目前只有題庫用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出。`className` 套在圖上；選用 `buttonClassName` 套在外層放大按鈕上（例如固定大小的縮圖框傳 `block h-full w-full` 讓按鈕撐滿），不傳時不變 |
+| ImageCarousel | `frontend/src/components/ImageCarousel.tsx` | 圖片輪播（左右箭頭、圓點、觸控滑動、鍵盤左右鍵）。預設為首頁功能特色外觀（圓點在上、下方說明文字）；`compact`（#1133）：圓點在圖下、無說明文字區、單張不顯示控制；`zoomable`：點圖放大（ZoomableImage），放大視窗內滑動／按鍵不會讓背後輪播換張 |
+| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。題庫與 `ImageCarousel` 的 `zoomable` 模式（#1133 情境對話）使用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出。`className` 套在圖上；選用 `buttonClassName` 套在外層放大按鈕上（例如固定大小的縮圖框傳 `block h-full w-full` 讓按鈕撐滿），不傳時不變 |
 
 ### 6.5 淘汰中
 
