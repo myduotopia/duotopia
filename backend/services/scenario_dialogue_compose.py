@@ -222,6 +222,11 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
 
     @staticmethod
     def _count(raw: Any, cap: int) -> int:
+        """模型給的題數 → 0～cap 的整數。接受數字與純數字字串（例如 ``"8"``）；
+        其他（布林、NaN、inf、"three"）一律 0。"""
+        if isinstance(raw, str):
+            text = raw.strip()
+            raw = int(text) if text.isascii() and text.isdigit() else None
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
             return 0
         if raw != raw or raw in (float("inf"), float("-inf")):  # NaN / inf
@@ -341,9 +346,30 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
             "output_truncated": False,
         }
 
+    @staticmethod
+    def hit_token_limit(response: Any) -> bool:
+        """Vertex 回應的 finish_reason 是否為 MAX_TOKENS（取不到時當作否）。"""
+        try:
+            finish = response.candidates[0].finish_reason
+        except (AttributeError, IndexError, TypeError):
+            return False
+        name = getattr(finish, "name", finish)
+        return str(name).upper().endswith("MAX_TOKENS")
+
     @classmethod
-    def parse_compose_json(cls, content: str) -> Tuple[Any, bool]:
+    def parse_compose_json(
+        cls, content: str, hit_token_limit: bool = False
+    ) -> Tuple[Any, bool]:
         """compose 專用的 JSON 解析，回傳 ``(raw, output_truncated)``。
+
+        判斷順序（修正 C1b）：
+        1. 整段是合法 JSON → 沒截斷。
+        2. 用 ``raw_decode`` 讀出開頭那段**完整**的 JSON（後面多了說明文字）→ 沒截斷，
+           尾巴丟掉；不能因為多一句話就變成 502 或誤報截斷。
+        3. 都讀不出完整 JSON → 截斷，走救援。
+
+        ``hit_token_limit``（finish_reason=MAX_TOKENS）只在讀不出完整 JSON 時寫進 log：
+        讀得出完整 JSON 代表題目都在，被截掉的只是尾巴的多餘文字，不算截斷。
 
         輸出被 token 上限截斷時 ``parse_json`` 只救回題目物件（``{"questions": [...]}``），
         前面的意圖、標題、題數會掉；prompt 要求這些 key 排在 questions 前面，
@@ -356,6 +382,18 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
             return json.loads(text), False
         except json.JSONDecodeError:
             pass
+        start = text.find("{")
+        if start >= 0:
+            try:
+                raw, _end = json.JSONDecoder().raw_decode(text, start)
+            except json.JSONDecodeError:
+                raw = None
+            if isinstance(raw, dict):
+                return raw, False
+        logger.warning(
+            "scenario_dialogue_compose: JSON 不完整，走救援 | finish_reason=MAX_TOKENS: %s",
+            hit_token_limit,
+        )
         # 一題都救不回時丟 ScenarioDialogueAIOutputError（端點回 502 並退次數）
         raw = cls.parse_json(text)
         if not isinstance(raw, dict):
@@ -411,7 +449,9 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
             prompt, MAX_OUTPUT_TOKENS, extra_parts=image_parts
         )
         cost = self._log_usage("compose", usage)
-        raw, output_truncated = self.parse_compose_json(response.text)
+        raw, output_truncated = self.parse_compose_json(
+            response.text, hit_token_limit=self.hit_token_limit(response)
+        )
         result = self.normalize_compose(
             raw,
             remaining=remaining,

@@ -347,7 +347,7 @@ def test_normalize_cleans_fields():
     raw = {
         "usable": True,
         "intent": "generate",
-        "skipped_count": "3",  # 不是數字 → 0
+        "skipped_count": "three",  # 不是數字 → 0
         "questions": [
             "not a dict",
             {"question": "   "},
@@ -560,3 +560,98 @@ def test_scenario_images_are_sent_as_parts(
     assert resp.status_code == 200, resp.text
     assert fake_ai["extra_parts"] == ["PART"]
     assert "1 picture(s)" in fake_ai["prompt"]
+
+
+# ---------------------------------------------------------------- 修正 C1b
+
+
+def test_complete_json_with_trailing_text_is_not_truncated(fake_ai):
+    """完整 JSON 後面多一段說明文字：照常解析，不算截斷、不 502。"""
+    import asyncio
+
+    body = json.dumps(
+        {"usable": True, "intent": "add_questions", "questions": [_q("A?"), _q("B?")]}
+    )
+    fake_ai["output"] = body + "\n\nNote: I split the text into two questions."
+    service = compose_mod.ScenarioDialogueComposeService()
+    result = asyncio.run(service.compose(text="A? B?", remaining=5))
+
+    assert [q["question"] for q in result["questions"]] == ["A?", "B?"]
+    assert result["output_truncated"] is False
+
+
+def test_unusable_json_with_trailing_text_reasks(
+    test_client, auth_headers_teacher, fake_ai
+):
+    """usable:false 加尾巴文字：照樣重問、不計次，不變成 502。"""
+    fake_ai["output"] = (
+        json.dumps({"usable": False, "reask": "請打題目", "questions": []})
+        + " (the input was unrelated)"
+    )
+    resp = _post(test_client, auth_headers_teacher, text="今天天氣好")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["usable"] is False
+    assert data["output_truncated"] is False
+    assert _used(test_client, auth_headers_teacher) == 0
+
+
+def test_hit_token_limit_reads_finish_reason():
+    hit = ScenarioDialogueComposeService.hit_token_limit
+    max_tokens = SimpleNamespace(name="MAX_TOKENS")
+    stop = SimpleNamespace(name="STOP")
+
+    assert hit(SimpleNamespace(candidates=[SimpleNamespace(finish_reason=max_tokens)]))
+    assert not hit(SimpleNamespace(candidates=[SimpleNamespace(finish_reason=stop)]))
+    assert not hit(SimpleNamespace(candidates=[]))
+    assert not hit(SimpleNamespace(text="{}"))
+
+
+def test_parse_compose_json_complete_json_wins_over_token_limit():
+    """讀得出完整 JSON 時，即使 finish_reason=MAX_TOKENS 也不算截斷（題目都在）。"""
+    raw, truncated = ScenarioDialogueComposeService.parse_compose_json(
+        '{"usable": true, "intent": "generate", "questions": []} trailing',
+        hit_token_limit=True,
+    )
+    assert raw["intent"] == "generate"
+    assert truncated is False
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("8", 8),
+        (" 12 ", 12),
+        ("999", 50),
+        ("8.5", 0),
+        ("-3", 0),
+        ("three", 0),
+        ("", 0),
+        ("８", 0),  # 全形數字不收
+        (float("nan"), 0),
+        (float("inf"), 0),
+        (float("-inf"), 0),
+        (True, 0),
+        (None, 0),
+        (7.9, 7),
+    ],
+)
+def test_count_accepts_digit_strings_and_rejects_nan_inf(value, expected):
+    assert ScenarioDialogueComposeService._count(value, 50) == expected
+
+
+def test_requested_count_digit_string_is_read(
+    test_client, auth_headers_teacher, fake_ai
+):
+    fake_ai["output"] = {
+        "usable": True,
+        "intent": "generate",
+        "requested_count": "8",
+        "skipped_count": "1",
+        "questions": [_q("Q1")],
+    }
+    data = _post(test_client, auth_headers_teacher, text="再出 8 題").json()
+
+    assert data["requested_count"] == 8
+    assert data["skipped_count"] == 1
