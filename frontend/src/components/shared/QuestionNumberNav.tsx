@@ -18,7 +18,7 @@
  * - `readOnly` 或單格 `disabled`：不能點（只顯示狀態）
  * - `children`：接在方格後面同一列的內容（例如作答頁的提交鈕，顯示規則由呼叫端決定）
  * 每格都是 `<button>`，`aria-label`／`title` 由呼叫端傳（本元件不綁 i18n 命名空間）；
- * 目前這格帶 `aria-current="step"`。
+ * 目前這格帶 `aria-current="step"`；鍵盤移到格子上有藍色 focus-visible 外圈（標準藍，C4b 審查 11）。
  */
 import type { ReactNode } from "react";
 
@@ -202,6 +202,7 @@ export function QuestionNumberNav({
             title={item.title}
             className={cn(
               "relative inline-flex shrink-0 items-center justify-center rounded border font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1",
               sizeClass,
               questionNumberCellClass(item, {
                 isCurrent,

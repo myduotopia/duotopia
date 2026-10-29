@@ -6522,7 +6522,8 @@
         "reselect": "請再選一次〈{{name}}〉以繼續處理",
         "reselectPhotos": "如果是照片，請照第一次的順序選取。",
         "reselectButton": "選擇檔案",
-        "anotherRunning": "另一份題本正在處理中，請等它處理完再打開"
+        "anotherRunning": "另一份題本正在處理中，請等它處理完再打開",
+        "keepOpenOrg": "網頁開著才會繼續處理；關掉這個面板、切到「教材」分頁都不會中斷。關掉網頁或離開「機構教材」頁的話，下次從「機構教材」的「題庫」分頁上方繼續。"
       },
       "banner": {
         "one": "你有 1 份題本還沒處理完（{{name}}，{{progress}}）",
@@ -6648,7 +6649,16 @@
         "addTypePlaceholder": "請選擇題型",
         "addNo": "原卷題號（選填）",
         "addNoPlaceholder": "例如 12",
-        "addSubmit": "新增並編輯"
+        "addSubmit": "新增並編輯",
+        "editClosedSaved": "這一題已經存進題庫，編輯已關閉。",
+        "editClosedGone": "這一題已經不在畫面上（可能重新處理或被刪除），編輯已關閉。",
+        "cardChanged": "這題剛有更新，請重新打開。",
+        "retryImageMissing": "找不到這一頁的圖片，沒辦法重試，請用「手動補這一題」。",
+        "closeBlocked": "編輯中的題目還沒存好，面板先不關：{{reason}}",
+        "lockedUntilNextPage": "下一頁處理完才能編輯",
+        "pendingContinuation": "這個題組可能還有下一頁的內容，等下一頁處理完再存。",
+        "unmergedContinuation": "接續上一頁的題組（上一題組已編輯或已存入，未自動合併）",
+        "saveNeedsFile": "請先重選檔案"
       },
       "openOtherOrg": "那次匯入在另一個機構的題庫，請先切換到那個機構再打開。",
       "openOtherSchool": "那次匯入在學校題庫，目前還不能從這裡打開。"

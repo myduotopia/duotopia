@@ -3,8 +3,11 @@
  *
  * - **整份設定**：年段（GradeRangeSlider）、考題來源（CreatableCombobox，只取一個）、教材與單元
  *   （ProgramLessonPicker）、公開（VisibilitySelect，機構題庫顯示「僅機構／公開」）。改了就 PATCH 設定，
- *   套用到全部還沒存的卡（題目卡上不顯示這四個欄位）。年段拖曳時等 0.5 秒沒再動才送。口音不在這裡改。
- * - **藍色進度條**：已處理頁數／總頁數（含空白頁說明、失敗頁數），處理中時提醒「網頁開著才會繼續」。
+ *   套用到全部還沒存的卡（題目卡上不顯示這四個欄位）。年段拖曳時等 0.5 秒沒再動才送（狀態在
+ *   useExamImportReview：存入前先送出、送失敗滑桿改回）。來源名稱直接用整份摘要的 `source`（C4a 修正，
+ *   不再另查來源列表）；改來源失敗時改回摘要的來源。口音不在這裡改。
+ * - **藍色進度條**：已處理頁數／總頁數（含空白頁說明、失敗頁數），處理中時提醒「網頁開著才會繼續」
+ *   （機構題庫的文字寫「機構教材」頁／「機構題庫」上方，C4b 審查 9）。
  * - 原進度畫面的頂部提示（C4 定案 A1 搬過來）：處理停下＋「繼續處理」、從提示列繼續時請老師
  *   「再選一次〈檔名〉」、整份錯誤；頁碼說明小字；上次存入「N 題因題庫已有而略過」。
  */
@@ -20,25 +23,15 @@ import {
   CreatableCombobox,
   type ComboboxItem,
 } from "@/components/shared/CreatableCombobox";
-import {
-  GradeRangeSlider,
-  type GradeRange,
-} from "@/components/shared/GradeRangeSlider";
+import { GradeRangeSlider } from "@/components/shared/GradeRangeSlider";
 import { ProgramLessonPicker } from "@/components/shared/ProgramLessonPicker";
 import { VisibilitySelect } from "@/components/shared/VisibilitySelect";
-import { apiClient } from "@/lib/api";
 import type { Program } from "@/types";
 import type { QuestionVisibility } from "@/types/questionBank";
-import {
-  makeCreateSource,
-  searchSources,
-  sourceToItem,
-} from "../sourcesCombobox";
+import { makeCreateSource, searchSources } from "../sourcesCombobox";
 import { errorInfo, errorKey } from "./examImportErrors";
 import type { ExamImportController, PageNote } from "./useExamImport";
 import type { ExamImportReviewState } from "./useExamImportReview";
-
-const GRADE_DEBOUNCE_MS = 500;
 
 interface Props {
   controller: ExamImportController;
@@ -56,56 +49,28 @@ export default function ExamImportReviewTop({
   const settings = detail?.settings ?? {};
   const org = controller.organizationId;
 
-  // 年段：本機先動，停 0.5 秒才送
-  const [grade, setGrade] = useState<GradeRange>([
-    settings.grade_min ?? null,
-    settings.grade_max ?? null,
-  ]);
-  const gradeTimer = useRef<number | null>(null);
+  // 來源：整份摘要帶 id＋名稱（C4a 修正）；本機先換，送失敗改回摘要的來源
+  const summarySourceId = detail?.source?.id ?? null;
+  const summarySourceName = detail?.source?.name ?? "";
+  const summarySource = (): ComboboxItem[] =>
+    summarySourceId === null
+      ? []
+      : [{ id: summarySourceId, label: summarySourceName }];
+  const [source, setSource] = useState<ComboboxItem[]>(summarySource);
   useEffect(() => {
-    setGrade([settings.grade_min ?? null, settings.grade_max ?? null]);
-  }, [settings.grade_min, settings.grade_max]);
-  useEffect(
-    () => () => {
-      if (gradeTimer.current) window.clearTimeout(gradeTimer.current);
-    },
-    [],
-  );
-  const changeGrade = (next: GradeRange) => {
-    setGrade(next);
-    if (gradeTimer.current) window.clearTimeout(gradeTimer.current);
-    gradeTimer.current = window.setTimeout(() => {
-      void review.patchSettings({ grade_min: next[0], grade_max: next[1] });
-    }, GRADE_DEBOUNCE_MS);
+    setSource(
+      summarySourceId === null
+        ? []
+        : [{ id: summarySourceId, label: summarySourceName }],
+    );
+  }, [summarySourceId, summarySourceName]);
+  const changeSource = async (next: ComboboxItem[]) => {
+    const picked = next.slice(-1);
+    setSource(picked);
+    if (!picked[0]) return;
+    if (!(await review.patchSettings({ source_id: picked[0].id })))
+      setSource(summarySource());
   };
-
-  // 來源：設定只存 id，打開時查名稱
-  const [source, setSource] = useState<ComboboxItem[]>([]);
-  const sourceId = settings.source_id ?? null;
-  useEffect(() => {
-    if (sourceId === null) {
-      setSource([]);
-      return;
-    }
-    let cancelled = false;
-    apiClient
-      .listSources()
-      .then((res) => {
-        if (cancelled) return;
-        const found = res.items.find((s) => s.id === sourceId);
-        setSource(
-          found
-            ? [sourceToItem(found)]
-            : [{ id: sourceId, label: `#${sourceId}` }],
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setSource([{ id: sourceId, label: `#${sourceId}` }]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceId]);
 
   const link = settings.program_links?.[0] ?? null;
   const visibility = (settings.visibility ?? null) as QuestionVisibility | null;
@@ -146,8 +111,8 @@ export default function ExamImportReviewTop({
             {t("questionBank.examImport.upload.grade")}
           </Label>
           <GradeRangeSlider
-            value={grade}
-            onChange={changeGrade}
+            value={review.grade}
+            onChange={review.changeGrade}
             compact
             emptyLabel={t("questionBank.examImport.upload.gradeEmpty")}
             data-testid="exam-review-grade"
@@ -159,12 +124,7 @@ export default function ExamImportReviewTop({
           </Label>
           <CreatableCombobox
             value={source}
-            onChange={(next) => {
-              const picked = next.slice(-1);
-              setSource(picked);
-              if (picked[0])
-                void review.patchSettings({ source_id: picked[0].id });
-            }}
+            onChange={(next) => void changeSource(next)}
             onSearch={searchSources}
             onCreate={makeCreateSource(org ?? undefined)}
             closeOnSelect
@@ -236,7 +196,11 @@ export default function ExamImportReviewTop({
         />
         {!allDone && (
           <p className="text-xs text-gray-500">
-            {t("questionBank.examImport.progress.keepOpen")}
+            {t(
+              org
+                ? "questionBank.examImport.progress.keepOpenOrg"
+                : "questionBank.examImport.progress.keepOpen",
+            )}
           </p>
         )}
       </div>

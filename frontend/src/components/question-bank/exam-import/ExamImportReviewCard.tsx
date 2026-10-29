@@ -8,6 +8,12 @@
  * 考點 clip。需注意的題左邊一條對應顏色的短豎線；導覽目前這題淡藍底。
  * 卡片上方提示：題庫已有（藍字＋「看原題」）、題目文字相同（A4 文字）、這份題本內重複、處理失敗
  * （「重試」：次數還有、不是手動補的卡；「手動補這一題」＝打開編輯）、上次存入被退回的原因（紅字）。
+ * 存入時因重複被略過（duplicate／same_stem／duplicate_in_import）只顯示藍字「這題重複」類說明、不再加
+ * 紅字（C4b 審查 7）；`pending_continuation` 用灰字「等下一頁處理完再存」。
+ * **還不能編輯**（`locked`：頁上最後一張題組、下一頁還沒處理完；C4b 審查 1）：鉛筆停用、點卡片不打開，
+ * 滑鼠停留與卡上灰字都說明「下一頁處理完才能編輯」。延續上一頁卻沒自動合併的題組（上一個題組已編輯或
+ * 已存入）卡上說明「接續上一頁的題組…未自動合併」（C4a 修正 4）。
+ * 小題位置以 `cardToUnitWithOrder` 的對照表對回卡片原題（克漏字依空格排序過也對得上）。
  * 題組標題旁的喇叭先停用、標「即將推出」（A5）。
  *
  * **編輯**：原位展開，最上方原卷這一題的截圖（ExamImportOriginalCrop），表單嵌 `QuestionCard`／
@@ -30,7 +36,7 @@ import GroupPreview from "../GroupPreview";
 import QuestionCard from "../QuestionCard";
 import QuestionsPreview from "../QuestionsPreview";
 import type { QuestionDraft } from "../questionDraft";
-import { cardToUnit, examPointsOf } from "./cardDraft";
+import { cardToUnitWithOrder, examPointsOf } from "./cardDraft";
 import ExamImportOriginalCrop from "./ExamImportOriginalCrop";
 import {
   entryDomId,
@@ -59,6 +65,13 @@ const MARKER: Partial<Record<ReviewIssue, string>> = {
   importDuplicate: "border-l-4 border-blue-400 pl-2",
 };
 
+/** 存入時因重複略過的原因：卡上只用藍字說明，不加紅字 */
+const DUPLICATE_REASONS: Record<string, string> = {
+  duplicate: "duplicate",
+  same_stem: "sameStem",
+  duplicate_in_import: "importDuplicate",
+};
+
 interface Props {
   card: ExamImportCard;
   pageImageUrl: string | null;
@@ -68,18 +81,10 @@ interface Props {
   programs: Program[];
   retryLimit: number;
   failure?: ExamImportSaveFailure;
-}
-
-/** 草稿小題 → 卡片原本那一題的位置（克漏字排序過，依 blank 對回） */
-function originalIndex(
-  card: ExamImportCard,
-  d: QuestionDraft,
-  i: number,
-): number {
-  if (card.kind !== "group" || card.group?.group_type !== "cloze") return i;
-  const qs = card.group?.questions ?? [];
-  const at = qs.findIndex((q) => (q.blank ?? null) === d.blank_index);
-  return at >= 0 ? at : i;
+  /** 還不能編輯（下一頁還沒處理完，可能還會併進內容） */
+  locked?: boolean;
+  /** 延續上一頁卻沒自動合併 */
+  unmergedContinuation?: boolean;
 }
 
 function letters(indexes: number[]): string {
@@ -94,14 +99,19 @@ export default function ExamImportReviewCard({
   programs,
   retryLimit,
   failure,
+  locked = false,
+  unmergedContinuation = false,
 }: Props) {
   const { t, i18n } = useTranslation();
   const editing = review.editing?.cardId === card.card_id;
   const busy = review.busyCard === card.card_id;
-  const unit = useMemo(
-    () => cardToUnit(card, review.catalog),
+  const { unit, originalIndex: orderMap } = useMemo(
+    () => cardToUnitWithOrder(card, review.catalog),
     [card, review.catalog],
   );
+  /** 草稿小題 → 卡片原本那一題的位置 */
+  const originalIndex = (d: QuestionDraft, i: number) => orderMap[d.key] ?? i;
+  const lockedText = t("questionBank.examImport.review.lockedUntilNextPage");
   const cardQs: ExamImportCardQuestion[] =
     card.kind === "group"
       ? (card.group?.questions ?? [])
@@ -112,7 +122,7 @@ export default function ExamImportReviewCard({
   const tid = (s: string) => `exam-card-${card.card_id}-${s}`;
 
   const aside = (d: QuestionDraft, i: number): ReactNode => {
-    const q = cardQs[originalIndex(card, d, i)] ?? {};
+    const q = cardQs[originalIndex(d, i)] ?? {};
     const correct = q.correct_indexes ?? [];
     const points = examPointsOf(q, review.catalog);
     return (
@@ -164,7 +174,7 @@ export default function ExamImportReviewCard({
   };
 
   const itemAttrs = (d: QuestionDraft, i: number) => {
-    const at = originalIndex(card, d, i);
+    const at = originalIndex(d, i);
     const key = entryKey(card.card_id, at);
     const issue = questionIssue(card, cardQs[at] ?? {}, failure);
     return {
@@ -248,13 +258,38 @@ export default function ExamImportReviewCard({
           size="sm"
           className="h-7"
           onClick={() => void review.startEditing(card)}
+          disabled={locked}
+          title={locked ? lockedText : undefined}
           data-testid={tid("manual")}
         >
           {t("questionBank.examImport.review.manualFill")}
         </Button>
       </div>,
     );
-  if (failure)
+  const dupFailure = failure ? DUPLICATE_REASONS[failure.reason] : undefined;
+  if (dupFailure) {
+    // 重複：卡上已有藍字說明就不再加；存入時才查到的（卡上還沒標）補一行藍字
+    if (!dup)
+      notices.push(
+        <p
+          key="fail"
+          className="text-sm text-blue-700"
+          data-testid={tid("save-duplicate")}
+        >
+          {t(`questionBank.examImport.review.issue.${dupFailure}`)}
+        </p>,
+      );
+  } else if (failure?.reason === "pending_continuation") {
+    notices.push(
+      <p
+        key="fail"
+        className="text-sm text-gray-600"
+        data-testid={tid("save-pending")}
+      >
+        {t("questionBank.examImport.review.pendingContinuation")}
+      </p>,
+    );
+  } else if (failure) {
     notices.push(
       <p
         key="fail"
@@ -264,9 +299,30 @@ export default function ExamImportReviewCard({
         {failure.message}
       </p>,
     );
+  }
+  if (unmergedContinuation)
+    notices.push(
+      <p
+        key="cont"
+        className="text-sm text-gray-600"
+        data-testid={tid("unmerged-continuation")}
+      >
+        {t("questionBank.examImport.review.unmergedContinuation")}
+      </p>,
+    );
+  if (locked)
+    notices.push(
+      <p
+        key="locked"
+        className="text-sm text-gray-500"
+        data-testid={tid("locked")}
+      >
+        {lockedText}
+      </p>,
+    );
 
   const onCardClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (editing) return;
+    if (editing || locked) return;
     const target = e.target as HTMLElement;
     if (target.closest("button, a, input, textarea, [role='dialog']")) return;
     void review.startEditing(card);
@@ -399,18 +455,26 @@ export default function ExamImportReviewCard({
   return (
     <div
       className={cn(
-        "group relative cursor-pointer space-y-2 rounded-md px-3 py-4 transition-colors hover:bg-gray-50",
+        "group relative space-y-2 rounded-md px-3 py-4 transition-colors",
+        locked ? "cursor-default" : "cursor-pointer hover:bg-gray-50",
         groupFrame,
       )}
       onClick={onCardClick}
+      title={locked ? lockedText : undefined}
       data-testid={tid("view")}
+      data-locked={locked || undefined}
     >
       <button
         type="button"
         onClick={() => void review.startEditing(card)}
-        className="absolute right-2 top-2 rounded p-1 text-gray-300 hover:bg-gray-100 hover:text-gray-600 group-hover:text-gray-500"
-        aria-label={t("questionBank.examImport.review.edit")}
-        title={t("questionBank.examImport.review.edit")}
+        disabled={locked}
+        className="absolute right-2 top-2 rounded p-1 text-gray-300 hover:bg-gray-100 hover:text-gray-600 group-hover:text-gray-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+        aria-label={
+          locked
+            ? `${t("questionBank.examImport.review.edit")}（${lockedText}）`
+            : t("questionBank.examImport.review.edit")
+        }
+        title={locked ? lockedText : t("questionBank.examImport.review.edit")}
         data-testid={tid("edit")}
       >
         <Pencil className="h-4 w-4" />

@@ -12,6 +12,12 @@
  *   - 還沒處理完的頁：每頁一格 `processing`（灰虛線）
  * - 「需注意」＝缺答案、失敗、這份題本內重複、儲存被退回（題庫已有的會自動略過，不算需注意，A2）。
  * - 格子標籤＝原卷題號；沒有就用流水號（B4）。
+ * - 存入退回 `pending_continuation`（題組可能還有下一頁的內容）不算問題：等下一頁處理完就好，不標色。
+ * - `unsettledCardIds`：**還不能編輯的題組卡**（C4b 審查 1）——頁上最後一張是題組，後面（往下找到下一個
+ *   有卡片的已處理頁之前）還有頁在等待／處理中，下一頁可能還會併進小題或文章。規則與後端
+ *   `exam_import_save.unsettled_card_ids` 相同；畫面停用編輯並說明「下一頁處理完才能編輯」。
+ * - `continuationNotMerged`：卡片仍標 `continues_previous`、前面的頁都處理完了（照理該併進上一個題組
+ *   卻沒併：上一個題組老師已編輯過排版或已存入，C4a 修正 4），卡上說明「接續上一頁的題組…未自動合併」。
  */
 import {
   cardIsSaved,
@@ -78,6 +84,9 @@ const FAILURE_ISSUE: Record<string, ReviewIssue> = {
   duplicate_in_import: "importDuplicate",
 };
 
+/** 存入退回但不算問題的原因（等下一頁處理完再存） */
+const NOT_AN_ISSUE = new Set(["missing_answer", "pending_continuation"]);
+
 /** 整張卡的狀態（題組每一格都套用）；null＝看各題 */
 export function cardIssue(
   card: ExamImportCard,
@@ -88,7 +97,7 @@ export function cardIssue(
   if (dup?.type === "bank")
     return dup.reason === "same_stem" ? "sameStem" : "duplicate";
   if (dup?.type === "import") return "importDuplicate";
-  if (failure && failure.reason !== "missing_answer")
+  if (failure && !NOT_AN_ISSUE.has(failure.reason))
     return FAILURE_ISSUE[failure.reason] ?? "saveFailed";
   return null;
 }
@@ -157,4 +166,46 @@ export function pagesInProgress(detail: ExamImportDetail | null): number {
   return detail.pages.filter(
     (p) => p.status === "pending" || p.status === "processing",
   ).length;
+}
+
+const isUnprocessed = (status: ExamImportPage["status"] | undefined) =>
+  status === "pending" || status === "processing";
+
+/**
+ * 還不能編輯的題組卡 id（下一頁可能還會併進內容）。同後端 `unsettled_card_ids`：只看已處理完的頁，
+ * 頁上最後一張是題組時往後找，遇到等待／處理中的頁 → 不能編輯；遇到失敗頁或有卡片的頁就停。
+ */
+export function unsettledCardIds(detail: ExamImportDetail | null): Set<string> {
+  const out = new Set<string>();
+  if (!detail) return out;
+  const byNo = new Map(detail.pages.map((p) => [p.page_no, p]));
+  for (const page of detail.pages) {
+    if (page.status !== "done") continue;
+    const cards = page.cards ?? [];
+    const last = cards[cards.length - 1];
+    if (!last || last.kind !== "group") continue;
+    for (let n = page.page_no + 1; n <= detail.page_count; n += 1) {
+      const later = byNo.get(n);
+      if (isUnprocessed(later?.status)) {
+        out.add(last.card_id);
+        break;
+      }
+      if (later?.status !== "done" || (later.cards ?? []).length > 0) break;
+    }
+  }
+  return out;
+}
+
+/**
+ * 延續上一頁卻沒併進去的題組卡：卡片還標 `continues_previous`、而且前面的頁都處理完了
+ * （前面還有頁在處理時，等那一頁處理完會自動併，不必說明）。
+ */
+export function continuationNotMerged(
+  detail: ExamImportDetail | null,
+  card: ExamImportCard,
+): boolean {
+  if (!detail || card.kind !== "group" || !card.continues_previous)
+    return false;
+  const home = card.page_no ?? 0;
+  return !detail.pages.some((p) => p.page_no < home && isUnprocessed(p.status));
 }

@@ -4,13 +4,16 @@
  * 純函式，不呼叫 API。編輯沿用 QuestionCard／GroupCard（題庫規則 7：不複製），所以卡片要先轉成
  * 它們吃的草稿；收合（完成編輯）時再把草稿轉回卡片格式送 PATCH（後端只收卡片格式，cold-read B2）。
  *
- * - `cardToUnit`：卡片 → `UnitDraft`。單題用 `draftsFromExtracted`；題組用 `groupDraftFromExtracted`
+ * - `cardToUnit`／`cardToUnitWithOrder`：卡片 → `UnitDraft`（後者另回「草稿小題 key → 卡片原本第幾題」，
+ *   克漏字依 `blank` 排序過也對得回原題，唯讀卡片的右邊欄、導覽格與送出順序都用它）。單題用 `draftsFromExtracted`；題組用 `groupDraftFromExtracted`
  *   排出主圖文（段落 → layout，與題庫自己出題同規則），小題則依卡片原順序另外建（每題的考點、原卷
  *   題號才對得回來；克漏字依 `blank` 排序）。老師之前改過排版（卡片帶 `layout`）就用卡片的排版。
  *   後端裁好的題幹圖、選項圖、插圖、整張圖直接帶進草稿。考點：`exam_point_ids` 優先，再用
  *   `exam_point_codes` 對考點目錄。
  * - `unitToCardPatch`：只送「跟打開編輯時比有變」的欄位（後端比對新舊記 `teacher_edited`，送了沒變的
- *   值也不會記，但考點代碼對不到目錄時會被誤記，所以前端也先比一次）；題組小題用原卷題號對回原題。
+ *   值也不會記，但考點代碼對不到目錄時會被誤記，所以前端也先比一次）；題組小題用原卷題號對回原題，
+ *   小題沒增刪、沒換順序時**依卡片原順序**送（沒有原卷題號的克漏字，後端依位置對回；C4b 審查 6）。
+ *   帶上打開時的卡片版本 `rev`（後端版本不符回 409，避免蓋掉編輯期間併入的下一頁內容；C4b 審查 1）。
  *   完全沒改回傳 null（不送 PATCH）。
  * - `questionInputFromDraft`：一題草稿 → 卡片格式（只留有填的選項，正確答案依留下的選項重編）。
  */
@@ -105,16 +108,34 @@ export interface CardEditState {
   /** 打開編輯時每題的卡片格式（比對有沒有改） */
   initialQuestions: Record<string, CardQuestionInput>;
   initialGroup: CardGroupInput | null;
+  /** 草稿小題 key 依卡片原順序排（小題沒增刪、沒換順序時照這個順序送） */
+  originalOrder: string[];
+  /** 打開編輯時的卡片版本（PATCH 帶回；舊草稿沒有就不帶） */
+  rev?: number;
+}
+
+export interface UnitWithOrder {
+  unit: UnitDraft;
+  /** 草稿小題 key → 卡片原本第幾題（單題：0） */
+  originalIndex: Record<string, number>;
 }
 
 export function cardToUnit(
   card: ExamImportCard,
   catalog: ExamPointCatalog,
 ): UnitDraft {
+  return cardToUnitWithOrder(card, catalog).unit;
+}
+
+export function cardToUnitWithOrder(
+  card: ExamImportCard,
+  catalog: ExamPointCatalog,
+): UnitWithOrder {
   if (card.kind !== "group") {
+    const draft = questionDraftFromCard(card.question ?? {}, catalog);
     return {
-      kind: "single",
-      draft: questionDraftFromCard(card.question ?? {}, catalog),
+      unit: { kind: "single", draft },
+      originalIndex: { [draft.key]: 0 },
     };
   }
   const g = card.group ?? {};
@@ -163,17 +184,25 @@ export function cardToUnit(
       segments,
     };
   }
-  const questions = (g.questions ?? []).map((q) => ({
-    ...questionDraftFromCard(q, catalog),
-    question_type: type,
-    groupKey: draft.key,
-  }));
+  const originalIndex: Record<string, number> = {};
+  const questions = (g.questions ?? []).map((q, i) => {
+    const d: QuestionDraft = {
+      ...questionDraftFromCard(q, catalog),
+      question_type: type,
+      groupKey: draft.key,
+    };
+    originalIndex[d.key] = i;
+    return d;
+  });
   return {
-    kind: "group",
-    draft: {
-      ...draft,
-      questions: type === "cloze" ? sortClozeQuestions(questions) : questions,
+    unit: {
+      kind: "group",
+      draft: {
+        ...draft,
+        questions: type === "cloze" ? sortClozeQuestions(questions) : questions,
+      },
     },
+    originalIndex,
   };
 }
 
@@ -214,26 +243,26 @@ export function startEdit(
   card: ExamImportCard,
   catalog: ExamPointCatalog,
 ): CardEditState {
-  const unit = cardToUnit(card, catalog);
+  const { unit, originalIndex } = cardToUnitWithOrder(card, catalog);
   const sourceNos: Record<string, string | null> = {};
   const initialQuestions: Record<string, CardQuestionInput> = {};
+  let originalOrder: string[];
   if (unit.kind === "single") {
     const no = card.question?.source_question_no ?? null;
     sourceNos[unit.draft.key] = no;
     initialQuestions[unit.draft.key] = questionInputFromDraft(unit.draft, no);
+    originalOrder = [unit.draft.key];
   } else {
-    // 草稿小題與卡片小題一一對應（克漏字排序過：依 blank 對回）
-    const cardQs = unit.draft.questions.map((d, i) => {
-      const qs = card.group?.questions ?? [];
-      return unit.draft.question_type === "cloze"
-        ? (qs.find((q) => (q.blank ?? null) === d.blank_index) ?? qs[i])
-        : qs[i];
-    });
-    unit.draft.questions.forEach((d, i) => {
-      const no = cardQs[i]?.source_question_no ?? null;
+    // 草稿小題（克漏字排序過）以 originalIndex 對回卡片原本那一題
+    const qs = card.group?.questions ?? [];
+    unit.draft.questions.forEach((d) => {
+      const no = qs[originalIndex[d.key]]?.source_question_no ?? null;
       sourceNos[d.key] = no;
       initialQuestions[d.key] = questionInputFromDraft(d, no);
     });
+    originalOrder = unit.draft.questions
+      .map((d) => d.key)
+      .sort((a, b) => originalIndex[a] - originalIndex[b]);
   }
   return {
     cardId: card.card_id,
@@ -242,6 +271,8 @@ export function startEdit(
     initialQuestions,
     initialGroup:
       unit.kind === "group" ? groupInputFromDraft(unit.draft) : null,
+    originalOrder,
+    ...(typeof card.rev === "number" ? { rev: card.rev } : {}),
   };
 }
 
@@ -277,13 +308,14 @@ function changedQuestion(
 /** 收合編輯：草稿 → 只含有改欄位的 PATCH；完全沒改回傳 null */
 export function unitToCardPatch(edit: CardEditState): CardPatchInput | null {
   const { unit } = edit;
+  const rev = typeof edit.rev === "number" ? { rev: edit.rev } : {};
   if (unit.kind === "single") {
     const next = questionInputFromDraft(
       unit.draft,
       edit.sourceNos[unit.draft.key] ?? null,
     );
     const q = changedQuestion(next, edit.initialQuestions[unit.draft.key]);
-    return q ? { question: q } : null;
+    return q ? { ...rev, question: q } : null;
   }
   const g = unit.draft;
   const nextGroup = groupInputFromDraft(g);
@@ -305,7 +337,15 @@ export function unitToCardPatch(edit: CardEditState): CardPatchInput | null {
   const initialKeys = Object.keys(edit.initialQuestions);
   const currentKeys = g.questions.map((q) => q.key);
   const structureChanged = !same(initialKeys, currentKeys);
-  const questions = g.questions.map((d) => {
+  // 結構沒變：依卡片原順序（後端沒有原卷題號時依位置對回原題）；有增刪、換順序：照草稿順序整份送
+  const byKey = new Map(g.questions.map((d) => [d.key, d]));
+  const ordered = structureChanged
+    ? g.questions
+    : edit.originalOrder.flatMap((k) => {
+        const d = byKey.get(k);
+        return d ? [d] : [];
+      });
+  const questions = ordered.map((d) => {
     const next = questionInputFromDraft(d, edit.sourceNos[d.key] ?? null);
     return {
       full: next,
@@ -320,5 +360,5 @@ export function unitToCardPatch(edit: CardEditState): CardPatchInput | null {
         : (q.diff ?? { source_question_no: q.full.source_question_no }),
     );
   }
-  return Object.keys(group).length > 0 ? { group } : null;
+  return Object.keys(group).length > 0 ? { ...rev, group } : null;
 }

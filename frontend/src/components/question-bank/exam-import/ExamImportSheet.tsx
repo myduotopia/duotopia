@@ -9,6 +9,8 @@
  * QuestionSheet 一致，C4 cold-read B13）。Esc 只看 `e.defaultPrevented`：上面疊著的 Dialog
  * （放大縮圖、看原題、確認視窗）由 Radix 先處理並標記，按 Esc 只關它自己；焦點在面板外（例如從
  * 「新增題目 ▽」選單開啟後焦點回到觸發鈕）也照樣能關（C4 第五輪遺留）。
+ * 關閉鈕與 Esc 走 `controller.requestClose`：核對畫面有題目正在編輯時先存回草稿（還沒送的年段也先送），
+ * 存不進去就不關、原因顯示在那一題與提示訊息（C4b 審查 3）。
  *
  * 不新增路由、不塞進 QuestionSheet.tsx。狀態都在 `useExamImport`（關掉面板不停止處理）。
  * 由「我的教材」頁（TeacherTemplatePrograms）與「機構教材」頁（OrgMaterialsPage）在分頁外渲染，
@@ -42,15 +44,15 @@ export default function ExamImportSheet({
   const titleId = useId();
   const descId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(controller.close);
-  closeRef.current = controller.close;
+  const closeRef = useRef(controller.requestClose);
+  closeRef.current = controller.requestClose;
 
   useEffect(() => {
     if (!open) return;
     panelRef.current?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
-      closeRef.current();
+      void closeRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -99,7 +101,7 @@ export default function ExamImportSheet({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={controller.close}
+                onClick={() => void controller.requestClose()}
                 aria-label={t("common.close", "關閉")}
                 data-testid="exam-import-close"
               >

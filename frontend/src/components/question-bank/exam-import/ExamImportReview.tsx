@@ -11,7 +11,10 @@
  *   「需注意 N 題」「跳到下一題」一列（▦ 抽屜在 C4c）。右側捲動區：依原卷頁碼排列的頁與題目卡，
  *   預留「整頁對照原卷」分頁（C4c）的位置
  * - 頁尾：「放棄這次匯入」（紅字次要）、「略過核對，直接存入」（次要，先確認）、「全部儲存」（主按鈕；
- *   還有頁在處理時停用＋說明「還有 N 頁處理中」）
+ *   還有頁在處理時停用＋說明「還有 N 頁處理中」；還沒處理的頁要重選檔案才能送時說明「請先重選檔案」，
+ *   C4b 審查 8）
+ * - 題目卡另外帶 `locked`（頁上最後一張題組、下一頁還沒處理完 → 不能編輯）與 `unmergedContinuation`
+ *   （延續上一頁卻沒自動合併）說明。
  * 捲動區與頁尾右側 `pr-8 sm:pr-16`：閃避老師後台右側的數位教學工具列（同 ScenarioSheetLayout）。
  */
 import { useMemo, useState } from "react";
@@ -35,6 +38,7 @@ import ExamImportReviewPageRow from "./ExamImportReviewPageRow";
 import ExamImportReviewTop from "./ExamImportReviewTop";
 import { errorKey } from "./examImportErrors";
 import {
+  continuationNotMerged,
   needsAttention,
   pagesInProgress,
   type ReviewEntry,
@@ -140,11 +144,13 @@ export default function ExamImportReview({
   const inProgress = pagesInProgress(detail);
   const unsavedCards = review.pages.reduce((n, p) => n + p.cards.length, 0);
   const saveDisabledReason =
-    inProgress > 0
-      ? t("questionBank.examImport.review.saveBlocked", { count: inProgress })
-      : unsavedCards === 0
-        ? t("questionBank.examImport.review.nothingToSave")
-        : null;
+    inProgress > 0 && controller.needsFile
+      ? t("questionBank.examImport.review.saveNeedsFile")
+      : inProgress > 0
+        ? t("questionBank.examImport.review.saveBlocked", { count: inProgress })
+        : unsavedCards === 0
+          ? t("questionBank.examImport.review.nothingToSave")
+          : null;
   const attentionCount = review.attention.length;
 
   const attentionBar = (
@@ -239,6 +245,8 @@ export default function ExamImportReview({
                     programs={programs}
                     retryLimit={detail.retry_limits.question_retries}
                     failure={review.failures[card.card_id]}
+                    locked={review.locked.has(card.card_id)}
+                    unmergedContinuation={continuationNotMerged(detail, card)}
                   />
                 ))}
               </section>

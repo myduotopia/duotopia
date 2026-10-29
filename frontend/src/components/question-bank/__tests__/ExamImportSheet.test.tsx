@@ -4,6 +4,7 @@
  * - 點遮罩不關閉（遮罩 pointer-events-none，與 QuestionSheet 一致）
  * - 上面疊著 Dialog 時按 Esc 只關 Dialog，面板留著
  * - 從「新增題目 ▽」DropdownMenuItem 打開（焦點回到選單觸發鈕、不在面板內）後 Esc 照樣能關
+ * - X／Esc 走 `requestClose`：收尾（存回編輯中的題）失敗就不關（C4b 審查 3）
  * 上傳畫面與核對畫面換成替身（各自有測試）。
  */
 import { describe, it, expect, vi } from "vitest";
@@ -45,11 +46,14 @@ function Host({
   onClose,
   withDialog = false,
   withMenu = false,
+  beforeClose,
 }: {
   initialOpen?: boolean;
   onClose?: () => void;
   withDialog?: boolean;
   withMenu?: boolean;
+  /** 模擬核對畫面登記的收尾；回傳 false＝不要關 */
+  beforeClose?: () => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(initialOpen);
   const [dialogOpen, setDialogOpen] = useState(withDialog);
@@ -60,6 +64,11 @@ function Host({
     organizationId: null,
     openUpload: () => setOpen(true),
     close: () => {
+      onClose?.();
+      setOpen(false);
+    },
+    requestClose: async () => {
+      if (beforeClose && !(await beforeClose())) return;
       onClose?.();
       setOpen(false);
     },
@@ -92,20 +101,34 @@ function Host({
 }
 
 describe("ExamImportSheet 開關", () => {
-  it("X 關閉", () => {
+  it("X 關閉", async () => {
     render(<Host />);
     fireEvent.click(screen.getByTestId("exam-import-close"));
-    expect(screen.queryByTestId("exam-import-sheet")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("exam-import-sheet")).toBeNull(),
+    );
   });
 
-  it("Esc 關閉；點遮罩不關閉", () => {
+  it("Esc 關閉；點遮罩不關閉", async () => {
     render(<Host />);
     const backdrop = screen.getByTestId("exam-import-backdrop");
     expect(backdrop.className).toContain("pointer-events-none");
     fireEvent.click(backdrop);
     expect(screen.getByTestId("exam-import-sheet")).toBeTruthy();
     fireEvent.keyDown(document.body, { key: "Escape" });
-    expect(screen.queryByTestId("exam-import-sheet")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("exam-import-sheet")).toBeNull(),
+    );
+  });
+
+  it("收尾失敗（編輯中的題存不進去）→ X、Esc 都不關", async () => {
+    const beforeClose = vi.fn(async () => false);
+    render(<Host beforeClose={beforeClose} />);
+    fireEvent.click(screen.getByTestId("exam-import-close"));
+    await waitFor(() => expect(beforeClose).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(beforeClose).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("exam-import-sheet")).toBeTruthy();
   });
 
   it("疊著 Dialog 時 Esc 只關 Dialog", async () => {

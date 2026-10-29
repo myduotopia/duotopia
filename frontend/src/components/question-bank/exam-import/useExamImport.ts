@@ -10,8 +10,11 @@
  *   題目邊處理邊出現；原進度畫面退場，每頁狀態與按鈕移到核對畫面「原卷第 N 頁」那一行）。
  * - **同一份題本已匯入過**：`openExisting` 依 409 帶的題庫判斷——同一個題庫直接打開；在別的題庫就交給
  *   宿主頁面的 `onOpenOtherBank`（切到那個題庫再打開）。
- * - **核對畫面用的**：`reload`（重抓整份）、`retryQuestion`（重讀單一題：有本機檔案用本機頁圖，
- *   沒有就抓後端存的頁圖）、`markSaved`（全部存完：關面板、刷新列表）。
+ * - **核對畫面用的**：`reload`（重抓整份）、`retryQuestion`（重讀單一題：不附頁圖，後端用存好的頁圖，
+ *   C4a 修正）、`replaceCard`（409 卡片已更新時換成後端附的最新卡）、`markSaved`（全部存完：關面板、
+ *   刷新列表）。
+ * - **關面板前先收尾**（C4b 審查 3）：核對畫面用 `setBeforeClose` 登記收尾函式（存回編輯中的題、送出還沒送
+ *   的年段）；關閉鈕與 Esc 走 `requestClose`，收尾失敗就不關（原因由核對畫面顯示）。`close` 直接關。
  *
  * - **Sheet 開關與處理分開**：關掉 Sheet、切到教材分頁都不會停止處理；提示列顯示進度。
  *   關掉網頁或離開「我的教材」頁才會停，下次從提示列「繼續」。
@@ -41,6 +44,7 @@ import { ClientError, errorInfo, errorKey } from "./examImportErrors";
 import { preparePageSource, type PageSource } from "./pageSource";
 import { nextPageToSend } from "./sendOrder";
 import type {
+  ExamImportCard,
   ExamImportDetail,
   ExamImportSettingsPayload,
   ExamImportSummary,
@@ -514,6 +518,18 @@ export function useExamImport(
     void refreshList();
   }, [refreshList]);
 
+  /** 關面板前的收尾（核對畫面登記）；回傳 false＝不要關 */
+  const beforeCloseRef = useRef<(() => Promise<boolean>) | null>(null);
+  const setBeforeClose = useCallback((fn: (() => Promise<boolean>) | null) => {
+    beforeCloseRef.current = fn;
+  }, []);
+  /** 關閉鈕／Esc：先收尾（存回編輯中的題），失敗就留著面板 */
+  const requestClose = useCallback(async () => {
+    const guard = beforeCloseRef.current;
+    if (guard && !(await guard())) return;
+    close();
+  }, [close]);
+
   /** 「打開那次匯入」：同一個題庫直接打開；在別的題庫交給宿主頁面切過去 */
   const openExisting = useCallback(
     (target: ExistingImportTarget) => {
@@ -533,31 +549,42 @@ export function useExamImport(
   }, [fetchDetail]);
 
   /**
-   * 重讀單一題：要附頁圖。這次的檔案還在就用本機畫好的頁圖；否則抓後端存的頁圖。
-   * 錯誤丟給呼叫端顯示（409 RETRY_LIMIT → 只留「手動補這一題」）。
+   * 重讀單一題：不附頁圖，後端用擷取時存好的頁圖（C4a 修正；瀏覽器不必抓 GCS 頁圖）。
+   * 錯誤丟給呼叫端顯示（409 RETRY_LIMIT → 只留「手動補這一題」；409 PAGE_IMAGE_MISSING → 輕提示）。
    */
   const retryQuestion = useCallback(
     async (pageNo: number, cardId: string) => {
       const id = importIdRef.current;
-      if (id === null || !detail) return;
-      let image: Blob;
-      if (sourceRef.current) {
-        image = (await renderLocal(pageNo)).blob;
-      } else {
-        const url = detail.pages.find((p) => p.page_no === pageNo)?.image_url;
-        if (!url) throw new ClientError("pageImageMissing");
-        const res = await fetch(url);
-        if (!res.ok) throw new ClientError("pageImageMissing");
-        image = await res.blob();
-      }
+      if (id === null) return;
       try {
-        await examImportApi.retry(id, pageNo, image, cardId);
+        await examImportApi.retry(id, pageNo, cardId);
       } finally {
         await fetchDetail(id).catch(() => undefined);
       }
     },
-    [detail, fetchDetail, renderLocal],
+    [fetchDetail],
   );
+
+  /** 換掉畫面上的一張卡（409 EXAM_IMPORT_CARD_CHANGED 附的最新卡片） */
+  const replaceCard = useCallback((card: ExamImportCard) => {
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            pages: prev.pages.map((p) =>
+              p.cards.some((c) => c.card_id === card.card_id)
+                ? {
+                    ...p,
+                    cards: p.cards.map((c) =>
+                      c.card_id === card.card_id ? card : c,
+                    ),
+                  }
+                : p,
+            ),
+          }
+        : prev,
+    );
+  }, []);
 
   /** 全部存完（或只剩題庫已有的題）：關面板、這份從提示列消失 */
   const markSaved = useCallback(() => {
@@ -614,11 +641,14 @@ export function useExamImport(
     confirmAbandon,
     cancelAbandon,
     close,
+    setBeforeClose,
+    requestClose,
     refreshList,
     organizationId,
     openExisting,
     reload,
     retryQuestion,
+    replaceCard,
     markSaved,
   };
 }

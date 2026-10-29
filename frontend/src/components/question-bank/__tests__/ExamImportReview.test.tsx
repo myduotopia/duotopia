@@ -7,6 +7,9 @@
  * 2. 點卡片 → 原位展開編輯 →「完成」：有改才 PATCH（只送有改的欄位＋原卷題號），沒改不送
  * 3. 全部儲存：被退回的卡標出原因；「N 題因題庫已有而略過」；整份存完 → markSaved
  * 4. 點題庫已有的導覽格 → 以 id 抓原題顯示
+ * 5. 題組（C4b 審查 1–5、7）：編輯題組 →「完成」送卡片格式＋rev；頁上最後一張題組、下一頁還沒處理完
+ *    → 不能編輯並說明；409 CARD_CHANGED → 換成最新卡、編輯收起、提示重新打開；409 CARD_SAVED →
+ *    放掉編輯；重複被略過只顯示藍字不加紅字；「全部儲存」連按只送一次
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -19,7 +22,8 @@ import type {
   ExamImportPage,
   ExamImportSaveResult,
 } from "../exam-import/types";
-import type { QuestionDraft } from "../questionDraft";
+import type { GroupDraft, QuestionDraft } from "../questionDraft";
+import { ApiError } from "@/lib/api";
 
 vi.mock("react-i18next", () => {
   const translation = {
@@ -88,6 +92,53 @@ vi.mock("../QuestionCard", () => ({
     />
   ),
 }));
+
+vi.mock("../GroupCard", () => ({
+  default: ({
+    draft,
+    onChange,
+  }: {
+    draft: GroupDraft;
+    onChange: (d: GroupDraft) => void;
+  }) => (
+    <input
+      data-testid="gc-stub-title"
+      value={draft.title}
+      onChange={(e) => onChange({ ...draft, title: e.target.value })}
+    />
+  ),
+}));
+
+function group(
+  id: string,
+  patch: Partial<ExamImportCard> = {},
+): ExamImportCard {
+  return {
+    card_id: id,
+    kind: "group",
+    page_no: 1,
+    pages: [1],
+    status: "ok",
+    duplicate_of: null,
+    rev: 5,
+    group: {
+      group_type: "reading",
+      title: "Passage",
+      stimulus: { kind: "text", paragraphs: ["Tom goes to school."] },
+      glossary: [],
+      questions: [
+        {
+          source_question_no: "1",
+          stem: "Where?",
+          options: ["home", "school"],
+          correct_indexes: [1],
+          status: "ok",
+        },
+      ],
+    },
+    ...patch,
+  };
+}
 
 function single(
   id: string,
@@ -170,6 +221,8 @@ function controllerWith(pages: ExamImportPage[]) {
     sendBlankPage: vi.fn(),
     reload: vi.fn(async () => detail),
     retryQuestion: vi.fn(),
+    replaceCard: vi.fn(),
+    setBeforeClose: vi.fn(),
     markSaved: vi.fn(),
   } as unknown as ExamImportController;
 }
@@ -362,5 +415,118 @@ describe("ExamImportReview：題庫已有", () => {
     expect(
       await screen.findByTestId("exam-review-duplicate-dialog"),
     ).toBeTruthy();
+  });
+});
+
+describe("ExamImportReview：題組", () => {
+  it("編輯題組標題 →「完成」送卡片格式＋打開時的 rev", async () => {
+    api.patchCard.mockResolvedValue({ card: group("g"), import: {} });
+    const controller = controllerWith([page(1, [group("g")])]);
+    renderReview(controller);
+    fireEvent.click(screen.getByTestId("exam-card-g-edit"));
+    const title = await screen.findByTestId("gc-stub-title");
+    fireEvent.change(title, { target: { value: "New title" } });
+    fireEvent.click(screen.getByTestId("exam-card-g-done"));
+    await waitFor(() =>
+      expect(api.patchCard).toHaveBeenCalledWith(9, "g", {
+        rev: 5,
+        group: { title: "New title" },
+      }),
+    );
+  });
+
+  it("頁上最後一張題組、下一頁還沒處理完 → 不能編輯並說明", () => {
+    const controller = controllerWith([
+      page(1, [group("g")]),
+      page(2, [], "pending"),
+    ]);
+    renderReview(controller);
+    const edit = screen.getByTestId("exam-card-g-edit") as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.getAttribute("title")).toBe(
+      "questionBank.examImport.review.lockedUntilNextPage",
+    );
+    expect(screen.getByTestId("exam-card-g-locked")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("exam-card-g-view"));
+    expect(screen.queryByTestId("exam-card-g-editor")).toBeNull();
+  });
+
+  it("409 CARD_CHANGED → 換成最新卡、編輯收起、提示重新打開", async () => {
+    const latest = group("g", { rev: 6 });
+    api.patchCard.mockRejectedValue(
+      new ApiError(409, {
+        error: "EXAM_IMPORT_CARD_CHANGED",
+        message: "changed",
+        card: latest,
+      } as unknown as { message: string }),
+    );
+    const controller = controllerWith([page(1, [group("g")])]);
+    renderReview(controller);
+    fireEvent.click(screen.getByTestId("exam-card-g-edit"));
+    fireEvent.change(await screen.findByTestId("gc-stub-title"), {
+      target: { value: "Mine" },
+    });
+    fireEvent.click(screen.getByTestId("exam-card-g-done"));
+    await waitFor(() =>
+      expect(controller.replaceCard).toHaveBeenCalledWith(latest),
+    );
+    expect(screen.queryByTestId("exam-card-g-editor")).toBeNull();
+    expect(toast.info).toHaveBeenCalledWith(
+      "questionBank.examImport.review.cardChanged",
+    );
+  });
+
+  it("409 CARD_SAVED → 放掉編輯、重抓", async () => {
+    api.patchCard.mockRejectedValue(
+      new ApiError(409, {
+        error: "EXAM_IMPORT_CARD_SAVED",
+        message: "saved",
+      } as unknown as { message: string }),
+    );
+    const controller = controllerWith([page(1, [single("a", "41")])]);
+    renderReview(controller);
+    fireEvent.click(screen.getByTestId("exam-card-a-edit"));
+    fireEvent.change(await screen.findByTestId("qc-stub-stem"), {
+      target: { value: "Changed" },
+    });
+    fireEvent.click(screen.getByTestId("exam-card-a-done"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("exam-card-a-editor")).toBeNull(),
+    );
+    expect(controller.reload).toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalled();
+  });
+
+  it("存入時因重複略過 → 只有藍字，沒有紅字原因", async () => {
+    api.save.mockResolvedValue(
+      saveResult({
+        failed: [{ card_id: "a", reason: "same_stem", message: "重複" }],
+      }),
+    );
+    const controller = controllerWith([page(1, [single("a", "41")])]);
+    renderReview(controller);
+    fireEvent.click(screen.getByTestId("exam-review-save"));
+    expect(
+      await screen.findByTestId("exam-card-a-save-duplicate"),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("exam-card-a-save-failure")).toBeNull();
+  });
+
+  it("「全部儲存」連按只送一次", async () => {
+    let resolve: (r: ExamImportSaveResult) => void = () => undefined;
+    api.save.mockReturnValue(
+      new Promise<ExamImportSaveResult>((r) => {
+        resolve = r;
+      }),
+    );
+    const controller = controllerWith([page(1, [single("a", "41")])]);
+    renderReview(controller);
+    const save = screen.getByTestId("exam-review-save");
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    resolve(saveResult({ saved: [{ card_id: "a" }] }));
+    await waitFor(() => expect(controller.reload).toHaveBeenCalled());
+    expect(api.save).toHaveBeenCalledTimes(1);
   });
 });

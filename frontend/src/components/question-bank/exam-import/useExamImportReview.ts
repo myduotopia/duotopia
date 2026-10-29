@@ -3,15 +3,26 @@
  * （關掉面板不停）；這裡只管核對畫面自己的事，面板關掉就丟掉：
  *
  * - **編輯一題**（設計文件第五節「編輯一題」）：一次只展開一張卡。`startEditing` 把卡片轉成草稿
- *   （cardDraft.ts）；`finishEditing`＝收合，只送有改的欄位（PATCH，卡片格式），成功後重抓整份；
- *   換編輯另一張卡時先收合目前這張。`cancelEditing` 放棄修改。
- * - **刪除這一題**（ConfirmDialog 確認後）、**重試**（既有 retry API，次數用完只留「手動補這一題」）、
- *   **手動補一題**（先選題型，原卷題號選填，A6；新增後直接展開編輯）。
- * - **整份設定**：改了就 PATCH 設定（套用到全部還沒存的卡）。
+ *   （cardDraft.ts，記下打開時的卡片版本 `rev`）；`finishEditing`＝收合，只送有改的欄位（PATCH，卡片格式
+ *   ＋`rev`），成功後重抓整份；換編輯另一張卡時先收合目前這張。`cancelEditing` 放棄修改。
+ *   - **還不能編輯的題組**（C4b 審查 1）：頁上最後一張題組、下一頁還沒處理完（`locked`，規則同後端）——
+ *     下一頁可能還會併進小題或文章，`startEditing` 不打開，卡上說明「下一頁處理完才能編輯」。
+ *   - 409 `EXAM_IMPORT_CARD_CHANGED`（編輯期間卡片被後端更新）：換成回應附的最新卡、編輯收起、提示
+ *     「這題剛有更新，請重新打開」；回傳 false（接著要做的存入／關面板先停下，讓老師重看）。
+ *   - 409 `EXAM_IMPORT_CARD_SAVED`／404 找不到卡（被自動存走、被刪）：放掉編輯狀態、提示、重抓，
+ *     回傳 true（不擋其他動作；C4b 審查 2）。重抓後編輯中的卡不見了（自動存入、整頁重送）也一樣放掉並提示。
+ * - **刪除這一題**（ConfirmDialog 確認後）、**重試**（retry API 不附頁圖；次數用完只留「手動補這一題」；
+ *   後端找不到頁圖 409 PAGE_IMAGE_MISSING → 輕提示改用手動補）、**手動補一題**（先選題型，原卷題號選填，A6；
+ *   新增後直接展開編輯）。
+ * - **整份設定**：改了就 PATCH 設定（套用到全部還沒存的卡）。年段拖曳由這裡管（`grade`／`changeGrade`）：
+ *   停 0.5 秒才送；存入、略過核對、關面板前先把還沒送的年段送出（`flushSettings`）；送失敗把滑桿改回
+ *   後端的值（C4b 審查 10）。
  * - **全部儲存**：POST save（不帶 card_ids＝全部）。存好的卡從畫面消失（重抓後被過濾）；被退回的卡
  *   記下原因（`failures`，卡上與導覽格都標出）；有題庫已有而略過的題顯示「N 題因題庫已有而略過」；
- *   `completed` → 整份存完，提示後關面板（A2）。
+ *   `completed` → 整份存完，提示後關面板（A2）。連按防護：`savingRef` 在第一次按下就設好（C4b 審查 5）。
  * - **略過核對，直接存入**：POST skip-review，結果處理同上；沒存完的頁處理完會自動存入。
+ * - **關面板前收尾**（C4b 審查 3）：向 controller 登記 `beforeClose`：送出年段、收合編輯中的題；失敗回傳
+ *   false（面板不關），原因顯示在那一題並跳提示。
  * - **看原題**：題庫已有這題時，Dialog 以 id 抓那一題／那一組顯示預覽。
  * - **目前這題**：題號導覽點了或「跳到下一題」都會設 `currentKey`，畫面捲到那一題。
  */
@@ -20,6 +31,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 import { apiClient } from "@/lib/api";
+import type { GradeRange } from "@/components/shared/GradeRangeSlider";
 import type { UnitDraft } from "../questionDraft";
 import { examImportApi } from "./examImportApi";
 import { errorInfo, errorKey } from "./examImportErrors";
@@ -36,12 +48,15 @@ import {
   needsAttention,
   reviewEntries,
   reviewPages,
+  unsettledCardIds,
 } from "./reviewModel";
-import type {
-  ExamImportCard,
-  ExamImportSaveFailure,
-  ExamImportSaveResult,
-  ExamImportSettingsPatch,
+import {
+  cardIsSaved,
+  type ExamImportCard,
+  type ExamImportDetail,
+  type ExamImportSaveFailure,
+  type ExamImportSaveResult,
+  type ExamImportSettingsPatch,
 } from "./types";
 import type { ExamImportController } from "./useExamImport";
 
@@ -55,6 +70,23 @@ export interface AddCardInput {
   type: "single" | "reading" | "cloze";
   pageNo: number;
   sourceQuestionNo: string;
+}
+
+const GRADE_DEBOUNCE_MS = 500;
+
+const gradeOf = (d: ExamImportDetail | null | undefined): GradeRange => [
+  d?.settings?.grade_min ?? null,
+  d?.settings?.grade_max ?? null,
+];
+
+/** 409 帶回的最新卡片（EXAM_IMPORT_CARD_CHANGED 的 `detail.card`） */
+function changedCard(err: unknown): ExamImportCard | null {
+  const detail = (err as { detail?: unknown })?.detail;
+  if (!detail || typeof detail !== "object") return null;
+  const card = (detail as { card?: unknown }).card;
+  return card && typeof card === "object" && "card_id" in card
+    ? (card as ExamImportCard)
+    : null;
 }
 
 export function useExamImportReview(controller: ExamImportController) {
@@ -77,6 +109,9 @@ export function useExamImportReview(controller: ExamImportController) {
   const [currentKey, setCurrentKey] = useState<string | null>(null);
   const editingRef = useRef(editing);
   editingRef.current = editing;
+  const savingRef = useRef(false);
+  const detailRef = useRef(detail);
+  detailRef.current = detail;
 
   // 考點目錄：數百筆、整棵抓一次（卡片只有 code／id）
   useEffect(() => {
@@ -110,6 +145,10 @@ export function useExamImportReview(controller: ExamImportController) {
     () => entries.filter((e) => needsAttention(e.issue)),
     [entries],
   );
+  /** 還不能編輯的題組卡（下一頁還沒處理完） */
+  const locked = useMemo(() => unsettledCardIds(detail), [detail]);
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
 
   const toastError = useCallback(
     (err: unknown) => {
@@ -118,6 +157,26 @@ export function useExamImportReview(controller: ExamImportController) {
     },
     [t],
   );
+
+  // 編輯中的卡從畫面上消失（自動存入、整頁重送、別處刪掉）：放掉編輯狀態並提示（C4b 審查 2）
+  useEffect(() => {
+    const current = editingRef.current;
+    if (!current || !detail) return;
+    if (pages.some((p) => p.cards.some((c) => c.card_id === current.cardId)))
+      return;
+    const saved = detail.pages.some((p) =>
+      p.cards.some((c) => c.card_id === current.cardId && cardIsSaved(c)),
+    );
+    setEditing(null);
+    setEditError(null);
+    toast.info(
+      t(
+        saved
+          ? "questionBank.examImport.review.editClosedSaved"
+          : "questionBank.examImport.review.editClosedGone",
+      ),
+    );
+  }, [pages, detail, t]);
 
   const scrollTo = useCallback((key: string) => {
     setCurrentKey(key);
@@ -137,15 +196,23 @@ export function useExamImportReview(controller: ExamImportController) {
     scrollTo(next.key);
   }, [attention, entries, currentKey, scrollTo]);
 
-  /** 收合目前編輯的卡：有改就 PATCH；失敗留在編輯狀態並顯示原因 */
-  const finishEditing = useCallback(async (): Promise<boolean> => {
+  /**
+   * 收合目前編輯的卡：有改就 PATCH（帶 rev）。回傳 ok＝可以接著做別的事；message＝沒存成的原因。
+   * - 一般錯誤：留在編輯狀態並顯示原因
+   * - 卡片已被更新（409 CARD_CHANGED）：換成最新卡、收起編輯、提示重新打開；ok=false
+   * - 已存進題庫／找不到：放掉編輯狀態、提示、重抓；ok=true
+   */
+  const closeEditor = useCallback(async (): Promise<{
+    ok: boolean;
+    message?: string;
+  }> => {
     const current = editingRef.current;
-    if (!current || importId === null) return true;
+    if (!current || importId === null) return { ok: true };
     const patch = unitToCardPatch(current);
     if (!patch) {
       setEditing(null);
       setEditError(null);
-      return true;
+      return { ok: true };
     }
     setBusyCard(current.cardId);
     try {
@@ -158,19 +225,47 @@ export function useExamImportReview(controller: ExamImportController) {
         return next;
       });
       await controller.reload();
-      return true;
+      return { ok: true };
     } catch (err) {
       const info = errorInfo(err);
-      setEditError(t(errorKey(info.key), info.params));
-      return false;
+      if (info.code === "EXAM_IMPORT_CARD_CHANGED") {
+        const card = changedCard(err);
+        setEditing(null);
+        setEditError(null);
+        if (card) controller.replaceCard(card);
+        else void controller.reload();
+        const message = t("questionBank.examImport.review.cardChanged");
+        toast.info(message);
+        return { ok: false, message };
+      }
+      if (
+        info.code === "EXAM_IMPORT_CARD_SAVED" ||
+        info.code === "EXAM_IMPORT_CARD_NOT_FOUND" ||
+        info.status === 404
+      ) {
+        setEditing(null);
+        setEditError(null);
+        toast.info(t(errorKey(info.key), info.params));
+        await controller.reload().catch(() => null);
+        return { ok: true };
+      }
+      const message = t(errorKey(info.key), info.params);
+      setEditError(message);
+      return { ok: false, message };
     } finally {
       setBusyCard(null);
     }
   }, [controller, importId, t]);
 
+  const finishEditing = useCallback(
+    async (): Promise<boolean> => (await closeEditor()).ok,
+    [closeEditor],
+  );
+
   const startEditing = useCallback(
     async (card: ExamImportCard) => {
       if (editingRef.current?.cardId === card.card_id) return;
+      if (lockedRef.current.has(card.card_id)) return;
       if (editingRef.current && !(await finishEditing())) return;
       setEditError(null);
       setEditing(startEdit(card, catalog));
@@ -212,12 +307,14 @@ export function useExamImportReview(controller: ExamImportController) {
       try {
         await controller.retryQuestion(pageNo, card.card_id);
       } catch (err) {
-        toastError(err);
+        if (errorInfo(err).code === "EXAM_IMPORT_PAGE_IMAGE_MISSING")
+          toast.info(t("questionBank.examImport.review.retryImageMissing"));
+        else toastError(err);
       } finally {
         setBusyCard(null);
       }
     },
-    [controller, toastError],
+    [controller, t, toastError],
   );
 
   const addCard = useCallback(
@@ -241,19 +338,78 @@ export function useExamImportReview(controller: ExamImportController) {
     [catalog, controller, finishEditing, importId, toastError],
   );
 
+  // ---- 整份設定 ----
+
+  const [grade, setGrade] = useState<GradeRange>(() => gradeOf(detail));
+  const pendingGradeRef = useRef<GradeRange | null>(null);
+  const gradeTimerRef = useRef<number | null>(null);
+  const gradeMin = detail?.settings?.grade_min ?? null;
+  const gradeMax = detail?.settings?.grade_max ?? null;
+  // 後端的值變了（重抓、別處改）：沒有還沒送的年段時跟著更新
+  useEffect(() => {
+    if (pendingGradeRef.current === null) setGrade([gradeMin, gradeMax]);
+  }, [gradeMin, gradeMax]);
+
+  /** PATCH 設定；失敗提示、重抓，年段改回後端的值（沒有還沒送的年段時） */
   const patchSettings = useCallback(
-    async (patch: ExamImportSettingsPatch) => {
-      if (importId === null) return;
+    async (patch: ExamImportSettingsPatch): Promise<boolean> => {
+      if (importId === null) return false;
       try {
         await examImportApi.patchSettings(importId, patch);
         await controller.reload();
+        return true;
       } catch (err) {
         toastError(err);
-        await controller.reload();
+        const fresh = await controller.reload().catch(() => null);
+        if (pendingGradeRef.current === null)
+          setGrade(gradeOf(fresh ?? detailRef.current));
+        return false;
       }
     },
     [controller, importId, toastError],
   );
+
+  /** 送出還沒送的年段（存入、略過核對、關面板前）；失敗回傳 false */
+  const flushSettings = useCallback(async (): Promise<boolean> => {
+    if (gradeTimerRef.current) {
+      window.clearTimeout(gradeTimerRef.current);
+      gradeTimerRef.current = null;
+    }
+    const next = pendingGradeRef.current;
+    if (next === null) return true;
+    pendingGradeRef.current = null;
+    return patchSettings({ grade_min: next[0], grade_max: next[1] });
+  }, [patchSettings]);
+
+  /** 年段：本機先動，停 0.5 秒才送 */
+  const changeGrade = useCallback(
+    (next: GradeRange) => {
+      setGrade(next);
+      pendingGradeRef.current = next;
+      if (gradeTimerRef.current) window.clearTimeout(gradeTimerRef.current);
+      gradeTimerRef.current = window.setTimeout(() => {
+        gradeTimerRef.current = null;
+        void flushSettings();
+      }, GRADE_DEBOUNCE_MS);
+    },
+    [flushSettings],
+  );
+
+  // 卸載（換題庫、面板被收起）時還有沒送的年段：照樣送出，不等結果
+  useEffect(
+    () => () => {
+      if (gradeTimerRef.current) window.clearTimeout(gradeTimerRef.current);
+      const next = pendingGradeRef.current;
+      const id = detailRef.current?.id;
+      if (next !== null && id !== undefined)
+        examImportApi
+          .patchSettings(id, { grade_min: next[0], grade_max: next[1] })
+          .catch((err) => console.error("Failed to save grade range", err));
+    },
+    [],
+  );
+
+  // ---- 存入 ----
 
   const handleResult = useCallback(
     async (res: ExamImportSaveResult) => {
@@ -287,40 +443,77 @@ export function useExamImportReview(controller: ExamImportController) {
     [controller, entries, scrollTo, t],
   );
 
-  const saveAll = useCallback(async () => {
-    if (importId === null || saving) return;
-    if (editingRef.current && !(await finishEditing())) return;
-    setSaving("save");
-    try {
-      await handleResult(await examImportApi.save(importId));
-    } catch (err) {
-      toastError(err);
-    } finally {
-      setSaving(null);
-    }
-  }, [finishEditing, handleResult, importId, saving, toastError]);
+  /** 存入前的共同步驟（連按防護、送出年段、收合編輯）；回傳要不要繼續 */
+  const runSave = useCallback(
+    async (
+      kind: "save" | "skip",
+      action: () => Promise<void>,
+    ): Promise<void> => {
+      if (importId === null || savingRef.current) return;
+      savingRef.current = true;
+      setSaving(kind);
+      try {
+        if (!(await flushSettings())) return;
+        if (editingRef.current && !(await finishEditing())) return;
+        await action();
+      } catch (err) {
+        toastError(err);
+      } finally {
+        savingRef.current = false;
+        setSaving(null);
+      }
+    },
+    [finishEditing, flushSettings, importId, toastError],
+  );
 
-  const skipReview = useCallback(async () => {
-    if (importId === null || saving) return;
-    if (editingRef.current && !(await finishEditing())) return;
-    setSaving("skip");
-    try {
-      const res = await examImportApi.skipReview(importId);
-      if (!res.completed && res.status !== "saved")
-        toast.info(t("questionBank.examImport.review.skipStarted"));
-      await handleResult(res);
-    } catch (err) {
-      toastError(err);
-    } finally {
-      setSaving(null);
-    }
-  }, [finishEditing, handleResult, importId, saving, t, toastError]);
+  const saveAll = useCallback(
+    () =>
+      runSave("save", async () => {
+        if (importId === null) return;
+        await handleResult(await examImportApi.save(importId));
+      }),
+    [handleResult, importId, runSave],
+  );
+
+  const skipReview = useCallback(
+    () =>
+      runSave("skip", async () => {
+        if (importId === null) return;
+        const res = await examImportApi.skipReview(importId);
+        if (!res.completed && res.status !== "saved")
+          toast.info(t("questionBank.examImport.review.skipStarted"));
+        await handleResult(res);
+      }),
+    [handleResult, importId, runSave, t],
+  );
+
+  // ---- 關面板前收尾（C4b 審查 3） ----
+
+  const beforeCloseRef = useRef<() => Promise<boolean>>(async () => true);
+  beforeCloseRef.current = async () => {
+    if (!(await flushSettings())) return false;
+    if (!editingRef.current) return true;
+    const res = await closeEditor();
+    if (!res.ok && res.message)
+      toast.error(
+        t("questionBank.examImport.review.closeBlocked", {
+          reason: res.message,
+        }),
+      );
+    return res.ok;
+  };
+  const { setBeforeClose } = controller;
+  useEffect(() => {
+    setBeforeClose?.(() => beforeCloseRef.current());
+    return () => setBeforeClose?.(null);
+  }, [setBeforeClose]);
 
   return {
     catalog,
     pages,
     entries,
     attention,
+    locked,
     currentKey,
     setCurrentKey,
     scrollTo,
@@ -347,6 +540,9 @@ export function useExamImportReview(controller: ExamImportController) {
     addCard,
     retryCard,
     patchSettings,
+    grade,
+    changeGrade,
+    flushSettings,
   };
 }
 

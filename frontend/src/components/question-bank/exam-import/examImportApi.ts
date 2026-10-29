@@ -4,11 +4,12 @@
  *
  * - create / list / get / abandon：JSON。`list(organizationId)` 依題庫範圍：不帶＝我的題庫、
  *   帶機構 id＝該機構題庫（C4）；機構題庫建立時 `settings.organization_id` 帶機構 id
- * - sendPage（送一頁擷取）、markBlank（標為空白頁，不呼叫 AI）、retry（重讀單一題，附頁圖＋
- *   `card_id`）：multipart 附頁圖
+ * - sendPage（送一頁擷取）、markBlank（標為空白頁，不呼叫 AI）：multipart 附頁圖
+ * - retry（重讀單一題）：multipart 只送 `card_id`、**不附頁圖**，後端用擷取時存好的頁圖（C4a 修正；
+ *   找不到存好的頁圖回 409 `EXAM_IMPORT_PAGE_IMAGE_MISSING`）
  * - sendBlank（空白頁「仍要送出這一頁」）：用後端存好的頁圖，不附檔、不算重送次數
  * - 核對畫面（C4）：patchSettings（整份設定）、addCard（手動補一題）、patchCard（收合編輯時存回，
- *   卡片格式）、deleteCard、save（全部儲存）、skipReview（略過核對，直接存入）
+ *   卡片格式＋打開時的 `rev`）、deleteCard、save（全部儲存）、skipReview（略過核對，直接存入）
  *
  * 錯誤一律是 `ApiError`（`detail` 為 `{ error, message, ... }` 或字串），由
  * `examImportErrors.ts` 轉成白話提示。
@@ -59,8 +60,8 @@ export const examImportApi = {
     apiClient.post<ExamImportPageResult>(
       `${BASE}/${id}/pages/${pageNo}/send-blank`,
     ),
-  retry: (id: number, pageNo: number, image: Blob, cardId: string) => {
-    const form = pageForm(image);
+  retry: (id: number, pageNo: number, cardId: string) => {
+    const form = new FormData();
     form.append("card_id", cardId);
     return apiClient.postForm<ExamImportCardResult>(
       `${BASE}/${id}/pages/${pageNo}/retry`,

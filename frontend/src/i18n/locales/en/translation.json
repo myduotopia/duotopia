@@ -6485,7 +6485,8 @@
         "reselect": "Choose \"{{name}}\" again to continue",
         "reselectPhotos": "For photos, select them in the same order as the first time.",
         "reselectButton": "Choose file",
-        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes."
+        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes.",
+        "keepOpenOrg": "Processing continues only while this web page is open. Closing this panel or switching to the Materials tab won't stop it; if you close the page or leave Organization Materials, continue later from the top of its Question Bank tab."
       },
       "banner": {
         "one": "You have 1 exam paper that isn't finished ({{name}}, {{progress}})",
@@ -6615,7 +6616,16 @@
         "addTypePlaceholder": "Choose a type",
         "addNo": "Original question number (optional)",
         "addNoPlaceholder": "e.g. 12",
-        "addSubmit": "Add and edit"
+        "addSubmit": "Add and edit",
+        "editClosedSaved": "This question was already saved to the question bank, so editing was closed.",
+        "editClosedGone": "This question is no longer here (it may have been reprocessed or deleted), so editing was closed.",
+        "cardChanged": "This question was just updated. Please open it again.",
+        "retryImageMissing": "This page's image can't be found, so it can't be retried. Please use \"Fill in manually\".",
+        "closeBlocked": "The question you're editing isn't saved yet, so the panel stays open: {{reason}}",
+        "lockedUntilNextPage": "You can edit this after the next page is processed",
+        "pendingContinuation": "This group may continue on the next page. It will be saved after the next page is processed.",
+        "unmergedContinuation": "Continues the group from the previous page (not merged automatically because the previous group was edited or saved)",
+        "saveNeedsFile": "Select the file again first"
       },
       "openOtherOrg": "That import belongs to another organization's question bank. Switch to that organization first.",
       "openOtherSchool": "That import belongs to a school question bank, which can't be opened here yet."

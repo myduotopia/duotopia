@@ -4,7 +4,8 @@
  *
  * 題目卡（`cards`）的形狀見後端 `services/exam_paper_service.py` 模組說明；C4 核對畫面用到的欄位
  * 都宣告在這裡（其餘保留 index signature）。核對畫面的 API（PATCH 設定、卡片增刪改、存入、
- * 略過核對）的輸入與回應型別也在這裡。
+ * 略過核對）的輸入與回應型別也在這裡。C4a 修正輪新增：卡片 `rev`（PATCH 帶回、版本不符 409）、
+ * `continues_previous`、摘要 `source`（來源名稱）、存入退回原因 `pending_continuation`。
  *
  * `pageMergeInfo`（第五輪）：從各頁卡片的 `pages`、子題的 `page_no`／`source_question_no` 算出
  * 「被併入前面題組的頁」（目標頁＋題號範圍）與「跨頁題組所在的頁」（跨第幾到第幾頁），
@@ -108,6 +109,16 @@ export interface ExamImportCard {
   manual?: boolean;
   /** 題組已存進題庫 */
   saved_group_id?: number | null;
+  /**
+   * 卡片版本：後端每改一次內容 +1（合併延續頁、答案頁回填、重試、老師 PATCH）。編輯時記下打開時的
+   * 版本、PATCH 帶回去；不同 → 409 EXAM_IMPORT_CARD_CHANGED。舊草稿沒有。
+   */
+  rev?: number;
+  /**
+   * 題組延續上一頁。合併後會清掉；還留著＝沒併進去（上一個題組老師已編輯過排版或已存入，
+   * 或前面還有頁沒處理完）。
+   */
+  continues_previous?: boolean;
   question?: ExamImportCardQuestion | null;
   group?: ExamImportCardGroup | null;
   [key: string]: unknown;
@@ -169,6 +180,8 @@ export interface ExamImportSummary {
   saved_question_count?: number;
   /** 略過核對（處理完自動存入）是否開著 */
   auto_save?: boolean;
+  /** 整份設定的考題來源（id＋名稱；沒選時 null）。頂部直接顯示名稱，不必另查來源列表 */
+  source?: { id: number; name: string } | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -217,6 +230,8 @@ export interface CardGroupInput {
 }
 
 export interface CardPatchInput {
+  /** 打開編輯時看到的卡片版本（只有 PATCH 用；新增卡片忽略） */
+  rev?: number;
   tts_accent?: string;
   question?: CardQuestionInput;
   group?: CardGroupInput;
@@ -241,7 +256,8 @@ export type ExamImportSaveFailReason =
   | "same_stem"
   | "duplicate_in_import"
   | "cloze_blanks"
-  | "invalid";
+  | "invalid"
+  | "pending_continuation";
 
 export interface ExamImportSaveFailure {
   card_id: string;
