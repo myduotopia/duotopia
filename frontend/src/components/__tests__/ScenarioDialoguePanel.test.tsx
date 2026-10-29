@@ -22,6 +22,7 @@ import ScenarioDialoguePanel, {
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 
 const mockToastError = vi.fn();
+const mockToastInfo = vi.fn();
 
 // #1021: 產題／生成情境文章／擷取／TTS 都真的打 API 了，這裡一律 mock。
 // 預設回傳足夠的題目，讓「產一批」相關的測試維持原本的行為斷言。
@@ -107,7 +108,7 @@ vi.mock("sonner", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     success: vi.fn(),
-    info: vi.fn(),
+    info: (...args: unknown[]) => mockToastInfo(...args),
   },
 }));
 
@@ -258,6 +259,7 @@ const runGenerate = async (label: string) => {
 
 beforeEach(() => {
   mockToastError.mockClear();
+  mockToastInfo.mockClear();
   generateScenarioQuestions.mockReset();
   generateScenarioArticle.mockReset();
   extractScenarioArticle.mockReset();
@@ -1693,6 +1695,54 @@ describe("ScenarioDialoguePanel 題目圖 AI 生圖（#1024／#1158）", () => {
       `scenarioDialogue.imageGen.errors.${key}`,
     );
     expect(screen.getByTestId("ai-image-generate-dialog")).toBeInTheDocument();
+  });
+
+  it("生成期間該列已經換了別張圖 → AI 圖不覆蓋，提示老師（#1158 修正 B1）", async () => {
+    global.URL.createObjectURL = vi.fn(
+      () => "blob:teacher-upload",
+    ) as unknown as typeof URL.createObjectURL;
+    global.URL.revokeObjectURL =
+      vi.fn() as unknown as typeof URL.revokeObjectURL;
+    let resolveImage: (v: {
+      image_url: string;
+      prompt: string;
+    }) => void = () => {};
+    generateScenarioImage.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolveImage = r;
+        }),
+    );
+    const { container } = render(<ScenarioDialoguePanel />, { wrapper });
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
+
+    await openDialogFor(0);
+    await submit();
+    expect(generateScenarioImage).toHaveBeenCalledTimes(1);
+
+    // 對話框擋住畫面，正常操作做不到；直接對檔案欄位送事件模擬「生成中換了圖」
+    const input = container.querySelectorAll<HTMLInputElement>(
+      'input[accept="image/*"]',
+    )[0];
+    fireEvent.change(input, {
+      target: { files: [new File(["x"], "mine.png", { type: "image/png" })] },
+    });
+
+    await act(async () => {
+      resolveImage({ image_url: "https://cdn/generated.png", prompt: "p" });
+    });
+    await flush();
+
+    expect(
+      container.querySelector('img[src="blob:teacher-upload"]'),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector('img[src="https://cdn/generated.png"]'),
+    ).not.toBeInTheDocument();
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "scenarioDialogue.imageGen.imageReplacedDuringGenerate",
+    );
   });
 });
 

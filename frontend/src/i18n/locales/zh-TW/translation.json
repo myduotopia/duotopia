@@ -5114,6 +5114,8 @@
       "generate": "生成",
       "generating": "生成中…",
       "generatingHint": "正在畫圖，大約需要 10～20 秒",
+      "closeLocked": "圖片生成中，完成後可關閉",
+      "imageReplacedDuringGenerate": "這題在生圖時已經換了圖，AI 生成的圖沒有放上去",
       "quotaLoading": "讀取額度中…",
       "billing": {
         "admin": "管理員不限張數",

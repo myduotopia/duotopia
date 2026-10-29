@@ -298,6 +298,74 @@ describe("AiImageGenerateDialog 生成", () => {
   });
 });
 
+describe("AiImageGenerateDialog 生成中不能關閉（#1158 修正 B1）", () => {
+  it("取消、✕、Esc 都擋下，並說明完成後可關閉；生成完才關", async () => {
+    let finish: () => void = () => {};
+    const onGenerate = vi.fn(
+      () =>
+        new Promise<void>((r) => {
+          finish = r;
+        }),
+    );
+    const onOpenChange = vi.fn();
+    render(
+      <AiImageGenerateDialog
+        open
+        onOpenChange={onOpenChange}
+        kind="question"
+        initialDescription="A park"
+        onGenerate={onGenerate}
+      />,
+    );
+    await flush();
+
+    // 生成前還沒有說明
+    expect(
+      screen.queryByTestId("ai-image-close-locked"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(generateButton());
+    await flush();
+
+    expect(screen.getByTestId("ai-image-close-locked")).toHaveTextContent(
+      "scenarioDialogue.imageGen.closeLocked",
+    );
+    const cancel = screen
+      .getByText("contentEditor.buttons.cancel")
+      .closest("button") as HTMLButtonElement;
+    expect(cancel).toBeDisabled();
+    fireEvent.click(cancel);
+    fireEvent.click(screen.getByText("Close").closest("button")!);
+    fireEvent.keyDown(screen.getByTestId("ai-image-generate-dialog"), {
+      key: "Escape",
+    });
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finish();
+    });
+    await flush();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("沒在生成時，✕ 照常可以關", async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <AiImageGenerateDialog
+        open
+        onOpenChange={onOpenChange}
+        kind="question"
+        initialDescription="A park"
+        onGenerate={vi.fn()}
+      />,
+    );
+    await flush();
+
+    fireEvent.click(screen.getByText("Close").closest("button")!);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
 describe("imageGenerateErrorKey", () => {
   it.each([
     [new MockApiError(402, { error: "X" }), "quota"],
@@ -308,6 +376,11 @@ describe("imageGenerateErrorKey", () => {
     [new MockApiError(409, "上一張圖還在生成"), "inProgress"],
     [new MockApiError(409, { error: "OTHER" }), "failed"],
     [new MockApiError(422, "blocked"), "blocked"],
+    // Pydantic 欄位驗證錯誤（detail 是陣列）不是安全過濾，換描述沒用
+    [
+      new MockApiError(422, [{ msg: "too long", loc: ["body", "text"] }]),
+      "failed",
+    ],
     [new MockApiError(502, "upstream"), "failed"],
     [new Error("network"), "failed"],
   ])("%s → %s", (error, key) => {

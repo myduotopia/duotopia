@@ -593,3 +593,56 @@ def test_suggest_description_ai_failure_is_502(
         SUGGEST_URL, headers=auth_headers_teacher, json={"scenario_content": "zoo"}
     )
     assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------- 稽核 log（#1158 修正 B1）
+
+AUDIT_LOGGER = "routers.scenario_dialogue_ai"
+
+
+def _audit_records(caplog):
+    return [
+        r
+        for r in caplog.records
+        if r.name == AUDIT_LOGGER and "scenario_image_generate" in r.getMessage()
+    ]
+
+
+def test_audit_log_is_written_even_when_409(
+    test_client, auth_headers_teacher, db_session, mock_image, caplog
+):
+    """上一張還在生成（409）時也要留下誰、用什麼描述的稽核紀錄。"""
+    from models import Teacher
+
+    teacher = db_session.query(Teacher).first()
+    sib.acquire_generation_slot(db_session, teacher)
+
+    with caplog.at_level("INFO", logger=AUDIT_LOGGER):
+        resp = test_client.post(
+            IMAGE_URL, headers=auth_headers_teacher, json={"description": "busy park"}
+        )
+    assert resp.status_code == 409
+    records = _audit_records(caplog)
+    assert len(records) == 1
+    assert f"teacher_id={teacher.id}" in records[0].getMessage()
+    assert "busy park" in records[0].getMessage()
+
+
+def test_audit_log_is_written_even_when_402(
+    test_client, auth_headers_teacher, mock_image, caplog
+):
+    """額度用完（402）時也要留下稽核紀錄。"""
+    for _ in range(sib.FREE_DAILY_LIMIT):
+        test_client.post(
+            IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+        )
+
+    caplog.clear()
+    with caplog.at_level("INFO", logger=AUDIT_LOGGER):
+        resp = test_client.post(
+            IMAGE_URL, headers=auth_headers_teacher, json={"description": "over quota"}
+        )
+    assert resp.status_code == 402
+    records = _audit_records(caplog)
+    assert len(records) == 1
+    assert "over quota" in records[0].getMessage()

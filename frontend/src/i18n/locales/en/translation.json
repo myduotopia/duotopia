@@ -5095,6 +5095,8 @@
       "generate": "Generate",
       "generating": "Generating…",
       "generatingHint": "Drawing the image, this takes about 10–20 seconds",
+      "closeLocked": "Generating the image. You can close this when it finishes.",
+      "imageReplacedDuringGenerate": "This question got a different image while generating, so the AI image was not applied.",
       "quotaLoading": "Loading quota…",
       "billing": {
         "admin": "Admins have no image limit",

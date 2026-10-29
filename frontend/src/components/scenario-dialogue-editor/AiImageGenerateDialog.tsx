@@ -12,6 +12,11 @@
  *
  * 錯誤（以狀態碼區分，訊息顯示在對話框內，老師不用重打描述）：
  * 402 額度用完、409 上一張還在生成、422 被安全過濾擋下（換描述）、其他（含 502）稍後再試。
+ * 422 的 detail 若是陣列（Pydantic 欄位驗證錯誤），不是安全過濾，歸為「稍後再試」。
+ *
+ * 生成中不能關閉（#1158 修正 B1）：「取消」、✕、Esc、點遮罩都擋下，並在按鈕旁說明
+ * 「圖片生成中，完成後可關閉」。避免老師關掉後又上傳別張，AI 圖回來把它蓋掉，或情境圖
+ * 已滿 5 張時的競態。
  *
  * 實際生圖與放進畫面由呼叫端的 `onGenerate` 處理（情境圖要先預留 5 張名額，題目圖要換掉
  * 舊圖），失敗時丟出原本的錯誤，這裡負責轉成訊息。
@@ -58,7 +63,12 @@ export function imageGenerateErrorKey(error: unknown): string {
       return "scenarioDialogue.imageGen.errors.inProgress";
     }
   }
-  if (status === 422) return "scenarioDialogue.imageGen.errors.blocked";
+  if (status === 422) {
+    // 陣列 detail 是 Pydantic 驗證錯誤（描述太長、欄位缺漏），換描述沒用，不算被安全過濾擋
+    const detail = error instanceof ApiError ? error.detail : null;
+    if (Array.isArray(detail)) return "scenarioDialogue.imageGen.errors.failed";
+    return "scenarioDialogue.imageGen.errors.blocked";
+  }
   return "scenarioDialogue.imageGen.errors.failed";
 }
 
@@ -201,11 +211,23 @@ export function AiImageGenerateDialog({
     }
   };
 
+  /** 生成中擋下所有關閉途徑（取消、✕、Esc、點遮罩都會走到這裡） */
+  const handleOpenChange = (next: boolean) => {
+    if (!next && generating) return;
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className="sm:max-w-lg"
         data-testid="ai-image-generate-dialog"
+        onEscapeKeyDown={(e) => {
+          if (generating) e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          if (generating) e.preventDefault();
+        }}
       >
         <DialogHeader>
           <DialogTitle>
@@ -278,8 +300,25 @@ export function AiImageGenerateDialog({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="sm:items-center">
+          {generating && (
+            <p
+              className="text-xs text-gray-500 sm:mr-auto"
+              data-testid="ai-image-close-locked"
+            >
+              {t("scenarioDialogue.imageGen.closeLocked")}
+            </p>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            disabled={generating}
+            title={
+              generating
+                ? t("scenarioDialogue.imageGen.closeLocked")
+                : undefined
+            }
+          >
             {t("contentEditor.buttons.cancel")}
           </Button>
           <Button

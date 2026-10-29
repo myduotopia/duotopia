@@ -188,6 +188,11 @@ const ScenarioDialoguePanel = forwardRef<
   const [rows, setRows] = useState<ScenarioDialogueRow[]>(() =>
     initialData?.rows?.length ? initialData.rows : [createRow()],
   );
+  /** 最新一次 render 的 rows，給 await 之後的非同步流程判斷用（#1158 修正 B1） */
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   /** 逐題 TTS 同理（#1021） */
   const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
@@ -558,12 +563,18 @@ const ScenarioDialoguePanel = forwardRef<
    *
    * 失敗時把原本的錯誤往上丟，由對話框依狀態碼顯示原因（402／409／422／其他），
    * 老師不用重打描述。
+   *
+   * 保險（#1158 修正 B1）：生成中對話框關不掉，老師照理沒辦法同時換圖；但寫入前仍用
+   * functional setRows 比對該列「目前」的圖 —— 若和開始生成時不同（老師已換了別張），
+   * 就不覆蓋，改提示老師 AI 圖沒有放上去；該列已被刪除也直接略過。
    */
   const generateRowImage = async (id: string, description: string) => {
     // #1044: 旗標關閉時這裡也擋一次 —— 「只靠 UI 藏起來」是會漏的：哪天多一個入口
     // 忘了查旗標，就會真的打生圖。白名單的教訓同 #1030（review R3 第 1 點）。
     if (!FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION) return;
-    if (!rows.some((r) => r.id === id)) return;
+    const startRow = rows.find((r) => r.id === id);
+    if (!startRow) return;
+    const imageBefore = startRow.imageUrl ?? null;
 
     setImageLoadingId(id);
     try {
@@ -571,8 +582,30 @@ const ScenarioDialoguePanel = forwardRef<
         kind: "question",
         description,
       });
-      // 換掉舊圖前先釋放 blob（手動上傳的預覽是 blob:），否則會一路累積不釋放
-      setRowImage(id, image_url);
+      // 用最新的 rows 判斷（這段 closure 的 rows 是開始生成時的舊值）
+      const latest = rowsRef.current;
+      const current = latest.find((r) => r.id === id);
+      if (!current) return;
+      if ((current.imageUrl ?? null) !== imageBefore) {
+        toast.info(t("scenarioDialogue.imageGen.imageReplacedDuringGenerate"));
+        return;
+      }
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id && (r.imageUrl ?? null) === imageBefore
+            ? { ...r, imageUrl: image_url }
+            : r,
+        ),
+      );
+      // 換掉舊圖後釋放 blob（手動上傳的預覽是 blob:），否則會一路累積不釋放；
+      // 複製過的題目會共用同一個網址，別列還在用就不釋放
+      if (
+        imageBefore &&
+        imageBefore !== image_url &&
+        !latest.some((r) => r.id !== id && r.imageUrl === imageBefore)
+      ) {
+        releasePreviewUrl(imageBefore);
+      }
     } finally {
       setImageLoadingId(null);
     }

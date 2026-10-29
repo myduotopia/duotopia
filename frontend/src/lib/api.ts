@@ -81,9 +81,6 @@ function parseSuccessBody<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-/**
- * Custom API Error class for better error handling
- */
 /** 生圖種類（#1158）：情境圖或題目圖 */
 export type ScenarioImageKind = "scenario" | "question";
 
@@ -100,6 +97,9 @@ export interface ScenarioImageQuota {
   can_generate: boolean;
 }
 
+/**
+ * Custom API Error class for better error handling
+ */
 export class ApiError extends Error {
   constructor(
     public status: number,
