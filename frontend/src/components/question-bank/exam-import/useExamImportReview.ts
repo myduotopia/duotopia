@@ -11,7 +11,7 @@
  *     「這題剛有更新，請重新打開」；回傳 false（接著要做的存入／關面板先停下，讓老師重看）。
  *   - 409 `EXAM_IMPORT_CARD_SAVED`／404 找不到卡（被自動存走、被刪）：放掉編輯狀態、提示、重抓，
  *     回傳 true（不擋其他動作；C4b 審查 2）。重抓後編輯中的卡不見了（自動存入、整頁重送）也一樣放掉並提示。
- * - **刪除這一題**（ConfirmDialog 確認後）、**重試**（retry API 不附頁圖；次數用完只留「手動補這一題」；
+ * - **刪除這一題**（ConfirmDialog 確認後）、**重試**（retry API 不附頁圖；次數用完只留「手動補這一題」；這張卡編輯中不重試，免得重試結果被編輯蓋掉；
  *   後端找不到頁圖 409 PAGE_IMAGE_MISSING → 輕提示改用手動補）、**手動補一題**（先選題型，原卷題號選填，A6；
  *   新增後直接展開編輯）。
  * - **整份設定**：改了就 PATCH 設定（套用到全部還沒存的卡）。年段拖曳由這裡管（`grade`／`changeGrade`）：
@@ -303,6 +303,8 @@ export function useExamImportReview(controller: ExamImportController) {
     async (card: ExamImportCard) => {
       const pageNo = card.page_no;
       if (pageNo === undefined) return;
+      // 編輯中（手動補）的卡不重試：重試換卡會跟編輯中的草稿互蓋
+      if (editingRef.current?.cardId === card.card_id) return;
       setBusyCard(card.card_id);
       try {
         await controller.retryQuestion(pageNo, card.card_id);

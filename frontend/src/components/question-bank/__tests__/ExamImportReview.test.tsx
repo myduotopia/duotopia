@@ -338,6 +338,23 @@ describe("ExamImportReview：編輯", () => {
     );
     expect(api.patchCard).not.toHaveBeenCalled();
   });
+
+  it("處理失敗的卡按「手動補這一題」→ 編輯中不顯示「重試」，收合後才回來", async () => {
+    const failedCard = single("f", "44", { status: "failed", retry_count: 0 });
+    const controller = controllerWith([page(1, [failedCard])]);
+    renderReview(controller);
+
+    expect(screen.getByTestId("exam-card-f-retry")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("exam-card-f-manual"));
+    await screen.findByTestId("exam-card-f-editor");
+    expect(screen.queryByTestId("exam-card-f-retry")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("exam-card-f-cancel"));
+    await waitFor(() =>
+      expect(screen.getByTestId("exam-card-f-retry")).toBeTruthy(),
+    );
+    expect(controller.retryQuestion).not.toHaveBeenCalled();
+  });
 });
 
 describe("ExamImportReview：全部儲存", () => {

@@ -16,7 +16,9 @@
     一個區塊一列，插圖依 ``after_paragraph``／``placement``／``side``／``width`` 擺），
     ``framed`` → 根層 ``frame: true``；沒切段落只有 ``text`` → 當文字版、排版留空；
   - ``stimulus.kind = image`` → 一張圖的排版（``stimulus.image_url``，裁不出來就沒有排版），
-    文字版＝圖內文字；有逐句對話 → ``segments``，文字版＝非對話文字＋逐句對話。
+    文字版＝圖內文字；有逐句對話 → ``segments``，文字版＝非對話文字＋逐句對話。跨頁併進來的
+    延續頁段落／插圖（``paragraphs``／``figures``）→ 改用 ``paragraphs_to_layout``，主圖放最前面一列，
+    存入時才不會遺失。
   - 閱讀題組不得含 ``{{n}}``：段落與文字版一律轉回底線；克漏字保留，小題 ``blank_index``＝``blank``。
 - 整份設定（年段、公開、教材、來源、機構／學校）由呼叫端套用（``apply_settings``）。
 """
@@ -222,8 +224,15 @@ def _group_stimulus(group: Mapping[str, Any]) -> Dict[str, Any]:
         if segments is None:
             segments = dialogue_segments(stim.get("dialogue") or [])
         url = stim.get("image_url")
+        main = single_image_layout(url, title or "stimulus") if url else None
+        extra = paragraphs_to_layout(
+            [norm(p) for p in stim.get("paragraphs") or []],
+            stim.get("figures") or [],
+        )
+        if extra:  # 併進來的延續頁段落／插圖：主圖放最前面
+            extra["rows"] = (main["rows"] if main else []) + extra["rows"]
         return {
-            "layout": single_image_layout(url, title or "stimulus") if url else None,
+            "layout": extra or main,
             "passage_text": _dialogue_passage(text, segments) if segments else text,
             "segments": segments or None,
         }

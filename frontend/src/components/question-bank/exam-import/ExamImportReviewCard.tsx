@@ -7,7 +7,7 @@
  * 編號＝原卷題號。每題右邊欄：答案字母（綠）、答案來源 clip（答案頁灰／AI 作答紫；老師改過不顯示）、
  * 考點 clip。需注意的題左邊一條對應顏色的短豎線；導覽目前這題淡藍底。
  * 卡片上方提示：題庫已有（藍字＋「看原題」）、題目文字相同（A4 文字）、這份題本內重複、處理失敗
- * （「重試」：次數還有、不是手動補的卡；「手動補這一題」＝打開編輯）、上次存入被退回的原因（紅字）。
+ * （「重試」：次數還有、不是手動補的卡、這張卡沒在編輯中；「手動補這一題」＝打開編輯）、上次存入被退回的原因（紅字）。
  * 存入時因重複被略過（duplicate／same_stem／duplicate_in_import）只顯示藍字「這題重複」類說明、不再加
  * 紅字（C4b 審查 7）；`pending_continuation` 用灰字「等下一頁處理完再存」。
  * **還不能編輯**（`locked`：頁上最後一張題組、下一頁還沒處理完；C4b 審查 1）：鉛筆停用、點卡片不打開，
@@ -192,6 +192,7 @@ export default function ExamImportReviewCard({
   const canRetry =
     card.status === "failed" &&
     !card.manual &&
+    !editing &&
     (card.retry_count ?? 0) < retryLimit;
   const notices: ReactNode[] = [];
   if (dup?.type === "bank")

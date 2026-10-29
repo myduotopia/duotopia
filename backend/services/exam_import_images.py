@@ -14,7 +14,8 @@
 2. 存入時補裁（``precrop`` → ``apply_crops``）：卡上有框、但沒有對應網址欄位（寫入時裁失敗、或 C3
    之前的舊草稿）→ **在匯入鎖外**讀回存好的頁圖再裁一次、上傳，結果記成「(頁, 框) → 網址」表；
    拿鎖後只查表寫回卡片（鎖內不碰 GCS，C4a 審查 3）。還是失敗就寫 None（沒有圖），不擋存入
-   （驗證會照規則判斷缺不缺內容）。
+   （驗證會照規則判斷缺不缺內容）。表裡沒有的框（鎖外裁完之後才出現，例如鎖內才併進來的延續頁）
+   這次不動、欄位留空，下次存入再補裁。
 
 每個框屬於哪一頁：題目看 ``question.page_no``；跨頁合併進來的插圖／主圖看 ``figure.page_no``／
 ``stimulus.page_no``（``exam_paper_cards.merge_group_cards`` 記下）；都沒有就是卡片的 ``page_no``。
@@ -88,6 +89,8 @@ Uploader = Callable[[bytes], Optional[str]]
 Resolver = Callable[[Any], Optional[str]]
 # (頁碼, 框的鍵) → 網址：鎖外先裁好，鎖內只查表
 CropTable = Dict[Tuple[int, str], Optional[str]]
+# resolver 回這個 ＝ 這個框這次沒有結果（不在表裡）：欄位不動，留給下次補裁
+NOT_RESOLVED: Any = object()
 
 
 def _upload(content: bytes) -> Optional[str]:
@@ -122,6 +125,7 @@ def crop_card(
     final: bool,
 ) -> int:
     """裁這張卡在第 ``page_no`` 頁上、還沒處理過的框。``final`` = True 時裁不出來也寫 None（不再試）。
+    ``resolve`` 回 ``NOT_RESOLVED`` 的框不寫（欄位留空；圖片選項有任一個框沒結果就整組不寫）。
     回傳裁出幾張。"""
     made = 0
 
@@ -130,6 +134,8 @@ def crop_card(
         if key in target or not box:
             return
         url = resolve(box)
+        if url is NOT_RESOLVED:
+            return
         if url or final:
             target[key] = url
         made += 1 if url else 0
@@ -141,6 +147,8 @@ def crop_card(
         boxes = q.get("option_boxes") or []
         if "option_image_urls" not in q and any(boxes):
             urls = [resolve(b) if b else None for b in boxes]
+            if any(u is NOT_RESOLVED for u in urls):
+                continue
             made += sum(1 for u in urls if u)
             if final or all(u for u, b in zip(urls, boxes) if b):
                 q["option_image_urls"] = urls
@@ -219,8 +227,12 @@ def precrop(
 
 
 def apply_crops(card: Dict[str, Any], table: CropTable) -> None:
-    """鎖內：用 ``precrop`` 的表把網址寫回卡片（不碰 GCS）。表裡沒有的框（鎖外之後才出現）寫 None。"""
+    """鎖內：用 ``precrop`` 的表把網址寫回卡片（不碰 GCS）。只寫表裡有的框（含裁失敗的 None）；
+    表裡沒有的框（鎖外之後才出現）不動，欄位留空，下次存入再補裁。"""
     for no in card_needs_crops(card):
         crop_card(
-            card, no, lambda box, _no=no: table.get((_no, box_key(box))), final=True
+            card,
+            no,
+            lambda box, _no=no: table.get((_no, box_key(box)), NOT_RESOLVED),
+            final=True,
         )

@@ -149,6 +149,79 @@ def test_merged_figure_is_cropped_from_its_own_page(monkeypatch):
     assert target["group"]["stimulus"]["figures"][0]["url"] == "https://x/fig.png"
 
 
+def test_apply_crops_leaves_boxes_missing_from_table_untouched():
+    """複審 3：表裡沒有的框（鎖外裁完之後才出現）不寫 None，欄位留空等下次補裁；
+    表裡有的照寫（裁失敗的 None 也寫）。"""
+    in_ok, in_fail, absent = [0, 0, 100, 100], [0, 0, 200, 200], [0, 0, 300, 300]
+    card = _group(
+        1,
+        ["P1."],
+        [
+            {"box_2d": in_ok, "after_paragraph": 0},
+            {"box_2d": in_fail, "after_paragraph": 0},
+            {"box_2d": absent, "after_paragraph": 0},
+        ],
+    )
+    q = card["group"]["questions"][0]
+    q["stem_box_2d"] = absent
+    q["option_boxes"] = [in_ok, absent]
+    table = {
+        (1, exam_import_images.box_key(in_ok)): "https://x/ok.png",
+        (1, exam_import_images.box_key(in_fail)): None,
+    }
+    apply_crops(card, table)
+    figs = card["group"]["stimulus"]["figures"]
+    assert figs[0]["url"] == "https://x/ok.png"
+    assert "url" in figs[1] and figs[1]["url"] is None
+    assert "url" not in figs[2]
+    assert "image_url" not in q
+    assert "option_image_urls" not in q  # 有一個選項框不在表裡：整組不寫
+    assert card_needs_crops(card) == [1]  # 下次存入還會補裁
+
+
+# ---------------------------------------------------------------- 複審 5：以圖為準題組併入延續頁
+
+
+def _image_group_payload_rows(stim_extra):
+    card = _group(1, [], kind="image", image_url="https://x/main.png", **stim_extra)
+    _, payload = card_to_payload(card, {})
+    return payload["layout"]["rows"] if payload["layout"] else None
+
+
+def _blocks(rows):
+    return [b for r in rows for c in r["columns"] for b in c["blocks"]]
+
+
+def test_image_group_keeps_merged_paragraphs_and_figures_with_main_image_first():
+    card = _group(1, [], kind="image", image_url="https://x/main.png")
+    cont = _group(
+        2,
+        ["P2 text."],
+        [{"box_2d": [0, 0, 500, 500], "after_paragraph": 0}],
+        cont=True,
+    )
+    merge_group_cards(card, cont)
+    card["group"]["stimulus"]["figures"][0]["url"] = "https://x/fig.png"
+    _, payload = card_to_payload(card, {})
+    blocks = _blocks(payload["layout"]["rows"])
+    assert [b.get("url") or b.get("text") for b in blocks] == [
+        "https://x/main.png",
+        "P2 text.",
+        "https://x/fig.png",
+    ]
+
+
+def test_image_group_without_extras_is_single_image_layout():
+    rows = _image_group_payload_rows({})
+    assert [b["url"] for b in _blocks(rows)] == ["https://x/main.png"]
+
+
+def test_image_group_without_main_image_still_keeps_merged_paragraphs():
+    card = _group(1, ["P2 text."], kind="image")
+    _, payload = card_to_payload(card, {})
+    assert [b["text"] for b in _blocks(payload["layout"]["rows"])] == ["P2 text."]
+
+
 # ---------------------------------------------------------------- 審查 4：老師改過排版
 
 
