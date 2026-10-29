@@ -26,7 +26,8 @@
  * - **看原題**：題庫已有這題時，Dialog 以 id 抓那一題／那一組顯示預覽。
  * - **目前這題**（C4c）：`currentKey`＝題號下拉顯示的題，捲動時由 `useReviewScrollSpy` 更新；從下拉選題、
  *   「需注意 ‹ ›」（`jumpToAttention`，前後循環，E11）跳過去時同時設 `highlightKey`（那題淡藍底）並記下
- *   `jumpedAtRef`，捲動偵測在平滑捲動期間不改目前這題。
+ *   `jumpedAtRef`，捲動偵測在平滑捲動期間不改目前這題。跳過去的位置＝捲動偵測的判定線
+ *   （`scrollToSpyLine`，捲動區 `scrollRootRef`），捲完稍微滑一下也不會跳回前一題（C4c 審查 1）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -61,6 +62,7 @@ import {
   type ExamImportSettingsPatch,
 } from "./types";
 import type { ExamImportController } from "./useExamImport";
+import { scrollToSpyLine } from "./useReviewScrollSpy";
 
 export interface DuplicateTarget {
   kind: "single" | "group";
@@ -186,15 +188,16 @@ export function useExamImportReview(controller: ExamImportController) {
 
   /** 程式捲動（選題、跳需注意）的時間：捲動偵測在這之後一小段時間不改目前這題 */
   const jumpedAtRef = useRef(0);
+  /** 逐題核對的捲動區（ExamImportReview 掛上；捲動偵測的 root 也是它） */
+  const scrollRootRef = useRef<HTMLDivElement>(null);
   const scrollTo = useCallback((key: string) => {
     setCurrentKey(key);
     setHighlightKey(key);
     jumpedAtRef.current = Date.now();
-    // 等畫面更新（例如剛展開、剛切回逐題核對）再捲
+    // 等畫面更新（例如剛展開、剛切回逐題核對）再捲；捲到捲動偵測的判定線，捲完目前這題＝所選的題
     window.requestAnimationFrame(() => {
-      document
-        .getElementById(entryDomId(key))
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const el = document.getElementById(entryDomId(key));
+      if (el) scrollToSpyLine(el, scrollRootRef.current);
     });
   }, []);
 
@@ -538,6 +541,7 @@ export function useExamImportReview(controller: ExamImportController) {
     setCurrentKey,
     highlightKey,
     jumpedAtRef,
+    scrollRootRef,
     scrollTo,
     jumpToAttention,
     editing,

@@ -22,7 +22,7 @@
  *   （延續上一頁卻沒自動合併）說明。
  * 捲動區與頁尾右側 `pr-8 sm:pr-16`：閃避老師後台右側的數位教學工具列（同 ScenarioSheetLayout）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -75,7 +75,7 @@ export default function ExamImportReview({
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = review.scrollRootRef;
   const mergeInfo = useMemo(() => pageMergeInfo(detail?.pages ?? []), [detail]);
   const missing = missingSettings(detail?.settings, review.grade);
   // 分頁：逐題核對／整頁對照原卷（手機 < md 不顯示整頁對照，U3）

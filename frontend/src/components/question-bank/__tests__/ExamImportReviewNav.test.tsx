@@ -5,7 +5,9 @@
  * 1. 下拉依「原卷第 P 頁」分組、每題標狀態文字；處理中的頁一行灰字不能選；觸發鈕只顯示題號
  * 2. 選一題 → 捲到那題並淡藍底；選回目前這題也會再捲一次
  * 3. 需注意 ‹ ›：下一個／上一個需注意的題，到頭尾循環；0 題時停用並說明
- * 4. 捲動偵測：捲動區 1/3 處碰到的題變成「第 N 題」；程式捲動後一小段時間不改
+ * 4. 捲動偵測：捲動區 1/3 處碰到的題變成「第 N 題」；程式捲動後一小段時間不改；
+ *    選題捲到同一條判定線，捲完目前題目＝所選題（C4c 審查 1）
+ *    （jsdom 的元素沒有 scrollTo → 其他測試走 scrollIntoView 退路，`scrolled` 記目標題）
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, screen } from "@testing-library/react";
@@ -302,5 +304,49 @@ describe("捲動偵測", () => {
     expect(screen.getByTestId("exam-review-picker").textContent).toBe("13");
     act(() => callback!([{ target: el("b:0"), isIntersecting: true }]));
     expect(screen.getByTestId("exam-review-picker").textContent).toBe("12");
+  });
+
+  it("選題 → 捲到判定線（不是正中間），目前題目＝所選題、捲完不被蓋回前一題（C4c 審查 1）", () => {
+    renderReview(
+      controllerWith([
+        page(1, [single("a", "11"), single("b", "12"), single("c", "13")]),
+      ]),
+    );
+    const el = (k: string) => document.getElementById(domId(k))!;
+    // 捲動區：高 600、頂端在 100、已捲 50；c 頂端在 900、高 200
+    const root = screen.getByTestId("exam-review-scroll");
+    const rootScrollTo = vi.fn();
+    Object.assign(root, { scrollTo: rootScrollTo });
+    Object.defineProperty(root, "clientHeight", { value: 600 });
+    Object.defineProperty(root, "scrollTop", { value: 50 });
+    root.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+    const target = el("c:0");
+    Object.defineProperty(target, "offsetHeight", { value: 200 });
+    target.getBoundingClientRect = () => ({ top: 900 }) as DOMRect;
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("exam-review-picker-item-c:0"));
+    // 下拉立即顯示所選的題
+    expect(screen.getByTestId("exam-review-picker").textContent).toBe("13");
+    // c 頂端放在判定線（600 × 1/3 = 200）上方 24px：50 + (900 − 100) − 200 + 24
+    expect(rootScrollTo).toHaveBeenLastCalledWith({
+      top: 674,
+      behavior: "smooth",
+    });
+    expect(scrolled).toEqual([]);
+
+    // 平滑捲動經過 a、b 不改
+    act(() => callback!([{ target: el("b:0"), isIntersecting: true }]));
+    expect(screen.getByTestId("exam-review-picker").textContent).toBe("13");
+
+    // 捲完、過了暫停時間：判定線落在 c 上 → 仍是 c，不跳回前一題
+    vi.advanceTimersByTime(1500);
+    act(() =>
+      callback!([
+        { target: el("b:0"), isIntersecting: false },
+        { target: el("c:0"), isIntersecting: true },
+      ]),
+    );
+    expect(screen.getByTestId("exam-review-picker").textContent).toBe("13");
   });
 });

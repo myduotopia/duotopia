@@ -10,14 +10,42 @@
  *   變化忽略，免得平滑捲動經過的題把剛選的題蓋掉。
  * - 卡片展開編輯／收合後題目元素會換掉：`version` 變了就重新觀察。
  * - 沒有 IntersectionObserver（舊瀏覽器、測試環境）就不做事。
+ * - 程式捲到某題（`scrollToSpyLine`）用同一條線（`SPY_LINE_RATIO`）：把題目頂端放在線上方一點，
+ *   線一定落在那題上，捲完「第 N 題」就是剛選的題（C4c 審查 1：原本捲到正中間、線在 1/3，
+ *   稍一捲動就跳回前一題）。
  */
 import { useEffect, useRef, type RefObject } from "react";
 
 import { entryDomId, type ReviewEntry } from "./reviewModel";
 
 const PAUSE_MS = 1000;
-/** 觀察線：捲動區頂端往下 1/3 */
-const ROOT_MARGIN = "-33% 0px -66% 0px";
+/** 判定線：捲動區頂端往下的比例（捲動偵測與程式捲動共用） */
+export const SPY_LINE_RATIO = 1 / 3;
+const LINE_PCT = Math.round(SPY_LINE_RATIO * 100);
+/** 觀察範圍：從判定線往下 1% 的一條帶子 */
+const ROOT_MARGIN = `-${LINE_PCT}% 0px -${100 - LINE_PCT - 1}% 0px`;
+/** 程式捲動時題目頂端放在判定線上方多少 px（題目很矮時取一半高度） */
+const LINE_OVERLAP_PX = 24;
+
+/**
+ * 把題目捲到判定線上：題目頂端在線上方 `LINE_OVERLAP_PX`（最多題目高度一半），平滑捲動。
+ * 捲動區不支援 `scrollTo`（測試環境）就退回 `scrollIntoView`。
+ */
+export function scrollToSpyLine(el: HTMLElement, root: HTMLElement | null) {
+  if (!root || typeof root.scrollTo !== "function") {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const line = root.clientHeight * SPY_LINE_RATIO;
+  const overlap = Math.min(LINE_OVERLAP_PX, el.offsetHeight / 2);
+  const top =
+    root.scrollTop +
+    el.getBoundingClientRect().top -
+    root.getBoundingClientRect().top -
+    line +
+    overlap;
+  root.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+}
 
 interface Options {
   rootRef: RefObject<HTMLElement | null>;
