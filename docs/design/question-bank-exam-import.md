@@ -35,8 +35,8 @@
 - 可以放 **PDF** 或 **多張照片**，兩種不能混用。
 - **最多 20 頁**（上傳區上直接寫出來）：照片最多 20 張；PDF 超過 20 頁就擋下，提示老師拆成幾份再上傳。
 - 頁尾只顯示「**共 N 頁**」（空白頁也算在 N 頁和 20 頁上限裡）。用量只在後台記錄，老師看不到（見第八節）。
-- 畫面：右側編輯面板（不新增路由），寬度和其他「新增題目／新增教材」面板一致——用 `editor-panel` 寫法，左緣貼齊側邊欄、佔滿右側（手機版滿版），背後半透明遮罩；關閉鈕、Esc 會關閉（不停止處理），**點遮罩不關閉**（與 `QuestionSheet` 一致，C4 cold-read B13）。左邊上傳區、右邊整份設定；年段、考題來源、公開、朗讀口音沒填完時「開始擷取」停用，旁邊寫出還缺哪幾項。按「開始擷取」後同一個面板換成處理進度畫面（C3 先做簡單進度：整份進度條＋每頁一行狀態）；C4 改成**直接進綜合確認畫面**，題目邊處理邊出現，原進度畫面的每頁狀態與按鈕移到「原卷第 N 頁」換頁那一行（C4 定案 A1）。
-- 處理進度畫面（第五輪）：
+- 畫面：右側編輯面板（不新增路由），寬度和其他「新增題目／新增教材」面板一致——用 `editor-panel` 寫法，左緣貼齊側邊欄、佔滿右側（手機版滿版），背後半透明遮罩；關閉鈕、Esc 會關閉（不停止處理），**點遮罩不關閉**（與 `QuestionSheet` 一致，C4 cold-read B13）。左邊上傳區、右邊整份設定；年段、考題來源、公開、朗讀口音沒填完時「開始擷取」停用，旁邊寫出還缺哪幾項。按「開始擷取」後同一個面板換成（C3 是簡單進度畫面；C4 起）**直接進綜合確認畫面**，題目邊處理邊出現，原進度畫面的每頁狀態與按鈕移到「原卷第 N 頁」換頁那一行（C4 定案 A1）。
+- 每頁的說明（第五輪；C4 起顯示在核對畫面「原卷第 N 頁」那一行）：
   - 頁列表上方一行灰色小字「**頁碼是 PDF 檔的頁序，可能和題本上印的頁碼不同**」（例如封面沒印頁碼，題本上印的頁碼會少 1）。
   - 每頁的小縮圖可以點開放大（標準元件 `ZoomableImage`，用 `buttonClassName` 讓按鈕撐滿縮圖框）。
   - 完成但 0 題的頁要說明原因，避免老師以為漏抓（前端從各頁卡片的 `pages`、小題的 `page_no`／`source_question_no` 計算，`exam-import/types.ts` 的 `pageMergeInfo`；後端不改）：
@@ -189,6 +189,16 @@
 - **略過核對**：`settings.auto_save` 打開；已處理好的頁立即存，之後每頁寫入結果（擷取、仍要送出、重試、標空白頁）後自動再存一次。頁上最後一張是題組、後面還有頁在處理中時先不存（可能還有下一頁的內容）；已存的題組不再併入下一頁的延續卡。
 - **編輯一張卡**（PATCH，卡片格式）：後端比對新舊值，只記有變的欄位到 `teacher_edited`（卡片層記題組欄位、每題記自己的）；改了答案 → `answer_source = "teacher"`（畫面不顯示答案來源，答案頁晚到也不覆蓋）；處理失敗的題補上兩個以上選項改回正常；改完重算重複。和寫入頁結果、重試、存入同一把鎖。跨頁合併紀錄（`_merge_pre`／`_merge_parts`）**只在輸出時剝除，草稿裡保留**；老師改過的題組不再被拆回重算。已存進題庫的卡不能改、刪、重試（409 `EXAM_IMPORT_CARD_SAVED`）。
 
+**前端做法**（C4b，`frontend/src/components/question-bank/exam-import/`）
+- 面板：`ExamImportSheet` 的 `view` 是上傳（`ExamImportUploadForm`）或核對（`ExamImportReview`）；原「處理進度」畫面（`ExamImportProgress`）已移除，每頁狀態、「重送這一頁」、空白頁「仍要送出這一頁」、「這一頁讀不出來，請手動補題」、跨頁說明、縮圖放大都在「原卷第 N 頁」那一行（`ExamImportReviewPageRow`），處理中的頁顯示「第 N 頁處理中…」＋灰色佔位條；「繼續處理」、重選檔案、頁碼說明小字在頂部（`ExamImportReviewTop`）。捲動區與頁尾右側 `pr-8 sm:pr-16` 閃避老師後台的右側浮動工具列。
+- 頂部整份設定改了就 `PATCH …/settings`（年段拖曳停 0.5 秒才送）；來源只存 id，打開時用來源列表查名稱。
+- 題號導覽用共用元件 `components/shared/QuestionNumberNav`（ui-style-guide 第 6 節）：題組每小題一格、標籤＝原卷題號（沒有用流水號）；琥珀缺答案、紅失敗（整張卡失敗全組紅，單一小題失敗只標那格）、藍＝題庫已有／題目文字相同／本份重複、灰虛線＝處理中的頁；目前這題粗框淡底；需注意（缺答案、失敗、本份重複、存入被退回）格子旁短豎線，「需注意 N 題」不含題庫已有的（會自動略過，A2）。「跳到下一題」＝目前這題之後的下一個需注意的題。點題庫已有的格子＝捲過去並打開原題（Dialog，以 id 抓題、題庫預覽元件顯示）。小螢幕（< md）只留「需注意 N 題」「跳到下一題」一列，▦ 抽屜在 C4c。
+- 唯讀卡片用題庫預覽元件（`QuestionsPreview`／`GroupPreview` 加 `showAnswers`、`numberLabels`、`aside`、`itemAttrs`、`collapsibleStimulus` 擴充），右邊欄＝答案字母、答案來源 clip（答案頁灰、AI 作答紫，`answer_source=teacher` 不顯示）、考點 clip。已存進題庫的卡（`saved_question_id`／`saved_group_id`）不顯示。
+- 編輯：一次只展開一張；嵌 `QuestionCard`／`GroupCard`（`hideScopeSettings` 不顯示教材年段、單題不查相似題、`audioDisabledReason` 麥克風停用「即將推出」），上方原卷截圖用整頁圖＋題目框以 CSS 裁（`ExamImportOriginalCrop`，點圖看整頁）。卡片 ↔ 草稿轉換在 `cardDraft.ts`；「完成」只送跟打開時比有改的欄位（題組小題一律帶原卷題號讓後端對回原題；小題增刪或換順序時整份送），沒改不送。題組的音檔操作（喇叭、重新產生、換口音、上傳錄音）先停用＋「即將推出」（A5）。
+- 重試用既有 retry API：這次的檔案還在用本機頁圖，否則抓後端存的頁圖（頁圖網址要允許瀏覽器跨網域讀取）。手動補一題：先選題型（選擇題／閱讀題組／克漏字題組），原卷題號選填，新增後直接展開編輯。
+- 全部儲存：還有頁在處理時停用、旁邊寫「還有 N 頁處理中」；結果被退回的卡在卡上標原因（`failed[].message`）並捲到第一張；有題庫已有而略過的顯示「N 題因題庫已有而略過」；`completed` → 關面板、提示列消失。略過核對：確認視窗後 `POST …/skip-review`，已打開時按鈕停用並說明。
+- 機構題庫：`OrgMaterialsPage` 以目前工作區的機構建立狀態（`useExamImportHost`），提示列與建立都帶 `organization_id`，公開設定顯示「僅機構／公開」。同一份題本 409 的「打開那次匯入」在別的題庫時，換到那個題庫的題庫分頁（網址帶 `examImport`、機構另帶 `org`）再打開；機構不是目前工作區時提示先切換。
+
 ## 六、與自己題庫重複的題目
 
 - **只比對「我自己的題目」**（自己建立、未刪除的；**個人＋機構題庫合計**，C4 定案 A3，與資料表唯一索引一致）。不跟別人的公開題目比：別人的公開題就算一模一樣，也存一份給自己，不在別人的題目上加來源。
@@ -242,6 +252,7 @@
 
 - 後端（C4-0 拆檔後）：`services/exam_import_service.py` 是對外入口（逐頁擷取流程＋轉出其他模組的名稱）；`exam_import_common`（錯誤、常數、`lock_import`）、`exam_import_lifecycle`（建立、列表、放棄）、`exam_import_refresh`（合併、答案回填、重複標記）、`exam_import_serialize`（輸出）、`exam_import_retry`、`exam_import_blank`、`exam_import_images`（裁圖）、`exam_import_convert`（卡片 → 題庫 payload）、`exam_import_settings`（整份設定與題庫範圍）、`exam_import_edit`（核對畫面編輯）、`exam_import_save`（存入）。端點：`routers/question_bank_exam_imports.py`（擷取）、`question_bank_exam_import_review.py`（核對畫面：PATCH 設定、題目卡增刪改、`/save`、`/skip-review`），schema 在 `question_bank_exam_import_schemas.py`。
 
+- 前端（C4b）：核對畫面 `exam-import/ExamImportReview*.tsx`＋`useExamImportReview.ts`（狀態）、`cardDraft.ts`（卡片 ↔ 草稿）、`reviewModel.ts`（頁與導覽格）；宿主頁面用 `useExamImportHost.ts`。題庫分頁的接線在 `exam-import/QuestionBankExamImport.tsx`（C4-0 自 QuestionBankTab 拆出）。
 - 確認畫面、上傳畫面是**新檔案**，不塞進 `QuestionSheet.tsx`（已接近 1000 行上限）；題目編輯沿用 `QuestionCard`／`GroupCard`，不複製。
 - 擷取新增 `exam_paper`（單頁圖片 → 題目卡陣列；克漏字由題組 `group_type: "cloze"` 產出）與 `cloze_group`（**匯入內部使用**，目前沒有端點，保留給之後只重讀一個克漏字題組），**不改動現有四種擷取模式**（vocabulary／sentence／multiple_choice／reading_group）。
 - #1113（AI 檢查）、#1114（AI 出題）之後會共用綜合確認畫面，元件要設計成接得上。
