@@ -5,7 +5,8 @@
  * 點任何地方（按鈕以外）都進入編輯，右上常駐淡灰鉛筆。內容用題庫的預覽元件（不複製）：
  * 單題 `QuestionsPreview`、題組 `GroupPreview`（長文章收合「展開全文」），選項全部展開、正確選項綠字＋✓，
  * 編號＝原卷題號。每題右邊欄：答案字母（綠）、答案來源 clip（答案頁灰／AI 作答紫；老師改過不顯示）、
- * 考點 clip。需注意的題左邊一條對應顏色的短豎線；導覽目前這題淡藍底。
+ * 考點 clip。需注意的題左邊一條對應顏色的短豎線（本份重複算需注意，琥珀，C4c E3）；從題號下拉或「需注意 ‹ ›」
+ * 剛跳過來的題淡藍底（`highlightKey`）。
  * 卡片上方提示：題庫已有（藍字＋「看原題」）、題目文字相同（A4 文字）、這份題本內重複、處理失敗
  * （「重試」：次數還有、不是手動補的卡、這張卡沒在編輯中；「手動補這一題」＝打開編輯）、上次存入被退回的原因（紅字）。
  * 存入時因重複被略過（duplicate／same_stem／duplicate_in_import）只顯示藍字「這題重複」類說明、不再加
@@ -62,7 +63,7 @@ const MARKER: Partial<Record<ReviewIssue, string>> = {
   missing: "border-l-4 border-amber-400 pl-2",
   failed: "border-l-4 border-red-400 pl-2",
   saveFailed: "border-l-4 border-red-400 pl-2",
-  importDuplicate: "border-l-4 border-blue-400 pl-2",
+  importDuplicate: "border-l-4 border-amber-400 pl-2",
 };
 
 /** 存入時因重複略過的原因：卡上只用藍字說明，不加紅字 */
@@ -182,7 +183,7 @@ export default function ExamImportReviewCard({
       className: cn(
         "rounded-sm",
         needsAttention(issue) && MARKER[issue as ReviewIssue],
-        review.currentKey === key && "bg-blue-50",
+        review.highlightKey === key && "bg-blue-50",
       ),
     };
   };

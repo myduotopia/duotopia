@@ -6596,11 +6596,9 @@
         "completed": "The whole paper has been saved to the question bank",
         "skipStarted": "Processed questions were saved; the remaining pages will be saved automatically when done.",
         "questionLabel": "Question {{label}}",
-        "navLabel": "Question navigator",
         "attention_one": "{{count}} question needs attention",
         "attention_other": "{{count}} questions need attention",
         "noAttention": "No questions need attention",
-        "next": "Next to check",
         "saveBlocked_one": "{{count}} page still processing",
         "saveBlocked_other": "{{count}} pages still processing",
         "nothingToSave": "No questions to save",
@@ -6625,7 +6623,37 @@
         "lockedUntilNextPage": "You can edit this after the next page is processed",
         "pendingContinuation": "This group may continue on the next page. It will be saved after the next page is processed.",
         "unmergedContinuation": "Continues the group from the previous page (not merged automatically because the previous group was edited or saved)",
-        "saveNeedsFile": "Select the file again first"
+        "saveNeedsFile": "Select the file again first",
+        "summary": {
+          "grade": "Grades {{value}}",
+          "source": "Source {{value}}",
+          "program": "Material {{value}}",
+          "notSet": "not set",
+          "required": "not set (required)",
+          "visibilityMissing": "Visibility not set (required)",
+          "edit": "Edit settings",
+          "collapse": "Hide settings"
+        },
+        "picker": {
+          "before": "Question",
+          "after": "",
+          "label": "Choose a question (number on the paper)",
+          "none": "–",
+          "remaining_one": "· {{count}} question left to review",
+          "remaining_other": "· {{count}} questions left to review",
+          "processing": "Processing… (questions appear when ready)",
+          "prevAttention": "Previous question that needs attention",
+          "nextAttention": "Next question that needs attention"
+        },
+        "status": {
+          "missing": "No answer",
+          "failed": "Failed",
+          "saveFailed": "Last save failed",
+          "importDuplicate": "Duplicate in this paper",
+          "duplicate": "Already in bank (will skip)",
+          "sameStem": "Same question text (will skip)",
+          "pending": "Waiting for next page"
+        }
       },
       "openOtherOrg": "That import belongs to another organization's question bank. Switch to that organization first.",
       "openOtherSchool": "That import belongs to a school question bank, which can't be opened here yet."

@@ -24,7 +24,9 @@
  * - **關面板前收尾**（C4b 審查 3）：向 controller 登記 `beforeClose`：送出年段、收合編輯中的題；失敗回傳
  *   false（面板不關），原因顯示在那一題並跳提示。
  * - **看原題**：題庫已有這題時，Dialog 以 id 抓那一題／那一組顯示預覽。
- * - **目前這題**：題號導覽點了或「跳到下一題」都會設 `currentKey`，畫面捲到那一題。
+ * - **目前這題**（C4c）：`currentKey`＝題號下拉顯示的題，捲動時由 `useReviewScrollSpy` 更新；從下拉選題、
+ *   「需注意 ‹ ›」（`jumpToAttention`，前後循環，E11）跳過去時同時設 `highlightKey`（那題淡藍底）並記下
+ *   `jumpedAtRef`，捲動偵測在平滑捲動期間不改目前這題。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -106,7 +108,10 @@ export function useExamImportReview(controller: ExamImportController) {
   const [duplicateTarget, setDuplicateTarget] =
     useState<DuplicateTarget | null>(null);
   const [addPage, setAddPage] = useState<number | null>(null);
+  /** 目前看到的題（題號下拉顯示它；捲動時跟著變） */
   const [currentKey, setCurrentKey] = useState<string | null>(null);
+  /** 剛跳過去的題（淡藍底，讓老師找到它；捲動不會改） */
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const editingRef = useRef(editing);
   editingRef.current = editing;
   const savingRef = useRef(false);
@@ -134,6 +139,7 @@ export function useExamImportReview(controller: ExamImportController) {
     setFailures({});
     setSkippedDuplicates(0);
     setCurrentKey(null);
+    setHighlightKey(null);
   }, [importId]);
 
   const pages = useMemo(() => reviewPages(detail), [detail]);
@@ -178,9 +184,13 @@ export function useExamImportReview(controller: ExamImportController) {
     );
   }, [pages, detail, t]);
 
+  /** 程式捲動（選題、跳需注意）的時間：捲動偵測在這之後一小段時間不改目前這題 */
+  const jumpedAtRef = useRef(0);
   const scrollTo = useCallback((key: string) => {
     setCurrentKey(key);
-    // 等畫面更新（例如剛展開）再捲
+    setHighlightKey(key);
+    jumpedAtRef.current = Date.now();
+    // 等畫面更新（例如剛展開、剛切回逐題核對）再捲
     window.requestAnimationFrame(() => {
       document
         .getElementById(entryDomId(key))
@@ -188,13 +198,21 @@ export function useExamImportReview(controller: ExamImportController) {
     });
   }, []);
 
-  /** 跳到下一個需注意的題（目前這題之後；到底了從頭） */
-  const jumpToNextAttention = useCallback(() => {
-    if (attention.length === 0) return;
-    const at = entries.findIndex((e) => e.key === currentKey);
-    const next = attention.find((e) => entries.indexOf(e) > at) ?? attention[0];
-    scrollTo(next.key);
-  }, [attention, entries, currentKey, scrollTo]);
+  /** 跳到上一個／下一個需注意的題（以目前這題為準；到頭尾就循環，E11） */
+  const jumpToAttention = useCallback(
+    (dir: 1 | -1) => {
+      if (attention.length === 0) return;
+      const at = entries.findIndex((e) => e.key === currentKey);
+      const pos = (e: (typeof entries)[number]) => entries.indexOf(e);
+      const target =
+        dir === 1
+          ? (attention.find((e) => pos(e) > at) ?? attention[0])
+          : ([...attention].reverse().find((e) => at >= 0 && pos(e) < at) ??
+            attention[attention.length - 1]);
+      scrollTo(target.key);
+    },
+    [attention, entries, currentKey, scrollTo],
+  );
 
   /**
    * 收合目前編輯的卡：有改就 PATCH（帶 rev）。回傳 ok＝可以接著做別的事；message＝沒存成的原因。
@@ -518,8 +536,10 @@ export function useExamImportReview(controller: ExamImportController) {
     locked,
     currentKey,
     setCurrentKey,
+    highlightKey,
+    jumpedAtRef,
     scrollTo,
-    jumpToNextAttention,
+    jumpToAttention,
     editing,
     editError,
     busyCard,

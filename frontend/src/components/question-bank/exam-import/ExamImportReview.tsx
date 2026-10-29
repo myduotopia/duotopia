@@ -1,34 +1,29 @@
 /**
- * 上傳題本・綜合確認畫面（逐題核對，#1112 C4b；設計文件第五節）。按「開始擷取」或提示列「繼續」後
+ * 上傳題本・綜合確認畫面（逐題核對，#1112 C4b／C4c；設計文件第五節）。按「開始擷取」或提示列「繼續」後
  * 直接進這裡（C4 定案 A1），題目邊處理邊出現；原「處理進度」畫面退場，它的每頁狀態與按鈕在
  * 「原卷第 N 頁」那一行（ExamImportReviewPageRow），「繼續處理」等提示在頂部（ExamImportReviewTop）。
  *
- * 版面（上到下）：
- * - 頂部（不捲動）：整份設定＋藍色進度條＋提示
- * - 中間：左側題號導覽（共用 QuestionNumberNav：琥珀＝缺答案、紅＝失敗、灰虛線＝處理中、藍＝題庫已有／
- *   題目文字相同／本份重複；目前這題粗框淡底；需注意的格子旁有短豎線；標籤＝原卷題號），下方
- *   「需注意 N 題」「跳到下一題」。點題庫已有的格子會打開原題。小螢幕（< md）導覽收起，只留
- *   「需注意 N 題」「跳到下一題」一列（▦ 抽屜在 C4c）。右側捲動區：依原卷頁碼排列的頁與題目卡，
- *   預留「整頁對照原卷」分頁（C4c）的位置
+ * 版面（上到下；C4c 把空間留給考卷閱讀，維持整份考卷一路往下看）：
+ * - 頂部（不捲動）：一行整份設定摘要＋「編輯設定 ▾」＋細進度線＋有才出現的提示（ExamImportReviewTop）
+ * - 題號列（不捲動）：「第 [N ▾] 題・還有 M 題待核對」＋「需注意 K 題 ‹ ›」（ExamImportQuestionPicker；
+ *   左側題號方格 QuestionNumberNav 已移除）。N 隨捲動更新（useReviewScrollSpy）。
+ * - 捲動區：頁碼說明小字、依原卷頁碼排列的頁與題目卡；考卷最寬約 920px 置中（E7）
  * - 頁尾：「放棄這次匯入」（紅字次要）、「略過核對，直接存入」（次要，先確認）、「全部儲存」（主按鈕；
  *   還有頁在處理時停用＋說明「還有 N 頁處理中」；還沒處理的頁要重選檔案才能送時說明「請先重選檔案」，
- *   C4b 審查 8）
+ *   C4b 審查 8）。按存入或略過核對時整份設定還缺必填 → 不送、展開設定並把焦點放到第一個缺的欄位（E5）。
  * - 題目卡另外帶 `locked`（頁上最後一張題組、下一頁還沒處理完 → 不能編輯）與 `unmergedContinuation`
  *   （延續上一頁卻沒自動合併）說明。
  * 捲動區與頁尾右側 `pr-8 sm:pr-16`：閃避老師後台右側的數位教學工具列（同 ScenarioSheetLayout）。
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
-import {
-  QuestionNumberNav,
-  type QuestionNumberNavItem,
-  type QuestionNumberTone,
-} from "@/components/shared/QuestionNumberNav";
 import type { Program } from "@/types";
+import ExamImportQuestionPicker from "./ExamImportQuestionPicker";
 import ExamImportReviewCard from "./ExamImportReviewCard";
 import {
   AddCardDialog,
@@ -39,24 +34,15 @@ import ExamImportReviewTop from "./ExamImportReviewTop";
 import { errorKey } from "./examImportErrors";
 import {
   continuationNotMerged,
-  needsAttention,
+  missingSettings,
   pagesInProgress,
+  pickerStatus,
   type ReviewEntry,
-  type ReviewIssue,
 } from "./reviewModel";
-import { pageMergeInfo, type ExamImportCard } from "./types";
+import { pageMergeInfo } from "./types";
 import type { ExamImportController } from "./useExamImport";
 import { useExamImportReview } from "./useExamImportReview";
-
-const TONE: Record<ReviewIssue, QuestionNumberTone> = {
-  missing: "warning",
-  failed: "error",
-  saveFailed: "error",
-  duplicate: "info",
-  sameStem: "info",
-  importDuplicate: "info",
-  processing: "pending",
-};
+import { useReviewScrollSpy } from "./useReviewScrollSpy";
 
 interface Props {
   controller: ExamImportController;
@@ -73,12 +59,19 @@ export default function ExamImportReview({
   const review = useExamImportReview(controller);
   const { detail, loadingDetail, runError } = controller;
   const [confirmSkip, setConfirmSkip] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const mergeInfo = useMemo(() => pageMergeInfo(detail?.pages ?? []), [detail]);
-  const cardsById = useMemo(() => {
-    const map = new Map<string, ExamImportCard>();
-    review.pages.forEach((p) => p.cards.forEach((c) => map.set(c.card_id, c)));
-    return map;
-  }, [review.pages]);
+  const missing = missingSettings(detail?.settings, review.grade);
+  useReviewScrollSpy({
+    rootRef: scrollRef,
+    entries: review.entries,
+    enabled: true,
+    onCurrent: review.setCurrentKey,
+    pausedAtRef: review.jumpedAtRef,
+    version: review.editing?.cardId,
+  });
   const labelsByCard = useMemo(() => {
     const map = new Map<string, string[]>();
     review.entries.forEach((e) => {
@@ -102,44 +95,13 @@ export default function ExamImportReview({
     );
   }
 
-  const issueText = (e: ReviewEntry) => {
-    if (e.issue === "processing")
-      return t("questionBank.examImport.review.pageProcessing", {
-        n: e.pageNo,
-      });
-    if (!e.issue) return null;
-    return t(`questionBank.examImport.review.issue.${e.issue}`);
-  };
-  const navItems: QuestionNumberNavItem[] = review.entries.map((e) => {
-    const text = issueText(e);
-    const base = t("questionBank.examImport.review.questionLabel", {
-      label: e.label,
-    });
-    return {
-      key: e.key,
-      label: e.label,
-      tone: e.issue ? TONE[e.issue] : "default",
-      marker: needsAttention(e.issue),
-      title: text ?? undefined,
-      ariaLabel: text ? `${base}，${text}` : base,
-    };
-  });
-  const selectEntry = (key: string) => {
-    const entry = review.entries.find((e) => e.key === key);
-    if (!entry) return;
-    if (!entry.cardId) {
-      // 處理中的頁：捲到那一頁
-      review.setCurrentKey(key);
-      document
-        .querySelector(`[data-testid="exam-page-${entry.pageNo}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    review.scrollTo(key);
-    const dup = cardsById.get(entry.cardId)?.duplicate_of;
-    if (dup?.type === "bank")
-      review.showDuplicate({ kind: dup.kind, id: dup.id });
-  };
+  const statusOf = (e: ReviewEntry) =>
+    pickerStatus(
+      e,
+      e.cardId ? review.failures[e.cardId] : undefined,
+      e.cardId ? review.locked.has(e.cardId) : false,
+    );
+  const remaining = review.entries.filter((e) => e.cardId).length;
 
   const inProgress = pagesInProgress(detail);
   const unsavedCards = review.pages.reduce((n, p) => n + p.cards.length, 0);
@@ -151,74 +113,48 @@ export default function ExamImportReview({
         : unsavedCards === 0
           ? t("questionBank.examImport.review.nothingToSave")
           : null;
-  const attentionCount = review.attention.length;
 
-  const attentionBar = (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span
-        className={
-          attentionCount > 0 ? "font-medium text-amber-700" : "text-gray-500"
-        }
-        data-testid="exam-review-attention"
-      >
-        {t("questionBank.examImport.review.attention", {
-          count: attentionCount,
-        })}
-      </span>
-      <span
-        title={
-          attentionCount === 0
-            ? t("questionBank.examImport.review.noAttention")
-            : undefined
-        }
-      >
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1"
-          onClick={review.jumpToNextAttention}
-          disabled={attentionCount === 0}
-          data-testid="exam-review-next"
-        >
-          <ArrowDown className="h-3.5 w-3.5" />
-          {t("questionBank.examImport.review.next")}
-        </Button>
-      </span>
-    </div>
-  );
+  /** 存入前檢查整份設定：缺必填 → 展開設定、焦點到第一個缺的欄位，不送（E5） */
+  const settingsReady = () => {
+    if (missing.length === 0) return true;
+    setSettingsOpen(true);
+    setFocusRequest((n) => n + 1);
+    toast.info(t(errorKey("settingsIncomplete")));
+    return false;
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="exam-review">
-      <div className="shrink-0 border-b border-gray-200 px-6 py-3 pr-8 sm:pr-16">
+      <div className="shrink-0 border-b border-gray-200">
         <ExamImportReviewTop
           controller={controller}
           review={review}
           programs={programs}
+          expanded={settingsOpen}
+          onToggle={() => setSettingsOpen((o) => !o)}
+          missing={missing}
+          focusRequest={focusRequest}
         />
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <aside
-          className="hidden w-60 shrink-0 flex-col gap-3 overflow-y-auto border-r border-gray-200 p-4 md:flex"
-          data-testid="exam-review-nav-panel"
-        >
-          <QuestionNumberNav
-            items={navItems}
-            currentKey={review.currentKey}
-            onSelect={selectEntry}
-            columns={4}
-            ariaLabel={t("questionBank.examImport.review.navLabel")}
-            testId="exam-review-nav"
-          />
-          {attentionBar}
-        </aside>
+      <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 px-4 py-2 pr-8 sm:px-6 sm:pr-16">
+        <ExamImportQuestionPicker
+          entries={review.entries}
+          currentKey={review.currentKey}
+          statusOf={statusOf}
+          remaining={remaining}
+          attentionCount={review.attention.length}
+          onPick={review.scrollTo}
+          onAttention={review.jumpToAttention}
+        />
+      </div>
 
-        <div
-          className="min-h-0 flex-1 overflow-y-auto p-6 pr-8 sm:pr-16"
-          data-testid="exam-review-scroll"
-        >
-          <div className="mb-3 md:hidden">{attentionBar}</div>
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pr-8 sm:px-6 sm:pr-16"
+        data-testid="exam-review-scroll"
+      >
+        <div className="mx-auto max-w-[920px]">
           <p
             className="mb-3 text-xs text-gray-500"
             data-testid="exam-review-page-order-hint"
@@ -255,7 +191,7 @@ export default function ExamImportReview({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-gray-200 bg-white px-6 py-3 pr-8 sm:pr-16">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-gray-200 bg-white px-4 py-3 pr-8 sm:px-6 sm:pr-16">
         <Button
           type="button"
           variant="outline"
@@ -278,7 +214,9 @@ export default function ExamImportReview({
           <Button
             type="button"
             variant="outline"
-            onClick={() => setConfirmSkip(true)}
+            onClick={() => {
+              if (settingsReady()) setConfirmSkip(true);
+            }}
             disabled={review.saving !== null || detail.auto_save === true}
             title={
               detail.auto_save
@@ -295,7 +233,9 @@ export default function ExamImportReview({
           <span title={saveDisabledReason ?? undefined}>
             <Button
               type="button"
-              onClick={() => void review.saveAll()}
+              onClick={() => {
+                if (settingsReady()) void review.saveAll();
+              }}
               disabled={saveDisabledReason !== null || review.saving !== null}
               data-testid="exam-review-save"
             >

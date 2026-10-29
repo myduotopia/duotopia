@@ -2,28 +2,31 @@
  * ExamImportReview（#1112 C4b）核對畫面主要流程。API 全部用假的（不連網路）；QuestionCard／頂部設定
  * 換成簡單替身（編輯表單本身有自己的測試）。
  *
- * 1. 載入：依原卷頁碼列出還沒存的卡（已存的不顯示），題號導覽標籤＝原卷題號；缺答案琥珀、
- *    題庫已有藍；處理中的頁有灰色佔位條，「全部儲存」停用並說明「還有 N 頁處理中」
+ * 1. 載入：依原卷頁碼列出還沒存的卡（已存的不顯示），卡上編號＝原卷題號；處理中的頁有灰色佔位條，
+ *    「全部儲存」停用並說明「還有 N 頁處理中」；需注意不含題庫已有的
  * 2. 點卡片 → 原位展開編輯 →「完成」：有改才 PATCH（只送有改的欄位＋原卷題號），沒改不送
- * 3. 全部儲存：被退回的卡標出原因；「N 題因題庫已有而略過」；整份存完 → markSaved
- * 4. 點題庫已有的導覽格 → 以 id 抓原題顯示
+ * 3. 全部儲存：被退回的卡標出原因；「N 題因題庫已有而略過」；整份存完 → markSaved；整份設定缺必填 →
+ *    不送、展開設定（C4c E5）
+ * 4. 題庫已有：卡片上「看原題」→ 以 id 抓原題顯示（題號下拉只捲動，C4c E4）
  * 5. 題組（C4b 審查 1–5、7）：編輯題組 →「完成」送卡片格式＋rev；頁上最後一張題組、下一頁還沒處理完
  *    → 不能編輯並說明；409 CARD_CHANGED → 換成最新卡、編輯收起、提示重新打開；409 CARD_SAVED →
  *    放掉編輯；重複被略過只顯示藍字不加紅字；「全部儲存」連按只送一次
+ * 題號下拉、捲動偵測、需注意 ‹ › 在 ExamImportReviewNav.test.tsx；整頁對照在 ExamImportCompareView.test.tsx。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
-import ExamImportReview from "../exam-import/ExamImportReview";
-import type { ExamImportController } from "../exam-import/useExamImport";
-import type {
-  ExamImportCard,
-  ExamImportDetail,
-  ExamImportPage,
-  ExamImportSaveResult,
-} from "../exam-import/types";
+import type { ExamImportSaveResult } from "../exam-import/types";
 import type { GroupDraft, QuestionDraft } from "../questionDraft";
 import { ApiError } from "@/lib/api";
+import {
+  controllerWith,
+  group,
+  page,
+  renderReview,
+  saveResult,
+  single,
+} from "./examImportReviewFixtures";
 
 vi.mock("react-i18next", () => {
   const translation = {
@@ -74,7 +77,22 @@ vi.mock("@/lib/api", async (orig) => ({
 }));
 
 vi.mock("../exam-import/ExamImportReviewTop", () => ({
-  default: () => <div data-testid="top-stub" />,
+  default: ({
+    expanded,
+    missing,
+    focusRequest,
+  }: {
+    expanded: boolean;
+    missing: string[];
+    focusRequest: number;
+  }) => (
+    <div
+      data-testid="top-stub"
+      data-expanded={String(expanded)}
+      data-missing={missing.join(",")}
+      data-focus={String(focusRequest)}
+    />
+  ),
 }));
 
 vi.mock("../QuestionCard", () => ({
@@ -109,149 +127,6 @@ vi.mock("../GroupCard", () => ({
   ),
 }));
 
-function group(
-  id: string,
-  patch: Partial<ExamImportCard> = {},
-): ExamImportCard {
-  return {
-    card_id: id,
-    kind: "group",
-    page_no: 1,
-    pages: [1],
-    status: "ok",
-    duplicate_of: null,
-    rev: 5,
-    group: {
-      group_type: "reading",
-      title: "Passage",
-      stimulus: { kind: "text", paragraphs: ["Tom goes to school."] },
-      glossary: [],
-      questions: [
-        {
-          source_question_no: "1",
-          stem: "Where?",
-          options: ["home", "school"],
-          correct_indexes: [1],
-          status: "ok",
-        },
-      ],
-    },
-    ...patch,
-  };
-}
-
-function single(
-  id: string,
-  no: string,
-  patch: Partial<ExamImportCard> = {},
-  correct: number[] = [1],
-): ExamImportCard {
-  return {
-    card_id: id,
-    kind: "single",
-    page_no: 1,
-    pages: [1],
-    status: "ok",
-    duplicate_of: null,
-    question: {
-      source_question_no: no,
-      page_no: 1,
-      stem: `Question ${no}`,
-      options: ["apple", "banana", "cherry", "durian"],
-      correct_indexes: correct,
-      answer_source: "ai",
-      exam_point_codes: ["G-01"],
-      status: "ok",
-    },
-    ...patch,
-  };
-}
-
-function page(
-  no: number,
-  cards: ExamImportCard[],
-  status: ExamImportPage["status"] = "done",
-): ExamImportPage {
-  return {
-    page_no: no,
-    status,
-    image_url: null,
-    is_answer_page: false,
-    cards,
-    error: null,
-    blank_skipped: false,
-    resend_count: 0,
-    processed_at: null,
-  };
-}
-
-function controllerWith(pages: ExamImportPage[]) {
-  const detail: ExamImportDetail = {
-    id: 9,
-    file_name: "paper.pdf",
-    file_hash: "a".repeat(64),
-    page_count: pages.length,
-    status: "ready",
-    settings: {},
-    tts_accents: ["American English"],
-    question_count: 0,
-    pages_done: pages.filter((p) => p.status === "done").length,
-    pages_failed: 0,
-    pages_blank: 0,
-    created_at: null,
-    updated_at: null,
-    known_answers: {},
-    retry_limits: { page_resends: 2, question_retries: 2 },
-    pages,
-  };
-  return {
-    detail,
-    loadingDetail: false,
-    running: false,
-    activePage: null,
-    pageNotes: {},
-    runError: null,
-    thumbs: {},
-    hasSource: false,
-    needsFile: false,
-    canResume: false,
-    staleProcessing: () => false,
-    organizationId: null,
-    resendPage: vi.fn(),
-    sendBlankPage: vi.fn(),
-    reload: vi.fn(async () => detail),
-    retryQuestion: vi.fn(),
-    replaceCard: vi.fn(),
-    setBeforeClose: vi.fn(),
-    markSaved: vi.fn(),
-  } as unknown as ExamImportController;
-}
-
-function renderReview(controller: ExamImportController) {
-  return render(
-    <ExamImportReview
-      controller={controller}
-      programs={[]}
-      onRequestAbandon={vi.fn()}
-    />,
-  );
-}
-
-function saveResult(
-  patch: Partial<ExamImportSaveResult>,
-): ExamImportSaveResult {
-  return {
-    saved: [],
-    failed: [],
-    skipped_duplicate_cards: 0,
-    skipped_duplicate_questions: 0,
-    completed: false,
-    status: "ready",
-    import: {} as ExamImportSaveResult["import"],
-    ...patch,
-  };
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   window.requestAnimationFrame = (cb: FrameRequestCallback) => {
@@ -262,7 +137,7 @@ beforeEach(() => {
 });
 
 describe("ExamImportReview：載入", () => {
-  it("列出還沒存的卡、導覽標原卷題號與狀態色；處理中的頁有佔位條、全部儲存停用", () => {
+  it("列出還沒存的卡、卡上標原卷題號；處理中的頁有佔位條、全部儲存停用", () => {
     const saved = single("s", "40");
     saved.question!.saved_question_id = 123;
     const controller = controllerWith([
@@ -287,11 +162,13 @@ describe("ExamImportReview：載入", () => {
       '"answer":"B"',
     );
 
-    const cell = (k: string) => screen.getByTestId(`exam-review-nav-cell-${k}`);
-    expect(cell("a:0").textContent).toBe("41");
-    expect(cell("b:0").getAttribute("data-tone")).toBe("warning");
-    expect(cell("c:0").getAttribute("data-tone")).toBe("info");
-    expect(cell("page-2").getAttribute("data-tone")).toBe("pending");
+    // 左側題號方格已移除（C4c），改成上方題號下拉
+    expect(screen.queryByTestId("exam-review-nav")).toBeNull();
+    expect(screen.getByTestId("exam-review-picker")).toBeTruthy();
+    // 還沒存的 3 題待核對
+    expect(screen.getByTestId("exam-review-remaining").textContent).toContain(
+      '"count":3',
+    );
 
     expect(screen.getByTestId("exam-page-2-placeholder")).toBeTruthy();
     const save = screen.getByTestId("exam-review-save") as HTMLButtonElement;
@@ -380,6 +257,34 @@ describe("ExamImportReview：全部儲存", () => {
     expect(toast.success).toHaveBeenCalled();
   });
 
+  it("整份設定缺必填 → 不送存入、展開設定並要求焦點（C4c E5）；略過核對也一樣", () => {
+    const controller = controllerWith([page(1, [single("a", "41")])], {
+      grade_min: 7,
+      grade_max: 9,
+      source_id: null,
+      visibility: null,
+    });
+    renderReview(controller);
+    const top = screen.getByTestId("top-stub");
+    expect(top.getAttribute("data-expanded")).toBe("false");
+    expect(top.getAttribute("data-missing")).toBe("source,visibility");
+
+    fireEvent.click(screen.getByTestId("exam-review-save"));
+    expect(api.save).not.toHaveBeenCalled();
+    expect(top.getAttribute("data-expanded")).toBe("true");
+    expect(top.getAttribute("data-focus")).toBe("1");
+    expect(toast.info).toHaveBeenCalledWith(
+      "questionBank.examImport.errors.settingsIncomplete",
+    );
+
+    fireEvent.click(screen.getByTestId("exam-review-skip"));
+    expect(top.getAttribute("data-focus")).toBe("2");
+    // 確認視窗沒有打開
+    expect(
+      screen.queryByText("questionBank.examImport.review.skipTitle"),
+    ).toBeNull();
+  });
+
   it("整份存完 → markSaved（關面板）", async () => {
     api.save.mockResolvedValue(
       saveResult({
@@ -402,7 +307,7 @@ describe("ExamImportReview：全部儲存", () => {
 });
 
 describe("ExamImportReview：題庫已有", () => {
-  it("點藍色導覽格 → 以 id 抓原題", async () => {
+  it("卡片上「看原題」→ 以 id 抓原題", async () => {
     getQuestion.mockResolvedValue({
       id: 55,
       question_type: "multiple_choice",
@@ -427,7 +332,7 @@ describe("ExamImportReview：題庫已有", () => {
       ]),
     ]);
     renderReview(controller);
-    fireEvent.click(screen.getByTestId("exam-review-nav-cell-c:0"));
+    fireEvent.click(screen.getByTestId("exam-card-c-view-original"));
     await waitFor(() => expect(getQuestion).toHaveBeenCalledWith(55));
     expect(
       await screen.findByTestId("exam-review-duplicate-dialog"),

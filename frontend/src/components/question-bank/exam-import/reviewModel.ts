@@ -1,6 +1,6 @@
 /**
  * 上傳題本核對畫面（#1112 C4b）的畫面模型：純函式，把整份匯入（`ExamImportDetail`）整理成
- * 「依原卷頁碼排列的頁＋還沒存的題目卡」與題號導覽的每一格。
+ * 「依原卷頁碼排列的頁＋還沒存的題目卡」與題號下拉的每一列（C4c：左側方格導覽改成上方下拉）。
  *
  * - 已存進題庫的卡（`cardIsSaved`）不顯示。
  * - 每題的狀態（`ReviewIssue`，設計文件第五節「題號導覽」、cold-read B4）：
@@ -11,7 +11,9 @@
  *   - `saveFailed` 上次「全部儲存」被退回的其他原因（克漏字空格對不上、驗證錯誤）
  *   - 還沒處理完的頁：每頁一格 `processing`（灰虛線）
  * - 「需注意」＝缺答案、失敗、這份題本內重複、儲存被退回（題庫已有的會自動略過，不算需注意，A2）。
- * - 格子標籤＝原卷題號；沒有就用流水號（B4）。
+ * - 標籤＝原卷題號；沒有就用流水號（B4）。
+ * - 題號下拉（C4c）：`pickerGroups` 依原卷頁分組、`pickerStatus` 每題狀態文字（E3）；
+ *   `missingSettings` 整份設定缺哪些必填（按存入時自動展開設定、焦點到第一個缺的欄位，E5）。
  * - 存入退回 `pending_continuation`（題組可能還有下一頁的內容）不算問題：等下一頁處理完就好，不標色。
  * - `unsettledCardIds`：**還不能編輯的題組卡**（C4b 審查 1）——頁上最後一張是題組，後面（往下找到下一個
  *   有卡片的已處理頁之前）還有頁在等待／處理中，下一頁可能還會併進小題或文章。規則與後端
@@ -27,6 +29,7 @@ import {
   type ExamImportDetail,
   type ExamImportPage,
   type ExamImportSaveFailure,
+  type ExamImportSettingsPayload,
 } from "./types";
 
 export type ReviewIssue =
@@ -157,6 +160,57 @@ export function reviewEntries(
       });
     }
   }
+  return out;
+}
+
+/**
+ * 題號下拉每題的狀態（C4c cold-read E3）：問題（`ReviewIssue`）優先；沒有問題但還在等下一頁
+ * （`pending_continuation` 被退回、或題組卡還不能編輯）→ `pending`（灰字「等下一頁」）。
+ */
+export type PickerStatus = Exclude<ReviewIssue, "processing"> | "pending";
+
+export function pickerStatus(
+  entry: ReviewEntry,
+  failure: ExamImportSaveFailure | undefined,
+  locked: boolean,
+): PickerStatus | null {
+  if (entry.issue && entry.issue !== "processing") return entry.issue;
+  if (failure?.reason === "pending_continuation" || locked) return "pending";
+  return null;
+}
+
+/** 下拉依「原卷第 P 頁」分組（跨頁題組歸起始頁，E2）；處理中的頁只有一列灰字 */
+export interface PickerGroup {
+  pageNo: number;
+  processing: boolean;
+  entries: ReviewEntry[];
+}
+
+export function pickerGroups(entries: ReviewEntry[]): PickerGroup[] {
+  const out: PickerGroup[] = [];
+  for (const e of entries) {
+    let g = out[out.length - 1];
+    if (!g || g.pageNo !== e.pageNo) {
+      g = { pageNo: e.pageNo, processing: false, entries: [] };
+      out.push(g);
+    }
+    if (e.issue === "processing") g.processing = true;
+    else g.entries.push(e);
+  }
+  return out;
+}
+
+/** 整份設定還缺的必填欄位（同後端 `missing_required`：年段上下限、來源、公開） */
+export type SettingKey = "grade" | "source" | "visibility";
+
+export function missingSettings(
+  settings: Partial<ExamImportSettingsPayload> | undefined,
+  grade: [number | null, number | null],
+): SettingKey[] {
+  const out: SettingKey[] = [];
+  if (grade[0] === null || grade[1] === null) out.push("grade");
+  if (settings?.source_id == null) out.push("source");
+  if (!settings?.visibility) out.push("visibility");
   return out;
 }
 

@@ -6631,10 +6631,8 @@
         "completed": "這份題本已全部存進題庫",
         "skipStarted": "已存入處理好的題目；其他頁處理完會自動存入。",
         "questionLabel": "第 {{label}} 題",
-        "navLabel": "題號導覽",
         "attention": "需注意 {{count}} 題",
         "noAttention": "沒有需要注意的題目",
-        "next": "跳到下一題",
         "saveBlocked": "還有 {{count}} 頁處理中",
         "nothingToSave": "沒有要存的題目",
         "save": "全部儲存",
@@ -6658,7 +6656,36 @@
         "lockedUntilNextPage": "下一頁處理完才能編輯",
         "pendingContinuation": "這個題組可能還有下一頁的內容，等下一頁處理完再存。",
         "unmergedContinuation": "接續上一頁的題組（上一題組已編輯或已存入，未自動合併）",
-        "saveNeedsFile": "請先重選檔案"
+        "saveNeedsFile": "請先重選檔案",
+        "summary": {
+          "grade": "年段 {{value}}",
+          "source": "來源 {{value}}",
+          "program": "教材 {{value}}",
+          "notSet": "未選",
+          "required": "未選（必填）",
+          "visibilityMissing": "是否公開 未選（必填）",
+          "edit": "編輯設定",
+          "collapse": "收合設定"
+        },
+        "picker": {
+          "before": "第",
+          "after": "題",
+          "label": "選擇要看的題目（原卷題號）",
+          "none": "–",
+          "remaining": "・還有 {{count}} 題待核對",
+          "processing": "處理中…（題目出來後才會列出）",
+          "prevAttention": "上一個需注意的題",
+          "nextAttention": "下一個需注意的題"
+        },
+        "status": {
+          "missing": "缺答案",
+          "failed": "處理失敗",
+          "saveFailed": "上次存入沒成功",
+          "importDuplicate": "本份重複",
+          "duplicate": "題庫已有（會略過）",
+          "sameStem": "題目文字相同（會略過）",
+          "pending": "等下一頁"
+        }
       },
       "openOtherOrg": "那次匯入在另一個機構的題庫，請先切換到那個機構再打開。",
       "openOtherSchool": "那次匯入在學校題庫，目前還不能從這裡打開。"

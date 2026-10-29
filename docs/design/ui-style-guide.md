@@ -238,7 +238,6 @@
 | ProgramLessonPicker | `frontend/src/components/shared/ProgramLessonPicker.tsx` | 「教材＋單元」關聯下拉 |
 | ProgramTreeView | `frontend/src/components/shared/ProgramTreeView.tsx` | 教材／單元／內容三層樹（可編輯） |
 | programTreeConfig | `frontend/src/components/shared/programTreeConfig.tsx` | 教材樹的層級設定（給 RecursiveTreeAccordion） |
-| QuestionNumberNav | `frontend/src/components/shared/QuestionNumberNav.tsx` | 題號方格導覽：一格一題、依狀態上色（`tone`：default／success 綠／error 紅／warning 琥珀／info 藍／neutral 灰底／pending 灰虛線），點格子跳題。`current` 目前這題（outline 粗框＋淡底／solid 填 `accent` 色：blue／amber／emerald／pink）、`fill`（soft 淡底／solid 實心）、`marker` 需注意短豎線、`size`（md 44px 觸控／sm h-8）、`layout`（grid／row）、`readOnly`；`aria-label`／`title` 由呼叫端傳。第一個使用者是上傳題本核對畫面（#1112）；作答頁各自寫的方格之後另開 issue 換成它 |
 | RecursiveTreeAccordion | `frontend/src/components/shared/RecursiveTreeAccordion.tsx` | 多層樹狀手風琴 |
 | RefSaveButton | `frontend/src/components/shared/RefSaveButton.tsx` | 透過 ref 呼叫面板存檔的按鈕 |
 | ResourceFolderView | `frontend/src/components/shared/ResourceFolderView.tsx` | 公版教材資料夾式顯示（唯讀＋複製） |
