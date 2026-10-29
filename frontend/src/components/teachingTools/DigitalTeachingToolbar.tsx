@@ -6,6 +6,11 @@
  * pointerdown 判斷「點到外面」就關閉，所以**會在 sheet 開著時被按的控制項**（拖動把手、
  * 收起／展開鈕、分享、說明）都在 onPointerDown 呼叫 stopPropagation，免得一按就把底下的
  * sheet 關掉（#1146 第 3b 輪補上把手與收起／展開鈕）。pointerdown 同時涵蓋滑鼠與觸控。
+ *
+ * **手機寬度自動收起**（#1112 C4c 定案 U1）：視窗 < 640px（Tailwind `sm` 以下）而且有編輯面板開著
+ * （面板用 `lib/editorPanelPresence` 的 `useEditorPanelPresence(open)` 登記，例如上傳題本）時，工具列
+ * 自動收成右緣小把手，不蓋住面板內容；點把手可暫時展開（不寫進 localStorage），面板關掉就恢復老師
+ * 原本的收合設定。桌機與沒有面板開著時行為不變。
  */
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
@@ -33,6 +38,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useAnyEditorPanelOpen } from "@/lib/editorPanelPresence";
 import TimerTool from "./TimerTool";
 import DiceTool from "./DiceTool";
 import RpsTool from "./RpsTool";
@@ -61,14 +68,27 @@ const DigitalTeachingToolbar: React.FC = () => {
     () => localStorage.getItem("duotopia-toolbar-collapsed") === "true",
   );
   const zCounterRef = useRef(200);
+  // 手機寬度＋編輯面板開著 → 自動收起；peek＝老師點把手暫時展開（不記住）
+  const panelOpen = useAnyEditorPanelOpen();
+  const isPhone = useMediaQuery("(max-width: 639px)");
+  const autoCollapse = panelOpen && isPhone;
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    if (!autoCollapse) setPeek(false);
+  }, [autoCollapse]);
+  const collapsed = autoCollapse ? !peek : isCollapsed;
 
   const toggleCollapse = useCallback(() => {
+    if (autoCollapse) {
+      setPeek((prev) => !prev);
+      return;
+    }
     setIsCollapsed((prev) => {
       const next = !prev;
       localStorage.setItem("duotopia-toolbar-collapsed", String(next));
       return next;
     });
-  }, []);
+  }, [autoCollapse]);
 
   useEffect(() => {
     if (toolbarY === null) {
@@ -252,11 +272,13 @@ const DigitalTeachingToolbar: React.FC = () => {
       {/* Side toolbar */}
       <div
         ref={toolbarRef}
-        className={`fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] transition-transform duration-300 ${isCollapsed ? "pointer-events-none" : "pointer-events-auto"}`}
+        className={`fixed right-0 flex flex-col gap-1 bg-white/90 backdrop-blur-md shadow-2xl border border-gray-200 border-r-0 rounded-l-xl p-1.5 z-[150] transition-transform duration-300 ${collapsed ? "pointer-events-none" : "pointer-events-auto"}`}
         style={{
           top: `${toolbarY ?? window.innerHeight / 2}px`,
-          transform: `translateY(-50%)${isCollapsed ? " translateX(100%)" : ""}`,
+          transform: `translateY(-50%)${collapsed ? " translateX(100%)" : ""}`,
         }}
+        data-testid="teaching-toolbar"
+        data-collapsed={collapsed ? "true" : "false"}
       >
         {/* Drag handle */}
         <div
@@ -366,7 +388,7 @@ const DigitalTeachingToolbar: React.FC = () => {
       </div>
 
       {/* Expand tab (visible only when collapsed) */}
-      {isCollapsed && (
+      {collapsed && (
         <button
           className="fixed right-0 z-[150] pointer-events-auto bg-white/90 backdrop-blur-md shadow-lg border border-gray-200 border-r-0 rounded-l-lg px-1 py-3 hover:bg-blue-50 text-blue-500 transition-all duration-300"
           style={{

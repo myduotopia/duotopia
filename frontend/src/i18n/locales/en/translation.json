@@ -6666,6 +6666,10 @@
           "nextPage": "Next page",
           "firstPage": "This is the first page",
           "lastPage": "This is the last page"
+        },
+        "short": {
+          "abandon": "Discard",
+          "skip": "Skip review"
         }
       },
       "openOtherOrg": "That import belongs to another organization's question bank. Switch to that organization first.",

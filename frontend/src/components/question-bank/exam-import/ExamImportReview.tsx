@@ -16,6 +16,8 @@
  * - 頁尾：「放棄這次匯入」（紅字次要）、「略過核對，直接存入」（次要，先確認）、「全部儲存」（主按鈕；
  *   還有頁在處理時停用＋說明「還有 N 頁處理中」；還沒處理的頁要重選檔案才能送時說明「請先重選檔案」，
  *   C4b 審查 8）。按存入或略過核對時整份設定還缺必填 → 不送、展開設定並把焦點放到第一個缺的欄位（E5）。
+ *   手機（< sm，U5）：三個按鈕一排短字「放棄／略過核對／全部儲存」，完整文字放 aria-label／title，
+ *   停用原因另起一行小字；確認視窗照舊。
  * - 題目卡另外帶 `locked`（頁上最後一張題組、下一頁還沒處理完 → 不能編輯）與 `unmergedContinuation`
  *   （延續上一頁卻沒自動合併）說明。
  * 捲動區與頁尾右側 `pr-8 sm:pr-16`：閃避老師後台右側的數位教學工具列（同 ScenarioSheetLayout）。
@@ -292,20 +294,36 @@ export default function ExamImportReview({
       )}
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-gray-200 bg-white px-4 py-3 pr-8 sm:px-6 sm:pr-16">
+        {/* 手機：按鈕一排短字，停用原因另起一行（U5） */}
+        {(saveDisabledReason || detail.auto_save) && (
+          <p
+            className="w-full text-right text-xs text-gray-500 sm:hidden"
+            data-testid="exam-review-save-reason-mobile"
+          >
+            {saveDisabledReason ?? t("questionBank.examImport.review.skipOn")}
+          </p>
+        )}
         <Button
           type="button"
           variant="outline"
           className="text-red-600 hover:text-red-700"
           onClick={() => onRequestAbandon(detail.id)}
           disabled={review.saving !== null}
+          aria-label={t("questionBank.examImport.abandon.button")}
+          title={t("questionBank.examImport.abandon.button")}
           data-testid="exam-review-abandon"
         >
-          {t("questionBank.examImport.abandon.button")}
+          <span className="sm:hidden">
+            {t("questionBank.examImport.review.short.abandon")}
+          </span>
+          <span className="hidden sm:inline">
+            {t("questionBank.examImport.abandon.button")}
+          </span>
         </Button>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className="ml-auto flex items-center justify-end gap-2">
           {saveDisabledReason && (
             <span
-              className="text-xs text-gray-500"
+              className="hidden text-xs text-gray-500 sm:inline"
               data-testid="exam-review-save-reason"
             >
               {saveDisabledReason}
@@ -318,17 +336,23 @@ export default function ExamImportReview({
               if (settingsReady()) setConfirmSkip(true);
             }}
             disabled={review.saving !== null || detail.auto_save === true}
+            aria-label={t("questionBank.examImport.review.skip")}
             title={
               detail.auto_save
                 ? t("questionBank.examImport.review.skipOn")
-                : undefined
+                : t("questionBank.examImport.review.skip")
             }
             data-testid="exam-review-skip"
           >
             {review.saving === "skip" && (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             )}
-            {t("questionBank.examImport.review.skip")}
+            <span className="sm:hidden">
+              {t("questionBank.examImport.review.short.skip")}
+            </span>
+            <span className="hidden sm:inline">
+              {t("questionBank.examImport.review.skip")}
+            </span>
           </Button>
           <span title={saveDisabledReason ?? undefined}>
             <Button

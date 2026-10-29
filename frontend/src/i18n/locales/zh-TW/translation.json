@@ -6698,6 +6698,10 @@
           "nextPage": "下一頁",
           "firstPage": "已經是第一頁",
           "lastPage": "已經是最後一頁"
+        },
+        "short": {
+          "abandon": "放棄",
+          "skip": "略過核對"
         }
       },
       "openOtherOrg": "那次匯入在另一個機構的題庫，請先切換到那個機構再打開。",

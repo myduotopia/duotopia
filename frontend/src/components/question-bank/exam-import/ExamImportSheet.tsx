@@ -12,6 +12,9 @@
  * 關閉鈕與 Esc 走 `controller.requestClose`：核對畫面有題目正在編輯時先存回草稿（還沒送的年段也先送），
  * 存不進去就不關、原因顯示在那一題與提示訊息（C4b 審查 3）。
  *
+ * 手機（< sm，C4c 定案 U1／U5）：標題下的說明文字不顯示、內距縮小；面板開著時以
+ * `useEditorPanelPresence(open)` 登記，全站浮動的數位教學工具列在手機寬度自動收成右緣小把手。
+ *
  * 不新增路由、不塞進 QuestionSheet.tsx。狀態都在 `useExamImport`（關掉面板不停止處理）。
  * 由「我的教材」頁（TeacherTemplatePrograms）與「機構教材」頁（OrgMaterialsPage）在分頁外渲染，
  * 切到「教材」分頁也不卸載（C3 review 3）。
@@ -23,6 +26,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
 import type { Program } from "@/types";
+import { useEditorPanelPresence } from "@/lib/editorPanelPresence";
 import ExamImportReview from "./ExamImportReview";
 import ExamImportUploadForm from "./ExamImportUploadForm";
 import type { ExamImportController } from "./useExamImport";
@@ -58,6 +62,8 @@ export default function ExamImportSheet({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
+  // 手機寬度時讓全站浮動工具列自動收起（U1）
+  useEditorPanelPresence(open);
   const isUpload = view === "upload";
 
   return (
@@ -81,7 +87,7 @@ export default function ExamImportSheet({
             data-testid="exam-import-sheet"
             data-view={view}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-6 py-4 pr-8 sm:pr-16">
+            <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-4 py-3 pr-8 sm:px-6 sm:py-4 sm:pr-16">
               <div className="min-w-0 space-y-1">
                 <h2
                   id={titleId}
@@ -91,7 +97,10 @@ export default function ExamImportSheet({
                     ? t("questionBank.examImport.upload.title")
                     : t("questionBank.examImport.review.title")}
                 </h2>
-                <p id={descId} className="text-sm text-gray-500">
+                <p
+                  id={descId}
+                  className="hidden text-sm text-gray-500 sm:block"
+                >
                   {isUpload
                     ? t("questionBank.examImport.upload.description")
                     : t("questionBank.examImport.review.description")}
@@ -109,7 +118,7 @@ export default function ExamImportSheet({
               </Button>
             </div>
             {isUpload ? (
-              <div className="flex flex-1 flex-col min-h-0 p-6 pr-8 sm:pr-16">
+              <div className="flex flex-1 flex-col min-h-0 p-4 pr-8 sm:p-6 sm:pr-16">
                 <ExamImportUploadForm
                   programs={programs}
                   onStart={controller.start}

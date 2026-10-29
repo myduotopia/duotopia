@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DigitalTeachingToolbar from "../DigitalTeachingToolbar";
+import { useEditorPanelPresence } from "@/lib/editorPanelPresence";
 import {
   Sheet,
   SheetContent,
@@ -257,6 +258,78 @@ describe("DigitalTeachingToolbar", () => {
   });
 
   // i18n tests for drawing tools removed; remaining tools use labels as expected.
+
+  // #1112 C4c 定案 U1：手機寬度＋編輯面板開著 → 自動收成右緣小把手
+  describe("手機寬度、編輯面板開著時自動收起", () => {
+    const originalMatchMedia = window.matchMedia;
+    const setPhone = (phone: boolean) => {
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: phone && query === "(max-width: 639px)",
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })) as unknown as typeof window.matchMedia;
+    };
+    const Panel = ({ open }: { open: boolean }) => {
+      useEditorPanelPresence(open);
+      return null;
+    };
+    const toolbar = () => screen.getByTestId("teaching-toolbar");
+
+    beforeEach(() => {
+      localStorage.setItem("duotopia_help_dismissed", "true");
+      localStorage.setItem("duotopia-toolbar-collapsed", "false");
+    });
+    afterEach(() => {
+      window.matchMedia = originalMatchMedia;
+      localStorage.removeItem("duotopia_help_dismissed");
+      localStorage.removeItem("duotopia-toolbar-collapsed");
+    });
+
+    it("手機＋面板開著 → 收起；點把手暫時展開（不記住）；面板關掉恢復", () => {
+      setPhone(true);
+      const { rerender } = render(
+        <>
+          <Panel open />
+          <DigitalTeachingToolbar />
+        </>,
+      );
+      expect(toolbar().getAttribute("data-collapsed")).toBe("true");
+
+      fireEvent.click(screen.getByLabelText("Expand toolbar"));
+      expect(toolbar().getAttribute("data-collapsed")).toBe("false");
+      expect(localStorage.getItem("duotopia-toolbar-collapsed")).toBe("false");
+
+      fireEvent.click(screen.getByLabelText("Collapse toolbar"));
+      expect(toolbar().getAttribute("data-collapsed")).toBe("true");
+      expect(localStorage.getItem("duotopia-toolbar-collapsed")).toBe("false");
+
+      rerender(
+        <>
+          <Panel open={false} />
+          <DigitalTeachingToolbar />
+        </>,
+      );
+      expect(toolbar().getAttribute("data-collapsed")).toBe("false");
+    });
+
+    it("桌機＋面板開著 → 不動", () => {
+      setPhone(false);
+      render(
+        <>
+          <Panel open />
+          <DigitalTeachingToolbar />
+        </>,
+      );
+      expect(toolbar().getAttribute("data-collapsed")).toBe("false");
+    });
+
+    it("手機但沒有面板開著 → 不動", () => {
+      setPhone(true);
+      render(<DigitalTeachingToolbar />);
+      expect(toolbar().getAttribute("data-collapsed")).toBe("false");
+    });
+  });
 
   // #1146 第 3b 輪：工具列疊在 Radix Sheet 上方，Radix 在 document 聽 pointerdown
   // 判斷「點到外面」就關 sheet。工具列自己的控制項要擋下 pointerdown。

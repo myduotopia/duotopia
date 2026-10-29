@@ -5,6 +5,7 @@
  * - 上面疊著 Dialog 時按 Esc 只關 Dialog，面板留著
  * - 從「新增題目 ▽」DropdownMenuItem 打開（焦點回到選單觸發鈕、不在面板內）後 Esc 照樣能關
  * - X／Esc 走 `requestClose`：收尾（存回編輯中的題）失敗就不關（C4b 審查 3）
+ * - 開著時登記編輯面板（手機寬度浮動工具列自動收起，C4c U1）；手機不顯示說明文字（U5）
  * 上傳畫面與核對畫面換成替身（各自有測試）。
  */
 import { describe, it, expect, vi } from "vitest";
@@ -19,6 +20,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import ExamImportSheet from "../exam-import/ExamImportSheet";
+import { useAnyEditorPanelOpen } from "@/lib/editorPanelPresence";
 import type { ExamImportController } from "../exam-import/useExamImport";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -156,6 +158,31 @@ describe("ExamImportSheet 開關", () => {
     await user.keyboard("{Escape}");
     await waitFor(() =>
       expect(screen.queryByTestId("exam-import-sheet")).toBeNull(),
+    );
+  });
+});
+
+describe("ExamImportSheet 手機（C4c U1／U5）", () => {
+  function Probe() {
+    const open = useAnyEditorPanelOpen();
+    return <div data-testid="panel-open-probe">{String(open)}</div>;
+  }
+
+  it("面板開著時登記（浮動工具列在手機會收起），關掉取消；說明文字手機不顯示", async () => {
+    render(
+      <>
+        <Host />
+        <Probe />
+      </>,
+    );
+    expect(screen.getByTestId("panel-open-probe").textContent).toBe("true");
+    const desc = screen.getByText("questionBank.examImport.upload.description");
+    expect(desc.className).toContain("hidden");
+    expect(desc.className).toContain("sm:block");
+
+    fireEvent.click(screen.getByTestId("exam-import-close"));
+    await waitFor(() =>
+      expect(screen.getByTestId("panel-open-probe").textContent).toBe("false"),
     );
   });
 });

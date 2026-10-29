@@ -183,6 +183,33 @@ describe("ExamImportReview：載入", () => {
   });
 });
 
+describe("ExamImportReview：手機頁尾（C4c U5）", () => {
+  it("按鈕有短字與完整 aria-label；停用原因另有手機那一行", () => {
+    const controller = controllerWith([
+      page(1, [single("a", "41")]),
+      page(2, [], "processing"),
+    ]);
+    renderReview(controller);
+    const abandon = screen.getByTestId("exam-review-abandon");
+    expect(abandon.getAttribute("aria-label")).toBe(
+      "questionBank.examImport.abandon.button",
+    );
+    expect(abandon.textContent).toContain(
+      "questionBank.examImport.review.short.abandon",
+    );
+    const skip = screen.getByTestId("exam-review-skip");
+    expect(skip.getAttribute("aria-label")).toBe(
+      "questionBank.examImport.review.skip",
+    );
+    expect(skip.textContent).toContain(
+      "questionBank.examImport.review.short.skip",
+    );
+    expect(
+      screen.getByTestId("exam-review-save-reason-mobile").textContent,
+    ).toContain("questionBank.examImport.review.saveBlocked");
+  });
+});
+
 describe("ExamImportReview：編輯", () => {
   it("點卡片展開編輯，改了按完成 → PATCH 只送有改的欄位＋原卷題號", async () => {
     api.patchCard.mockResolvedValue({ card: single("a", "41"), import: {} });
