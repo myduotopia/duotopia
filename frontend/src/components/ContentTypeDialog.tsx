@@ -30,6 +30,8 @@ interface ContentType {
   image?: string;
   recommended?: boolean;
   isNew?: boolean;
+  /** 測試版本（#1158）：角標顯示紫色 Beta，取代 New */
+  isBeta?: boolean;
   disabled?: boolean;
 }
 
@@ -102,7 +104,8 @@ export default function ContentTypeDialog({
       icon: "💬",
       image:
         "https://storage.googleapis.com/duotopia-social-media-videos/website/add3-output.png",
-      isNew: true,
+      // #1158：開關開著時角標顯示 Beta（測試版本，可能會有錯誤），取代 New
+      isBeta: true,
       // Issue #1039: 功能是完整的，但在人工驗證做完之前先關著 —— PR #1038 把整條
       // 功能線發到 prod 了。關閉時這張卡片反灰、點不動，右上角顯示 Soon 角標。
       // 五個新增路徑都經過這個對話框，所以這裡是唯一的咽喉點。
@@ -223,14 +226,27 @@ export default function ContentTypeDialog({
                   }`}
                 >
                   {/* Corner Badge */}
-                  {contentType.isNew && !contentType.disabled && (
-                    <div className="absolute top-0 right-0 w-[45px] h-[45px]">
-                      <div className="absolute top-0 right-0 w-[45px] h-[45px] bg-red-500 rounded-bl-full" />
-                      <span className="absolute top-1.5 right-1.5 text-[10px] font-bold text-white uppercase">
-                        New
+                  {contentType.isBeta && !contentType.disabled && (
+                    <div
+                      className="absolute top-0 right-0 w-[45px] h-[45px]"
+                      data-testid="content-type-badge-beta"
+                    >
+                      <div className="absolute top-0 right-0 w-[45px] h-[45px] bg-purple-500 rounded-bl-full" />
+                      <span className="absolute top-1.5 right-1 text-[10px] font-bold text-white uppercase">
+                        Beta
                       </span>
                     </div>
                   )}
+                  {contentType.isNew &&
+                    !contentType.isBeta &&
+                    !contentType.disabled && (
+                      <div className="absolute top-0 right-0 w-[45px] h-[45px]">
+                        <div className="absolute top-0 right-0 w-[45px] h-[45px] bg-red-500 rounded-bl-full" />
+                        <span className="absolute top-1.5 right-1.5 text-[10px] font-bold text-white uppercase">
+                          New
+                        </span>
+                      </div>
+                    )}
                   {contentType.disabled && (
                     <div className="absolute top-0 right-0 w-[45px] h-[45px]">
                       <div className="absolute top-0 right-0 w-[45px] h-[45px] bg-amber-400 rounded-bl-full" />

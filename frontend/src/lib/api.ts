@@ -84,6 +84,22 @@ function parseSuccessBody<T>(response: Response): Promise<T> {
 /**
  * Custom API Error class for better error handling
  */
+/** 生圖種類（#1158）：情境圖或題目圖 */
+export type ScenarioImageKind = "scenario" | "question";
+
+/** `GET /scenario-dialogue/image-quota` 的回傳（#1158） */
+export interface ScenarioImageQuota {
+  billing: "admin" | "org" | "subscription" | "points" | "free_daily";
+  /** 剩餘張數；以點數計費（org / points）或 admin 時為 null */
+  remaining: number | null;
+  limit: number | null;
+  period: "day" | "month" | null;
+  /** 一張圖大約會扣的點數 */
+  points_per_image_estimate: number;
+  /** 現在按得下去嗎（後端已算好） */
+  can_generate: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -1630,22 +1646,45 @@ class ApiClient {
   }
 
   /**
-   * 逐題 AI 生圖（Issue #1024）。
+   * AI 生圖（Issue #1024；#1158 起情境圖與題目圖共用）。
    *
-   * `image_prompt` 是產題時 AI 一併回傳、存在 item_metadata 裡的生圖描述，前端只是
-   * 帶回去，不解讀內容。後端會把兒童相關描述改寫成場景（Imagen 對兒童影像有嚴格
-   * 限制），所以送回來的 `prompt` 可能與送出去的不同。
+   * `description` 是老師在生圖對話框裡確認過的描述。錯誤以狀態碼區分：
+   * 402 額度用完、409 上一張還在生成（`SCENARIO_IMAGE_IN_PROGRESS`）、
+   * 422 被安全過濾擋下（換描述）、502 AI 服務暫時失敗（稍後再試）。
    */
-  async generateScenarioImage(imagePrompt: string): Promise<{
+  async generateScenarioImage(data: {
+    kind: ScenarioImageKind;
+    description: string;
+  }): Promise<{
     image_url: string;
     prompt: string;
+    kind?: ScenarioImageKind;
     estimated_cost_usd?: number;
-    quota?: { used: number; remaining: number; limit: number };
+    quota?: ScenarioImageQuota;
   }> {
     return this.request("/api/teachers/scenario-dialogue/generate-image", {
       method: "POST",
-      body: JSON.stringify({ image_prompt: imagePrompt }),
+      body: JSON.stringify(data),
     });
+  }
+
+  /**
+   * AI 先擬一段生圖描述（#1158），給老師在生圖對話框裡改。不計任何次數。
+   * 情境圖帶情境文章；題目圖可以只帶題目。
+   */
+  async suggestScenarioImageDescription(data: {
+    scenario_content?: string;
+    question?: string;
+  }): Promise<{ description: string }> {
+    return this.request(
+      "/api/teachers/scenario-dialogue/suggest-image-description",
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  }
+
+  /** 老師目前的生圖計費方式與剩餘量（#1158），生圖對話框顯示用 */
+  async getScenarioImageQuota(): Promise<ScenarioImageQuota> {
+    return this.request("/api/teachers/scenario-dialogue/image-quota");
   }
 
   /**

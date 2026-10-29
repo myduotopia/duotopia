@@ -27,6 +27,9 @@
  *   在該步驟顯示重問句（`goalReask` / `directionReask`），不產內容。
  * - 產生前的確認句帶出老師原話。
  *
+ * - 頂端有 Beta 標籤＋灰色小字「測試版本，可能會有錯誤」（#1158）。情境步驟的情境圖列
+ *   有「AI 生圖」（`ScenarioImageStrip`，依情境文章預填描述）。
+ *
  * state 全部由面板持有（存檔、題目清單都要用），這個元件只負責畫與回報老師的選擇。
  */
 import {
@@ -404,7 +407,10 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
               aria-label={t("scenarioDialogue.labels.scenarioText")}
               className="min-h-0 max-h-[60vh] resize-y overflow-y-auto"
             />
-            <ScenarioImageStrip actions={props.imageActions} />
+            <ScenarioImageStrip
+              actions={props.imageActions}
+              scenarioContent={props.scenarioContent}
+            />
           </div>
         );
 
@@ -541,6 +547,18 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
     <>
       <ScenarioScrollArea ref={scrollRef}>
         <div className="space-y-4" data-testid="scenario-setup-chat">
+          {/* 測試版本標示（#1158）：只放在引導式對話頂端 */}
+          <div
+            className="flex items-center gap-2"
+            data-testid="scenario-setup-beta"
+          >
+            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-bold text-purple-600">
+              Beta
+            </span>
+            <span className="text-xs text-gray-500">
+              {t("scenarioDialogue.setup.betaNote")}
+            </span>
+          </div>
           {steps.map((step) => {
             const answered = isAnswered(step, answers);
             const isCurrent = step === current;

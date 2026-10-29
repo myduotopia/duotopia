@@ -42,7 +42,8 @@
  * 整體，會跟著整體變動；老師動過單題就脫鉤（可用 ↺ 復原）。
  *
  * 題目圖片是**單題**的事（`row.imageUrl`，每題 1 張）；情境圖是整份的事
- * （`scenario_settings.scenario_images`），兩者無關。
+ * （`scenario_settings.scenario_images`），兩者無關。兩者都能用 AI 生圖（#1158），共用
+ * `AiImageGenerateDialog`；題目圖的對話框由這裡持有（`imageDialogRowId`）。
  *
  * **儲存已串接後端（#1013）**：`save()` 通過擋關後把整份資料交給呼叫端的 `onSave`，
  * 由呼叫端換成 API payload（`@/lib/scenarioDialogue` 的 `toScenarioSavePayload`）並
@@ -65,6 +66,7 @@ import { useSidebar } from "@/contexts/SidebarContext";
 import { Button } from "@/components/ui/button";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { TTSSettingsDialog } from "@/components/shared/TTSSettingsDialog";
+import { AiImageGenerateDialog } from "@/components/scenario-dialogue-editor/AiImageGenerateDialog";
 import {
   DndContext,
   closestCenter,
@@ -80,7 +82,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { apiClient, ApiError } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import {
   createScenarioRow as createRow,
@@ -197,6 +199,8 @@ const ScenarioDialoguePanel = forwardRef<
   >({});
   /** 逐題 AI 生圖是一題一題觸發的，要記住是哪一題在跑（#1024） */
   const [imageLoadingId, setImageLoadingId] = useState<string | null>(null);
+  /** 開著「AI 生圖」對話框的那一題（#1158） */
+  const [imageDialogRowId, setImageDialogRowId] = useState<string | null>(null);
   /** 目前正在播的題目語音；換一題要先停掉舊的，不然會疊音 */
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -547,60 +551,37 @@ const ScenarioDialoguePanel = forwardRef<
   };
 
   /**
-   * 逐題 AI 生圖。前端 stub：只跑 loading，串接後把回傳的圖片網址填進 imageUrl。
-   * 圖片改成單題的事之後，整份不再有「一次生成全部」的勾選。
-   */
-  /**
-   * 逐題 AI 生圖（Issue #1024 起改為真的呼叫 Imagen）。
+   * 逐題 AI 生圖（Issue #1024；#1158 起改成先開「AI 生圖」對話框）。
    *
-   * 生圖描述用的是產題時 AI 一併回傳、存在該列的 `imagePrompt`；老師沒產過題、
-   * 自己打的題目沒有這個值，就退回題目本文當描述 —— 總比按下去什麼都不做好。
+   * 對話框預填該題的 `imagePrompt`（產題時 AI 一併擬好的描述）；老師沒產過題、自己打的
+   * 題目沒有這個值，就退回題目本文。這裡收到的是老師確認過的描述。
    *
-   * 三種失敗要分開講，因為老師的下一步完全不同：
-   * - 402 額度用完 → 改用手動上傳
-   * - 422 被安全過濾擋下 → 換個描述（Imagen 對兒童影像有嚴格限制，後端已經先把
-   *   兒童相關描述改寫成場景，仍可能被擋）
-   * - 其他 → 稍後再試
+   * 失敗時把原本的錯誤往上丟，由對話框依狀態碼顯示原因（402／409／422／其他），
+   * 老師不用重打描述。
    */
-  const generateRowImage = async (id: string) => {
-    // #1044: 旗標關閉時這裡也擋一次。目前唯一的呼叫端是圖片欄位的按鈕，而那顆按鈕
-    // 已經是停用狀態，所以這一行現在不會被走到 —— 但「只靠 UI 藏起來」是會漏的：
-    // 哪天多一個入口（批次生圖之類）忘了查旗標，就會真的打 Imagen。
-    // 白名單的教訓同 #1030：預設要安全，開放是明確的動作（review R3 第 1 點）。
+  const generateRowImage = async (id: string, description: string) => {
+    // #1044: 旗標關閉時這裡也擋一次 —— 「只靠 UI 藏起來」是會漏的：哪天多一個入口
+    // 忘了查旗標，就會真的打生圖。白名單的教訓同 #1030（review R3 第 1 點）。
     if (!FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION) return;
-
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-
-    const prompt = (row.imagePrompt || row.question).trim();
-    if (!prompt) {
-      toast.error(t("scenarioDialogue.messages.imagePromptRequired"));
-      return;
-    }
+    if (!rows.some((r) => r.id === id)) return;
 
     setImageLoadingId(id);
     try {
-      const { image_url } = await apiClient.generateScenarioImage(prompt);
+      const { image_url } = await apiClient.generateScenarioImage({
+        kind: "question",
+        description,
+      });
       // 換掉舊圖前先釋放 blob（手動上傳的預覽是 blob:），否則會一路累積不釋放
-      releaseIfUnused(row.imageUrl, id);
-      patchRow(id, { imageUrl: image_url });
-    } catch (error) {
-      console.error("Failed to generate question image:", error);
-      // 同 textAiErrorKey：改用 status，不比對 message 字串。
-      // 這段是 #1024 就有的同一個錯法（ApiError.message 是後端那句中文，不含狀態碼），
-      // 順手一起修 —— 留著等於知道壞了還放過。
-      const status = error instanceof ApiError ? error.status : 0;
-      if (status === 402) {
-        toast.error(t("scenarioDialogue.messages.imageQuotaExceeded"));
-      } else if (status === 422) {
-        toast.error(t("scenarioDialogue.messages.imageBlocked"));
-      } else {
-        toast.error(t("scenarioDialogue.messages.imageFailed"));
-      }
+      setRowImage(id, image_url);
     } finally {
       setImageLoadingId(null);
     }
   };
+
+  const imageDialogRow =
+    imageDialogRowId !== null
+      ? (rows.find((r) => r.id === imageDialogRowId) ?? null)
+      : null;
 
   /**
    * 逐題題目語音（Issue #1021 起改為真的呼叫 TTS）。
@@ -864,7 +845,7 @@ const ScenarioDialoguePanel = forwardRef<
                           onRegenerate={() => regenerateRow(row.id)}
                           onPickImage={(file) => pickRowImage(row.id, file)}
                           onRemoveImage={() => removeRowImage(row.id)}
-                          onGenerateImage={() => generateRowImage(row.id)}
+                          onGenerateImage={() => setImageDialogRowId(row.id)}
                           onGenerateAudio={() => setAudioDialogRowId(row.id)}
                           onPlayAudio={() => playRowAudio(row.id)}
                           audioLoading={audioLoadingId === row.id}
@@ -927,6 +908,24 @@ const ScenarioDialoguePanel = forwardRef<
           />
         </>
       )}
+
+      {/* 單題 AI 生圖（#1158）：描述預填 imagePrompt，沒有就用題目本文 */}
+      <AiImageGenerateDialog
+        open={imageDialogRow !== null}
+        onOpenChange={(open) => {
+          if (!open) setImageDialogRowId(null);
+        }}
+        kind="question"
+        initialDescription={
+          imageDialogRow
+            ? (imageDialogRow.imagePrompt || imageDialogRow.question).trim()
+            : ""
+        }
+        onGenerate={(description) => {
+          const id = imageDialogRowId;
+          return id ? generateRowImage(id, description) : Promise.resolve();
+        }}
+      />
 
       {/* 單題語音設定（Issue #1051） */}
       <TTSSettingsDialog

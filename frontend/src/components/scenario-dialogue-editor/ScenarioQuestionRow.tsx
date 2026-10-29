@@ -3,7 +3,8 @@
  * `ScenarioDialoguePanel.tsx` 原樣搬出來，讓面板只留 state 與流程。
  *
  * - `SortableRow`：題目、翻譯、參考答案／補充說明、單題評分標準（預設＋覆寫）、題目圖、題目語音。
- * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標）。
+ * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標，#1158 起開
+ *   共用的 `AiImageGenerateDialog`，對話框由面板持有）。
  * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：題目清單左欄也會用到。
  *
  * 窄寬度（< sm，第 3 輪）：題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
@@ -83,9 +84,8 @@ export function Chip({
 /**
  * 情境圖片欄位 —— AI 生成與手動上傳共用同一個位置。
  *
- * 老師不必先決定「這張要 AI 產還是自己傳」：勾了「AI 生成情境圖片」就在產題時
- * 自動填進來，任何時候都可以點縮圖換成自己的圖。因此這裡不提供生成按鈕，
- * 只負責顯示、上傳、替換、移除。
+ * 沒有圖時並列兩個入口：自己上傳，或「AI 生成」（#1158：開生圖對話框，由面板處理）。
+ * 有圖時可以點縮圖換成自己的圖或移除。
  */
 function ScenarioImageSlot({
   imageUrl,
@@ -104,7 +104,7 @@ function ScenarioImageSlot({
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
-  // #1044: 生圖暫時關閉。上傳／替換／移除完全不受影響，既有圖片照常顯示。
+  // #1044 關閉、#1158 打開。關閉時只藏生圖入口，上傳／替換／移除不受影響。
   const imageGenerationEnabled = FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION;
 
   const pick = () => inputRef.current?.click();
@@ -159,8 +159,8 @@ function ScenarioImageSlot({
          * 104 - 2×6（p-1.5）= 92px，實測四種標籤都塞得下：
          *   上傳圖片 48 + 圖示 14 + gap 4 = 66px
          *   Upload   40 + 圖示 14 + gap 4 = 58px
-         *   即將推出 48（停用狀態不放圖示）
-         *   Coming soon 約 74px
+         *   AI 生成 約 44 + 圖示 14 + gap 4 = 62px
+         *   Generate 約 52 + 圖示 14 + gap 4 = 70px
          * 新增語系或改這兩個標籤時請重算 —— 超過 92px 會被 overflow-hidden 切掉。
          */
         <div className="w-full h-full flex flex-col items-stretch justify-center gap-1 p-1.5">
@@ -172,7 +172,9 @@ function ScenarioImageSlot({
             <ImagePlus className="h-3.5 w-3.5 shrink-0" />
             {t("scenarioDialogue.buttons.uploadImage")}
           </button>
-          {imageGenerationEnabled ? (
+          {/* #1158：按下去開共用的「AI 生圖」對話框（描述預填 imagePrompt 或題目本文）。
+              開關關閉時不顯示（不再放「即將推出」）。 */}
+          {imageGenerationEnabled && (
             <button
               type="button"
               onClick={onGenerate}
@@ -180,26 +182,6 @@ function ScenarioImageSlot({
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               {t("scenarioDialogue.buttons.generateImage")}
-            </button>
-          ) : (
-            /*
-             * #1044: 生圖先關著，照專案既有的停用慣例做（ui-style-guide §3 規則 3 與
-             * BulkActionBar 的 disabledReason / disabledBadge）：**原因要看得見**，
-             * 不是點了才知道。
-             *
-             * 所以按鈕文字直接換成「即將推出」，title 補完整說明。原因既然不藏在
-             * click 後面，就沒有 #1033 那個問題（那次的坑是「唯一的說明被原生
-             * disabled 吃掉」），可以用原生 disabled。
-             *
-             * 停用狀態不放圖示：框只有 104px 寬，"Coming soon" 加上圖示會擠到換行。
-             */
-            <button
-              type="button"
-              disabled
-              title={t("scenarioDialogue.messages.imageGenerationComingSoon")}
-              className="rounded border border-gray-200 bg-gray-100 py-1 text-xs font-semibold text-gray-400 whitespace-nowrap opacity-70 cursor-not-allowed"
-            >
-              {t("scenarioDialogue.buttons.comingSoon")}
             </button>
           )}
         </div>

@@ -30,6 +30,8 @@ const generateScenarioArticle = vi.fn();
 const extractScenarioArticle = vi.fn();
 const generateTTS = vi.fn();
 const generateScenarioImage = vi.fn();
+const getScenarioImageQuota = vi.fn();
+const suggestScenarioImageDescription = vi.fn();
 
 const fakeQuestion = (n: number) => ({
   question: `Generated question ${n}?`,
@@ -95,6 +97,9 @@ vi.mock("@/lib/api", () => ({
     extractScenarioArticle: (...a: unknown[]) => extractScenarioArticle(...a),
     generateTTS: (...a: unknown[]) => generateTTS(...a),
     generateScenarioImage: (...a: unknown[]) => generateScenarioImage(...a),
+    getScenarioImageQuota: (...a: unknown[]) => getScenarioImageQuota(...a),
+    suggestScenarioImageDescription: (...a: unknown[]) =>
+      suggestScenarioImageDescription(...a),
   },
 }));
 
@@ -258,6 +263,19 @@ beforeEach(() => {
   extractScenarioArticle.mockReset();
   generateTTS.mockReset();
   generateScenarioImage.mockReset();
+  getScenarioImageQuota.mockReset();
+  getScenarioImageQuota.mockResolvedValue({
+    billing: "free_daily",
+    remaining: 3,
+    limit: 3,
+    period: "day",
+    points_per_image_estimate: 10,
+    can_generate: true,
+  });
+  suggestScenarioImageDescription.mockReset();
+  suggestScenarioImageDescription.mockResolvedValue({
+    description: "A suggested scene",
+  });
 
   // 每次呼叫都給「還沒出現過」的題目，讓『再產一批』能像真的一樣長出新題
   let seq = 0;
@@ -1051,16 +1069,17 @@ describe("ScenarioDialoguePanel 單題情境圖片", () => {
       target: { files: [new File(["x"], name, { type: "image/png" })] },
     });
 
-  it("空圖框有「上傳」，AI 那顆則標示為即將推出（#1044）", () => {
-    // 兩個版位都還在畫面上 —— 整個藏起來的話，老師會以為沒有這個功能。
-    // AI 那顆的文字換成「即將推出」，原因看得見、不必點（見 #1044 的 describe）。
+  it("空圖框有「上傳」；旗標關閉時不顯示 AI 生成，也不再有「即將推出」（#1158）", () => {
     renderPanel();
     gotoList();
 
     expect(screen.getAllByText(K.uploadImage).length).toBeGreaterThan(0);
     expect(
-      screen.getAllByText("scenarioDialogue.buttons.comingSoon").length,
-    ).toBeGreaterThan(0);
+      screen.queryByText("scenarioDialogue.buttons.generateImage"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("scenarioDialogue.buttons.comingSoon"),
+    ).not.toBeInTheDocument();
   });
 
   it("對話一開始沒有題目圖片欄位", () => {
@@ -1559,18 +1578,12 @@ describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () 
 });
 
 /**
- * Issue #1024：逐題 AI 生圖接上 Imagen。
+ * 題目圖 AI 生圖（Issue #1024；#1158 起先開「AI 生圖」對話框）。
  *
- * 三種失敗要分開講，因為老師的下一步完全不同（額度用完 → 改手動上傳、被安全過濾
- * 擋下 → 換描述、其他 → 稍後再試）。
+ * 按「AI 生成」→ 對話框預填該題的 imagePrompt（沒有就用題目本文）→ 按「生成」才打 API。
+ * 失敗訊息顯示在對話框內，依狀態碼分開講（老師的下一步不同）。
  */
-describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
-  /**
-   * #1044 把生圖入口關掉了，但**生圖的程式碼路徑完整保留著**（之後要開回來）。
-   * 這個 describe 驗的就是那條路徑，所以明確把旗標開起來 —— 否則這些測試會跟著
-   * 當下的開關狀態一起紅，而開關狀態不是它們要守的東西。
-   * 關閉時的行為由下面「生圖 coming soon」那個 describe 負責。
-   */
+describe("ScenarioDialoguePanel 題目圖 AI 生圖（#1024／#1158）", () => {
   beforeEach(() => {
     mockFlags.SCENARIO_IMAGE_GENERATION = true;
   });
@@ -1579,13 +1592,28 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
     mockFlags.SCENARIO_IMAGE_GENERATION = false;
   });
 
-  const generateImageFor = async (index: number) => {
+  const flush = async () => {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  const descriptionBox = () =>
+    within(screen.getByTestId("ai-image-generate-dialog")).getByLabelText(
+      "scenarioDialogue.imageGen.descriptionLabel",
+    );
+
+  const openDialogFor = async (index: number) => {
     fireEvent.click(
       screen.getAllByText("scenarioDialogue.buttons.generateImage")[index],
     );
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await flush();
+  };
+
+  const submit = async () => {
+    fireEvent.click(screen.getByText("scenarioDialogue.imageGen.generate"));
+    await flush();
   };
 
   const prepareRows = async () => {
@@ -1594,7 +1622,34 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
     await runGenerate(K.generate);
   };
 
-  it("用該題的 imagePrompt 呼叫生圖，成功後把圖填進該列", async () => {
+  it("按「AI 生成」只開對話框，預填題目本文，不直接打生圖 API", async () => {
+    await prepareRows();
+    await openDialogFor(0);
+
+    expect(generateScenarioImage).not.toHaveBeenCalled();
+    // 題目圖直接用 imagePrompt／題目本文，不呼叫 AI 擬描述
+    expect(suggestScenarioImageDescription).not.toHaveBeenCalled();
+    expect(descriptionBox()).toHaveValue("Generated question 1?");
+  });
+
+  it("有 imagePrompt 時預填 imagePrompt", async () => {
+    generateScenarioQuestions.mockImplementation(
+      async ({ count }: { count: number }) => ({
+        usable: true,
+        reask: "",
+        questions: Array.from({ length: count }, (_, i) => ({
+          ...fakeQuestion(i + 1),
+          image_prompt: `A drawing for ${i + 1}`,
+        })),
+      }),
+    );
+    await prepareRows();
+    await openDialogFor(0);
+
+    expect(descriptionBox()).toHaveValue("A drawing for 1");
+  });
+
+  it("按「生成」用老師確認過的描述呼叫，成功後把圖填進該列並關閉", async () => {
     generateScenarioImage.mockResolvedValue({
       image_url: "https://cdn/generated.png",
       prompt: "rewritten",
@@ -1603,146 +1658,75 @@ describe("ScenarioDialoguePanel AI 生圖（#1024）", () => {
     fillRequiredForGenerate();
     await runGenerate(K.generate);
 
-    await generateImageFor(0);
+    await openDialogFor(0);
+    fireEvent.change(descriptionBox(), {
+      target: { value: "A cat on a desk" },
+    });
+    await submit();
 
-    expect(generateScenarioImage).toHaveBeenCalledTimes(1);
+    expect(generateScenarioImage).toHaveBeenCalledWith({
+      kind: "question",
+      description: "A cat on a desk",
+    });
     expect(
       container.querySelector('img[src="https://cdn/generated.png"]'),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("ai-image-generate-dialog"),
+    ).not.toBeInTheDocument();
   });
 
-  it("額度用完（402）會告訴老師改用手動上傳", async () => {
+  it.each([
+    [402, { error: "SCENARIO_IMAGE_QUOTA_EXCEEDED" }, "quota"],
+    [409, { error: "SCENARIO_IMAGE_IN_PROGRESS" }, "inProgress"],
+    [422, "描述被安全過濾擋下", "blocked"],
+    [502, { message: "AI 服務暫時失敗" }, "failed"],
+  ])("%s 時在對話框裡顯示對應原因，對話框不關", async (status, detail, key) => {
     generateScenarioImage.mockRejectedValue(
-      new MockApiError(402, {
-        error: "SCENARIO_IMAGE_QUOTA_EXCEEDED",
-        message: "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片。",
-      }),
+      new MockApiError(status as number, detail),
     );
     await prepareRows();
+    await openDialogFor(0);
+    await submit();
 
-    await generateImageFor(0);
-
-    expect(mockToastError).toHaveBeenCalledWith(
-      "scenarioDialogue.messages.imageQuotaExceeded",
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      `scenarioDialogue.imageGen.errors.${key}`,
     );
-  });
-
-  it("被安全過濾擋下（422）會請老師換個描述", async () => {
-    generateScenarioImage.mockRejectedValue(
-      new MockApiError(422, { message: "描述被安全過濾擋下，請換個說法" }),
-    );
-    await prepareRows();
-
-    await generateImageFor(0);
-
-    expect(mockToastError).toHaveBeenCalledWith(
-      "scenarioDialogue.messages.imageBlocked",
-    );
-  });
-
-  it("其他錯誤是「稍後再試」，不會誤導成額度或描述問題", async () => {
-    generateScenarioImage.mockRejectedValue(
-      new MockApiError(500, { message: "伺服器錯誤" }),
-    );
-    await prepareRows();
-
-    await generateImageFor(0);
-
-    expect(mockToastError).toHaveBeenCalledWith(
-      "scenarioDialogue.messages.imageFailed",
-    );
+    expect(screen.getByTestId("ai-image-generate-dialog")).toBeInTheDocument();
   });
 });
 
 /**
- * 生圖 coming soon（Issue #1044）
- *
- * 實測發現生圖品質與流程還要調整，團隊決定先把「出內容 → 出作業 → 學生作答」整條
- * 主線做完整，之後再回頭修。這段期間入口關著，但要關得讓老師看得懂。
- *
- * 最重要的一條是**原因要看得見，不必點才知道**：按鈕文字直接寫「即將推出」，
- * title 補完整說明（ui-style-guide §3 規則 3 與 BulkActionBar 的 disabledBadge
- * 就是這個慣例）。
- *
- * 原因既然不藏在 click 後面，就沒有 #1033 那個坑 —— 那次的問題是「唯一的說明被原生
- * disabled 吃掉」，不是「不能用原生 disabled」。所以這裡用原生 disabled 是對的。
+ * 生圖開關關閉時（#1044 起；#1158 拿掉「即將推出」）：只藏生圖入口，上傳照常。
  */
-describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
+describe("ScenarioDialoguePanel 生圖開關關閉", () => {
   const gotoList = () => goToListManually();
 
   beforeEach(() => {
     mockFlags.SCENARIO_IMAGE_GENERATION = false;
     generateScenarioImage.mockReset();
-    // 本機 review 抓到：這個 describe 原本沒自己補 createObjectURL，
-    // 只是靠別的 describe 洩漏的 global stub 才過。單獨跑會 TypeError。
     global.URL.createObjectURL = vi.fn(
-      () => "blob:coming-soon",
+      () => "blob:flag-off",
     ) as unknown as typeof URL.createObjectURL;
     global.URL.revokeObjectURL =
       vi.fn() as unknown as typeof URL.revokeObjectURL;
   });
 
-  // 最後一條會把旗標開起來，不還原會汙染後面的 describe（本機 review 抓到）
   afterEach(() => {
     mockFlags.SCENARIO_IMAGE_GENERATION = false;
   });
 
-  const generateButton = () =>
-    screen
-      .getAllByText("scenarioDialogue.buttons.comingSoon")[0]
-      .closest("button") as HTMLButtonElement;
-
-  it("原因直接寫在按鈕上，不必點才知道", () => {
+  it("不顯示 AI 生成鈕，也不會打生圖 API", () => {
     renderPanel();
     gotoList();
 
-    // 專案慣例（ui-style-guide §3 規則 3 / BulkActionBar 的 disabledBadge）是
-    // 「原因要看得見」。原因不藏在 click 後面，就沒有 #1033 那個坑。
-    expect(generateButton()).toHaveAttribute(
-      "title",
-      "scenarioDialogue.messages.imageGenerationComingSoon",
-    );
-  });
-
-  it("停用狀態不會打生圖 API", () => {
-    renderPanel();
-    gotoList();
-
-    // 先釘住「它真的是停用的」—— 否則下面那句 click 在原生 disabled 的按鈕上
-    // 本來就不會派發事件，斷言會**不管實作對不對都通過**（review 指出的空驗）
-    expect(generateButton()).toBeDisabled();
-
-    fireEvent.click(generateButton());
-
+    expect(
+      screen.queryByText("scenarioDialogue.buttons.generateImage"),
+    ).not.toBeInTheDocument();
     expect(generateScenarioImage).not.toHaveBeenCalled();
   });
 
-  it("看得出是停用狀態", () => {
-    renderPanel();
-    gotoList();
-
-    expect(generateButton()).toBeDisabled();
-    const className = generateButton().className;
-    expect(className).not.toContain("bg-blue-600");
-    // 明確釘住停用的視覺，否則被人改成「看起來可按」也不會紅
-    expect(className).toContain("bg-gray-100");
-    expect(className).toContain("text-gray-400");
-    expect(className).toContain("cursor-not-allowed");
-  });
-
-  it("長文字不會把 104px 的圖框擠爆", () => {
-    renderPanel();
-    gotoList();
-
-    // 兩顆按鈕都要 nowrap —— 英文標籤在 12px 下接近框寬上限，換行會把圖框撐開
-    expect(generateButton().className).toContain("whitespace-nowrap");
-    const uploadButton = screen
-      .getAllByText(K.uploadImage)[0]
-      .closest("button") as HTMLButtonElement;
-    expect(uploadButton.className).toContain("whitespace-nowrap");
-  });
-
-  it("手動上傳完全不受影響 —— 這段期間它是主要途徑", () => {
+  it("手動上傳完全不受影響", () => {
     const { container } = render(<ScenarioDialoguePanel />, { wrapper });
     gotoList();
 
@@ -1756,19 +1740,17 @@ describe("ScenarioDialoguePanel 生圖 coming soon（#1044）", () => {
     expect(container.querySelector("img")).toBeInTheDocument();
   });
 
-  it("旗標打開時回到正常的生圖按鈕", () => {
+  it("旗標打開時顯示可按的生圖按鈕", () => {
     mockFlags.SCENARIO_IMAGE_GENERATION = true;
     renderPanel();
     gotoList();
 
-    expect(
-      screen.queryByText("scenarioDialogue.buttons.comingSoon"),
-    ).not.toBeInTheDocument();
     const button = screen
       .getAllByText("scenarioDialogue.buttons.generateImage")[0]
       .closest("button") as HTMLButtonElement;
     expect(button).not.toBeDisabled();
     expect(button.className).toContain("bg-blue-600");
+    expect(button.className).toContain("whitespace-nowrap");
   });
 });
 
@@ -1859,12 +1841,12 @@ describe("ScenarioDialoguePanel 圖框標籤寬度預算（#1044）", () => {
   });
 
   it.each(locales)(
-    "%s 的「即將推出」標籤（無圖示）塞得進 92px",
+    "%s 的「AI 生成」標籤（含圖示）塞得進 92px（#1158）",
     async (locale) => {
       const dict = await import(`@/i18n/locales/${locale}/translation.json`);
-      const label = dict.default.scenarioDialogue.buttons.comingSoon;
+      const label = dict.default.scenarioDialogue.buttons.generateImage;
 
-      expect(estimateWidth(label)).toBeLessThanOrEqual(BUDGET);
+      expect(estimateWidth(label) + ICON_AND_GAP).toBeLessThanOrEqual(BUDGET);
     },
   );
 });
@@ -2273,5 +2255,29 @@ describe("ScenarioDialoguePanel 修正第 4 輪：操作列固定在 sheet 底�
       window.matchMedia = originalMatchMedia;
       Element.prototype.scrollIntoView = originalScroll;
     }
+  });
+});
+
+/**
+ * Beta 標示（#1158）：引導式對話頂端放 Beta 標籤＋灰色小字「測試版本，可能會有錯誤」。
+ */
+describe("ScenarioDialoguePanel Beta 標示（#1158）", () => {
+  it("引導式對話頂端有 Beta 標籤與測試版本說明", () => {
+    renderPanel();
+
+    const beta = screen.getByTestId("scenario-setup-beta");
+    expect(within(beta).getByText("Beta")).toBeInTheDocument();
+    expect(
+      within(beta).getByText("scenarioDialogue.setup.betaNote"),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["zh-TW", "en"] as const)("%s 有測試版本說明文案", async (locale) => {
+    const dict = await import(`@/i18n/locales/${locale}/translation.json`);
+    expect(dict.default.scenarioDialogue.setup.betaNote).toBe(
+      locale === "en"
+        ? "Beta: this feature may have bugs"
+        : "測試版本，可能會有錯誤",
+    );
   });
 });

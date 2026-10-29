@@ -4973,7 +4973,6 @@
       "replaceImage": "Replace",
       "removeImage": "Remove",
       "generateImage": "Generate",
-      "comingSoon": "Coming soon",
       "expandScenario": "Show all",
       "collapseScenario": "Show less"
     },
@@ -5000,11 +4999,6 @@
       "generateFailed": "AI generation failed, please try again later",
       "goalRequired": "Please enter a teaching goal first",
       "audioFailed": "Audio generation failed, please try again later",
-      "imagePromptRequired": "Add a question first — there's nothing to base the image on",
-      "imageQuotaExceeded": "You've used all your AI image generations this month — you can upload an image manually",
-      "imageBlocked": "This description can't be turned into an image, please try a different one",
-      "imageFailed": "Image generation failed, please try again later",
-      "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now",
       "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead",
       "extractFailedFiles": "Couldn't extract these files: {{files}}. Content from the other files is in the scenario box — you can upload the failed ones again.",
       "extractAllFailed": "Couldn't extract any of the files: {{files}}. Upload them again, or paste the scenario into the scenario box.",
@@ -5090,6 +5084,39 @@
       "retrying": "Re-answering question {{no}}",
       "cancelRetry": "Cancel re-answer"
     },
+    "imageGen": {
+      "titleScenario": "AI scenario image",
+      "titleQuestion": "AI question image",
+      "hint": "AI draws a black-and-white line drawing from the description. Edit it if you like, then press Generate.",
+      "descriptionLabel": "Image description",
+      "placeholder": "e.g. Two students having a picnic in the park, with sandwiches and juice on the table",
+      "suggesting": "AI is drafting a description…",
+      "suggestFailed": "AI couldn't draft a description. Write one yourself, then press Generate.",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "generatingHint": "Drawing the image, this takes about 10–20 seconds",
+      "quotaLoading": "Loading quota…",
+      "billing": {
+        "admin": "Admins have no image limit",
+        "org": "Uses organization points, about {{points}} points per image",
+        "points": "Uses plan points, about {{points}} points per image",
+        "subscription": "{{remaining}} / {{limit}} images left this month. After {{limit}} images a month, plan points are used (about {{points}} points per image)",
+        "free_daily": "{{remaining}} / {{limit}} images left today (resets daily)"
+      },
+      "blocked": {
+        "admin": "Can't generate right now",
+        "org": "Not enough organization or personal plan points to generate. You can upload an image instead.",
+        "points": "Not enough plan points to generate. You can upload an image instead.",
+        "subscription": "This month's {{limit}} images are used up and there aren't enough plan points. You can upload an image instead.",
+        "free_daily": "Today's {{limit}} images are used up (resets tomorrow). You can upload an image instead."
+      },
+      "errors": {
+        "quota": "You've used up your AI image quota. You can upload an image instead.",
+        "inProgress": "The previous image is still being generated. Please wait for it to finish.",
+        "blocked": "This description can't be turned into an image, please try a different one",
+        "failed": "Image generation failed, please try again later"
+      }
+    },
     "images": {
       "label": "Scenario images",
       "hint": "Students see these while answering (up to 5)",
@@ -5097,6 +5124,8 @@
       "add": "Upload image",
       "full": "Up to {{max}} scenario images. Delete one before uploading another.",
       "fullShort": "5 / 5 full",
+      "generate": "AI image",
+      "fullGenerate": "Up to {{max}} scenario images. Delete one before generating another.",
       "remove": "Delete this scenario image",
       "crop": "Adjust crop",
       "cropUnavailable": "This image was saved earlier and has no original to re-crop. Delete it and upload again to change the area.",
@@ -5109,6 +5138,7 @@
       "someNotCropped": "Some pictures couldn't be cropped automatically. You can upload them yourself."
     },
     "setup": {
+      "betaNote": "Beta: this feature may have bugs",
       "change": "Change",
       "back": "Back",
       "next": "Next",
@@ -5131,7 +5161,7 @@
       "q": {
         "mode": "Do you want to give students a passage or pictures as the context for the questions?",
         "goal": "What do you want students to practise? Tell me the goal and pick a passage level, and I'll write a scenario.",
-        "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5).",
+        "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5). You can also ask AI to draw one.",
         "scenarioExisting": "Paste the scenario below, or upload an image / PDF and I'll extract the text and pictures (up to 5 scenario images).",
         "source": "Where do the questions come from?",
         "direction": "What do you want to ask students? Give me a topic or direction and I'll write questions on it.",
@@ -5141,7 +5171,7 @@
       "modes": {
         "none": "No context, I just want to ask students questions",
         "existing": "I have existing material to use as the context",
-        "ai": "I need AI to write a passage as the context"
+        "ai": "I need AI to write a passage or draw a picture as the context"
       },
       "modeHints": {
         "existing": "Upload text, images or a PDF"

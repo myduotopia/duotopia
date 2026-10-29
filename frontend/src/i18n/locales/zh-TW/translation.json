@@ -4992,7 +4992,6 @@
       "replaceImage": "替換",
       "removeImage": "移除",
       "generateImage": "AI 生成",
-      "comingSoon": "即將推出",
       "expandScenario": "展開全文",
       "collapseScenario": "收合"
     },
@@ -5019,11 +5018,6 @@
       "generateFailed": "AI 產生失敗，請稍後再試",
       "goalRequired": "請先填寫訓練目標",
       "audioFailed": "語音產生失敗，請稍後再試",
-      "imagePromptRequired": "請先填寫題目或產生題目，才有生圖的依據",
-      "imageQuotaExceeded": "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片",
-      "imageBlocked": "這個描述沒辦法生成圖片，請換個描述再試",
-      "imageFailed": "圖片生成失敗，請稍後再試",
-      "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
       "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入",
       "extractFailedFiles": "這些檔案沒有擷取成功：{{files}}。其他檔案的內容已放進情境框，可以再傳一次失敗的檔案。",
       "extractAllFailed": "檔案都沒有擷取成功：{{files}}。可以再傳一次，或直接把情境貼進情境框。",
@@ -5109,6 +5103,39 @@
       "retrying": "正在重答第 {{no}} 題",
       "cancelRetry": "取消重答"
     },
+    "imageGen": {
+      "titleScenario": "AI 生成情境圖",
+      "titleQuestion": "AI 生成題目圖",
+      "hint": "AI 會依描述畫一張黑白線稿。描述可以直接修改，改好再按「生成」。",
+      "descriptionLabel": "圖片描述",
+      "placeholder": "例如：兩個學生在公園野餐，桌上有三明治和果汁",
+      "suggesting": "AI 正在擬描述…",
+      "suggestFailed": "AI 沒擬出描述，可以自己寫一段再按「生成」",
+      "generate": "生成",
+      "generating": "生成中…",
+      "generatingHint": "正在畫圖，大約需要 10～20 秒",
+      "quotaLoading": "讀取額度中…",
+      "billing": {
+        "admin": "管理員不限張數",
+        "org": "使用機構點數，每張約 {{points}} 點",
+        "points": "使用方案點數，每張約 {{points}} 點",
+        "subscription": "本月還可以生成 {{remaining}} / {{limit}} 張；超過每月 {{limit}} 張後會用到方案點數（每張約 {{points}} 點）",
+        "free_daily": "今天還可以生成 {{remaining}} / {{limit}} 張，每天重置"
+      },
+      "blocked": {
+        "admin": "目前無法生成",
+        "org": "機構與個人方案的點數都不足，無法生成；可以改用「上傳圖片」",
+        "points": "方案點數不足，無法生成；可以改用「上傳圖片」",
+        "subscription": "本月的 {{limit}} 張已用完，方案點數也不足；可以改用「上傳圖片」",
+        "free_daily": "今天的 {{limit}} 張已用完，明天會重置；可以改用「上傳圖片」"
+      },
+      "errors": {
+        "quota": "AI 生圖額度已用完，可以改用「上傳圖片」",
+        "inProgress": "上一張圖還在生成，請等它完成再生成下一張",
+        "blocked": "這個描述沒辦法生成圖片，請換個描述再試",
+        "failed": "圖片生成失敗，請稍後再試"
+      }
+    },
     "images": {
       "label": "情境圖",
       "hint": "學生作答時看得到，最多 5 張",
@@ -5116,6 +5143,8 @@
       "add": "上傳圖片",
       "full": "情境圖最多 {{max}} 張，請先刪掉一張再上傳",
       "fullShort": "已滿 5 張",
+      "generate": "AI 生圖",
+      "fullGenerate": "情境圖最多 {{max}} 張，請先刪掉一張再生成",
       "remove": "刪除這張情境圖",
       "crop": "調整裁切範圍",
       "cropUnavailable": "這張圖是之前存的，沒有原圖可以重新裁切；要換範圍請刪掉後重新上傳",
@@ -5129,6 +5158,7 @@
     },
     "setup": {
       "change": "改選",
+      "betaNote": "測試版本，可能會有錯誤",
       "back": "回上一步",
       "next": "下一步",
       "startGenerate": "開始產生",
@@ -5150,7 +5180,7 @@
       "q": {
         "mode": "需要提供給學生一段文章或圖片，作為問答情境嗎？",
         "goal": "這次想訓練學生什麼？告訴我訓練目標、選好文章難度，我來寫一篇情境。",
-        "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張）。",
+        "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張），也可以請 AI 畫情境圖。",
         "scenarioExisting": "請把情境貼在下面，或上傳圖片／PDF 讓我擷取文字和圖片（情境圖最多 5 張）。",
         "source": "題目怎麼來？",
         "direction": "想問學生什麼呢？說個主題或方向，我來照著出題",
@@ -5160,7 +5190,7 @@
       "modes": {
         "none": "我不需要情境，想直接問學生問題",
         "existing": "有既有的教材作為情境",
-        "ai": "我需要 AI 幫我生成文章作為情境"
+        "ai": "我需要 AI 幫我生成文章或圖片作為情境"
       },
       "modeHints": {
         "existing": "上傳文字、圖片或 PDF 檔"

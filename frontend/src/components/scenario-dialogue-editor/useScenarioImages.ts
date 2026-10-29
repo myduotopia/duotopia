@@ -1,5 +1,6 @@
 /**
- * 情境圖 state 與動作（Issue #1146）：新增（擷取裁切／老師自己上傳）、刪除、重裁。
+ * 情境圖 state 與動作（Issue #1146）：新增（擷取裁切／老師自己上傳／AI 生圖 #1158）、
+ * 刪除、重裁。
  *
  * state 本身由面板持有（存檔、出題都要讀），這裡只包動作與 loading，讓面板不必再長一段。
  */
@@ -14,12 +15,15 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { apiClient } from "@/lib/api";
+
 import {
   MAX_SCENARIO_IMAGES,
   FULL_BOX,
   cropFigures,
   recropImage,
   uploadCrops,
+  nextImageId,
   validateManualImage,
   type ExtractedFigure,
   type ScenarioImage,
@@ -33,6 +37,11 @@ export interface ScenarioImageActions {
   setCropping: (image: ScenarioImage | null) => void;
   addManual: (files: FileList | File[]) => Promise<void>;
   addExtracted: (file: File, figures: ExtractedFigure[]) => Promise<void>;
+  /**
+   * AI 生一張情境圖（#1158）。生圖前先預留 1 格（沿用 5 張預留邏輯），失敗時釋放名額並
+   * **丟出原本的錯誤**，讓生圖對話框依狀態碼顯示原因。已滿時不打 API、直接提示。
+   */
+  addGenerated: (description: string) => Promise<void>;
   remove: (id: string) => void;
   applyCrop: (box: number[]) => Promise<void>;
 }
@@ -162,6 +171,32 @@ export function useScenarioImages(
     [append, reserve, t],
   );
 
+  const addGenerated = useCallback(
+    async (description: string) => {
+      const reserved = reserve(1);
+      if (reserved === 0) {
+        append(0, [], 0, 1);
+        return;
+      }
+      setBusyCount((c) => c + 1);
+      let added: ScenarioImage[] = [];
+      try {
+        const { image_url } = await apiClient.generateScenarioImage({
+          kind: "scenario",
+          description,
+        });
+        added = [
+          { id: nextImageId(), url: image_url, source: null, generated: true },
+        ];
+      } finally {
+        // 失敗也要釋放預留；錯誤照樣往上丟給對話框
+        append(reserved, added, 0, 0);
+        setBusyCount((c) => c - 1);
+      }
+    },
+    [append, reserve],
+  );
+
   const remove = useCallback(
     (id: string) => setImages((prev) => prev.filter((img) => img.id !== id)),
     [setImages],
@@ -195,6 +230,7 @@ export function useScenarioImages(
     setCropping,
     addManual,
     addExtracted,
+    addGenerated,
     remove,
     applyCrop,
   };

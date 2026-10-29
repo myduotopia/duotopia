@@ -10,7 +10,7 @@ export const FEATURE_FLAGS = {
   /** 老師端 Google 登入按鈕（#740） */
   GOOGLE_LOGIN: true,
   /**
-   * 情境對話逐題「AI 生成圖片」（#1024 做的 Imagen 生圖）。
+   * 情境對話「AI 生成圖片」（#1024 做的 Imagen 生圖；#1158 起含情境圖與題目圖）。
    *
    * #1044 先關掉：實測發現生圖品質與流程還要調整，團隊決定先把「出內容 → 出作業 →
    * 學生作答」整條主線做完整，之後再回頭修這一塊。
@@ -19,9 +19,11 @@ export const FEATURE_FLAGS = {
    * 仍然顯示得出來、換得掉、刪得掉 —— 既有資料不能因為關掉入口就變成孤兒。
    * 手動上傳圖片也完全不受影響，那是這段期間的主要途徑。
    *
-   * 要開回來就把這裡改成 true（生圖的程式碼路徑完整保留著，沒有被刪）。
+   * #1158 打開：生圖改用 Gemini 生圖模型、依老師身分計費，入口改成共用的「AI 生圖」
+   * 對話框（情境圖＋題目圖）。整個情境對話仍受 `ENABLE_SCENARIO_DIALOGUE` 管，
+   * 正式站關著時這裡打開也看不到。
    */
-  SCENARIO_IMAGE_GENERATION: false,
+  SCENARIO_IMAGE_GENERATION: true,
 } as const;
 
 /**
