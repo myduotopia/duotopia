@@ -71,6 +71,7 @@ from models.exam_import import (  # noqa: F401
 )
 from models.question_bank import EXAM_POINT_STATUS_ACTIVE
 from services import exam_import_storage
+from services.exam_import_images import attach_crops
 from services.exam_import_common import (  # noqa: F401  (轉出)
     DAILY_LIMIT,
     MAX_PAGE_RESENDS,
@@ -396,15 +397,34 @@ async def run_claimed_page(
         _fail_page(db, import_id, page_no, claim_id, "AI 擷取失敗")
         raise
 
+    _crop_images(result.cards, page_no, image_bytes)
     imp = lock_import(db, import_id)
     try:
-        return _write_page_result(db, imp, page_no, claim_id, result, rng)
+        page = _write_page_result(db, imp, page_no, claim_id, result, rng)
     except ExamImportError:
         raise
     except Exception:
         logger.exception("[exam-import] import=%s page=%s 整理結果失敗", import_id, page_no)
         _fail_page(db, import_id, page_no, claim_id, "整理擷取結果失敗", usage=result.usage)
         raise
+    after_page_write(db, import_id)
+    return page
+
+
+def _crop_images(cards: List[Dict[str, Any]], page_no: int, image_bytes: bytes) -> None:
+    """拿鎖之前先從頁圖裁出題幹圖、選項圖、題組主圖、插圖（C4 B1；失敗留給存入時補裁）。"""
+    try:
+        attach_crops(cards, page_no, image_bytes)
+    except Exception:
+        logger.exception("[exam-import] page=%s crop failed", page_no)
+
+
+def after_page_write(db: Session, import_id: int) -> None:
+    """一頁（或一題）寫入結果並 commit 之後：開了「略過核對」就把能存的存掉（C4a）。
+    失敗只記 log，不影響這一頁的回應。"""
+    from services.exam_import_save import run_auto_save
+
+    run_auto_save(db, import_id)
 
 
 def _write_page_result(

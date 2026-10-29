@@ -118,3 +118,14 @@ def delete_import_images(import_id: int) -> int:
     except Exception as e:  # 刪不掉不影響放棄；目前沒有排程補刪（見模組說明的 TODO）
         logger.warning("[exam-import] delete images failed import=%s: %s", import_id, e)
         return 0
+
+
+def store_crop_image(content: bytes, content_type: str) -> str:
+    """存一張從頁圖裁下來的圖（題幹圖、選項圖、題組主圖、文章插圖；C4 cold-read B1），回傳公開網址。
+
+    走一般圖片路徑（``ImageUploadService.store_image_bytes``，``images/{environment}/…``），
+    **不放在匯入前綴下**：這些網址會寫進存入題庫的題目，放棄匯入（刪匯入前綴）時不能跟著刪
+    （cold-read B7：已存入的題目保留）。沒存入就放棄時留下的裁圖目前不清，見上方清理 TODO。
+    """
+    svc = get_image_upload_service()
+    return svc.store_image_bytes(content, content_type)

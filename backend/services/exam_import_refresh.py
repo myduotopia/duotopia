@@ -121,6 +121,7 @@ def backfill_saved_questions(
                 continue
             for i, o in enumerate(options):
                 o.is_correct = i in wanted
+            question.allow_multiple_answers = len(wanted) > 1
             updated += 1
     return updated
 

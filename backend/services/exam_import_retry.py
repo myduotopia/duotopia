@@ -34,6 +34,7 @@ from services.exam_paper_cards import (
     CARD_KIND_GROUP,
     apply_answer_key,
     card_has_question,
+    card_is_saved,
     iter_card_questions,
     normalize_question_no,
     renumber_cloze_cards,
@@ -116,6 +117,10 @@ def _require_target(card_id: Optional[str], question_no: Optional[str]) -> None:
         )
 
 
+def _saved_error() -> ExamImportError:
+    return ExamImportError(409, "EXAM_IMPORT_CARD_SAVED", "這一題已存進題庫，請到題庫編輯")
+
+
 def _not_found(card_id: Optional[str], question_no: Optional[str]) -> ExamImportError:
     if card_id:
         return ExamImportError(404, "EXAM_IMPORT_CARD_NOT_FOUND", "找不到這張題目卡")
@@ -140,6 +145,8 @@ def _check_retry_target(
     if found is None:
         raise _not_found(card_id, question_no)
     old = found[0].cards[found[1]]
+    if card_is_saved(old):
+        raise _saved_error()
     if page_no not in (old.get("pages") or [old.get("page_no")]):
         raise ExamImportError(422, "EXAM_IMPORT_RETRY_TARGET", f"這張題目卡不在第 {page_no} 頁")
     if question_no and not card_has_question(old, question_no):
@@ -262,9 +269,11 @@ async def retry_question(
         _record_failed_retry(db, import_id, page_no, e.usage)
         raise
 
+    picked = _pick_new_card(result.cards, question_no)
+    eis._crop_images([picked] if picked else [], page_no, image_bytes)
     imp = eis.lock_import(db, import_id)
     try:
-        return _apply_retry_result(
+        card = _apply_retry_result(
             db, imp, page_no, result, card_id=card_id, question_no=question_no
         )
     except ExamImportError:
@@ -272,6 +281,8 @@ async def retry_question(
     except Exception:
         _record_failed_retry(db, import_id, page_no, result.usage)
         raise
+    eis.after_page_write(db, import_id)
+    return card
 
 
 def _apply_retry_result(
@@ -316,6 +327,9 @@ def _apply_retry_result(
     owner, index = found
     cards = copy.deepcopy(owner.cards or [])
     old = cards[index]
+    if card_is_saved(old):  # AI 處理期間被存進題庫（略過核對）：結果丟掉
+        err = _saved_error()
+        raise fail(err.status_code, err.detail["error"], err.detail["message"])
     if _is_merged_group(old):
         if not _replace_in_merged_group(old, new_card, question_no):
             raise fail(422, "EXAM_IMPORT_RETRY_MERGED", "跨頁題組裡比不到這個題號，請手動補這一題")

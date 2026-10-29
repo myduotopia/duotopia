@@ -93,6 +93,7 @@ def mark_blank_page(
     eis._refresh_status_and_count(imp)
     db.commit()
     db.refresh(page)
+    eis.after_page_write(db, import_id)  # 略過核對：最後一頁是空白頁時也要收尾（C4a）
     return page
 
 

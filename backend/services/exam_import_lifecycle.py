@@ -3,8 +3,12 @@
 
 - **每天 1 本**：一般老師以台灣時間自然日計，算當天建立、沒有放棄的匯入；``Teacher.is_admin`` 不限
   （與 ``magic_paste_quota.is_unlimited`` 同一個判斷）。不佔 magic paste 每月額度、不扣點。
-- **重複匯入**：同一位老師、同一個檔案雜湊、沒有放棄的匯入 → 擋下並回那次匯入的 id。
+- **重複匯入**：同一位老師、同一個檔案雜湊、沒有放棄的匯入 → 擋下並回那次匯入的 id、狀態與題庫
+  （``existing_organization_id``／``existing_school_id``，C4 定案 A3：前端「打開那次匯入」切到對應題庫）。
   超過 30 天仍未完成的匯入視同過期（列表也不顯示），不擋。
+- 每天 1 本、同檔重複都**以老師計、不分題庫**；未完成列表則依題庫範圍分開列。
+- **放棄**部分已存入的匯入（cold-read B7）：只刪草稿與頁圖；已存進題庫的題目（和它們的裁圖，
+  存在一般圖片路徑）保留。
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from services.exam_import_common import (
     lock_import,
     taipei_day_bounds,
 )
+from services.exam_import_settings import bank_of, in_bank
 from services.magic_paste_quota import is_unlimited
 
 
@@ -90,11 +95,16 @@ def create_import(
 
     existing = find_duplicate_import(db, teacher.id, file_hash, now)
     if existing is not None:
+        org, school = bank_of(existing.settings or {})
         raise ExamImportError(
             409,
             "EXAM_IMPORT_DUPLICATE",
             "這個題本已經匯入過",
             existing_import_id=existing.id,
+            # 同檔重複以老師計、不分題庫（C4 定案 A3）：前端依這兩欄切到那次匯入所在的題庫
+            existing_status=existing.status,
+            existing_organization_id=org,
+            existing_school_id=school,
         )
     if (
         not is_unlimited(teacher)
@@ -140,10 +150,18 @@ def get_import(db: Session, teacher: Teacher, import_id: int) -> ExamImport:
 
 
 def list_unfinished(
-    db: Session, teacher: Teacher, now: Optional[datetime] = None
+    db: Session,
+    teacher: Teacher,
+    now: Optional[datetime] = None,
+    *,
+    organization_id: Optional[str] = None,
+    school_id: Optional[str] = None,
 ) -> List[ExamImport]:
+    """自己建立、30 天內、還沒存完的匯入，**依題庫範圍**（C4a）：都不給＝我的題庫（設定裡沒有
+    機構／學校的匯入）；給 ``organization_id``＝該機構題庫的匯入。範圍存在 settings JSON，
+    份數很少，直接在 Python 篩（SQLite／Postgres 同一套）。"""
     cutoff = (_as_utc(now) or _utcnow()) - timedelta(days=UNFINISHED_RETENTION_DAYS)
-    return (
+    rows = (
         db.query(ExamImport)
         .filter(
             ExamImport.teacher_id == teacher.id,
@@ -153,6 +171,7 @@ def list_unfinished(
         .order_by(ExamImport.created_at.desc(), ExamImport.id.desc())
         .all()
     )
+    return [r for r in rows if in_bank(r.settings or {}, organization_id, school_id)]
 
 
 def abandon_import(db: Session, imp: ExamImport) -> None:

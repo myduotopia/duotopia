@@ -12,7 +12,7 @@ from typing import Any, Dict
 from models import ExamImport, ExamImportPage
 from models.exam_import import PAGE_STATUS_DONE, PAGE_STATUS_FAILED
 from services.exam_import_common import MAX_PAGE_RESENDS
-from services.exam_paper_cards import strip_merge_records
+from services.exam_paper_cards import iter_card_questions, strip_merge_records
 
 
 def serialize_import(imp: ExamImport, include_pages: bool = False) -> Dict[str, Any]:
@@ -32,6 +32,16 @@ def serialize_import(imp: ExamImport, include_pages: bool = False) -> Dict[str, 
         "pages_failed": sum(1 for p in pages if p.status == PAGE_STATUS_FAILED),
         # 空白頁略過（瀏覽器判斷、沒送 AI）也算在 pages_done 裡；前端顯示「含 N 頁空白」
         "pages_blank": sum(1 for p in pages if p.blank_skipped),
+        # C4a：已存進題庫的題數（含題組小題）、略過核對（自動存入）是否開著
+        "saved_question_count": sum(
+            1
+            for p in pages
+            if p.status == PAGE_STATUS_DONE
+            for c in p.cards or []
+            for q in iter_card_questions(c)
+            if q.get("saved_question_id")
+        ),
+        "auto_save": bool((imp.settings or {}).get("auto_save")),
         "created_at": imp.created_at.isoformat() if imp.created_at else None,
         "updated_at": imp.updated_at.isoformat() if imp.updated_at else None,
     }

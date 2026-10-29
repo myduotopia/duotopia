@@ -53,6 +53,10 @@ openpyxl==3.1.5
 # built-in STSong-Light CID font, no TTF shipped)
 reportlab==5.0.0
 
+# Image cropping (issue #1112 — 上傳題本：從頁圖裁題幹圖／選項圖／題組圖)；
+# reportlab 原本就會裝 Pillow，這裡明列避免日後拿掉 reportlab 時漏裝
+Pillow>=10.0.0
+
 # =============================================
 # Development Dependencies
 # =============================================

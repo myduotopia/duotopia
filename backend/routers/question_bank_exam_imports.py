@@ -8,12 +8,13 @@
 - POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/retry      重讀單一題（card_id 或題號，bbox 只輔助）
 - POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/blank      標為空白頁（附頁圖；不呼叫 AI、不記用量）
 - POST   /api/question-bank/exam-imports/{id}/pages/{page_no}/send-blank 空白頁「仍要送出這一頁」（用存好的頁圖、不算重送）
-- DELETE /api/question-bank/exam-imports/{id}                            放棄匯入（刪草稿與頁圖）
+- DELETE /api/question-bank/exam-imports/{id}                            放棄匯入（刪草稿與頁圖；已存入的題目保留）
+- 核對畫面端點（PATCH 設定、題目卡增刪改、存入、略過核對）在 ``question_bank_exam_import_review.py``
 
 本檔的 ``router`` 不帶 prefix／tags，由 ``routers/question_bank.py`` ``include_router`` 掛上
 （同 question_bank_groups／question_bank_ai_routes 的拆檔慣例），``main.py`` 不需改。
 
-用量只記不扣：不佔 magic paste 每月額度、不扣點數。存入題庫（全部儲存／略過核對）在 C4。
+用量只記不扣：不佔 magic paste 每月額度、不扣點數。schemas 在 ``question_bank_exam_import_schemas.py``。
 業務規則在 ``services/exam_import_service.py``（空白頁在 ``exam_import_blank.py``、重試在
 ``exam_import_retry.py``）。
 """
@@ -22,20 +23,31 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import List, Literal, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field, field_validator, model_validator
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Teacher
-from models.exam_import import EXAM_IMPORT_MAX_PAGES
-from models.question_bank import GRADE_MAX, GRADE_MIN
+from routers import question_bank_exam_import_review
 from routers.question_bank_common import _parse_uuid, _require_bank_membership
-from routers.question_bank_schemas import ProgramLinkIn
+from routers.question_bank_exam_import_schemas import (  # noqa: F401  (舊匯入相容)
+    ExamImportCreate,
+    ExamImportSettings,
+)
 from routers.teachers import get_current_teacher
 from services import exam_import_service as eis
+from services.exam_import_settings import validate_program_links
 from services.exam_import_blank import mark_blank_page, send_blank_page
 from services.exam_import_retry import retry_question
 from services import question_bank_service as qbs
@@ -45,68 +57,10 @@ from services.exam_paper_service import (
     ExamPaperTimeoutError,
 )
 from services.magic_paste_service import MagicPasteError, MagicPasteService
-from utils.ttsVoiceResolver import ACCENT_CHOICES
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# ============ Schemas ============
-
-
-class ExamImportSettings(BaseModel):
-    """整份設定（每份只填一次，C4 存入時套用到全部題目）。都可先不填，存入前由畫面要求必填。"""
-
-    grade_min: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    grade_max: Optional[int] = Field(None, ge=GRADE_MIN, le=GRADE_MAX)
-    source_id: Optional[int] = None
-    # TODO(C4)：教材／單元的擁有權（老師看得到、能掛題目）目前沒驗證，只存在草稿；存入題庫時
-    # 沿用題目建立 API 的 program_links 驗證，驗不過的題目卡留在畫面上標出原因
-    program_links: List[ProgramLinkIn] = Field(default_factory=list)
-    visibility: Optional[
-        Literal["private", "public", "organization_only", "individual_only"]
-    ] = None
-    organization_id: Optional[str] = None
-    school_id: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _check(self):
-        if (
-            self.grade_min is not None
-            and self.grade_max is not None
-            and self.grade_min > self.grade_max
-        ):
-            raise ValueError("grade_min 不可大於 grade_max")
-        if self.organization_id and self.school_id:
-            raise ValueError("organization_id 與 school_id 只能擇一")
-        return self
-
-
-class ExamImportCreate(BaseModel):
-    file_name: str = Field(..., min_length=1, max_length=255)
-    # 檔案內容 SHA-256（前端計算；PDF 在前端拆頁，後端拿不到整份檔）
-    file_hash: str = Field(..., pattern=r"^[0-9a-fA-F]{64}$")
-    page_count: int = Field(..., ge=1, le=EXAM_IMPORT_MAX_PAGES)
-    # 朗讀口音：多選、至少一種（值同平台 TTS 設定：American English…）
-    tts_accents: List[str] = Field(..., min_length=1)
-    settings: ExamImportSettings = Field(default_factory=ExamImportSettings)
-
-    @field_validator("file_name")
-    @classmethod
-    def _strip_name(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("檔名不可空白")
-        return v
-
-    @field_validator("tts_accents")
-    @classmethod
-    def _accents(cls, v: List[str]) -> List[str]:
-        bad = [a for a in v if a not in ACCENT_CHOICES]
-        if bad:
-            raise ValueError(f"不支援的口音：{bad}（可選 {ACCENT_CHOICES}）")
-        return list(dict.fromkeys(v))
 
 
 # ============ Helpers ============
@@ -154,6 +108,9 @@ def _ai_failed(what: str, exc: Exception) -> HTTPException:
 
 # ============ Endpoints ============
 
+# 核對畫面（編輯／刪除／手動補題目卡、整份設定、存入、略過核對；C4a）在另一檔
+router.include_router(question_bank_exam_import_review.router)
+
 
 @router.post("/exam-imports", status_code=status.HTTP_201_CREATED)
 def create_exam_import(
@@ -178,6 +135,9 @@ def create_exam_import(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="找不到這個考題來源"
             )
     try:
+        validate_program_links(
+            db, teacher, [pl.model_dump() for pl in s.program_links], s.model_dump()
+        )
         imp = eis.create_import(
             db,
             teacher,
@@ -195,13 +155,21 @@ def create_exam_import(
 
 @router.get("/exam-imports")
 def list_exam_imports(
+    organization_id: Optional[str] = Query(None),
+    school_id: Optional[str] = Query(None),
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """未完成的匯入（30 天內、沒放棄、還沒全部存入），新的在前。"""
-    return {
-        "items": [eis.serialize_import(i) for i in eis.list_unfinished(db, teacher)]
-    }
+    """未完成的匯入（30 天內、沒放棄、還沒全部存入、自己建立的），新的在前。
+
+    依題庫範圍（C4a）：不帶參數＝我的題庫；``organization_id``＝該機構題庫（``school_id`` 同理）。
+    """
+    _parse_uuid(organization_id, "organization_id")
+    _parse_uuid(school_id, "school_id")
+    rows = eis.list_unfinished(
+        db, teacher, organization_id=organization_id, school_id=school_id
+    )
+    return {"items": [eis.serialize_import(i) for i in rows]}
 
 
 @router.get("/exam-imports/{import_id}")

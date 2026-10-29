@@ -51,6 +51,15 @@
       "explanation": "...", "exam_point_codes": [...], "exam_point_ids": [...],
       "status": "ok" | "failed", "teacher_edited": []
     }
+
+C4 之後由匯入流程補上的欄位（``exam_import_images``／``exam_import_edit``／``exam_import_save``）::
+
+    題目：  "image_url", "option_image_urls"（從頁圖裁好的圖；欄位存在＝已處理，null＝沒有圖）、
+            "saved_question_id"（已存進題庫）
+    題組：  "stimulus.image_url"、"stimulus.figures[i].url"（裁好的圖）；老師編輯過排版時的
+            "layout"／"passage_text"／"segments"（存入時原樣採用）
+    卡片：  "saved_group_id"（題組已存入）、"saved_at"、"manual"（手動補的卡）、
+            "duplicate_of.reason" = "same_stem"（題目文字相同）
 """
 
 from __future__ import annotations
