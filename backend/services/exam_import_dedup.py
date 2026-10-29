@@ -7,9 +7,17 @@
 - 題組：**題組文字相同＋小題題目集合相同**就算相同，**選項不同也算相同**；只有部分小題相同不算。
   題組文字：對話題組用逐句「說話者: 台詞」串起來；其他用文章段落（題庫端用 ``passage_text``）。
 - 同一份匯入裡也比：題目卡依原卷順序，後出現的標成重複前面那張。
+- **單題「題目文字相同、選項不同」也算重複**（C4 定案 Q1／A4）：資料表唯一索引
+  ``uq_questions_teacher_normalized_stem``（同一位老師、單題、``normalized_stem`` 相同）會擋下，
+  所以先標出來不存，另帶 ``"reason": "same_stem"``，畫面顯示「題目文字與我的題庫某題相同，
+  請修改題目文字」（完全相同的不帶 reason）。
+- 比對範圍是老師本人**所有**題目（個人＋機構題庫合計，C4 定案 A3，與唯一索引一致）。
+- 已存進題庫的卡（``card_is_saved``）不參與比對（否則會比到自己剛存的那題）。
+- 卡片的題組文字：老師編輯過排版（卡片帶 ``layout``／``passage_text``／``segments``）時用編輯後的。
 
-重複的卡寫入 ``card["duplicate_of"]``，預設不存（C4 存入時略過）：
-``{"type": "bank", "kind": "single" | "group", "id": 123}`` 或 ``{"type": "import", "card_id": "..."}``。
+重複的卡寫入 ``card["duplicate_of"]``，不存（C4 存入時略過）：
+``{"type": "bank", "kind": "single" | "group", "id": 123}``（題目文字相同多帶 ``"reason": "same_stem"``）
+或 ``{"type": "import", "card_id": "..."}``。
 """
 
 from __future__ import annotations
@@ -21,7 +29,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from models import Question, QuestionGroup
-from services.exam_paper_service import CARD_KIND_GROUP, CARD_KIND_SINGLE
+from services.exam_paper_cards import CARD_KIND_GROUP, CARD_KIND_SINGLE, card_is_saved
+from services.question_bank_layout import layout_to_plain_text
 from services.question_bank_service import normalize_stem
 
 _BLANK_RE = re.compile(r"\{\{\d+\}\}")
@@ -40,6 +49,15 @@ def _dialogue_text(lines: Iterable[Tuple[Any, Any]]) -> str:
 
 
 def card_group_text(group: Mapping[str, Any]) -> str:
+    segments = group.get("segments")
+    if segments:
+        return _dialogue_text(
+            (s.get("speaker_label"), s.get("transcript")) for s in segments
+        )
+    if group.get("passage_text"):
+        return str(group["passage_text"])
+    if group.get("layout"):
+        return layout_to_plain_text(group["layout"])
     stim = group.get("stimulus") or {}
     dialogue = stim.get("dialogue") or []
     if dialogue:
@@ -134,6 +152,7 @@ def find_bank_duplicates(
                     "kind": CARD_KIND_SINGLE,
                     "id": bank_singles[sig],
                 }
+        result.update(_same_stem_duplicates(db, teacher_id, cards, result))
 
     group_sigs = [s for s in sigs.values() if s and s[0] == CARD_KIND_GROUP]
     if group_sigs:
@@ -185,6 +204,49 @@ def find_bank_duplicates(
     return result
 
 
+def _same_stem_duplicates(
+    db: Session,
+    teacher_id: int,
+    cards: List[Dict[str, Any]],
+    found: Mapping[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    """單題「題目文字相同、選項不同」：和唯一索引 ``uq_questions_teacher_normalized_stem`` 同一個
+    條件（``normalized_stem`` 完全相等、單題、未停用）。已經完全相同的卡不再重複標。"""
+    stems: Dict[str, str] = {}
+    for c in cards:
+        if c.get("kind") != CARD_KIND_SINGLE or c.get("card_id") in found:
+            continue
+        norm = normalize_stem((c.get("question") or {}).get("stem") or "")
+        if norm:
+            stems[c["card_id"]] = norm
+    if not stems:
+        return {}
+    rows = (
+        db.query(Question.id, Question.normalized_stem)
+        .filter(
+            Question.teacher_id == teacher_id,
+            Question.group_id.is_(None),
+            Question.is_active.is_(True),
+            Question.normalized_stem.in_(set(stems.values())),
+        )
+        .order_by(Question.id)
+        .all()
+    )
+    first: Dict[str, int] = {}
+    for qid, norm in rows:
+        first.setdefault(norm, qid)
+    return {
+        card_id: {
+            "type": "bank",
+            "kind": CARD_KIND_SINGLE,
+            "id": first[norm],
+            "reason": "same_stem",
+        }
+        for card_id, norm in stems.items()
+        if norm in first
+    }
+
+
 def mark_duplicates(
     db: Session,
     teacher_id: int,
@@ -196,7 +258,12 @@ def mark_duplicates(
     - ``check_bank_ids``：這次要重新查題庫的卡（新擷取的）；None = 全部重查。其他卡沿用
       原本的題庫比對結果。
     - 同一份匯入：第一次出現的卡保留，後面相同的標 ``{"type": "import"}``；題庫重複優先。
+    - 已存進題庫的卡不比對（``duplicate_of`` 清成 None），也不算「第一次出現」。
     """
+    for card in cards_in_order:
+        if card_is_saved(card):
+            card["duplicate_of"] = None
+    cards_in_order = [c for c in cards_in_order if not card_is_saved(c)]
     to_check = [
         c
         for c in cards_in_order

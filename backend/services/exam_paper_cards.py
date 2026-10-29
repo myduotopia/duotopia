@@ -122,6 +122,20 @@ def iter_card_questions(card: Mapping[str, Any]) -> Iterable[Dict[str, Any]]:
                 yield q
 
 
+def card_is_saved(card: Mapping[str, Any]) -> bool:
+    """這張卡已存進題庫（C4）：單題看題目的 ``saved_question_id``，題組看卡上的 ``saved_group_id``。"""
+    if card.get("kind") == CARD_KIND_GROUP:
+        return bool(card.get("saved_group_id"))
+    return bool((card.get("question") or {}).get("saved_question_id"))
+
+
+def card_is_teacher_edited(card: Mapping[str, Any]) -> bool:
+    """老師改過這張卡（卡片層或任一題的 ``teacher_edited`` 非空，或是手動補的卡）。"""
+    if card.get("teacher_edited") or card.get("manual"):
+        return True
+    return any(q.get("teacher_edited") for q in iter_card_questions(card))
+
+
 def card_has_question(card: Mapping[str, Any], question_no: Optional[str]) -> bool:
     return bool(question_no) and any(
         q.get("source_question_no") == question_no for q in iter_card_questions(card)
@@ -333,7 +347,8 @@ def merge_continuations(
             continue
         target_cards = pages[target_no]
         target = target_cards[-1]
-        if target.get("kind") != CARD_KIND_GROUP:
+        if target.get("kind") != CARD_KIND_GROUP or card_is_saved(target):
+            # 已存進題庫的題組不再併入（C4 略過核對：題組存入後下一頁才到）；延續卡留著讓老師處理
             continue
         if record:
             if MERGE_PRE_KEY not in target:
@@ -379,6 +394,10 @@ def unmerge_invalid_continuations(
                 parts = card.get(MERGE_PARTS_KEY) or []
                 if not parts or MERGE_PRE_KEY not in card:
                     continue
+                # 已存進題庫、或老師改過的題組不拆回（拆回會換成合併前的樣子，蓋掉存入紀錄或
+                # 老師的修改）；合併紀錄仍留著（C4）
+                if card_is_saved(card) or card_is_teacher_edited(card):
+                    continue
                 if any(pages.get(part["page_no"]) is None for part in parts):
                     continue
                 if all(_merge_span_valid(pages, n, part["page_no"]) for part in parts):
@@ -422,6 +441,8 @@ __all__ = [
     "apply_answer_key",
     "blank_numbers",
     "card_has_question",
+    "card_is_saved",
+    "card_is_teacher_edited",
     "iter_card_questions",
     "label_to_indexes",
     "match_cloze_blanks",

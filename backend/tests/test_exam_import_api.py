@@ -610,7 +610,7 @@ def test_duplicates_against_own_bank(
         _page(
             # 空白／大小寫／標點不同 → 相同
             _single("1", "what  time is it", ["two", "THREE"], ai=[0]),
-            # 題目相同但選項不同 → 不同
+            # 題目相同但選項不同 → 也算重複，另標 same_stem（C4 定案 Q1／A4）
             _single("2", "What time is it?", ["Two.", "Four."], ai=[0]),
             _single("3", "Where are you?", ["Home", "School"], ai=[0]),
             _single("4", "Deleted question?", ["a", "b"], ai=[0]),
@@ -639,7 +639,12 @@ def test_duplicates_against_own_bank(
     ]
     dups = [c["duplicate_of"] for c in cards]
     assert dups[0] == {"type": "bank", "kind": "single", "id": mine.id}
-    assert dups[1] is None
+    assert dups[1] == {
+        "type": "bank",
+        "kind": "single",
+        "id": mine.id,
+        "reason": "same_stem",
+    }
     assert dups[2] is None
     assert dups[3] is None
     assert dups[4] == {"type": "bank", "kind": "group", "id": group.id}
