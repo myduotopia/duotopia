@@ -14,6 +14,8 @@ import MaterialsPageTabs, {
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
 import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
+import ExamImportSheet from "@/components/question-bank/exam-import/ExamImportSheet";
+import { useExamImportHost } from "@/components/question-bank/exam-import/useExamImportHost";
 import type { Question, QuestionType } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
 import ProgramFolderView from "@/components/shared/ProgramFolderView";
@@ -58,6 +60,12 @@ export default function OrgMaterialsPage() {
   const canManage = !!selectedOrganization;
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  // 上傳題本（#1112 C4 開放機構題庫）：狀態放在頁面層，切到「教材」分頁時處理繼續；
+  // 存進目前工作區的機構題庫，提示列只列這個機構的匯入
+  const examImport = useExamImportHost({
+    enabled: !!selectedOrganization,
+    organizationId: selectedOrganization?.id ?? null,
+  });
   // 題庫：新增／編輯選擇題 dialog（issue #1064）
   const [questionDialog, setQuestionDialog] = useState<{
     open: boolean;
@@ -160,7 +168,8 @@ export default function OrgMaterialsPage() {
       showReadingEditor ||
         showVocabularySetEditor ||
         scenarioEditor.isOpen ||
-        questionDialog.open,
+        questionDialog.open ||
+        examImport.open,
     );
     return () => setSidebarDisabled(false);
   }, [
@@ -168,6 +177,7 @@ export default function OrgMaterialsPage() {
     showVocabularySetEditor,
     scenarioEditor.isOpen,
     questionDialog.open,
+    examImport.open,
     setSidebarDisabled,
   ]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
@@ -702,6 +712,7 @@ export default function OrgMaterialsPage() {
               scope="organization"
               organizationId={selectedOrganization?.id}
               refreshKey={questionRefreshKey}
+              examImport={selectedOrganization ? examImport : undefined}
               onCreateQuestion={(type) =>
                 setQuestionDialog({
                   open: true,
@@ -1347,6 +1358,12 @@ export default function OrgMaterialsPage() {
           )}
 
         {/* Dialogs */}
+        {/* 上傳題本（#1112 C4）：放在分頁外，切到教材分頁也不卸載 */}
+        <ExamImportSheet
+          controller={examImport}
+          programs={programs}
+          sidebarWidth={sidebarWidth}
+        />
         {/* 機構題庫：成員都可新增；可編輯／刪除依後端回的 can_edit（自建題，或擁有人／教材管理者） */}
         <MultipleChoiceQuestionSheet
           open={questionDialog.open}

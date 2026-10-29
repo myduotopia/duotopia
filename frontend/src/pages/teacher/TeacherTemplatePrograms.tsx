@@ -36,7 +36,7 @@ import MaterialsPageTabs, {
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
 import ExamImportSheet from "@/components/question-bank/exam-import/ExamImportSheet";
-import { useExamImport } from "@/components/question-bank/exam-import/useExamImport";
+import { useExamImportHost } from "@/components/question-bank/exam-import/useExamImportHost";
 import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
 import type { Question, QuestionType } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
@@ -74,8 +74,8 @@ function TeacherTemplateProgramsInner() {
 
   const [programs, setPrograms] = useState<Program[]>([]);
   // 上傳題本（#1112 C3）：狀態放在頁面層，不跟題庫分頁一起卸載——切到「教材」分頁時處理繼續；
-  // 提示列在題庫分頁（QuestionBankTab），上傳／進度 Sheet 在這一層
-  const examImport = useExamImport(true);
+  // 提示列在題庫分頁（QuestionBankTab），上傳／核對 Sheet 在這一層（C4：跨題庫「打開那次匯入」在 host hook）
+  const examImport = useExamImportHost({});
   // 題庫：新增／編輯選擇題 dialog（issue #1064）
   const [questionDialog, setQuestionDialog] = useState<{
     open: boolean;
@@ -246,7 +246,8 @@ function TeacherTemplateProgramsInner() {
       showReadingEditor ||
         showVocabularySetEditor ||
         scenarioEditor.isOpen ||
-        questionDialog.open,
+        questionDialog.open ||
+        examImport.open,
     );
     return () => setSidebarDisabled(false);
   }, [
@@ -254,6 +255,7 @@ function TeacherTemplateProgramsInner() {
     showVocabularySetEditor,
     scenarioEditor.isOpen,
     questionDialog.open,
+    examImport.open,
     setSidebarDisabled,
   ]);
   const [vocabularySetLessonId, setVocabularySetLessonId] = useState<
