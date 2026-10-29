@@ -7,10 +7,14 @@
  * 3. 需注意 ‹ ›：下一個／上一個需注意的題，到頭尾循環；0 題時停用並說明
  * 4. 捲動偵測：捲動區 1/3 處碰到的題變成「第 N 題」；程式捲動後一小段時間不改；
  *    選題捲到同一條判定線，捲完目前題目＝所選題（C4c 審查 1）
- *    （jsdom 的元素沒有 scrollTo → 其他測試走 scrollIntoView 退路，`scrolled` 記目標題）
+ *    （`scrollToSpyLine` 換成包一層的版本：先把捲到的題 id 記進 `scrolled`，再照原樣捲；
+ *    jsdom 不會真的捲，setup 把 scrollTo 補成空函式）
+ * 5. `scrollToSpyLine` 本身：捲動目標＝題目頂端對齊判定線再往上 overlap；root 沒掛上不捲
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, screen } from "@testing-library/react";
+
+import type * as ScrollSpy from "../exam-import/useReviewScrollSpy";
 
 import {
   controllerWith,
@@ -39,6 +43,19 @@ vi.mock("@/lib/api", async (orig) => ({
   ...(await orig<typeof import("@/lib/api")>()),
   apiClient: { listExamPoints: vi.fn(async () => ({ items: [] })) },
 }));
+
+// 記下程式捲到哪一題（題目元素 id），其餘照原樣
+const { scrolled } = vi.hoisted(() => ({ scrolled: [] as string[] }));
+vi.mock("../exam-import/useReviewScrollSpy", async (orig) => {
+  const actual = await orig<typeof ScrollSpy>();
+  return {
+    ...actual,
+    scrollToSpyLine: (el: HTMLElement, root: HTMLElement | null) => {
+      scrolled.push(el.id);
+      actual.scrollToSpyLine(el, root);
+    },
+  };
+});
 
 vi.mock("../exam-import/ExamImportReviewTop", () => ({
   default: () => <div data-testid="top-stub" />,
@@ -83,17 +100,12 @@ vi.mock("@/components/ui/select", async () => {
   };
 });
 
-const scrolled: string[] = [];
-
 beforeEach(() => {
   scrolled.length = 0;
   window.requestAnimationFrame = (cb: FrameRequestCallback) => {
     cb(0);
     return 0;
   };
-  Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
-    scrolled.push(this.id);
-  });
 });
 
 const domId = (key: string) =>
@@ -239,14 +251,19 @@ describe("捲動偵測", () => {
   type Callback = (records: Partial<IntersectionObserverEntry>[]) => void;
   let callback: Callback | null = null;
   const observed: Element[] = [];
+  let observerOptions: IntersectionObserverInit | undefined;
   const original = globalThis.IntersectionObserver;
 
   beforeEach(() => {
     callback = null;
     observed.length = 0;
+    observerOptions = undefined;
     class FakeObserver {
-      constructor(cb: Callback) {
+      constructor(cb: Callback, options?: IntersectionObserverInit) {
+        // 重新觀察（effect 重跑）時換成新的觀察者：只留最新這個觀察的題
         callback = cb;
+        observerOptions = options;
+        observed.length = 0;
       }
       observe(el: Element) {
         observed.push(el);
@@ -273,6 +290,11 @@ describe("捲動偵測", () => {
       domId("b:0"),
       domId("c:0"),
     ]);
+    // 觀察範圍縮成捲動區 1/3 處的一條線，root＝捲動區
+    expect(observerOptions?.rootMargin).toBe("-33% 0px -66% 0px");
+    expect(observerOptions?.root).toBe(
+      screen.getByTestId("exam-review-scroll"),
+    );
     const el = (k: string) => document.getElementById(domId(k))!;
 
     act(() => callback!([{ target: el("b:0"), isIntersecting: true }]));
@@ -283,7 +305,8 @@ describe("捲動偵測", () => {
     expect(screen.getByTestId("exam-review-picker").textContent).toBe("11");
 
     // 從下拉選 c，平滑捲動經過 a、b 不改
-    vi.useFakeTimers();
+    // 只換 Date（暫停時間用 Date.now()）；requestAnimationFrame 維持上面的同步替身，選題才會捲
+    vi.useFakeTimers({ toFake: ["Date"] });
     fireEvent.click(screen.getByTestId("exam-review-picker-item-c:0"));
     act(() =>
       callback!([
@@ -324,7 +347,8 @@ describe("捲動偵測", () => {
     Object.defineProperty(target, "offsetHeight", { value: 200 });
     target.getBoundingClientRect = () => ({ top: 900 }) as DOMRect;
 
-    vi.useFakeTimers();
+    // 只換 Date（暫停時間用 Date.now()）；requestAnimationFrame 維持上面的同步替身，選題才會捲
+    vi.useFakeTimers({ toFake: ["Date"] });
     fireEvent.click(screen.getByTestId("exam-review-picker-item-c:0"));
     // 下拉立即顯示所選的題
     expect(screen.getByTestId("exam-review-picker").textContent).toBe("13");
@@ -333,7 +357,7 @@ describe("捲動偵測", () => {
       top: 674,
       behavior: "smooth",
     });
-    expect(scrolled).toEqual([]);
+    expect(scrolled).toEqual([domId("c:0")]);
 
     // 平滑捲動經過 a、b 不改
     act(() => callback!([{ target: el("b:0"), isIntersecting: true }]));
@@ -348,5 +372,57 @@ describe("捲動偵測", () => {
       ]),
     );
     expect(screen.getByTestId("exam-review-picker").textContent).toBe("13");
+  });
+});
+
+describe("scrollToSpyLine", () => {
+  const box = (top: number, height: number) => {
+    const el = document.createElement("div");
+    el.getBoundingClientRect = () => ({ top }) as DOMRect;
+    Object.defineProperty(el, "offsetHeight", { value: height });
+    return el;
+  };
+
+  it("捲動目標＝題目頂端對齊判定線（clientHeight × SPY_LINE_RATIO）再往上 overlap", async () => {
+    const { scrollToSpyLine, SPY_LINE_RATIO } = await vi.importActual<
+      typeof ScrollSpy
+    >("../exam-import/useReviewScrollSpy");
+    const root = box(0, 0);
+    const rootScrollTo = vi.fn();
+    Object.assign(root, { scrollTo: rootScrollTo });
+    Object.defineProperty(root, "clientHeight", { value: 900 });
+    Object.defineProperty(root, "scrollTop", { value: 0 });
+    const line = 900 * SPY_LINE_RATIO; // 300
+
+    // 一般高度：往上 24px
+    scrollToSpyLine(box(1000, 200), root);
+    expect(rootScrollTo).toHaveBeenLastCalledWith({
+      top: 1000 - line + 24,
+      behavior: "smooth",
+    });
+
+    // 很矮的題：往上最多一半高度
+    scrollToSpyLine(box(1000, 20), root);
+    expect(rootScrollTo).toHaveBeenLastCalledWith({
+      top: 1000 - line + 10,
+      behavior: "smooth",
+    });
+
+    // 算出來小於 0 → 停在最上面
+    scrollToSpyLine(box(100, 200), root);
+    expect(rootScrollTo).toHaveBeenLastCalledWith({
+      top: 0,
+      behavior: "smooth",
+    });
+  });
+
+  it("捲動區還沒掛上（null）→ 不捲", async () => {
+    const { scrollToSpyLine } = await vi.importActual<typeof ScrollSpy>(
+      "../exam-import/useReviewScrollSpy",
+    );
+    const el = box(500, 100);
+    el.scrollIntoView = vi.fn();
+    expect(() => scrollToSpyLine(el, null)).not.toThrow();
+    expect(el.scrollIntoView).not.toHaveBeenCalled();
   });
 });

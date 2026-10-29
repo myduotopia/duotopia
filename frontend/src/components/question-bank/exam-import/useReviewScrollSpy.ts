@@ -28,14 +28,11 @@ const ROOT_MARGIN = `-${LINE_PCT}% 0px -${100 - LINE_PCT - 1}% 0px`;
 const LINE_OVERLAP_PX = 24;
 
 /**
- * 把題目捲到判定線上：題目頂端在線上方 `LINE_OVERLAP_PX`（最多題目高度一半），平滑捲動。
- * 捲動區不支援 `scrollTo`（測試環境）就退回 `scrollIntoView`。
+ * 把題目捲到判定線上：題目頂端在線上方 `LINE_OVERLAP_PX`（最多題目高度一半），
+ * 在捲動區 `root` 上平滑捲動（`root.scrollTo`）。捲動區還沒掛上（null）就不捲。
  */
 export function scrollToSpyLine(el: HTMLElement, root: HTMLElement | null) {
-  if (!root || typeof root.scrollTo !== "function") {
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
+  if (!root) return;
   const line = root.clientHeight * SPY_LINE_RATIO;
   const overlap = Math.min(LINE_OVERLAP_PX, el.offsetHeight / 2);
   const top =
