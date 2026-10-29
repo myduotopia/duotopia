@@ -5168,7 +5168,8 @@
         "source": "Where do the questions come from?",
         "direction": "What do you want to ask students? Give me a topic or direction and I'll write questions on it.",
         "settings": "OK. Check the question settings and press \"Start generating\".",
-        "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\"."
+        "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\".",
+        "manualInput": "Type your questions below. You can type several at once."
       },
       "modes": {
         "none": "No context, I just want to ask students questions",
@@ -5185,7 +5186,36 @@
       "answers": {
         "goal": "Goal: \"{{goal}}\" (passage level {{level}})",
         "scenario": "Passage: {{chars}} characters, {{images}} scenario image(s)"
-      }
+      },
+      "placeholders": {
+        "goal": "e.g. ordering food at a night market, asking for directions",
+        "manualInput": "Type questions here, several at once is fine",
+        "done": "Type new questions, or say \"3 more questions about…\""
+      },
+      "chips": {
+        "scenario": "Context",
+        "source": "Source",
+        "direction": "Direction",
+        "settings": "Settings",
+        "editScenario": "Edit scenario"
+      },
+      "chipValues": {
+        "mode": {
+          "none": "None",
+          "existing": "My material",
+          "ai": "AI-written"
+        },
+        "source": {
+          "manual": "Typed by me",
+          "ai": "AI-written"
+        }
+      },
+      "modeChangeKeepQuestionsDescription": "The scenario will be cleared. Questions and settings are kept.",
+      "sourceChangeConfirmTitle": "Change where questions come from?",
+      "sourceChangeConfirmDescription": "The question direction and settings will be cleared.",
+      "rewriteConfirmTitle": "Rewrite the scenario?",
+      "rewriteConfirmDescription": "The scenario passage will be rewritten and the current text replaced.",
+      "rewriteConfirm": "Rewrite"
     }
   },
   "vocabularySet": {
@@ -6769,6 +6799,16 @@
       "createSuccess": "Classroom created",
       "createFailed": "Failed to create classroom. Please try again later.",
       "updateSuccess": "Classroom updated"
+    }
+  },
+  "guidedChat": {
+    "placeholders": {
+      "choice": "Please pick one of the options above",
+      "card": "Please finish the card above first",
+      "pending": "Generating, one moment…"
+    },
+    "log": {
+      "changed": "Changed {{label}} to: {{value}}"
     }
   }
 }

@@ -5187,7 +5187,8 @@
         "source": "題目怎麼來？",
         "direction": "想問學生什麼呢？說個主題或方向，我來照著出題",
         "settings": "好的，請確認出題設定，按「開始產生」我就開始出題。",
-        "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。"
+        "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。",
+        "manualInput": "請直接把題目打在下面，一次可以打好幾題"
       },
       "modes": {
         "none": "我不需要情境，想直接問學生問題",
@@ -5204,7 +5205,36 @@
       "answers": {
         "goal": "訓練目標：「{{goal}}」（文章難度 {{level}}）",
         "scenario": "情境文章 {{chars}} 字、情境圖 {{images}} 張"
-      }
+      },
+      "placeholders": {
+        "goal": "例如：在夜市點餐、問路",
+        "manualInput": "直接打題目，一次可以打好幾題",
+        "done": "可以直接打新題目，或說「再出 3 題關於…」"
+      },
+      "chips": {
+        "scenario": "情境",
+        "source": "來源",
+        "direction": "方向",
+        "settings": "設定",
+        "editScenario": "編輯情境內容"
+      },
+      "chipValues": {
+        "mode": {
+          "none": "不需要",
+          "existing": "既有教材",
+          "ai": "AI 生成"
+        },
+        "source": {
+          "manual": "自己輸入",
+          "ai": "AI 出題"
+        }
+      },
+      "modeChangeKeepQuestionsDescription": "情境會清空，題目和設定保留。",
+      "sourceChangeConfirmTitle": "要改題目來源嗎？",
+      "sourceChangeConfirmDescription": "出題方向和設定會清空。",
+      "rewriteConfirmTitle": "要重寫情境嗎？",
+      "rewriteConfirmDescription": "會重寫情境文章，目前的文章會被取代。",
+      "rewriteConfirm": "重寫"
     }
   },
   "vocabularySet": {
@@ -6806,6 +6836,16 @@
       "createSuccess": "班級建立成功",
       "createFailed": "建立班級失敗，請稍後再試",
       "updateSuccess": "班級更新成功"
+    }
+  },
+  "guidedChat": {
+    "placeholders": {
+      "choice": "請點選上面的選項",
+      "card": "請先完成上面的卡片",
+      "pending": "產生中，請稍候…"
+    },
+    "log": {
+      "changed": "已把{{label}}改成：{{value}}"
     }
   }
 }

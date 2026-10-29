@@ -1,6 +1,12 @@
 /**
  * 引導式對話的流程（Issue #1146）—— 純函式，沒有 UI。
  *
+ * **即將退場（#1158 C 段）**：新版改用通用引擎 `components/shared/guided-chat/flowEngine.ts`
+ * ＋情境對話步驟設定 `scenarioSteps.ts`（新增「自己打題目」步驟、「題目已產生」狀態、
+ * 已選項目列與新的清除規則）。這支檔暫時保留給現有面板（`useScenarioSetup.ts`、
+ * `ScenarioSetupChat.tsx`）使用，C 段 commit 4 面板換成新引擎後刪除。新功能請改
+ * `scenarioSteps.ts`，不要再加在這裡。
+ *
  * 對話取代舊的 Step 1 設定頁。**固定流程**：程式帶流程、選項是按鈕，老師打的字只當作
  * 「當下那一步」的答案，不做整句意圖解析。
  *
