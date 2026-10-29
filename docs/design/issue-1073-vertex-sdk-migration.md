@@ -268,6 +268,21 @@ Imagen（`imagen-3.0-generate-002`）已經 404，改用 Gemini 生圖模型。2
 
 因此生圖改用 `ALLOW_ALL`，並拿掉 #1024 為了配合 `ALLOW_ADULT` 加的兩道繞路：描述裡「students／kids／children…」改寫成「a classroom scene／people」的字詞替換，以及畫風提示裡「人物都是成人」那句。畫風提示改成「人物年齡依描述；未指明時依情境自然判斷」。上面「Phase 1：模型汰換」引言第 4 點說的「兒童影像防線」已不適用於生圖路徑。
 
+**備案（萬一 Google 之後拒絕 `ALLOW_ALL`，例如要求另外申請或回 400）：**
+1. `personGeneration` 退回 `ALLOW_ADULT`。
+2. 恢復描述的字詞改寫，但只把「students／kids／children…」改成「people」，**不再**改成「a classroom scene」（會讓畫面變成空教室）。
+3. 畫風提示加回「人物都是成人」。
+4. 前端生圖對話框加一行說明「目前無法生成兒童人物」（`scenarioDialogue.imageGen` 底下新增文案，中英文都要）。
+
+### 稽核紀錄
+
+生圖資料出境是合規例外，所以每次生圖都保留誰、生什麼的紀錄（Cloud Logging）：
+
+- `routers/scenario_dialogue_ai.py` 的 `/generate-image` 在打 AI **之前**寫一行 `scenario_image_generate | teacher_id=… | kind=… | description=…`（老師確認過的描述全文），被安全過濾擋下或失敗的請求也有紀錄。
+- `services/scenario_dialogue_image.py` 生成成功後再寫一行 model／location／output_tokens／預估成本。
+- `services/scenario_image_billing.py` 扣點時寫一筆點數紀錄（含 teacher_id 與 `feature_detail.kind`）。
+- 預填描述（`/suggest-image-description`）不計次，只記 `teacher_id` 與次數。
+
 ### 計費
 
 生圖改依老師身分計費（`services/scenario_image_billing.py`）：admin 不限、機構扣機構點數、訂閱每月 60 張後扣點、點數制依實際輸出 token 扣（130 token = 1 點，無條件進位）、未付費非機構每天 3 張（台灣時區）。#1024 的每月 30 張規則作廢。

@@ -368,11 +368,16 @@ def _as_aware(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.replace(tzinfo=timezone.utc)
 
 
-def acquire_generation_slot(db: Session, teacher: Teacher) -> None:
+def acquire_generation_slot(db: Session, teacher: Teacher) -> datetime:
     """生圖之前呼叫：佔下這位老師「生成中」的唯一名額，已經有一張在生成就丟 409。
 
     所有身分（含 admin）一律適用。拿到之後**一定要**在 finally 呼叫
     :func:`release_generation_slot`，不論成功、失敗、402、中途取消。
+
+    回傳寫入標記時的時間，當作「這個標記是我的」的憑證；release 時帶回來，只有標記
+    還是這個時間才歸零（#1158 A 段 review 第 2 輪第 1 點）。否則：這個請求跑超過
+    :data:`IN_FLIGHT_STALE_SECONDS`、標記被下一個請求接手之後，這個請求的 finally
+    會把**別人的**標記歸零，第三個請求就能跟第二個同時生成。
     """
     row = _in_flight._get_or_create_locked(db, teacher.id, IN_FLIGHT_KEY)
     now = datetime.now(timezone.utc)
@@ -398,14 +403,30 @@ def acquire_generation_slot(db: Session, teacher: Teacher) -> None:
     # 明確寫入時間：過期判斷靠它；不靠 onupdate（值沒變時不一定會更新）
     row.updated_at = now
     db.commit()
+    return now
 
 
-def release_generation_slot(db: Session, teacher: Teacher) -> None:
-    """放掉 :func:`acquire_generation_slot` 佔的名額（可重複呼叫）。"""
-    if not db.is_active:
-        # 前面的 DB 錯誤讓交易處於失敗狀態時，要先 rollback 才能再寫
-        db.rollback()
+def release_generation_slot(
+    db: Session, teacher: Teacher, token: Optional[datetime] = None
+) -> None:
+    """放掉 :func:`acquire_generation_slot` 佔的名額（可重複呼叫）。
+
+    ``token`` 是 acquire 回傳的時間：標記的時間跟它不同，代表標記已過期並被別的請求
+    接手，這時不動它。``token=None`` 則無條件歸零（只給測試與維運用）。
+    """
+    # 先無條件 rollback（#1158 A 段 review 第 2 輪第 2 點）：前面的 DB 錯誤可能讓交易
+    # 處於失敗狀態，但 ``db.is_active`` 不一定反映得出來（例如 PostgreSQL 的
+    # "current transaction is aborted"），沒 rollback 就寫不進去，老師得等 300 秒過期。
+    # 走到這裡時該 commit 的都已經 commit 了，rollback 不會丟掉任何東西。
+    db.rollback()
     row = _in_flight._get_or_create_locked(db, teacher.id, IN_FLIGHT_KEY)
+    if token is not None and _as_aware(row.updated_at) != _as_aware(token):
+        logger.warning(
+            "scenario_image_billing | 生成中標記已被其他請求接手，不歸零 | teacher_id=%s",
+            teacher.id,
+        )
+        db.commit()  # 放掉 FOR UPDATE 鎖
+        return
     row.count = 0
     row.updated_at = datetime.now(timezone.utc)
     db.commit()

@@ -503,6 +503,49 @@ class TestOneGenerationAtATime:
         sib.acquire_generation_slot(test_db_session, t)  # 不丟例外
         assert self._row(test_db_session, t).count == 1
 
+    def test_release_with_stale_token_keeps_new_owner(self, test_db_session):
+        """A 跑太久、標記過期被 B 接手後，A 的 release 不能把 B 的標記歸零（review 2-1）。"""
+        t = _teacher(test_db_session, "inflight-owner@img.com")
+        token_a = sib.acquire_generation_slot(test_db_session, t)
+        row = self._row(test_db_session, t)
+        row.updated_at = datetime.now(timezone.utc) - timedelta(
+            seconds=sib.IN_FLIGHT_STALE_SECONDS + 1
+        )
+        test_db_session.commit()
+        token_b = sib.acquire_generation_slot(test_db_session, t)  # B 接手
+        assert token_b != token_a
+
+        sib.release_generation_slot(test_db_session, t, token_a)  # A 結束
+        assert self._row(test_db_session, t).count == 1  # B 還在生成
+        with pytest.raises(HTTPException) as exc:
+            sib.acquire_generation_slot(test_db_session, t)  # C 仍被擋
+        assert exc.value.status_code == 409
+
+        sib.release_generation_slot(test_db_session, t, token_b)  # B 結束
+        assert self._row(test_db_session, t).count == 0
+
+    def test_release_with_own_token(self, test_db_session):
+        t = _teacher(test_db_session, "inflight-own@img.com")
+        token = sib.acquire_generation_slot(test_db_session, t)
+        sib.release_generation_slot(test_db_session, t, token)
+        assert self._row(test_db_session, t).count == 0
+
+    def test_release_rolls_back_first(self, test_db_session, monkeypatch):
+        """release 先無條件 rollback，交易壞掉時不必等標記過期（review 2-2）。"""
+        t = _teacher(test_db_session, "inflight-rb@img.com")
+        token = sib.acquire_generation_slot(test_db_session, t)
+        calls = []
+        real_rollback = test_db_session.rollback
+
+        def spy_rollback():
+            calls.append(1)
+            real_rollback()
+
+        monkeypatch.setattr(test_db_session, "rollback", spy_rollback)
+        sib.release_generation_slot(test_db_session, t, token)
+        assert calls, "release 應先 rollback"
+        assert self._row(test_db_session, t).count == 0
+
     def test_key_does_not_collide_with_counters(self, test_db_session, monkeypatch):
         """生成中標記與月／日計數同表，鍵長度不同，不影響剩餘張數。"""
         monkeypatch.setattr(sib, "current_taipei_date", lambda: "2026-10-29")

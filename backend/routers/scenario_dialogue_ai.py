@@ -460,9 +460,19 @@ async def generate_image(
     # 每位老師同時只能有一張在生成中，第二個請求回 409（#1158 A 段 review）。
     # 放在 reserve 之前，而且下面整段（含 reserve 的 402、settle）都包在 try/finally
     # 裡，不論成功、失敗、中途取消都會放掉。
-    sib.acquire_generation_slot(db, current_teacher)
+    slot_token = sib.acquire_generation_slot(db, current_teacher)
     try:
         charge = sib.reserve(db, current_teacher)
+
+        # 稽核紀錄：誰、生哪種圖、用什麼描述（生圖資料出境到 global 的合規例外要求
+        # 保留，見 docs/design/issue-1073-vertex-sdk-migration.md「生圖例外」）。
+        # 放在打 AI 之前，被擋下或失敗的請求也有紀錄。
+        logger.info(
+            "scenario_image_generate | teacher_id=%s | kind=%s | description=%r",
+            current_teacher.id,
+            payload.kind,
+            payload.text,
+        )
 
         # 佔位之後一律用 try/finally 退回，不是在每個 except 分支各退一次
         # （PR #1027 review round 2）：老師在生圖跑到一半關掉分頁時，Starlette 丟的是
@@ -528,7 +538,7 @@ async def generate_image(
         }
     finally:
         try:
-            sib.release_generation_slot(db, current_teacher)
+            sib.release_generation_slot(db, current_teacher, slot_token)
         except Exception:
             # 放不掉也不能取代原本的回應／錯誤；那列最多 IN_FLIGHT_STALE_SECONDS 後過期
             logger.exception("scenario_image_billing | 放掉生成中標記失敗")
