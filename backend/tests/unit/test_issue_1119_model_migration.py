@@ -34,6 +34,9 @@ RETIRED_MODELS = {
     "gemini-2.5-pro",
     "gemini-2.5-flash-lite",
     "imagen-3.0-generate-002",
+    # #1158：2.5 系列整批退役，生圖版同樣不可用
+    "gemini-2.5-flash-image",
+    "gemini-2.5-flash-image-preview",
 }
 
 
@@ -66,6 +69,14 @@ class TestNoRetiredModelIds:
 
         assert MODEL not in RETIRED_MODELS
 
+    def test_image_model_not_retired(self):
+        """#1158：生圖模型也不可以是退役的（imagen-3 / gemini-2.5-*-image）。"""
+        from services.scenario_dialogue_image import IMAGE_MODEL
+
+        assert IMAGE_MODEL not in RETIRED_MODELS
+        assert not IMAGE_MODEL.startswith("gemini-2.5")
+        assert not IMAGE_MODEL.startswith("imagen-")
+
 
 @pytest.mark.unit
 class TestModelIdsComeFromSettings:
@@ -85,6 +96,33 @@ class TestModelIdsComeFromSettings:
         assert dialogue_model == configured
         assert magic_model == configured
         assert grading_model == configured
+
+    def test_image_model_and_location_come_from_settings(self):
+        """#1158：生圖的模型 ID 與 location 也只有 settings 一個來源。"""
+        from core.config import settings
+        from services.scenario_dialogue_image import IMAGE_LOCATION, IMAGE_MODEL
+
+        assert IMAGE_MODEL == settings.VERTEX_IMAGE_MODEL
+        assert IMAGE_LOCATION == settings.VERTEX_IMAGE_LOCATION
+
+    def test_image_service_has_no_hardcoded_model_literal(self):
+        """服務檔裡不可以再寫死任何 gemini-/imagen- 模型字面值（#1119 的教訓）。"""
+        import ast
+
+        path = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "services"
+            / "scenario_dialogue_image.py"
+        )
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        literals = [
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and (node.value.startswith("gemini-") or node.value.startswith("imagen-"))
+        ]
+        assert not literals, f"生圖服務寫死了模型 ID：{literals}"
 
 
 @pytest.mark.unit
@@ -366,3 +404,37 @@ class TestDataResidencyNotRegressed:
             f"VERTEX_AI_LOCATION 預設值 {default!r} 不在亞洲 —— 這會違反 #959 "
             "對教育部徵求案的資料出境承諾，必須先取得合規確認"
         )
+
+    @staticmethod
+    def _config_default(name):
+        import ast
+
+        config_path = pathlib.Path(__file__).resolve().parents[2] / "core" / "config.py"
+        tree = ast.parse(config_path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AnnAssign):
+                continue
+            target = node.target
+            if not (isinstance(target, ast.Name) and target.id == name):
+                continue
+            call = node.value
+            if isinstance(call, ast.Call) and len(call.args) == 2:
+                literal = call.args[1]
+                if isinstance(literal, ast.Constant):
+                    return literal.value
+        return None
+
+    def test_image_exception_is_scoped_to_image_settings(self):
+        """#1158 生圖例外：只有 VERTEX_IMAGE_LOCATION 可以不在亞洲。
+
+        亞洲沒有 Gemini 生圖模型，所以生圖走 global／us-central1；成立前提是生圖只送
+        老師寫的描述、不送學生資料。這個例外**不可以**擴散到 VERTEX_AI_LOCATION
+        （上一個測試守著），生圖 location 也只能是實測過的這兩個。
+        """
+        image_location = self._config_default("VERTEX_IMAGE_LOCATION")
+        assert image_location in {
+            "global",
+            "us-central1",
+        }, f"VERTEX_IMAGE_LOCATION 預設值 {image_location!r} 不是實測過的生圖 location"
+        image_model = self._config_default("VERTEX_IMAGE_MODEL")
+        assert image_model and image_model not in RETIRED_MODELS

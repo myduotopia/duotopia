@@ -99,17 +99,19 @@ class TestSeparateFromTheImagePool:
     """生圖與文字是**兩個池**，不互相消耗（成本量級差太多，上限也不同）。"""
 
     def test_text_usage_does_not_touch_the_image_counter(self, db_session, teacher):
-        from services import scenario_image_quota as siq
+        from services import scenario_image_billing as sib
 
         stq.consume(db_session, teacher)
 
-        assert siq.get_quota_status(db_session, teacher)["used"] == 0
+        status = sib.get_status(db_session, teacher)
+        assert status["remaining"] == status["limit"]
 
     def test_the_two_pools_have_different_limits(self):
-        from services import scenario_image_quota as siq
+        from services import scenario_image_billing as sib
 
         # 生圖貴一個量級，所以次數少 —— 共用一張表就得共用一個數字
-        assert siq.FREE_MONTHLY_LIMIT != stq.FREE_MONTHLY_LIMIT
+        assert sib.FREE_DAILY_LIMIT != stq.FREE_MONTHLY_LIMIT
+        assert sib.SUBSCRIPTION_MONTHLY_LIMIT != stq.FREE_MONTHLY_LIMIT
 
 
 class TestLimitIsReadAtCallTime:

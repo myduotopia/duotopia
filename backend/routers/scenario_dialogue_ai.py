@@ -12,13 +12,19 @@
 `/api/teachers/lessons/{id}/contents`（#1013）存起來。
 
 配額（#1025）：三個端點都走每月硬上限（`services/scenario_text_quota`，50 次/月），
-順序一律是「**先佔位 → 打 AI → 失敗就退款**」。生圖另有一池（30 張/月，成本貴一個
-量級，見 `services/scenario_image_quota`）。回傳仍帶 token 用量與估算成本供觀測。
+順序一律是「**先佔位 → 打 AI → 失敗就退款**」。回傳仍帶 token 用量與估算成本供觀測。
+
+生圖（#1158）：依老師身分計費（admin 不限／機構點數／訂閱每月 60 張／點數制依 token／
+未付費每天 3 張），見 `services/scenario_image_billing`；#1024 的每月 30 張規則已作廢。
+
+- POST /api/teachers/scenario-dialogue/generate-image             生一張情境圖或題目圖
+- GET  /api/teachers/scenario-dialogue/image-quota                目前的生圖計費方式與剩餘量
+- POST /api/teachers/scenario-dialogue/suggest-image-description  AI 擬生圖描述（不計次數）
 """
 
 import logging
 from collections import Counter
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -30,19 +36,20 @@ from fastapi import (
     status,
 )
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from database import get_db
 from models import Teacher
 
 # 共用同一份教師鑑權依賴，避免 auth 邏輯分叉（同 magic_paste）
 from routers.teachers import get_current_teacher
-from services import scenario_image_quota as siq
+from services import scenario_image_billing as sib
 from services import scenario_text_quota as stq
 from services.scenario_dialogue_image import (
     ScenarioDialogueImageService,
     ScenarioImageBlockedError,
     ScenarioImageError,
+    ScenarioImageUpstreamError,
     get_scenario_dialogue_image_service,
 )
 from utils.scenario_dialogue import MAX_IMAGE_URL_CHARS, MAX_SCENARIO_IMAGES
@@ -72,7 +79,7 @@ MAX_EXISTING_QUESTIONS = 20
 MAX_EXISTING_QUESTION_CHARS = 1000
 # 與服務層同一個來源 —— 兩邊各寫一次 1000 的話，改了 Pydantic 上限卻忘了改截斷
 # 上限（或反過來）不會有人發現（PR #1027 review）
-MAX_IMAGE_PROMPT_CHARS = ScenarioDialogueImageService.MAX_PROMPT_CHARS
+MAX_IMAGE_PROMPT_CHARS = ScenarioDialogueImageService.MAX_DESCRIPTION_CHARS
 # #1146 無情境出題時的「想問的方向」—— 與訓練目標同級的自由文字
 MAX_DIRECTION_CHARS = MAX_GOAL_CHARS
 # 介面語言代碼（zh-TW / en），決定重問句與標題建議用什麼語言
@@ -89,22 +96,48 @@ class GenerateArticleRequest(BaseModel):
     ui_language: str = Field(default="zh-TW", max_length=MAX_UI_LANGUAGE_CHARS)
 
 
-class GenerateImageRequest(BaseModel):
-    """逐題生圖。`image_prompt` 已經存在 item_metadata 裡（#1013），前端直接帶回來。"""
+# 空白描述要在進到額度之前就被擋掉 —— 佔一次名額再退雖然結果正確，但白跑兩趟 DB。
+#
+# 一定要搭配 strip_whitespace：只寫 min_length=1 擋得掉 "" 卻擋不掉 " "
+# （長度是 1，照樣通過），空白描述還是會走完「佔額度 → 服務層失敗 → 退款」
+# ——那正是這條想省掉的事（PR #1027 review round 4）。
+_ImageDescription = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=MAX_IMAGE_PROMPT_CHARS,
+    ),
+]
 
-    # 空白描述要在進到配額之前就被擋掉 —— 佔一次額度再退雖然結果正確，但白跑兩趟 DB。
-    #
-    # 一定要搭配 strip_whitespace：只寫 min_length=1 擋得掉 "" 卻擋不掉 " "
-    # （長度是 1，照樣通過），空白描述還是會走完「扣額度 → 服務層失敗 → 退款」
-    # ——那正是這條想省掉的事（PR #1027 review round 4）。
-    image_prompt: Annotated[
-        str,
-        StringConstraints(
-            strip_whitespace=True,
-            min_length=1,
-            max_length=MAX_IMAGE_PROMPT_CHARS,
-        ),
-    ]
+
+class GenerateImageRequest(BaseModel):
+    """生一張情境圖或題目圖（#1158 起）。
+
+    ``description`` 是老師在生圖對話框裡確認過的描述。``image_prompt`` 是 #1024 的
+    舊欄位名（前端改版前還在送），兩者擇一，都給時以 ``description`` 為準。
+    """
+
+    kind: Literal["scenario", "question"] = "question"
+    description: Optional[_ImageDescription] = None
+    image_prompt: Optional[_ImageDescription] = None
+
+    @model_validator(mode="after")
+    def _require_description(self) -> "GenerateImageRequest":
+        if not (self.description or self.image_prompt):
+            raise ValueError("description 不可為空")
+        return self
+
+    @property
+    def text(self) -> str:
+        return self.description or self.image_prompt or ""
+
+
+class SuggestImageDescriptionRequest(BaseModel):
+    """AI 擬生圖描述。情境圖帶情境文章；題目圖要擬時可以只帶題目。"""
+
+    scenario_content: str = Field(default="", max_length=MAX_SCENARIO_CHARS)
+    question: str = Field(default="", max_length=MAX_EXISTING_QUESTION_CHARS)
 
 
 class GenerateQuestionsRequest(BaseModel):
@@ -356,12 +389,48 @@ def image_quota(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """本月生圖剩餘次數（Issue #1024）。
+    """目前的生圖計費方式與剩餘量（#1158）。
 
-    **目前前端沒有呼叫它** —— 每次點生圖都是直接送出、額度用完由後端回 402。這支是
-    給 #1025（配額 UI：顯示「本月還剩 N 張」）預留的查詢面，先做好並有測試涵蓋。
+    回傳 ``{billing, remaining, limit, period, points_per_image_estimate, can_generate}``，
+    格式見 ``services/scenario_image_billing.get_status``。
     """
-    return siq.get_quota_status(db, current_teacher)
+    return sib.get_status(db, current_teacher)
+
+
+# #1158 決定：預填描述不計任何次數，只記 log 觀察用量（每個 Cloud Run instance 各自
+# 計、重啟歸零，只供觀察趨勢 —— 同 _reask_refund_counts）。
+_suggest_description_counts: Counter = Counter()
+
+
+@router.post("/suggest-image-description")
+async def suggest_image_description(
+    payload: SuggestImageDescriptionRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+):
+    """依情境文章（或題目）擬一段英文生圖描述，給老師在生圖對話框裡改（#1158）。
+
+    **不計任何次數**（使用者定案）：不佔文字 AI 次數池、也不佔生圖額度，只寫 log。
+    這是文字模型的小請求，成本遠低於生圖本身；擋它只會讓老師不敢按「AI 生圖」。
+    """
+    service = get_scenario_dialogue_ai_service()
+    teacher_id = getattr(current_teacher, "id", None)
+    _suggest_description_counts[teacher_id] += 1
+    logger.info(
+        "scenario_image_description | teacher_id=%s | count=%s",
+        teacher_id,
+        _suggest_description_counts[teacher_id],
+    )
+    try:
+        return await service.suggest_image_description(
+            scenario_content=payload.scenario_content,
+            question=payload.question,
+        )
+    except ScenarioDialogueAIOutputError as e:
+        raise _ai_failed("suggest-image-description", e)
+    except ScenarioDialogueAIError as e:
+        raise _bad_request(e)
+    except Exception as e:
+        raise _ai_failed("suggest-image-description", e)
 
 
 @router.post("/generate-image")
@@ -370,44 +439,40 @@ async def generate_image(
     current_teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """依逐題的 image_prompt 生一張圖，存好之後回傳網址。
+    """依老師確認過的描述生一張圖（情境圖或題目圖），存好之後回傳網址。
 
-    順序是「**先佔位額度** → 生圖 → 存檔 → 失敗才退款」（PR #1027 review）。
+    順序是「**先佔位額度** → 生圖 → 存檔 → 成功才扣點／失敗就退名額」
+    （PR #1027 review；#1158 改成依身分計費，見 ``services/scenario_image_billing``）。
 
-    先查一次 `get_quota_status` 再打 AI、最後才 consume 是擋不住並發的：同一位老師在
-    29/30 時同時送兩個請求，兩個都會通過那次檢查，兩張都生出來、兩張都回 200，月上限
-    等於形同虛設。改成先 consume 佔位，額度用完在**打 AI 之前**就回 402，一次呼叫都
-    不會浪費。
+    先查一次額度再打 AI、最後才扣，是擋不住並發的：同一位老師在上限邊界同時送兩個
+    請求，兩個都會通過那次檢查。改成先 reserve 佔位，額度用完在**打 AI 之前**就回
+    402，一次呼叫都不會浪費。
 
-    老師沒拿到圖的情況一律退款（被安全過濾擋下、存檔失敗）—— 扣他一次只會讓他不敢
-    再試，比照 magic_paste 擷取到 0 項不扣額的決策。
+    點數制的實際 token 生完才知道，所以 reserve 只確認「餘額至少夠一張的預估點數」，
+    生完再依實際 token 一次扣掉；生圖失敗根本不會扣點，不需要退點。
+
+    老師沒拿到圖的情況一律退回張數名額（被安全過濾擋下、存檔失敗）—— 扣他一次只會
+    讓他不敢再試，比照 magic_paste 擷取到 0 項不扣額的決策。
     """
-    charge = siq.consume(db, current_teacher)
-    if charge["charged"] is None:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={
-                "error": "SCENARIO_IMAGE_QUOTA_EXCEEDED",
-                "message": "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片。",
-                "quota": charge,
-            },
-        )
+    charge = sib.reserve(db, current_teacher)
 
-    # 佔位之後一律用 try/finally 退款，不是在每個 except 分支各退一次
-    # （PR #1027 review round 2）：老師在 Imagen 跑到一半關掉分頁時，Starlette 丟的是
+    # 佔位之後一律用 try/finally 退回，不是在每個 except 分支各退一次
+    # （PR #1027 review round 2）：老師在生圖跑到一半關掉分頁時，Starlette 丟的是
     # asyncio.CancelledError —— 它是 BaseException 而不是 Exception，`except Exception`
-    # 接不到，那個名額就永遠回不來了。網路不穩或冷啟動慢的時候會慢慢侵蝕老師的額度，
-    # 而且他完全看不出原因。finally 則連 BaseException 都涵蓋得到。
+    # 接不到，那個名額就永遠回不來了。finally 則連 BaseException 都涵蓋得到。
     delivered = False
     service = get_scenario_dialogue_image_service()
     try:
         try:
-            result = await service.generate(payload.image_prompt)
+            result = await service.generate(payload.text, kind=payload.kind)
         except ScenarioImageBlockedError as e:
             # 被安全過濾擋下：這是「換個描述」而不是「稍後再試」，訊息直接給老師看
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
             )
+        except ScenarioImageUpstreamError as e:
+            # Vertex 回 HTTP 錯誤（模型下架、權限、5xx）—— 我們這邊的問題，稍後再試
+            raise _ai_failed("generate-image", e)
         except ScenarioImageError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         except Exception as e:
@@ -417,24 +482,37 @@ async def generate_image(
             from services.image_upload import get_image_upload_service
 
             image_url = get_image_upload_service().store_image_bytes(
-                result["image_bytes"], "image/png"
+                result["image_bytes"], result.get("mime_type") or "image/png"
             )
         except Exception as e:
             # 圖生出來了卻存不進去 —— 老師一樣沒拿到圖
             raise _ai_failed("generate-image-store", e)
 
         delivered = True
-        return {
-            "image_url": image_url,
-            "prompt": result["prompt"],
-            "estimated_cost_usd": result["estimated_cost_usd"],
-            "quota": charge,
-        }
     finally:
-        # 沒把圖交到老師手上就退款（被擋、失敗、中途取消都算）。
-        #
-        # 一定要用 charge["year_month"] 而不是讓 refund 自己重算：Imagen 慢起來可能
-        # 跨過 UTC 午夜，扣在 A 月、退到 B 月的話 A 月永遠少一格、B 月憑空多一格
+        # 沒把圖交到老師手上就退回名額（被擋、失敗、中途取消都算）。
+        # release 用佔位時的期間鍵，不重算 —— 生圖跨過午夜／月底時扣在哪期就退哪期
         # （PR #1027 review round 3）
         if not delivered:
-            siq.refund(db, current_teacher, year_month=charge["year_month"])
+            try:
+                sib.release(db, current_teacher, charge)
+            except Exception:
+                # finally 裡再丟例外會**取代**原本要回給老師的錯誤（PR #1123 review 4）
+                logger.exception("scenario_image_billing | 退回名額失敗")
+
+    # 圖已經存好才扣點（依實際 token）。扣點失敗不影響回應，見 settle 的說明
+    billed = sib.settle(
+        db,
+        current_teacher,
+        charge,
+        result.get("output_tokens", 0),
+        feature_detail={"kind": payload.kind},
+    )
+    return {
+        "image_url": image_url,
+        "prompt": result["prompt"],
+        "kind": payload.kind,
+        "estimated_cost_usd": result["estimated_cost_usd"],
+        "billing": billed,
+        "quota": sib.get_status(db, current_teacher),
+    }

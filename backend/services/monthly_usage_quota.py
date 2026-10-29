@@ -2,7 +2,8 @@
 
 ## 為什麼抽出來
 
-`scenario_image_quota`（#1024）與 `scenario_text_quota`（#1025）是同一個形狀：
+`scenario_image_quota`（#1024，#1158 起由 `scenario_image_billing` 取代）與
+`scenario_text_quota`（#1025）是同一個形狀：
 每位老師每個自然月 N 次、用完就擋、不接點數。兩份各寫一次等於把「保留 → 退還」
 那段並發處理複製兩遍，而那段的每一個細節都是踩過坑才長成現在這樣：
 
@@ -22,10 +23,17 @@
 扣點。這裡刻意**不接點數**：情境對話 AI 的計價還沒定（#1025 的產品決策是先用硬上限
 換取成本可控），等要收費時把 :meth:`consume` 換成 waterfall 即可，計數表沿用。
 
-所以這個模組只負責「每月硬上限」這一種形狀，不是通用配額框架。
+所以這個模組只負責「每期硬上限」這一種形狀，不是通用配額框架。
+
+## 期間的鍵（#1158）
+
+``year_month`` 雖然叫這個名字，實際上是「計數期間的鍵」：預設是 'YYYY-MM'（UTC 自然月），
+傳 :func:`current_taipei_date` 的 'YYYY-MM-DD' 就變成每日計數（情境生圖未付費老師每天
+3 張用這個）。兩種鍵長度不同，放在同一張表也不會撞到。
 """
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Optional, Type, Union
 
 from sqlalchemy.exc import IntegrityError
@@ -34,9 +42,24 @@ from sqlalchemy.orm import Session
 from models import Teacher
 
 
+# 台灣時區。每日計數（#1158 未付費老師每天 3 張）以「台灣的今天」為準 ——
+# 用 UTC 的話，老師早上 8 點前用的會算到前一天，看起來像額度沒重置。
+TAIPEI_TZ = ZoneInfo("Asia/Taipei")
+
+
 def current_year_month() -> str:
     """目前的自然月字串 'YYYY-MM'（UTC）。"""
     return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def current_taipei_date() -> str:
+    """台灣時區今天的日期字串 'YYYY-MM-DD'（#1158 每日計數用）。
+
+    :class:`MonthlyUsageQuota` 的 ``year_month`` 參數其實只是「計數期間的鍵」，
+    傳這個值進去就是以日為單位計數。consume 與 refund 要傳**同一個**鍵，理由同
+    跨月：生圖跨過午夜時，扣在今天就要退回今天。
+    """
+    return datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
 
 
 class MonthlyUsageQuota:
