@@ -33,6 +33,10 @@ admin（``is_admin``）        不限張數，不計數、不扣點
 張數計數（每月 60 張、每天 3 張）則照 ``MonthlyUsageQuota`` 的「先佔位、失敗就退」
 —— 只在打 AI 之前查一次是擋不住並發的（PR #1027 review）。
 
+另外每位老師**同時只能有 1 張圖在生成中**（:func:`acquire_generation_slot`，第二個
+請求回 409），避免點數制／機構老師並發送出、全部通過餘額檢查後超扣（等於免費）。
+個人扣點前另用 FOR UPDATE 鎖住訂閱週期與點數包資料列（:func:`_lock_personal_quota_rows`）。
+
 月與日兩種計數共用 ``scenario_image_usage`` 表：月計數的鍵是 'YYYY-MM'（**UTC**，沿用
 #1024 的寫法），日計數的鍵是 'YYYY-MM-DD'（**台灣時區**，老師感受到的「今天」）。
 兩者時區不同是刻意的：月計數在台灣時間每月 1 日早上 8 點重置，差 8 小時對 60 張的
@@ -43,6 +47,7 @@ admin（``is_admin``）        不限張數，不計數、不扣點
 import logging
 import math
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
@@ -87,6 +92,29 @@ _monthly = MonthlyUsageQuota(ScenarioImageUsage, lambda: SUBSCRIPTION_MONTHLY_LI
 _daily = MonthlyUsageQuota(ScenarioImageUsage, lambda: FREE_DAILY_LIMIT)
 
 QUOTA_EXCEEDED_ERROR = "SCENARIO_IMAGE_QUOTA_EXCEEDED"
+IN_PROGRESS_ERROR = "SCENARIO_IMAGE_IN_PROGRESS"
+
+# ---------------------------------------------------------------- 同時只能一張
+#
+# 每位老師同時只能有 1 張圖在生成中（#1158 A 段 review 第 1 輪第 3 點）。
+#
+# 為什麼需要：點數制／機構老師的 reserve 只確認「餘額至少夠一張」，點數要生完才扣。
+# 同一位老師同時送 N 個請求時，N 個都會通過那次檢查；超過 20% 緩衝的那幾張扣點失敗，
+# 圖照樣交出 = 免費。限制「同時只有一張」之後，下一張 reserve 一定看得到上一張扣完的餘額。
+#
+# 為什麼存在 DB 而不是記憶體：Cloud Run 有多個 instance，記憶體鎖擋不住打到不同
+# instance 的兩個請求。也不能把 FOR UPDATE 鎖一路抱到生圖結束 —— 中間的 consume／
+# commit 會放掉鎖，而且一個交易開著 10~20 秒等 AI 會佔住連線。
+#
+# 作法：沿用 ``scenario_image_usage`` 表，鍵 :data:`IN_FLIGHT_KEY`（8 字元，與 'YYYY-MM'
+# 的 7 字元、'YYYY-MM-DD' 的 10 字元都不撞），count=1 代表「有一張在生成中」。取得時
+# 用 FOR UPDATE 鎖住那列再判斷，所以兩個並發請求只有一個拿得到。
+#
+# 行程被砍掉（finally 沒跑到）時那列會一直是 1，所以超過 :data:`IN_FLIGHT_STALE_SECONDS`
+# 視為過期、可以搶下來 —— 生圖逾時 120 秒加存檔，300 秒一定已經結束。
+IN_FLIGHT_KEY = "inflight"
+IN_FLIGHT_STALE_SECONDS = 300
+_in_flight = MonthlyUsageQuota(ScenarioImageUsage, 1)
 
 
 def points_for_tokens(output_tokens: int) -> int:
@@ -333,6 +361,77 @@ def release(db: Session, teacher: Teacher, charge: ImageCharge) -> None:
     quota.refund(db, teacher, charge.usage_key)
 
 
+def _as_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    # SQLite 讀回來的時間沒有時區（PostgreSQL 有），統一當成 UTC 再比較
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=timezone.utc)
+
+
+def acquire_generation_slot(db: Session, teacher: Teacher) -> None:
+    """生圖之前呼叫：佔下這位老師「生成中」的唯一名額，已經有一張在生成就丟 409。
+
+    所有身分（含 admin）一律適用。拿到之後**一定要**在 finally 呼叫
+    :func:`release_generation_slot`，不論成功、失敗、402、中途取消。
+    """
+    row = _in_flight._get_or_create_locked(db, teacher.id, IN_FLIGHT_KEY)
+    now = datetime.now(timezone.utc)
+    started = _as_aware(row.updated_at or row.created_at)
+    busy = (row.count or 0) >= 1 and (
+        started is None or (now - started).total_seconds() < IN_FLIGHT_STALE_SECONDS
+    )
+    if busy:
+        db.commit()  # 放掉 FOR UPDATE 鎖
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": IN_PROGRESS_ERROR,
+                "message": "上一張圖還在生成，請等它完成再生成下一張。",
+            },
+        )
+    if (row.count or 0) >= 1:
+        logger.warning(
+            "scenario_image_billing | 生成中標記已過期，改由新請求接手 | teacher_id=%s",
+            teacher.id,
+        )
+    row.count = 1
+    # 明確寫入時間：過期判斷靠它；不靠 onupdate（值沒變時不一定會更新）
+    row.updated_at = now
+    db.commit()
+
+
+def release_generation_slot(db: Session, teacher: Teacher) -> None:
+    """放掉 :func:`acquire_generation_slot` 佔的名額（可重複呼叫）。"""
+    if not db.is_active:
+        # 前面的 DB 錯誤讓交易處於失敗狀態時，要先 rollback 才能再寫
+        db.rollback()
+    row = _in_flight._get_or_create_locked(db, teacher.id, IN_FLIGHT_KEY)
+    row.count = 0
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def _lock_personal_quota_rows(db: Session, teacher: Teacher) -> None:
+    """個人扣點前用 ``SELECT ... FOR UPDATE`` 鎖住訂閱週期與點數包的資料列。
+
+    ``QuotaService.deduct_quota`` 是「讀出 quota_used → 加上去 → commit」，兩個交易
+    同時做會互相覆蓋（後寫的蓋掉先寫的，等於少扣一次）。這裡先在同一個交易裡鎖住
+    那幾列，並用 ``populate_existing`` 讓 session 裡的物件換成鎖到的最新值，
+    deduct_quota 接著讀到的就是最新的 quota_used，鎖一直持有到它 commit。
+    （SQLite 不支援 FOR UPDATE，SQLAlchemy 會忽略，測試不受影響。）
+    """
+    from models import CreditPackage, SubscriptionPeriod
+
+    db.query(SubscriptionPeriod).filter(
+        SubscriptionPeriod.teacher_id == teacher.id,
+        SubscriptionPeriod.status == "active",
+    ).populate_existing().with_for_update().all()
+    db.query(CreditPackage).filter(
+        CreditPackage.teacher_id == teacher.id,
+        CreditPackage.status == "active",
+    ).populate_existing().with_for_update().all()
+
+
 def settle(
     db: Session,
     teacher: Teacher,
@@ -366,6 +465,7 @@ def settle(
                 feature_detail=detail,
             )
         else:
+            _lock_personal_quota_rows(db, teacher)
             QuotaService.deduct_quota(
                 db=db,
                 teacher=teacher,
@@ -401,4 +501,7 @@ __all__ = [
     "reserve",
     "release",
     "settle",
+    "acquire_generation_slot",
+    "release_generation_slot",
+    "IN_PROGRESS_ERROR",
 ]

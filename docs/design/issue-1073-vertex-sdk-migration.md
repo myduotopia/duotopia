@@ -255,6 +255,19 @@ Imagen（`imagen-3.0-generate-002`）已經 404，改用 Gemini 生圖模型。2
 
 所以 `services/scenario_dialogue_image.py` 用 `google-auth`（`google-cloud-aiplatform` 已帶進來）取 ADC 憑證，**直接呼叫 `generateContent` REST 端點**，請求／回應都是官方 JSON 格式。之後 Phase 2 做 SDK 遷移、升級 httpx／FastAPI 時，只要換掉 `ScenarioDialogueImageService._post`。
 
+### 人物年齡（`personGeneration`）
+
+使用者定案：人物年齡依描述決定，有時要畫成人、有時要畫兒童；描述沒寫明時，依情境自然判斷。
+
+2026-10-29 實測（global、`gemini-3.1-flash-lite-image`，同一句「two young children, about eight years old, talking in a school classroom」）：
+
+| `personGeneration` | 結果 |
+|---|---|
+| `ALLOW_ALL` | 200，正常生出兒童線稿（1120 output tokens），不需另外申請 |
+| `ALLOW_ADULT` | 200 但沒有圖，`finishReason=IMAGE_SAFETY` |
+
+因此生圖改用 `ALLOW_ALL`，並拿掉 #1024 為了配合 `ALLOW_ADULT` 加的兩道繞路：描述裡「students／kids／children…」改寫成「a classroom scene／people」的字詞替換，以及畫風提示裡「人物都是成人」那句。畫風提示改成「人物年齡依描述；未指明時依情境自然判斷」。上面「Phase 1：模型汰換」引言第 4 點說的「兒童影像防線」已不適用於生圖路徑。
+
 ### 計費
 
 生圖改依老師身分計費（`services/scenario_image_billing.py`）：admin 不限、機構扣機構點數、訂閱每月 60 張後扣點、點數制依實際輸出 token 扣（130 token = 1 點，無條件進位）、未付費非機構每天 3 張（台灣時區）。#1024 的每月 30 張規則作廢。

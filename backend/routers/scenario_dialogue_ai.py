@@ -453,66 +453,82 @@ async def generate_image(
 
     老師沒拿到圖的情況一律退回張數名額（被安全過濾擋下、存檔失敗）—— 扣他一次只會
     讓他不敢再試，比照 magic_paste 擷取到 0 項不扣額的決策。
+
+    每位老師同時只能有一張在生成中（``sib.acquire_generation_slot``），上一張還沒
+    結束時回 409 ``SCENARIO_IMAGE_IN_PROGRESS``「上一張圖還在生成」。
     """
-    charge = sib.reserve(db, current_teacher)
-
-    # 佔位之後一律用 try/finally 退回，不是在每個 except 分支各退一次
-    # （PR #1027 review round 2）：老師在生圖跑到一半關掉分頁時，Starlette 丟的是
-    # asyncio.CancelledError —— 它是 BaseException 而不是 Exception，`except Exception`
-    # 接不到，那個名額就永遠回不來了。finally 則連 BaseException 都涵蓋得到。
-    delivered = False
-    service = get_scenario_dialogue_image_service()
+    # 每位老師同時只能有一張在生成中，第二個請求回 409（#1158 A 段 review）。
+    # 放在 reserve 之前，而且下面整段（含 reserve 的 402、settle）都包在 try/finally
+    # 裡，不論成功、失敗、中途取消都會放掉。
+    sib.acquire_generation_slot(db, current_teacher)
     try:
+        charge = sib.reserve(db, current_teacher)
+
+        # 佔位之後一律用 try/finally 退回，不是在每個 except 分支各退一次
+        # （PR #1027 review round 2）：老師在生圖跑到一半關掉分頁時，Starlette 丟的是
+        # asyncio.CancelledError —— 它是 BaseException 而不是 Exception，`except Exception`
+        # 接不到，那個名額就永遠回不來了。finally 則連 BaseException 都涵蓋得到。
+        delivered = False
+        service = get_scenario_dialogue_image_service()
         try:
-            result = await service.generate(payload.text, kind=payload.kind)
-        except ScenarioImageBlockedError as e:
-            # 被安全過濾擋下：這是「換個描述」而不是「稍後再試」，訊息直接給老師看
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-            )
-        except ScenarioImageUpstreamError as e:
-            # Vertex 回 HTTP 錯誤（模型下架、權限、5xx）—— 我們這邊的問題，稍後再試
-            raise _ai_failed("generate-image", e)
-        except ScenarioImageError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        except Exception as e:
-            raise _ai_failed("generate-image", e)
-
-        try:
-            from services.image_upload import get_image_upload_service
-
-            image_url = get_image_upload_service().store_image_bytes(
-                result["image_bytes"], result.get("mime_type") or "image/png"
-            )
-        except Exception as e:
-            # 圖生出來了卻存不進去 —— 老師一樣沒拿到圖
-            raise _ai_failed("generate-image-store", e)
-
-        delivered = True
-    finally:
-        # 沒把圖交到老師手上就退回名額（被擋、失敗、中途取消都算）。
-        # release 用佔位時的期間鍵，不重算 —— 生圖跨過午夜／月底時扣在哪期就退哪期
-        # （PR #1027 review round 3）
-        if not delivered:
             try:
-                sib.release(db, current_teacher, charge)
-            except Exception:
-                # finally 裡再丟例外會**取代**原本要回給老師的錯誤（PR #1123 review 4）
-                logger.exception("scenario_image_billing | 退回名額失敗")
+                result = await service.generate(payload.text, kind=payload.kind)
+            except ScenarioImageBlockedError as e:
+                # 被安全過濾擋下：這是「換個描述」而不是「稍後再試」，訊息直接給老師看
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+                )
+            except ScenarioImageUpstreamError as e:
+                # Vertex 回 HTTP 錯誤（模型下架、權限、5xx）—— 我們這邊的問題，稍後再試
+                raise _ai_failed("generate-image", e)
+            except ScenarioImageError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                )
+            except Exception as e:
+                raise _ai_failed("generate-image", e)
 
-    # 圖已經存好才扣點（依實際 token）。扣點失敗不影響回應，見 settle 的說明
-    billed = sib.settle(
-        db,
-        current_teacher,
-        charge,
-        result.get("output_tokens", 0),
-        feature_detail={"kind": payload.kind},
-    )
-    return {
-        "image_url": image_url,
-        "prompt": result["prompt"],
-        "kind": payload.kind,
-        "estimated_cost_usd": result["estimated_cost_usd"],
-        "billing": billed,
-        "quota": sib.get_status(db, current_teacher),
-    }
+            try:
+                from services.image_upload import get_image_upload_service
+
+                image_url = get_image_upload_service().store_image_bytes(
+                    result["image_bytes"], result.get("mime_type") or "image/png"
+                )
+            except Exception as e:
+                # 圖生出來了卻存不進去 —— 老師一樣沒拿到圖
+                raise _ai_failed("generate-image-store", e)
+
+            delivered = True
+        finally:
+            # 沒把圖交到老師手上就退回名額（被擋、失敗、中途取消都算）。
+            # release 用佔位時的期間鍵，不重算 —— 生圖跨過午夜／月底時扣在哪期就退哪期
+            # （PR #1027 review round 3）
+            if not delivered:
+                try:
+                    sib.release(db, current_teacher, charge)
+                except Exception:
+                    # finally 裡再丟例外會**取代**原本要回給老師的錯誤（PR #1123 review 4）
+                    logger.exception("scenario_image_billing | 退回名額失敗")
+
+        # 圖已經存好才扣點（依實際 token）。扣點失敗不影響回應，見 settle 的說明
+        billed = sib.settle(
+            db,
+            current_teacher,
+            charge,
+            result.get("output_tokens", 0),
+            feature_detail={"kind": payload.kind},
+        )
+        return {
+            "image_url": image_url,
+            "prompt": result["prompt"],
+            "kind": payload.kind,
+            "estimated_cost_usd": result["estimated_cost_usd"],
+            "billing": billed,
+            "quota": sib.get_status(db, current_teacher),
+        }
+    finally:
+        try:
+            sib.release_generation_slot(db, current_teacher)
+        except Exception:
+            # 放不掉也不能取代原本的回應／錯誤；那列最多 IN_FLIGHT_STALE_SECONDS 後過期
+            logger.exception("scenario_image_billing | 放掉生成中標記失敗")

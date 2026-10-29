@@ -333,16 +333,24 @@ def test_daily_quota_exhausted_returns_402_without_calling_ai(
 
 
 def test_quota_is_reserved_before_calling_ai(
-    test_client, auth_headers_teacher, monkeypatch
+    test_client, auth_headers_teacher, db_session, monkeypatch
 ):
-    """名額要在打 AI **之前**就被佔走，否則兩個並發請求都會在空窗期通過檢查。"""
+    """名額要在打 AI **之前**就被佔走，否則兩個並發請求都會在空窗期通過檢查。
+
+    mock 裡不能再呼叫 test_client（會在 event loop thread 裡丟 RuntimeError），
+    直接用 db_session 查計數。
+    """
+    from models import Teacher
     from services import scenario_dialogue_image as mod
     from services import image_upload as upload_mod
 
     seen = {}
+    teacher = db_session.query(Teacher).first()
 
     async def check_midflight(self, raw_prompt, kind="question"):
-        seen["used"] = _used_today(test_client, auth_headers_teacher)
+        seen["used"] = sib._daily.get_quota_status(db_session, teacher, "2026-10-29")[
+            "used"
+        ]
         return _result()
 
     monkeypatch.setattr(mod.ScenarioDialogueImageService, "generate", check_midflight)
@@ -381,6 +389,147 @@ def test_refund_targets_the_day_that_was_charged(
     assert resp.status_code == 502
     assert sib._daily.get_quota_status(db_session, teacher, "2026-10-29")["used"] == 0
     assert sib._daily.get_quota_status(db_session, teacher, "2026-10-30")["used"] == 0
+
+
+# ---------------------------------------------------------------- 同時只能一張
+
+
+def _in_flight_count(db_session):
+    from models import ScenarioImageUsage, Teacher
+
+    teacher = db_session.query(Teacher).first()
+    db_session.expire_all()
+    row = (
+        db_session.query(ScenarioImageUsage)
+        .filter(
+            ScenarioImageUsage.teacher_id == teacher.id,
+            ScenarioImageUsage.year_month == sib.IN_FLIGHT_KEY,
+        )
+        .first()
+    )
+    return row.count if row else 0
+
+
+def test_second_request_while_generating_returns_409(
+    test_client, auth_headers_teacher, db_session, monkeypatch
+):
+    """上一張還在生成時，第二個請求回 409「上一張還在生成」，不佔名額、不打 AI。
+
+    用「生成中標記已被佔住」模擬上一張還沒結束（TestClient 無法真的並發）。
+    """
+    from models import Teacher
+
+    teacher = db_session.query(Teacher).first()
+    sib.acquire_generation_slot(db_session, teacher)
+
+    calls = {"generate": 0}
+
+    async def fake_generate(self, raw_prompt, kind="question"):
+        calls["generate"] += 1
+        return _result()
+
+    from services import scenario_dialogue_image as mod
+
+    monkeypatch.setattr(mod.ScenarioDialogueImageService, "generate", fake_generate)
+
+    resp = test_client.post(
+        IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["error"] == sib.IN_PROGRESS_ERROR
+    assert "上一張" in detail["message"]
+    assert calls["generate"] == 0
+    assert _used_today(test_client, auth_headers_teacher) == 0
+    # 409 不能把別人（上一張）的標記放掉
+    assert _in_flight_count(db_session) == 1
+
+
+def test_in_flight_is_held_during_generation_and_released_after(
+    test_client, auth_headers_teacher, db_session, monkeypatch
+):
+    from services import scenario_dialogue_image as mod
+    from services import image_upload as upload_mod
+
+    seen = {}
+
+    async def check_midflight(self, raw_prompt, kind="question"):
+        seen["in_flight"] = _in_flight_count(db_session)
+        return _result()
+
+    monkeypatch.setattr(mod.ScenarioDialogueImageService, "generate", check_midflight)
+    monkeypatch.setattr(
+        upload_mod.ImageUploadService,
+        "store_image_bytes",
+        lambda self, content, content_type, **kw: "https://cdn/x.jpg",
+    )
+
+    resp = test_client.post(
+        IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["in_flight"] == 1
+    assert _in_flight_count(db_session) == 0
+    # 放掉之後下一張可以接著生
+    resp = test_client.post(
+        IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+    )
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["blocked", "upstream", "generic", "store", "cancelled"],
+)
+def test_in_flight_is_released_on_every_failure(
+    test_client, auth_headers_teacher, db_session, monkeypatch, failure
+):
+    """被擋、上游錯誤、一般錯誤、存檔失敗、中途取消 —— 都要放掉生成中標記。"""
+    import asyncio
+
+    from services import scenario_dialogue_image as mod
+    from services import image_upload as upload_mod
+
+    async def gen(self, raw_prompt, kind="question"):
+        if failure == "blocked":
+            raise ScenarioImageBlockedError("blocked")
+        if failure == "upstream":
+            raise ScenarioImageUpstreamError("404")
+        if failure == "generic":
+            raise RuntimeError("boom")
+        if failure == "cancelled":
+            raise asyncio.CancelledError()
+        return _result()
+
+    def store(self, content, content_type, **kwargs):
+        raise RuntimeError("GCS down")
+
+    monkeypatch.setattr(mod.ScenarioDialogueImageService, "generate", gen)
+    monkeypatch.setattr(upload_mod.ImageUploadService, "store_image_bytes", store)
+
+    try:
+        test_client.post(
+            IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+        )
+    except BaseException:
+        pass
+
+    assert _in_flight_count(db_session) == 0
+
+
+def test_in_flight_is_released_when_quota_exhausted(
+    test_client, auth_headers_teacher, db_session, mock_image
+):
+    """額度用完的 402 也要放掉標記，否則老師買了點數後還是被 409 卡住。"""
+    for _ in range(sib.FREE_DAILY_LIMIT):
+        test_client.post(
+            IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+        )
+    resp = test_client.post(
+        IMAGE_URL, headers=auth_headers_teacher, json={"description": "a park"}
+    )
+    assert resp.status_code == 402
+    assert _in_flight_count(db_session) == 0
 
 
 # ---------------------------------------------------------------- 預填描述

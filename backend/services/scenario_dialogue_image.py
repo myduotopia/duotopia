@@ -33,11 +33,14 @@ Imagen（``imagen-3.0-generate-002``），後來下架回 404。#1158 改用 Gem
 人物與安全設定
 --------------
 
-情境對話幾乎都是校園情境，描述十之八九長成「students talking in a classroom」。
-生圖模型對兒童影像有嚴格限制，直接送過去會有相當比例被擋 —— 所以：
+人物年齡依描述決定（#1158 使用者定案）：有時要畫成人，有時要畫兒童（情境對話多半是
+校園情境）。所以 ``personGeneration="ALLOW_ALL"``，描述**不做任何兒童字詞改寫**，
+描述沒寫明年齡時交給模型依情境自然判斷。
 
-1. ``personGeneration="ALLOW_ADULT"``：允許成人人物，不嘗試生成兒童。
-2. :func:`build_image_prompt` 把兒童相關的詞改寫掉，把焦點移到**場景**。
+2026-10-29 實測（global、``gemini-3.1-flash-lite-image``）：同一句「two young
+children ... in a school classroom」，``ALLOW_ALL`` 正常生出兒童線稿；``ALLOW_ADULT``
+回 ``finishReason=IMAGE_SAFETY``。#1024 那套「students → a classroom scene」改寫與
+「人物都是成人」的畫風提示是為了繞過 ``ALLOW_ADULT``，已一併拿掉。
 
 被擋下時模型回的是「沒有圖片的候選」或 ``promptFeedback.blockReason``，不是 HTTP 錯誤，
 要自己判斷並轉成 :class:`ScenarioImageBlockedError` —— 那要對老師說「換個描述試試」，
@@ -107,25 +110,6 @@ class ScenarioImageUpstreamError(RuntimeError):
     """
 
 
-# 兒童相關詞 → 場景導向的替代寫法。
-#
-# 順序有意義：先處理複合詞（schoolchildren、school children），再處理單字，
-# 否則 "children" 會先把 "schoolchildren" 咬掉一半。
-_PERSON_REWRITES: List[tuple] = [
-    (r"\bschool ?children\b", "a school scene"),
-    (r"\bschoolkids\b", "a school scene"),
-    (r"\bclassmates?\b", "a classroom scene"),
-    (r"\bstudents?\b", "a classroom scene"),
-    (r"\bpupils?\b", "a classroom scene"),
-    (r"\bchildren\b", "people"),
-    (r"\bchild\b", "a person"),
-    (r"\bkids?\b", "people"),
-    (r"\bboys?\b", "people"),
-    (r"\bgirls?\b", "people"),
-    (r"\bteenagers?\b", "people"),
-    (r"\bteens?\b", "people"),
-]
-
 # 統一的畫風（#1158 使用者定案）：黑白線稿、不上色、不塗灰、白底、不放文字，
 # 適合印成語言學習講義。同一份教材裡的圖不該一張彩色一張線稿。
 #
@@ -140,7 +124,8 @@ _STYLE_HINT = (
     "background only: no color, no gray shading, no filled areas. "
     "Keep the picture sensible and realistic: correct proportions between "
     "people and objects, the exact number of items described, and one "
-    "consistent setting. Any people in the picture are adults. "
+    "consistent setting. People's ages follow the description; if it does "
+    "not say, choose ages that fit the situation naturally. "
     "Only if the description above explicitly asks for "
     "something absurd, impossible or funny, draw exactly that instead. "
     "Keep it simple; no text or letters in the image."
@@ -156,7 +141,8 @@ _KIND_LEAD = {
 def build_image_prompt(raw_prompt: Optional[str], kind: str = "question") -> str:
     """把老師確認過的描述變成真的要送給生圖模型的 prompt。
 
-    做三件事：把兒童相關描述導向場景（見模組說明）、依用途加一句開頭、補上統一畫風。
+    做兩件事：依用途加一句開頭、補上統一畫風。描述本身不改寫（人物年齡依描述，
+    見模組說明），只把多餘空白收成一個。
     """
     text = (raw_prompt or "").strip()
     if not text:
@@ -164,9 +150,6 @@ def build_image_prompt(raw_prompt: Optional[str], kind: str = "question") -> str
     if kind not in IMAGE_KINDS:
         raise ScenarioImageError(f"不支援的圖片用途：{kind!r}")
 
-    for pattern, replacement in _PERSON_REWRITES:
-        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-    # 改寫後可能出現「a classroom scene ... a classroom scene」這種重複空白
     text = re.sub(r"\s+", " ", text).strip()
 
     # 先把原文截到「扣掉開頭與風格提示之後」的長度，再接上去 —— 反過來做的話，原文
@@ -272,8 +255,8 @@ class ScenarioDialogueImageService:
                 "responseModalities": ["IMAGE"],
                 "imageConfig": {
                     "aspectRatio": "4:3",
-                    # 不嘗試生成兒童影像（見模組說明）
-                    "personGeneration": "ALLOW_ADULT",
+                    # 人物年齡依描述，成人與兒童都可以（見模組說明）
+                    "personGeneration": "ALLOW_ALL",
                 },
             },
         }

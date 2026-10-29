@@ -436,3 +436,139 @@ class TestSettleFailureDoesNotBreakDelivery:
         monkeypatch.setattr(sib.QuotaService, "deduct_quota", staticmethod(boom))
         result = sib.settle(test_db_session, t, charge, 1120)
         assert result["points_used"] == 0
+
+
+class TestOneGenerationAtATime:
+    """每位老師同時只能有 1 張圖在生成中（#1158 A 段 review 第 1 輪第 3 點）。"""
+
+    def _row(self, db, teacher):
+        from models import ScenarioImageUsage
+
+        db.expire_all()
+        return (
+            db.query(ScenarioImageUsage)
+            .filter(
+                ScenarioImageUsage.teacher_id == teacher.id,
+                ScenarioImageUsage.year_month == sib.IN_FLIGHT_KEY,
+            )
+            .first()
+        )
+
+    def test_second_acquire_is_409(self, test_db_session):
+        t = _teacher(test_db_session, "inflight@img.com")
+        sib.acquire_generation_slot(test_db_session, t)
+        with pytest.raises(HTTPException) as exc:
+            sib.acquire_generation_slot(test_db_session, t)
+        assert exc.value.status_code == 409
+        assert exc.value.detail["error"] == sib.IN_PROGRESS_ERROR
+        assert "上一張" in exc.value.detail["message"]
+
+    def test_release_allows_next(self, test_db_session):
+        t = _teacher(test_db_session, "inflight2@img.com")
+        sib.acquire_generation_slot(test_db_session, t)
+        sib.release_generation_slot(test_db_session, t)
+        assert self._row(test_db_session, t).count == 0
+        sib.acquire_generation_slot(test_db_session, t)  # 不丟例外
+        assert self._row(test_db_session, t).count == 1
+
+    def test_release_is_idempotent(self, test_db_session):
+        t = _teacher(test_db_session, "inflight3@img.com")
+        sib.release_generation_slot(test_db_session, t)
+        sib.release_generation_slot(test_db_session, t)
+        assert self._row(test_db_session, t).count == 0
+
+    @pytest.mark.parametrize("admin", [True, False])
+    def test_applies_to_every_billing_type(self, test_db_session, admin):
+        t = _teacher(test_db_session, f"inflight-{admin}@img.com", is_admin=admin)
+        sib.acquire_generation_slot(test_db_session, t)
+        with pytest.raises(HTTPException) as exc:
+            sib.acquire_generation_slot(test_db_session, t)
+        assert exc.value.status_code == 409
+
+    def test_per_teacher(self, test_db_session):
+        a = _teacher(test_db_session, "inflight-a@img.com")
+        b = _teacher(test_db_session, "inflight-b@img.com")
+        sib.acquire_generation_slot(test_db_session, a)
+        sib.acquire_generation_slot(test_db_session, b)  # 別的老師不受影響
+
+    def test_stale_marker_is_taken_over(self, test_db_session):
+        """行程被砍掉、finally 沒跑到時，標記過期後可以接手，不會永遠卡 409。"""
+        t = _teacher(test_db_session, "inflight-stale@img.com")
+        sib.acquire_generation_slot(test_db_session, t)
+        row = self._row(test_db_session, t)
+        row.updated_at = datetime.now(timezone.utc) - timedelta(
+            seconds=sib.IN_FLIGHT_STALE_SECONDS + 1
+        )
+        test_db_session.commit()
+        sib.acquire_generation_slot(test_db_session, t)  # 不丟例外
+        assert self._row(test_db_session, t).count == 1
+
+    def test_key_does_not_collide_with_counters(self, test_db_session, monkeypatch):
+        """生成中標記與月／日計數同表，鍵長度不同，不影響剩餘張數。"""
+        monkeypatch.setattr(sib, "current_taipei_date", lambda: "2026-10-29")
+        t = _teacher(test_db_session, "inflight-key@img.com")
+        sib.acquire_generation_slot(test_db_session, t)
+        assert len(sib.IN_FLIGHT_KEY) not in (7, 10)
+        status = sib.get_status(test_db_session, t)
+        assert status["remaining"] == sib.FREE_DAILY_LIMIT
+
+
+class TestPersonalDeductLocksRows:
+    def test_rows_locked_before_deduct(self, test_db_session, monkeypatch):
+        """個人扣點前先 FOR UPDATE 鎖住訂閱週期與點數包，再交給 deduct_quota。"""
+        t = _teacher(test_db_session, "lock@img.com")
+        pkg = _package(test_db_session, t, points=1000)
+        charge = sib.reserve(test_db_session, t)
+
+        order = []
+        real_lock = sib._lock_personal_quota_rows
+        real_deduct = sib.QuotaService.deduct_quota
+
+        def lock(db, teacher):
+            order.append("lock")
+            return real_lock(db, teacher)
+
+        def deduct(**kwargs):
+            order.append("deduct")
+            return real_deduct(**kwargs)
+
+        monkeypatch.setattr(sib, "_lock_personal_quota_rows", lock)
+        monkeypatch.setattr(sib.QuotaService, "deduct_quota", staticmethod(deduct))
+
+        assert sib.settle(test_db_session, t, charge, 1120)["points_used"] == 9
+        assert order == ["lock", "deduct"]
+        test_db_session.refresh(pkg)
+        assert pkg.points_used == 9
+
+    def test_lock_query_uses_for_update(self, test_db_session, monkeypatch):
+        """SQLite 會忽略 FOR UPDATE，這裡直接確認查詢有要求鎖。"""
+        from sqlalchemy.orm import Query
+
+        t = _teacher(test_db_session, "lock2@img.com")
+        _package(test_db_session, t, points=1000)
+        _subscribe(test_db_session, t)
+
+        locked = []
+        real = Query.with_for_update
+
+        def spy(self, *a, **kw):
+            locked.append(self.column_descriptions[0]["entity"].__name__)
+            return real(self, *a, **kw)
+
+        monkeypatch.setattr(Query, "with_for_update", spy)
+        sib._lock_personal_quota_rows(test_db_session, t)
+        assert sorted(locked) == ["CreditPackage", "SubscriptionPeriod"]
+
+
+class TestNaiveExpiryOnSQLite:
+    def test_teacher_quota_with_naive_expires_at(self, test_db_session):
+        """SQLite 讀回的 expires_at 沒有時區；Teacher 的配額屬性不能因此丟 TypeError。"""
+        t = _teacher(test_db_session, "naive@img.com")
+        pkg = _package(test_db_session, t, points=500)
+        pkg.expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).replace(
+            tzinfo=None
+        )
+        test_db_session.commit()
+        test_db_session.refresh(t)
+        assert t.quota_remaining == 500
+        assert t.quota_total == 500

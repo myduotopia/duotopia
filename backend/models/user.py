@@ -246,10 +246,17 @@ class Teacher(Base):
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc)
+
+        def _aware(dt):
+            # SQLite 讀回來的 DateTime 沒有時區，比照 end_date 補成 UTC 再比較
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
         return [
             pkg
             for pkg in (self.credit_packages or [])
-            if pkg.status == "active" and pkg.expires_at and pkg.expires_at > now
+            if pkg.status == "active"
+            and pkg.expires_at
+            and _aware(pkg.expires_at) > now
         ]
 
     @property

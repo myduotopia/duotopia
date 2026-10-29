@@ -2,9 +2,8 @@
 
 生圖 API 一律 mock。這裡驗的是我們自己的邏輯：
 
-1. **prompt 要把人物導向場景**。情境對話的題目幾乎都是校園情境，描述很可能長成
-   「students talking in a classroom」—— 生圖模型對兒童影像有嚴格限制，直接送過去
-   有相當比例會被安全過濾擋掉。
+1. **人物年齡依描述**（#1158 使用者定案）：描述原樣送出，不再把 students／kids
+   改寫成場景；``personGeneration`` 用 ``ALLOW_ALL``（2026-10-29 實測 global 可用）。
 2. **畫風統一**（#1158）：黑白線稿、不上色、白底、不放文字，並要求畫面合理，
    只有描述明確要求荒謬畫面時才例外。
 3. **被擋下時要能分辨**，不能跟「呼叫失敗」混在一起：前者要告訴老師換個描述，
@@ -26,8 +25,8 @@ from services.scenario_dialogue_image import (
 )
 
 
-class TestPromptSteersAwayFromChildren:
-    """人物描述導向場景，降低被安全過濾擋掉的機率（決策見模組說明）。"""
+class TestPromptKeepsDescription:
+    """人物年齡依描述：描述原樣保留，不改寫兒童字詞（#1158 使用者定案）。"""
 
     @pytest.mark.parametrize(
         "raw",
@@ -39,20 +38,21 @@ class TestPromptSteersAwayFromChildren:
             "a boy and a girl doing homework",
         ],
     )
-    def test_child_words_are_rewritten(self, raw):
-        prompt = build_image_prompt(raw)
-        lowered = prompt.lower()
-        for word in ["student", "kid", "child", "boy", "girl", "schoolchildren"]:
-            assert word not in lowered, f"{word!r} 仍留在 prompt：{prompt}"
+    def test_people_words_are_kept_as_written(self, raw):
+        assert raw in build_image_prompt(raw)
+
+    def test_no_classroom_scene_rewrite(self):
+        """#1024 的「students → a classroom scene」改寫已拿掉。"""
+        prompt = build_image_prompt("students at the zoo").lower()
+        assert "a classroom scene" not in prompt
+        assert "students at the zoo" in prompt
 
     def test_scene_without_people_is_kept_as_is(self):
         raw = "a yellow school bus on a street"
         assert raw in build_image_prompt(raw)
 
-    def test_keeps_the_setting_after_rewriting(self):
-        """改寫是把焦點移到場景，不是把情境整個丟掉。"""
-        prompt = build_image_prompt("students talking in a classroom").lower()
-        assert "classroom" in prompt
+    def test_extra_whitespace_is_collapsed(self):
+        assert "two kids at a park" in build_image_prompt("two   kids\n at a park")
 
     def test_blank_prompt_is_rejected(self):
         with pytest.raises(ScenarioImageError):
@@ -83,8 +83,10 @@ class TestLineArtStyle:
         assert "no gray shading" in prompt
         assert "white background" in prompt
         assert "no text or letters" in prompt
-        # 線稿版的人物常被畫成兒童而被 personGeneration 擋下（2026-10-29 實測），明講成人
-        assert "adults" in prompt
+        # 人物年齡依描述，未指明時依情境自然判斷；不再一律畫成人
+        assert "adults" not in prompt
+        assert "ages follow the description" in prompt
+        assert "fit the situation naturally" in prompt
 
     def test_asks_for_a_sensible_picture_unless_told_otherwise(self):
         prompt = build_image_prompt("a park").lower()
@@ -102,12 +104,13 @@ class TestLineArtStyle:
 
 
 class TestRequestShape:
-    def test_body_asks_for_an_image_in_4_3_with_adults_only(self):
+    def test_body_asks_for_an_image_in_4_3_allowing_all_ages(self):
         body = ScenarioDialogueImageService.build_request_body("p")
         config = body["generationConfig"]
         assert config["responseModalities"] == ["IMAGE"]
         assert config["imageConfig"]["aspectRatio"] == "4:3"
-        assert config["imageConfig"]["personGeneration"] == "ALLOW_ADULT"
+        # 人物年齡依描述，成人與兒童都要能畫（2026-10-29 實測 ALLOW_ALL 可用）
+        assert config["imageConfig"]["personGeneration"] == "ALLOW_ALL"
 
     def test_global_endpoint_has_no_region_prefix(self):
         url = ScenarioDialogueImageService.endpoint_url(
