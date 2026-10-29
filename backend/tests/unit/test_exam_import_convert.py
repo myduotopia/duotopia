@@ -14,7 +14,12 @@ from services.exam_import_convert import (
     derive_stimulus_type,
     paragraphs_to_layout,
 )
-from services.exam_import_images import PageImage, card_needs_crops, crop_card
+from services.exam_import_images import (
+    PageImage,
+    card_needs_crops,
+    crop_card,
+    page_resolver,
+)
 
 SETTINGS = {
     "grade_min": 7,
@@ -210,14 +215,14 @@ def test_crop_card_and_needs():
         },
     }
     assert card_needs_crops(card) == [1, 2]
-    crop_card(card, 1, page, final=False, upload=upload)
+    crop_card(card, 1, page_resolver(page, upload), final=False)
     stim = card["group"]["stimulus"]
     assert stim["figures"][0]["url"] == "u2"
     assert card["group"]["questions"][1]["option_image_urls"] == ["u1", None]
     assert sorted(uploaded) == [(500, 200), (500, 1000)]
     assert card_needs_crops(card) == [2]
     # 壞圖：final 時寫 None，不再試
-    crop_card(card, 2, PageImage(b"not an image"), final=True, upload=upload)
+    crop_card(card, 2, page_resolver(PageImage(b"not an image"), upload), final=True)
     q = card["group"]["questions"][0]
     assert q["image_url"] is None and q["option_image_urls"] == [None, None]
     assert card_needs_crops(card) == []

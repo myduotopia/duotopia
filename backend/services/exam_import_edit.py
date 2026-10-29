@@ -47,6 +47,7 @@ from services.exam_paper_cards import (
     STATUS_FAILED,
     STATUS_OK,
     card_is_saved,
+    card_rev,
     normalize_question_no,
     strip_merge_records,
 )
@@ -256,7 +257,15 @@ def patch_card(
         cards = copy.deepcopy(page.cards or [])
         if card_is_saved(cards[index]):
             raise _saved_error()
-        apply_card_patch(cards[index], patch)
+        expected = patch.get("rev")
+        if expected is not None and expected != card_rev(cards[index]):
+            raise ExamImportError(
+                409,
+                "EXAM_IMPORT_CARD_CHANGED",
+                "這一題在你編輯時被更新了（例如併入下一頁或對上答案頁），請看過最新內容再改",
+                card=copy.deepcopy(strip_merge_records([cards[index]])[0]),
+            )
+        apply_card_patch(cards[index], {k: v for k, v in patch.items() if k != "rev"})
         page.cards = cards
         eis._touch(page)
         _after_edit(db, imp)

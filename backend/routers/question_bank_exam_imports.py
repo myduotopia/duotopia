@@ -36,6 +36,7 @@ from fastapi import (
     status,
 )
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from database import get_db
 from models import Teacher
@@ -225,7 +226,10 @@ async def mark_exam_import_blank_page(
     imp = _load(db, teacher, import_id)
     data = await _read_page_file(file)
     try:
-        page = mark_blank_page(db, imp, page_no, data, file.content_type)
+        # 存頁圖（GCS）與略過核對的自動存入（補裁圖）都是同步 I/O：丟 threadpool，不擋事件迴圈
+        page = await run_in_threadpool(
+            mark_blank_page, db, imp, page_no, data, file.content_type
+        )
     except eis.ExamImportError as e:
         raise _raise(e)
     except (ExamPaperError, MagicPasteError) as e:
@@ -262,7 +266,7 @@ async def send_exam_import_blank_page(
 async def retry_exam_import_question(
     import_id: int,
     page_no: int,
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
     card_id: Optional[str] = Form(None),
     question_no: Optional[str] = Form(None),
     bbox: Optional[str] = Form(
@@ -272,6 +276,9 @@ async def retry_exam_import_question(
     db: Session = Depends(get_db),
 ):
     """只重讀那一頁的那一題，取代該卡；回傳新卡。
+
+    ``file``（頁圖）可省略：沒附就用擷取時存好的頁圖（前端不必再抓 GCS 頁圖）；找不到存好的頁圖
+    → 409 ``EXAM_IMPORT_PAGE_IMAGE_MISSING``。仍接受附檔（舊前端相容）。
 
     必須指定既有的題目卡：``card_id`` 或題號（``bbox`` 只是輔助定位，不能單獨使用）。都沒給 →
     422 ``EXAM_IMPORT_RETRY_TARGET``；題號比不到任何卡 → 404 ``EXAM_IMPORT_CARD_NOT_FOUND``。
@@ -299,14 +306,14 @@ async def retry_exam_import_question(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="bbox 格式錯誤"
             )
-    data = await _read_page_file(file)
+    data = await _read_page_file(file) if file is not None else None
     try:
         card = await retry_question(
             db,
             imp,
             page_no,
             data,
-            file.content_type,
+            file.content_type if file is not None else None,
             card_id=card_id,
             question_no=question_no,
             bbox=box,

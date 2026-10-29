@@ -14,7 +14,7 @@
 - **存前重算重複**（cold-read B10）：每張卡存之前即時查一次題庫，同一批前面剛存的也算
   （同一個交易裡已 flush）。單題「題目文字相同」是資料表唯一索引
   ``uq_questions_teacher_normalized_stem`` 會擋的情況，事先查出來當成重複；萬一仍撞到
-  IntegrityError（並發），只退回這一張（SAVEPOINT），原因同「題目文字相同」。
+  IntegrityError（並發），只退回這一張（SAVEPOINT），原因同「題目文字相同」（見下方 IntegrityError）。
 - 成功：單題在 ``question.saved_question_id``、題組在卡上 ``saved_group_id``＋每一小題
   ``saved_question_id`` 記下題庫 id（答案頁晚到時據此更新，見 ``exam_import_refresh``）；
   原卷題號寫進 ``question_source_links.source_question_no``；考點來源 ``ai``（老師改過考點＝``manual``）。
@@ -29,6 +29,15 @@
 - **略過核對**（``settings.auto_save``）：已處理好的頁立即存；之後每頁寫入結果（擷取、仍要送出、
   重試）後由 ``run_auto_save`` 再存一次；可能還有下一頁內容的題組（頁上最後一張、後面還有頁在
   處理中）先不存。
+- **還沒定的跨頁題組**：手動存入（全部儲存）也不存，回 ``pending_continuation``（C4a 審查 5）；
+  自動存入則默默等下一頁。
+- **補裁圖在鎖外**（C4a 審查 3）：拿匯入鎖之前先讀草稿、從存好的頁圖裁好上傳
+  （``exam_import_images.precrop``），鎖內只查表寫回卡片。
+- **IntegrityError**：只有唯一索引 ``uq_questions_teacher_normalized_stem`` 擋下的單題回
+  ``same_stem``，其他約束一律 ``invalid``（C4a 審查 6）。
+- **題目文字相同**（``same_stem``）照 A2 算進「題庫已有而略過」：回傳的
+  ``skipped_duplicate_cards``／``skipped_duplicate_questions`` 含這些卡，卡上
+  ``duplicate_of.reason`` 保留 ``"same_stem"``，畫面據此顯示「這題重複」。
 """
 
 from __future__ import annotations
@@ -61,7 +70,12 @@ from services import question_bank_service as qbs
 from services.exam_import_common import UNFINISHED_STATUSES, ExamImportError
 from services.exam_import_convert import apply_settings, card_to_payload
 from services.exam_import_dedup import find_bank_duplicates, mark_duplicates
-from services.exam_import_images import PageImage, ensure_crops
+from services.exam_import_images import (
+    CropTable,
+    apply_crops,
+    card_needs_crops,
+    precrop,
+)
 from services.exam_import_settings import (
     bank_allowed,
     bank_uuids,
@@ -88,7 +102,10 @@ REASONS = {
     "duplicate_in_import": "這份題本裡已有相同的題目，請刪除其中一題",
     "cloze_blanks": "克漏字空格與小題對不上",
     "invalid": "內容不完整",
+    "pending_continuation": "這個題組可能還有下一頁的內容，等下一頁處理完再存",
 }
+# 資料表唯一索引（同一位老師、單題、normalized_stem 相同）；撞到這個才算「題目文字相同」
+STEM_UNIQUE_INDEX = "uq_questions_teacher_normalized_stem"
 BANK_DUPLICATE_REASONS = ("duplicate", "same_stem")
 
 
@@ -294,6 +311,23 @@ def _create_group(db, teacher, card, payload, org, school) -> Dict[str, Any]:
     return {"card_id": card["card_id"], "group_id": group.id, "question_ids": ids}
 
 
+def is_stem_unique_violation(e: IntegrityError) -> bool:
+    """這個 IntegrityError 是不是唯一索引 ``uq_questions_teacher_normalized_stem`` 擋下的。
+
+    PostgreSQL（psycopg2）：看 ``diag.constraint_name``，沒有再看錯誤訊息裡的名稱。SQLite（測試）
+    的訊息不帶索引名稱，只列欄位（``UNIQUE constraint failed: questions.teacher_id,
+    questions.normalized_stem``），以欄位判斷。其他約束（外鍵、別的唯一索引）一律不是。
+    """
+    orig = getattr(e, "orig", None)
+    name = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    if name:
+        return name == STEM_UNIQUE_INDEX
+    msg = str(orig or e)
+    if STEM_UNIQUE_INDEX in msg:
+        return True
+    return "UNIQUE constraint failed" in msg and "questions.normalized_stem" in msg
+
+
 def _validation_message(e: ValidationError) -> str:
     err = (e.errors() or [{}])[0]
     msg = str(err.get("msg") or "").replace("Value error, ", "")
@@ -332,9 +366,14 @@ def _save_one(
         return _fail(card["card_id"], "invalid", _validation_message(e))
     except HTTPException as e:
         return _fail(card["card_id"], "invalid", str(e.detail))
-    except IntegrityError:
-        logger.info("[exam-import] unique stem collided card=%s", card["card_id"])
-        return _fail(card["card_id"], "same_stem" if kind == "single" else "invalid")
+    except IntegrityError as e:
+        stem_clash = kind == "single" and is_stem_unique_violation(e)
+        logger.info(
+            "[exam-import] integrity error card=%s stem_clash=%s",
+            card["card_id"],
+            stem_clash,
+        )
+        return _fail(card["card_id"], "same_stem" if stem_clash else "invalid")
     card.clear()
     card.update(work)
     card["saved_at"] = datetime.now(timezone.utc).isoformat()
@@ -372,6 +411,30 @@ def _maybe_complete(imp: ExamImport, cards: List[Dict[str, Any]]) -> bool:
     return True
 
 
+def _precrop_outside_lock(
+    db: Session, import_id: int, wanted: Optional[Set[str]]
+) -> CropTable:
+    """匯入鎖之前：讀一次草稿（不上鎖），把要存的卡還沒裁的圖先從頁圖裁好、上傳（C4a 審查 3：
+    鎖內不碰 GCS）。只裁看得出可以存的卡（沒失敗、有答案）；重複與否鎖內才知道，多裁幾張無妨。
+    讀完先結束交易（沒有待寫入的資料），裁圖期間不佔著連線上的交易。"""
+    imp = db.get(ExamImport, import_id)
+    if imp is None:
+        return {}
+    cards = [
+        copy.deepcopy(c)
+        for c in eis._all_cards(imp)
+        if not card_is_saved(c)
+        and (wanted is None or c.get("card_id") in wanted)
+        and blocking_reason(c) is None
+        and card_needs_crops(c)
+    ]
+    image_urls = {p.page_no: p.image_url for p in imp.pages}
+    db.commit()
+    if not cards:
+        return {}
+    return precrop(import_id, cards, image_urls)
+
+
 def save_cards(
     db: Session,
     teacher: Teacher,
@@ -382,6 +445,8 @@ def save_cards(
 ) -> Dict[str, Any]:
     """鎖內批次存入。回傳 ``{"saved": [...], "failed": [...], "skipped_duplicate_cards",
     "skipped_duplicate_questions", "completed", "status"}``。設定不完整／教材無效 → 422（不存任何卡）。"""
+    wanted = set(card_ids) if card_ids is not None else None
+    crops = _precrop_outside_lock(db, import_id, wanted)
     imp = eis.lock_import(db, import_id)
     try:
         if imp.status not in UNFINISHED_STATUSES:
@@ -396,10 +461,8 @@ def save_cards(
     ordered = [c for p in pages for c in by_page[p.page_no]]
     mark_duplicates(db, imp.teacher_id, ordered)  # 存前重算（B10）
     code_to_id = _code_to_id(db, ordered)
-    wanted = set(card_ids) if card_ids is not None else None
-    skip = unsettled_card_ids(imp, by_page) if auto else set()
-    image_urls = {p.page_no: p.image_url for p in imp.pages}
-    page_cache: Dict[int, PageImage] = {}
+    # 可能還會併入下一頁內容的題組：自動存入默默等下一頁；手動存入回報原因（C4a 審查 5）
+    unsettled = unsettled_card_ids(imp, by_page)
     saved: List[Dict[str, Any]] = []
     failed: List[Dict[str, Any]] = []
 
@@ -407,7 +470,9 @@ def save_cards(
         cid = card.get("card_id")
         if card_is_saved(card) or (wanted is not None and cid not in wanted):
             continue
-        if cid in skip:
+        if cid in unsettled:
+            if not auto:
+                failed.append(_fail(cid, "pending_continuation"))
             continue
         reason = blocking_reason(card)
         if reason is None:
@@ -418,7 +483,7 @@ def save_cards(
         if reason:
             failed.append(_fail(cid, reason))
             continue
-        ensure_crops(imp.id, card, image_urls, page_cache)
+        apply_crops(card, crops)
         result = _save_one(db, teacher, card, settings, code_to_id)
         (failed if "reason" in result else saved).append(result)
 

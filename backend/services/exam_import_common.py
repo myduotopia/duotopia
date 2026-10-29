@@ -20,6 +20,7 @@ from models.exam_import import (
     EXAM_IMPORT_STATUS_READY,
     PAGE_STATUS_DONE,
 )
+from services.exam_paper_cards import refresh_card_revs
 
 TAIPEI = ZoneInfo("Asia/Taipei")
 DAILY_LIMIT = 1
@@ -70,6 +71,8 @@ def _all_cards(imp: ExamImport) -> List[Dict[str, Any]]:
 
 
 def _touch(page: ExamImportPage) -> None:
+    """寫回頁的卡片後呼叫：內容有變的卡 ``rev`` +1（核對畫面防覆蓋），再標記欄位已改。"""
+    refresh_card_revs(page.cards or [])
     flag_modified(page, "cards")
 
 

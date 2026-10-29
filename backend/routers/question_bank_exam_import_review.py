@@ -78,8 +78,10 @@ def patch_exam_import_settings(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """改整份設定，套用到所有還沒存的題目卡（存入時才寫進題庫）。回整份匯入摘要（含 ``settings``）。"""
-    _load(db, teacher, import_id)
+    """改整份設定，套用到所有還沒存的題目卡（存入時才寫進題庫）。回整份匯入摘要（含 ``settings``）。
+    存進機構／學校題庫的匯入：老師須仍是該題庫成員（同 ``/save``），否則 403。"""
+    imp = _load(db, teacher, import_id)
+    _require_bank(db, teacher, imp)
     changes = payload.model_dump(exclude_unset=True)
     imp = _run(edit.update_settings, db, teacher, import_id, changes)
     return eis.serialize_import(imp)
@@ -97,7 +99,7 @@ def add_exam_import_card(
     _load(db, teacher, import_id)
     content = payload.model_dump(
         exclude_unset=True,
-        exclude={"kind", "page_no", "after_card_id", "source_question_no"},
+        exclude={"kind", "page_no", "after_card_id", "source_question_no", "rev"},
     )
     card = _run(
         edit.add_card,

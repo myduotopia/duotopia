@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import re
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Set
 
@@ -38,6 +40,15 @@ SOURCE_QUESTION_NO_MAX_CHARS = 20  # 對齊 question_source_links.source_questio
 # 跨頁合併的紀錄（只存在匯入草稿，API 不輸出）
 MERGE_PRE_KEY = "_merge_pre"
 MERGE_PARTS_KEY = "_merge_parts"
+
+# 卡片版本（C4 核對畫面防覆蓋）：``rev`` 每次卡片內容在後端變動就 +1（合併延續頁、答案頁回填、
+# 重試換卡、老師 PATCH…）；``_rev_sig`` 是上次算版本時的內容指紋（只存在草稿，API 不輸出）。
+CARD_REV_KEY = "rev"
+CARD_REV_SIG_KEY = "_rev_sig"
+# 不算「內容變動」的欄位：版本本身、合併紀錄、重複比對結果（題庫變了就會變，老師的編輯不受影響）
+_REV_IGNORED_KEYS = frozenset(
+    {CARD_REV_KEY, CARD_REV_SIG_KEY, MERGE_PRE_KEY, MERGE_PARTS_KEY, "duplicate_of"}
+)
 
 BLANK_TOKEN_RE = re.compile(r"\{\{(\d+)\}\}")
 # 選項標籤 → 0-based index（答案頁印的是標籤）
@@ -134,6 +145,45 @@ def card_is_teacher_edited(card: Mapping[str, Any]) -> bool:
     if card.get("teacher_edited") or card.get("manual"):
         return True
     return any(q.get("teacher_edited") for q in iter_card_questions(card))
+
+
+GROUP_EDITED_STIMULUS_KEYS = ("layout", "passage_text", "segments")
+
+
+def group_stimulus_is_teacher_edited(card: Mapping[str, Any]) -> bool:
+    """老師編輯過題組主圖文（卡上帶 ``layout``／``passage_text``／``segments``）。
+
+    存入時改用老師的版本（``exam_import_convert._group_stimulus``），``stimulus`` 不再被讀；
+    這種題組不能再併入延續頁，否則延續頁的文章只接到 ``stimulus``、存入時整段遺失（C4a 審查 4）。
+    """
+    group = card.get("group") or {}
+    return card.get("kind") == CARD_KIND_GROUP and any(
+        k in group for k in GROUP_EDITED_STIMULUS_KEYS
+    )
+
+
+def card_rev_signature(card: Mapping[str, Any]) -> str:
+    content = {k: v for k, v in card.items() if k not in _REV_IGNORED_KEYS}
+    raw = json.dumps(content, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def card_rev(card: Mapping[str, Any]) -> int:
+    return int(card.get(CARD_REV_KEY) or 0)
+
+
+def refresh_card_revs(cards: Iterable[Dict[str, Any]]) -> None:
+    """就地：內容和上次算版本時不同的卡 ``rev`` +1（新卡從 1 開始）。
+
+    匯入流程每次寫回頁的卡片都會經過 ``exam_import_common._touch``，在那裡統一呼叫，不必在每個
+    改卡片的地方各自記得加版本。"""
+    for card in cards:
+        if not isinstance(card, dict):
+            continue
+        sig = card_rev_signature(card)
+        if card.get(CARD_REV_SIG_KEY) != sig:
+            card[CARD_REV_KEY] = card_rev(card) + 1
+            card[CARD_REV_SIG_KEY] = sig
 
 
 def card_has_question(card: Mapping[str, Any], question_no: Optional[str]) -> bool:
@@ -254,6 +304,42 @@ def renumber_cloze_cards(cards: Iterable[Dict[str, Any]]) -> None:
 # --------------------------------------------------------------------------- #
 # 跨頁題組
 # --------------------------------------------------------------------------- #
+def _merge_stimulus_images(
+    ts: Dict[str, Any],
+    cs: Mapping[str, Any],
+    cont_page: Optional[int],
+    para_offset: int,
+) -> None:
+    """延續頁的插圖／主圖接進上一頁的題組主圖文（就地修改 ``ts``；見 ``merge_group_cards``）。"""
+    figures = list(ts.get("figures") or [])
+    for fig in cs.get("figures") or []:
+        moved = dict(fig)
+        after = moved.get("after_paragraph")
+        after = int(after) if isinstance(after, (int, float)) else -1
+        moved["after_paragraph"] = max(-1, after) + para_offset
+        moved.setdefault("page_no", cont_page)
+        figures.append(moved)
+    if cs.get("kind") == "image" and (cs.get("image_url") or cs.get("box_2d")):
+        has_own = ts.get("image_url") or ts.get("box_2d")
+        if ts.get("kind") == "image" and not has_own:
+            for key in ("image_url", "box_2d"):
+                if key in cs:
+                    ts[key] = cs[key]
+            ts["page_no"] = cont_page
+        else:
+            whole = {
+                "box_2d": cs.get("box_2d"),
+                "placement": "full",
+                "after_paragraph": para_offset + len(cs.get("paragraphs") or []) - 1,
+                "page_no": cont_page,
+            }
+            if "image_url" in cs:
+                whole["url"] = cs.get("image_url")
+            figures.append(whole)
+    if figures:
+        ts["figures"] = figures
+
+
 def merge_group_cards(target: Dict[str, Any], cont: Dict[str, Any]) -> None:
     """把「延續上一頁」的題組卡併進上一頁的題組卡（就地修改 target）。
 
@@ -262,9 +348,16 @@ def merge_group_cards(target: Dict[str, Any], cont: Dict[str, Any]) -> None:
     一起加上位移；下一頁文章沒有空格（只有小題）或 AI 已經接續編號時不加位移。合併後對整個題組
     重跑 ``match_cloze_blanks``（對不上就依閱讀順序補配），再依閱讀順序重編成 1..k
     （``renumber_cloze_blanks``）。
+
+    插圖與題組主圖（C4a 審查 2）：延續頁的 ``figures`` 接在後面，``after_paragraph`` 加上上一頁
+    的段落數；每張圖記下自己在哪一頁（``page_no``），存入時補裁才會用對頁圖。延續頁是以圖為準的
+    題組（``kind == "image"``）：上一頁也是以圖為準但還沒有圖 → 直接用延續頁的圖；否則改成一張
+    整列插圖接在文章最後，不丟掉。
     """
     tg, cg = target["group"], cont["group"]
     ts, cs = tg["stimulus"], cg["stimulus"]
+    cont_page = cont.get("page_no")
+    para_offset = len(ts.get("paragraphs") or [])
     is_cloze = GROUP_TYPE_CLOZE in (tg.get("group_type"), cg.get("group_type"))
     if is_cloze:
         tg["group_type"] = GROUP_TYPE_CLOZE
@@ -278,6 +371,7 @@ def merge_group_cards(target: Dict[str, Any], cont: Dict[str, Any]) -> None:
             for q in cg["questions"]:
                 if q.get("blank"):
                     q["blank"] += used
+    _merge_stimulus_images(ts, cs, cont_page, para_offset)
     ts["paragraphs"] = (ts.get("paragraphs") or []) + (cs.get("paragraphs") or [])
     ts["dialogue"] = (ts.get("dialogue") or []) + (cs.get("dialogue") or [])
     if cs.get("text"):
@@ -347,8 +441,14 @@ def merge_continuations(
             continue
         target_cards = pages[target_no]
         target = target_cards[-1]
-        if target.get("kind") != CARD_KIND_GROUP or card_is_saved(target):
-            # 已存進題庫的題組不再併入（C4 略過核對：題組存入後下一頁才到）；延續卡留著讓老師處理
+        if (
+            target.get("kind") != CARD_KIND_GROUP
+            or card_is_saved(target)
+            or group_stimulus_is_teacher_edited(target)
+        ):
+            # 已存進題庫的題組不再併入（C4 略過核對：題組存入後下一頁才到）；老師編輯過主圖文
+            # （排版）的題組也不併（存入用老師的排版，併進 stimulus 的延續文章會遺失，C4a 審查 4）。
+            # 延續卡留在自己那一頁、當成一張獨立題組卡，內容一字不少，讓老師核對時自行處理
             continue
         if record:
             if MERGE_PRE_KEY not in target:
@@ -416,9 +516,13 @@ def unmerge_invalid_continuations(
 
 
 def strip_merge_records(cards: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    """API 輸出用：拿掉跨頁合併的紀錄欄位（只供後端重算）。"""
+    """API 輸出用：拿掉跨頁合併的紀錄欄位（只供後端重算）與版本指紋；``rev`` 一定有（舊草稿 0）。"""
+    hidden = (MERGE_PRE_KEY, MERGE_PARTS_KEY, CARD_REV_SIG_KEY)
     return [
-        {k: v for k, v in card.items() if k not in (MERGE_PRE_KEY, MERGE_PARTS_KEY)}
+        {
+            **{k: v for k, v in card.items() if k not in hidden},
+            CARD_REV_KEY: card_rev(card),
+        }
         for card in cards
     ]
 
@@ -443,6 +547,12 @@ __all__ = [
     "card_has_question",
     "card_is_saved",
     "card_is_teacher_edited",
+    "card_rev",
+    "card_rev_signature",
+    "refresh_card_revs",
+    "CARD_REV_KEY",
+    "CARD_REV_SIG_KEY",
+    "group_stimulus_is_teacher_edited",
     "iter_card_questions",
     "label_to_indexes",
     "match_cloze_blanks",

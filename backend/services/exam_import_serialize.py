@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from models import ExamImport, ExamImportPage
+from sqlalchemy.orm import object_session
+
+from models import ExamImport, ExamImportPage, Teacher
 from models.exam_import import PAGE_STATUS_DONE, PAGE_STATUS_FAILED
 from services.exam_import_common import MAX_PAGE_RESENDS
 from services.exam_paper_cards import iter_card_questions, strip_merge_records
@@ -26,6 +28,8 @@ def serialize_import(imp: ExamImport, include_pages: bool = False) -> Dict[str, 
         "page_count": imp.page_count,
         "status": imp.status,
         "settings": imp.settings or {},
+        # 考題來源名稱（``settings.source_id`` 對應；老師看不到或沒設 → null）
+        "source": _source_summary(imp),
         "tts_accents": imp.tts_accents or [],
         "question_count": imp.question_count or 0,
         "pages_done": done,
@@ -69,6 +73,26 @@ def serialize_page(page: ExamImportPage) -> Dict[str, Any]:
         "resend_count": page.resend_count or 0,
         "processed_at": page.processed_at.isoformat() if page.processed_at else None,
     }
+
+
+def _source_summary(imp: ExamImport) -> Optional[Dict[str, Any]]:
+    """``{"id", "name"}``：只在這個來源仍是匯入老師看得到的（``visible_sources_query``）時給。"""
+    source_id = (imp.settings or {}).get("source_id")
+    db = object_session(imp)
+    if source_id is None or db is None:
+        return None
+    from services import question_bank_service as qbs
+
+    teacher = db.get(Teacher, imp.teacher_id)
+    if teacher is None:
+        return None
+    try:
+        row = (
+            qbs.visible_sources_query(db, teacher).filter_by(id=int(source_id)).first()
+        )
+    except (TypeError, ValueError):
+        return None
+    return {"id": row.id, "name": row.name} if row is not None else None
 
 
 def _max_question_retries() -> int:

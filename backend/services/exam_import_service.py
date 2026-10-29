@@ -52,6 +52,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, case, or_
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from models import (  # noqa: F401  (ExamImport 供 ``eis.ExamImport`` 舊寫法)
     ExamImport,
@@ -369,8 +370,12 @@ async def run_claimed_page(
     ``store_image=False``；見 ``exam_import_blank``）。"""
     try:
         if store_image:
-            image_url = exam_import_storage.store_page_image(
-                import_id, page_no, image_bytes, mime
+            image_url = await run_in_threadpool(
+                exam_import_storage.store_page_image,
+                import_id,
+                page_no,
+                image_bytes,
+                mime,
             )
             db.query(ExamImportPage).filter(
                 ExamImportPage.id == page_id, ExamImportPage.claim_id == claim_id
@@ -397,7 +402,7 @@ async def run_claimed_page(
         _fail_page(db, import_id, page_no, claim_id, "AI 擷取失敗")
         raise
 
-    _crop_images(result.cards, page_no, image_bytes)
+    await run_in_threadpool(_crop_images, result.cards, page_no, image_bytes)
     imp = lock_import(db, import_id)
     try:
         page = _write_page_result(db, imp, page_no, claim_id, result, rng)
@@ -407,7 +412,7 @@ async def run_claimed_page(
         logger.exception("[exam-import] import=%s page=%s 整理結果失敗", import_id, page_no)
         _fail_page(db, import_id, page_no, claim_id, "整理擷取結果失敗", usage=result.usage)
         raise
-    after_page_write(db, import_id)
+    await after_page_write_async(db, import_id)
     return page
 
 
@@ -421,10 +426,17 @@ def _crop_images(cards: List[Dict[str, Any]], page_no: int, image_bytes: bytes) 
 
 def after_page_write(db: Session, import_id: int) -> None:
     """一頁（或一題）寫入結果並 commit 之後：開了「略過核對」就把能存的存掉（C4a）。
-    失敗只記 log，不影響這一頁的回應。"""
+    失敗只記 log，不影響這一頁的回應。同步（存入會補裁圖、上傳 GCS）：async 流程用
+    ``after_page_write_async``。"""
     from services.exam_import_save import run_auto_save
 
     run_auto_save(db, import_id)
+
+
+async def after_page_write_async(db: Session, import_id: int) -> None:
+    """``after_page_write`` 丟到 threadpool 跑，不擋事件迴圈（C4a 審查 3）。同一個 Session 在
+    這段期間只由那個執行緒使用（呼叫端在 await 中，不會同時碰它）。"""
+    await run_in_threadpool(after_page_write, db, import_id)
 
 
 def _write_page_result(

@@ -26,10 +26,12 @@ import copy
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from models import ExamImport, ExamImportPage
 from models.exam_import import PAGE_STATUS_DONE, USAGE_CALL_RETRY_QUESTION
 from services import exam_import_service as eis
+from services import exam_import_storage
 from services.exam_paper_cards import (
     CARD_KIND_GROUP,
     apply_answer_key,
@@ -214,8 +216,8 @@ async def retry_question(
     db: Session,
     imp: ExamImport,
     page_no: int,
-    image_bytes: bytes,
-    mime_type: str,
+    image_bytes: Optional[bytes],
+    mime_type: Optional[str],
     *,
     card_id: Optional[str] = None,
     question_no: Optional[str] = None,
@@ -228,12 +230,26 @@ async def retry_question(
     一頁）只換掉那一個題號的小題，其他頁併進來的素材與小題保留；比不到題號回 422（請老師手動補），
     不會用單頁的局部題組蓋掉整個合併題組。指定了題號、AI 回傳卻沒有這個題號 → 422
     ``EXAM_IMPORT_RETRY_EMPTY``。
+
+    ``image_bytes`` 為 None：用擷取時存好的頁圖（``exam_import_storage.read_page_image``，同空白頁
+    「仍要送出」）；找不到 → 409 ``EXAM_IMPORT_PAGE_IMAGE_MISSING``。
     """
     eis._require_open(imp)
     page = eis._get_page(imp, page_no)
     if page.status != PAGE_STATUS_DONE:
         raise ExamImportError(409, "EXAM_IMPORT_PAGE_NOT_DONE", "這一頁還沒處理完，請重送整頁")
     service = service or get_exam_paper_service()
+    if image_bytes is None:
+        stored = await run_in_threadpool(
+            exam_import_storage.read_page_image, imp.id, page.image_url or ""
+        )
+        if stored is None:
+            raise ExamImportError(
+                409,
+                "EXAM_IMPORT_PAGE_IMAGE_MISSING",
+                f"找不到第 {page_no} 頁的圖片，請重新選擇這一頁的檔案",
+            )
+        image_bytes, mime_type = stored
     mime = service.validate_page_image(image_bytes, mime_type)
     import_id = imp.id
     question_no = normalize_question_no(question_no)
@@ -270,7 +286,9 @@ async def retry_question(
         raise
 
     picked = _pick_new_card(result.cards, question_no)
-    eis._crop_images([picked] if picked else [], page_no, image_bytes)
+    await run_in_threadpool(
+        eis._crop_images, [picked] if picked else [], page_no, image_bytes
+    )
     imp = eis.lock_import(db, import_id)
     try:
         card = _apply_retry_result(
@@ -281,7 +299,7 @@ async def retry_question(
     except Exception:
         _record_failed_retry(db, import_id, page_no, result.usage)
         raise
-    eis.after_page_write(db, import_id)
+    await eis.after_page_write_async(db, import_id)
     return card
 
 

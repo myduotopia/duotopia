@@ -138,6 +138,9 @@ class CardPatch(BaseModel):
     tts_accent: Optional[str] = None
     question: Optional[CardQuestionIn] = None
     group: Optional[CardGroupIn] = None
+    # 老師打開這張卡時看到的版本（卡片 ``rev``）；和目前不同 → 409 EXAM_IMPORT_CARD_CHANGED、不改。
+    # 沒給 ＝ 不檢查（舊前端相容）。新增卡片（POST）忽略。
+    rev: Optional[int] = Field(None, ge=0)
 
     @field_validator("tts_accent")
     @classmethod
