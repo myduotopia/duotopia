@@ -1,23 +1,33 @@
 /**
- * 上傳題本（#1112 C3）的狀態與流程：由「我的教材」頁（TeacherTemplatePrograms）呼叫一次，
- * 不放在題庫分頁裡——切到「教材」分頁時題庫分頁會卸載，處理要繼續（C3 review 3）。
- * 提示列（ExamImportBanner，在題庫分頁）與上傳／進度 Sheet（ExamImportSheet，在頁面層）共用這份狀態。
+ * 上傳題本（#1112 C3／C4）的狀態與流程：由「我的教材」頁（TeacherTemplatePrograms）與「機構教材」頁
+ * （OrgMaterialsPage，C4 開放機構題庫）各呼叫一次，不放在題庫分頁裡——切到「教材」分頁時題庫分頁會
+ * 卸載，處理要繼續（C3 review 3）。提示列（ExamImportBanner，在題庫分頁）與上傳／核對 Sheet
+ * （ExamImportSheet，在頁面層）共用這份狀態。
+ *
+ * - **題庫範圍**（C4）：`organizationId` 有值＝機構題庫：未完成列表只列該機構的匯入、建立時
+ *   `settings.organization_id` 帶機構 id；換機構時停下目前這份、清空狀態。
+ * - **畫面**：`view` 是 "upload"（上傳畫面）或 "review"（核對畫面，C4 定案 A1：開始擷取後直接進，
+ *   題目邊處理邊出現；原進度畫面退場，每頁狀態與按鈕移到核對畫面「原卷第 N 頁」那一行）。
+ * - **同一份題本已匯入過**：`openExisting` 依 409 帶的題庫判斷——同一個題庫直接打開；在別的題庫就交給
+ *   宿主頁面的 `onOpenOtherBank`（切到那個題庫再打開）。
+ * - **核對畫面用的**：`reload`（重抓整份）、`retryQuestion`（重讀單一題：有本機檔案用本機頁圖，
+ *   沒有就抓後端存的頁圖）、`markSaved`（全部存完：關面板、刷新列表）。
  *
  * - **Sheet 開關與處理分開**：關掉 Sheet、切到教材分頁都不會停止處理；提示列顯示進度。
  *   關掉網頁或離開「我的教材」頁才會停，下次從提示列「繼續」。
  * - **一次只處理一份**：處理中 `start` 直接丟 `anotherRunning`（不建立新匯入）；工具列的
  *   「上傳題本」也依 `running` 停用並說明原因。
- * - **開始擷取**：建立匯入（409 重複 → 提示＋「打開那次匯入」；429 每天 1 本）→ 換成進度畫面 →
+ * - **開始擷取**：建立匯入（409 重複 → 提示＋「打開那次匯入」；429 每天 1 本）→ 換成核對畫面 →
  *   依 `sendOrder.nextPageToSend` 一次送一頁：空白頁呼叫「標為空白頁」（不送 AI），其他頁送擷取；
  *   每送完一頁重抓整份（答案頁會回填別頁）。
  * - **錯誤**：409 PAGE_BUSY → 維持處理中，之後每 5 秒重抓，處理中超過 3 分鐘才給「重送這一頁」；
  *   PAGE_DONE → 重抓；RETRY_LIMIT → 標「這一頁讀不出來，請手動補題」；504／502 → 後端已把頁標失敗，
  *   重抓後有重送次數就給「重送這一頁」；400（圖片過大／格式）、畫不出來 → 這一頁留在待處理並標原因，
- *   這一輪不再自動送，進度畫面給「重送這一頁」（重畫一次再送）；CLOSED／404／網路中斷 → 停止並提示。
- * - **停下後接著送**：沒在處理、有檔案、還有待處理的頁（`canResume`）時，進度畫面有「繼續處理」
+ *   這一輪不再自動送，核對畫面該頁那一行給「重送這一頁」（重畫一次再送）；CLOSED／404／網路中斷 → 停止並提示。
+ * - **停下後接著送**：沒在處理、有檔案、還有待處理的頁（`canResume`）時，核對畫面頂部有「繼續處理」
  *   （`resume`：清掉這一輪略過的頁、重新跑送出迴圈）。
  * - **繼續**（提示列）：還有待處理或失敗的頁才請老師重選檔案（雜湊、頁數相符才繼續，否則
- *   「不是同一份題本」）；打開的是同一份、檔案還在，就直接接著送。全部處理完的直接看進度。
+ *   「不是同一份題本」）；打開的是同一份、檔案還在，就直接接著送。全部處理完的直接進核對畫面。
  *   空白頁「仍要送出這一頁」用後端存好的頁圖，不必重選。
  * - **放棄**：`requestAbandon` 先記下要放棄哪一份，ExamImportSheet 顯示 ConfirmDialog，確認後
   `confirmAbandon` 才呼叫 DELETE（停止處理、刪草稿）。
@@ -51,7 +61,7 @@ interface LocalPage {
   thumbUrl: string;
 }
 
-export type ExamImportView = "upload" | "progress";
+export type ExamImportView = "upload" | "review";
 
 export interface StartInput {
   source: PageSource;
@@ -59,8 +69,28 @@ export interface StartInput {
   settings: ExamImportSettingsPayload;
 }
 
-export function useExamImport(enabled: boolean) {
+/** 已匯入過的那一份在哪個題庫（409 EXAM_IMPORT_DUPLICATE） */
+export interface ExistingImportTarget {
+  id: number;
+  organizationId: string | null;
+  schoolId: string | null;
+}
+
+export interface UseExamImportOptions {
+  /** 機構題庫的機構 id；不給＝我的題庫 */
+  organizationId?: string | null;
+  /** 「打開那次匯入」但那次在別的題庫：由宿主頁面切過去 */
+  onOpenOtherBank?: (target: ExistingImportTarget) => void;
+}
+
+export function useExamImport(
+  enabled: boolean,
+  options: UseExamImportOptions = {},
+) {
   const { t } = useTranslation();
+  const organizationId = options.organizationId ?? null;
+  const onOpenOtherBankRef = useRef(options.onOpenOtherBank);
+  onOpenOtherBankRef.current = options.onOpenOtherBank;
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ExamImportView>("upload");
   const [unfinished, setUnfinished] = useState<ExamImportSummary[]>([]);
@@ -109,18 +139,32 @@ export function useExamImport(enabled: boolean) {
   const refreshList = useCallback(async () => {
     if (!enabled) return;
     try {
-      const res = await examImportApi.list();
+      const res = await examImportApi.list(organizationId);
       if (mountedRef.current) setUnfinished(res.items);
     } catch (err) {
       console.error("Failed to load unfinished exam imports", err);
     }
-  }, [enabled]);
+  }, [enabled, organizationId]);
 
   useEffect(() => {
     void refreshList();
   }, [refreshList]);
 
-  /** 進度畫面的整份資料也同步到提示列（處理中關掉 Sheet，提示列一樣看得到進度） */
+  // 換機構（同一頁切換工作區）：停下目前這份、清空狀態（提示列之後可續做）
+  const scopeRef = useRef(organizationId);
+  useEffect(() => {
+    if (scopeRef.current === organizationId) return;
+    scopeRef.current = organizationId;
+    generationRef.current += 1;
+    clearLocal();
+    importIdRef.current = null;
+    setDetail(null);
+    setOpen(false);
+    setPageNotes({});
+    setRunError(null);
+  }, [organizationId, clearLocal]);
+
+  /** 核對畫面的整份資料也同步到提示列（處理中關掉 Sheet，提示列一樣看得到進度） */
   useEffect(() => {
     if (!detail) return;
     setUnfinished((prev) =>
@@ -280,7 +324,7 @@ export function useExamImport(enabled: boolean) {
     setOpen(true);
   }, []);
 
-  /** 打開一份匯入的進度（提示列「繼續」、重複匯入的「打開那次匯入」）；同一份、檔案還在就接著送 */
+  /** 打開一份匯入的核對畫面（提示列「繼續」、重複匯入的「打開那次匯入」）；同一份、檔案還在就接著送 */
   const openImport = useCallback(
     async (id: number) => {
       if (runningRef.current && importIdRef.current !== id) {
@@ -296,7 +340,7 @@ export function useExamImport(enabled: boolean) {
         setBusySince({});
         importIdRef.current = id;
       }
-      setView("progress");
+      setView("review");
       setOpen(true);
       setLoadingDetail(true);
       let loaded = false;
@@ -315,7 +359,7 @@ export function useExamImport(enabled: boolean) {
   );
 
   /**
-   * 開始擷取：建立匯入後換成進度畫面並開始送。失敗丟出錯誤（上傳畫面顯示）。
+   * 開始擷取：建立匯入後換成核對畫面並開始送。失敗丟出錯誤（上傳畫面顯示）。
    * 已經有一份在處理：不建立新匯入，丟 `anotherRunning`。
    */
   const start = useCallback(
@@ -327,7 +371,9 @@ export function useExamImport(enabled: boolean) {
         file_hash: source.hash,
         page_count: source.pageCount,
         tts_accents: accents,
-        settings,
+        settings: organizationId
+          ? { ...settings, organization_id: organizationId }
+          : settings,
       });
       generationRef.current += 1;
       clearLocal();
@@ -338,11 +384,11 @@ export function useExamImport(enabled: boolean) {
       setPageNotes({});
       setRunError(null);
       setBusySince({});
-      setView("progress");
+      setView("review");
       void refreshList();
       void runQueue(created.id);
     },
-    [clearLocal, refreshList, runQueue],
+    [clearLocal, organizationId, refreshList, runQueue],
   );
 
   /** 「繼續處理」：停下（網路中斷、圖片被擋）後，清掉這一輪略過的頁，接著送 */
@@ -468,6 +514,61 @@ export function useExamImport(enabled: boolean) {
     void refreshList();
   }, [refreshList]);
 
+  /** 「打開那次匯入」：同一個題庫直接打開；在別的題庫交給宿主頁面切過去 */
+  const openExisting = useCallback(
+    (target: ExistingImportTarget) => {
+      const sameBank =
+        !target.schoolId && (target.organizationId ?? null) === organizationId;
+      if (sameBank) void openImport(target.id);
+      else onOpenOtherBankRef.current?.(target);
+    },
+    [openImport, organizationId],
+  );
+
+  /** 重抓目前這份（核對畫面編輯、存入後） */
+  const reload = useCallback(async () => {
+    const id = importIdRef.current;
+    if (id === null) return null;
+    return fetchDetail(id);
+  }, [fetchDetail]);
+
+  /**
+   * 重讀單一題：要附頁圖。這次的檔案還在就用本機畫好的頁圖；否則抓後端存的頁圖。
+   * 錯誤丟給呼叫端顯示（409 RETRY_LIMIT → 只留「手動補這一題」）。
+   */
+  const retryQuestion = useCallback(
+    async (pageNo: number, cardId: string) => {
+      const id = importIdRef.current;
+      if (id === null || !detail) return;
+      let image: Blob;
+      if (sourceRef.current) {
+        image = (await renderLocal(pageNo)).blob;
+      } else {
+        const url = detail.pages.find((p) => p.page_no === pageNo)?.image_url;
+        if (!url) throw new ClientError("pageImageMissing");
+        const res = await fetch(url);
+        if (!res.ok) throw new ClientError("pageImageMissing");
+        image = await res.blob();
+      }
+      try {
+        await examImportApi.retry(id, pageNo, image, cardId);
+      } finally {
+        await fetchDetail(id).catch(() => undefined);
+      }
+    },
+    [detail, fetchDetail, renderLocal],
+  );
+
+  /** 全部存完（或只剩題庫已有的題）：關面板、這份從提示列消失 */
+  const markSaved = useCallback(() => {
+    generationRef.current += 1;
+    clearLocal();
+    importIdRef.current = null;
+    setDetail(null);
+    setOpen(false);
+    void refreshList();
+  }, [clearLocal, refreshList]);
+
   // 處理中超過 3 分鐘的頁可以重送（busySince 從前端第一次看到「處理中」算起）
   const staleProcessing = (pageNo: number) =>
     busySince[pageNo] !== undefined &&
@@ -514,6 +615,11 @@ export function useExamImport(enabled: boolean) {
     cancelAbandon,
     close,
     refreshList,
+    organizationId,
+    openExisting,
+    reload,
+    retryQuestion,
+    markSaved,
   };
 }
 

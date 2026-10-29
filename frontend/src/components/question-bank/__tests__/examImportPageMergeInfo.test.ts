@@ -121,3 +121,15 @@ describe("pageMergeInfo", () => {
     expect(r.get(14)).toEqual({ kind: "merged", target: 12, from: 39, to: 39 });
   });
 });
+
+describe("pageMergeInfo：跨頁優先（C4 第五輪遺留）", () => {
+  it("同一頁既有小題併入前一頁題組、自己又有跨頁題組 → 標跨頁", () => {
+    const info = pageMergeInfo([
+      page(8, [group("g8", 8, [8, 9], [q("30", 8), q("31", 9)])]),
+      page(9, [group("g9", 9, [9, 10], [q("32", 9), q("33", 10)])]),
+      page(10, []),
+    ]);
+    expect(info.get(9)).toEqual({ kind: "span", from: 9, to: 10 });
+    expect(info.get(10)).toMatchObject({ kind: "merged", target: 9 });
+  });
+});

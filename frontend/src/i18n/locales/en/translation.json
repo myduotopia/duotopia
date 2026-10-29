@@ -6452,8 +6452,6 @@
         "openExisting": "Open that import"
       },
       "progress": {
-        "title": "Progress",
-        "description": "Pages are processed one at a time; finished pages are saved right away.",
         "count": "{{done}}/{{total}} pages",
         "countWithBlank": "{{done}}/{{total}} pages ({{blank}} blank)",
         "failedCount_one": "{{count}} page failed",
@@ -6487,9 +6485,7 @@
         "reselect": "Choose \"{{name}}\" again to continue",
         "reselectPhotos": "For photos, select them in the same order as the first time.",
         "reselectButton": "Choose file",
-        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes.",
-        "close": "Close",
-        "review": "Start reviewing"
+        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes."
       },
       "banner": {
         "one": "You have 1 exam paper that isn't finished ({{name}}, {{progress}})",
@@ -6497,7 +6493,8 @@
         "view": "View",
         "hide": "Hide",
         "continue": "Continue",
-        "abandon": "Discard"
+        "abandon": "Discard",
+        "ready": "ready to review"
       },
       "abandon": {
         "button": "Discard this import",
@@ -6545,8 +6542,83 @@
         "hashUnavailable": "Your browser can't compare files. Please use the latest Chrome, Edge or Safari.",
         "hashMismatch": "This isn't the same exam paper (different content or page count). Please choose the file you uploaded the first time.",
         "needFile": "Please choose the file again first.",
-        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes before uploading a new one."
-      }
+        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes before uploading a new one.",
+        "cardSaved": "This question is already in the question bank. Edit it there.",
+        "settingsIncomplete": "The import settings are incomplete (grade, source, visibility). Fill them in at the top before saving.",
+        "settingsInvalid": "The import settings are invalid. Please check the grade range.",
+        "programLinkInvalid": "The selected program or lesson can't be used in this question bank. Please choose again.",
+        "sourceInvalid": "The selected source can't be used. Please choose again.",
+        "forbidden": "You are no longer a member of this organization and can't save to its question bank."
+      },
+      "review": {
+        "title": "Review questions",
+        "description": "Questions appear as pages are processed. Click any question to edit it, then press \"Save all\" to add them to the question bank.",
+        "pageLabel": "Original page {{n}}",
+        "pageProcessing": "Processing page {{n}}…",
+        "addCard": "Add a question",
+        "originalAlt": "Original question on the paper",
+        "originalHint": "Snippet of the original paper. Box off? Click the image to see the whole page.",
+        "answer": "Answer {{answer}}",
+        "issue": {
+          "missing": "Missing answer",
+          "failed": "Processing failed",
+          "duplicate": "Already in your question bank (personal or organization)",
+          "sameStem": "Same question text as one in your bank. Please change the question text",
+          "importDuplicate": "The same question appears earlier in this paper. Delete one of them",
+          "saveFailed": "The last save didn't go through. See the reason on the card"
+        },
+        "source": {
+          "answerPage": "Answer key",
+          "ai": "AI answer"
+        },
+        "viewOriginal": "View original",
+        "originalTitle": "Original question in your bank",
+        "originalUnavailable": "This question can't be found (it may have been deleted).",
+        "retry": "Retry",
+        "manualFill": "Fill in manually",
+        "voice": {
+          "regenerate": "Regenerate audio",
+          "accent": "Change accent",
+          "upload": "Upload recording",
+          "play": "Play group audio"
+        },
+        "edit": "Edit this question",
+        "done": "Done",
+        "delete": "Delete this question",
+        "deleteTitle": "Delete this question?",
+        "deleteDescription": "It will be removed from this import and won't be saved to the question bank.",
+        "deleted": "Question deleted",
+        "savedCount_one": "Saved {{count}} question",
+        "savedCount_other": "Saved {{count}} questions",
+        "skippedDuplicates_one": "{{count}} question skipped because it's already in your bank",
+        "skippedDuplicates_other": "{{count}} questions skipped because they're already in your bank",
+        "completed": "The whole paper has been saved to the question bank",
+        "skipStarted": "Processed questions were saved; the remaining pages will be saved automatically when done.",
+        "questionLabel": "Question {{label}}",
+        "navLabel": "Question navigator",
+        "attention_one": "{{count}} question needs attention",
+        "attention_other": "{{count}} questions need attention",
+        "noAttention": "No questions need attention",
+        "next": "Next to check",
+        "saveBlocked_one": "{{count}} page still processing",
+        "saveBlocked_other": "{{count}} pages still processing",
+        "nothingToSave": "No questions to save",
+        "save": "Save all",
+        "skip": "Skip review and save",
+        "skipOn": "Skip review is on; questions will be saved automatically when processing finishes",
+        "skipTitle": "Skip review and save?",
+        "skipDescription": "Processed pages are saved to the question bank now; pages still processing are saved when done. Processing only continues while this page is open; if you close it, open the unfinished import next time to continue, and it will be saved automatically. Questions missing answers, failed questions and questions already in your bank are not saved and stay in the unfinished import.",
+        "skipConfirm": "Save now",
+        "addTitle": "Add a question on original page {{n}}",
+        "addDescription": "Choose the question type first; the editor opens right after.",
+        "addType": "Question type",
+        "addTypePlaceholder": "Choose a type",
+        "addNo": "Original question number (optional)",
+        "addNoPlaceholder": "e.g. 12",
+        "addSubmit": "Add and edit"
+      },
+      "openOtherOrg": "That import belongs to another organization's question bank. Switch to that organization first.",
+      "openOtherSchool": "That import belongs to a school question bank, which can't be opened here yet."
     }
   },
   "orgMaterials": {

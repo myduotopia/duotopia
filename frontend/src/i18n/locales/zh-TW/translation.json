@@ -6494,8 +6494,6 @@
         "openExisting": "打開那次匯入"
       },
       "progress": {
-        "title": "處理進度",
-        "description": "一次處理一頁，處理完的頁會先存起來。",
         "count": "{{done}}／{{total}} 頁",
         "countWithBlank": "{{done}}／{{total}} 頁（含 {{blank}} 頁空白）",
         "failedCount": "{{count}} 頁失敗",
@@ -6524,9 +6522,7 @@
         "reselect": "請再選一次〈{{name}}〉以繼續處理",
         "reselectPhotos": "如果是照片，請照第一次的順序選取。",
         "reselectButton": "選擇檔案",
-        "anotherRunning": "另一份題本正在處理中，請等它處理完再打開",
-        "close": "關閉",
-        "review": "開始核對"
+        "anotherRunning": "另一份題本正在處理中，請等它處理完再打開"
       },
       "banner": {
         "one": "你有 1 份題本還沒處理完（{{name}}，{{progress}}）",
@@ -6534,7 +6530,8 @@
         "view": "查看",
         "hide": "收起",
         "continue": "繼續",
-        "abandon": "放棄"
+        "abandon": "放棄",
+        "ready": "待核對"
       },
       "abandon": {
         "button": "放棄這次匯入",
@@ -6582,8 +6579,79 @@
         "hashUnavailable": "瀏覽器不支援檔案比對，請改用最新版的 Chrome、Edge 或 Safari。",
         "hashMismatch": "這不是同一份題本（內容或頁數不同）。請選第一次上傳的那個檔案。",
         "needFile": "請先重新選擇檔案。",
-        "anotherRunning": "目前有一份題本正在處理，請等它處理完再上傳。"
-      }
+        "anotherRunning": "目前有一份題本正在處理，請等它處理完再上傳。",
+        "cardSaved": "這一題已經存進題庫，請到題庫編輯。",
+        "settingsIncomplete": "整份設定還沒填完（年段、考題來源、是否公開），請先在上方填好再存入。",
+        "settingsInvalid": "整份設定不正確，請檢查年段等欄位。",
+        "programLinkInvalid": "選的教材或單元不能用在這個題庫，請重新選擇。",
+        "sourceInvalid": "選的考題來源不能用，請重新選擇。",
+        "forbidden": "你已經不是這個機構的成員，不能存進機構題庫。"
+      },
+      "review": {
+        "title": "核對題目",
+        "description": "題目邊處理邊出現。點任何一題就能修改；改完按「全部儲存」存進題庫。",
+        "pageLabel": "原卷第 {{n}} 頁",
+        "pageProcessing": "第 {{n}} 頁處理中…",
+        "addCard": "手動補一題",
+        "originalAlt": "原卷這一題的截圖",
+        "originalHint": "原卷這一題的截圖。框歪了？點圖看原卷整頁。",
+        "answer": "答案 {{answer}}",
+        "issue": {
+          "missing": "缺答案",
+          "failed": "處理失敗",
+          "duplicate": "你的題庫（個人或機構）已有這題",
+          "sameStem": "題目文字與我的題庫某題相同，請修改題目文字",
+          "importDuplicate": "這份題本裡已有相同的題目，請刪掉其中一題",
+          "saveFailed": "上次存入沒有成功，請看卡片上的原因"
+        },
+        "source": {
+          "answerPage": "答案頁",
+          "ai": "AI 作答"
+        },
+        "viewOriginal": "看原題",
+        "originalTitle": "題庫裡的原題",
+        "originalUnavailable": "找不到這一題（可能已刪除）。",
+        "retry": "重試",
+        "manualFill": "手動補這一題",
+        "voice": {
+          "regenerate": "重新產生語音",
+          "accent": "換口音",
+          "upload": "上傳錄音",
+          "play": "試聽題組音檔"
+        },
+        "edit": "編輯這一題",
+        "done": "完成",
+        "delete": "刪除這一題",
+        "deleteTitle": "刪除這一題？",
+        "deleteDescription": "這一題會從這次匯入移除，不會存進題庫。",
+        "deleted": "已刪除這一題",
+        "savedCount": "已存入 {{count}} 題",
+        "skippedDuplicates": "{{count}} 題因題庫已有而略過",
+        "completed": "這份題本已全部存進題庫",
+        "skipStarted": "已存入處理好的題目；其他頁處理完會自動存入。",
+        "questionLabel": "第 {{label}} 題",
+        "navLabel": "題號導覽",
+        "attention": "需注意 {{count}} 題",
+        "noAttention": "沒有需要注意的題目",
+        "next": "跳到下一題",
+        "saveBlocked": "還有 {{count}} 頁處理中",
+        "nothingToSave": "沒有要存的題目",
+        "save": "全部儲存",
+        "skip": "略過核對，直接存入",
+        "skipOn": "已經選擇略過核對，處理完會自動存入",
+        "skipTitle": "略過核對，直接存入？",
+        "skipDescription": "處理好的頁會先存進題庫，處理中的頁做完再存。網頁開著才會繼續處理；關掉的話，下次從「未完成的匯入」打開會接著做，做完自動存入。缺答案、處理失敗、題庫已有的題目不會存，留在「未完成的匯入」等你處理。",
+        "skipConfirm": "直接存入",
+        "addTitle": "在原卷第 {{n}} 頁手動補一題",
+        "addDescription": "先選題型，新增後直接打開編輯。",
+        "addType": "題型",
+        "addTypePlaceholder": "請選擇題型",
+        "addNo": "原卷題號（選填）",
+        "addNoPlaceholder": "例如 12",
+        "addSubmit": "新增並編輯"
+      },
+      "openOtherOrg": "那次匯入在另一個機構的題庫，請先切換到那個機構再打開。",
+      "openOtherSchool": "那次匯入在學校題庫，目前還不能從這裡打開。"
     }
   },
   "orgMaterials": {

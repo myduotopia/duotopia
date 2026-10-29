@@ -4,6 +4,8 @@
  * - 多份：「你有 N 份題本還沒處理完 [查看]」→ 展開每份的檔名、日期、進度，各有 [繼續][放棄]
  * 沒有未完成的匯入就不顯示。不用 BulkActionBar（那是列表勾選後的批次操作列）。
  * 「放棄」先跳 ConfirmDialog（ExamImportSheet 顯示）。
+ * C4：我的題庫、機構題庫各列各的（controller 依題庫範圍抓列表）；已處理完、等老師核對（`ready`）的
+ * 匯入進度改顯示「待核對」，「繼續」直接進核對畫面（不需要另外的「開始核對」，A1）。
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,16 +29,18 @@ export default function ExamImportBanner({
   if (items.length === 0) return null;
 
   const progress = (i: ExamImportSummary) =>
-    i.pages_blank > 0
-      ? t("questionBank.examImport.progress.countWithBlank", {
-          done: i.pages_done,
-          total: i.page_count,
-          blank: i.pages_blank,
-        })
-      : t("questionBank.examImport.progress.count", {
-          done: i.pages_done,
-          total: i.page_count,
-        });
+    i.status === "ready"
+      ? t("questionBank.examImport.banner.ready")
+      : i.pages_blank > 0
+        ? t("questionBank.examImport.progress.countWithBlank", {
+            done: i.pages_done,
+            total: i.page_count,
+            blank: i.pages_blank,
+          })
+        : t("questionBank.examImport.progress.count", {
+            done: i.pages_done,
+            total: i.page_count,
+          });
 
   const actions = (i: ExamImportSummary) => (
     <div className="flex shrink-0 items-center gap-2">

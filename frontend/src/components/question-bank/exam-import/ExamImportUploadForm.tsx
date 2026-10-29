@@ -10,6 +10,8 @@
  *   朗讀口音（Checkbox 多選、至少一種、**預設全不選、不記預設**）。
  * - 沒填完時「開始擷取」停用，旁邊寫出還缺哪幾項。
  * - 建立失敗：409 重複題本 → 提示＋「打開那次匯入」；429 每天 1 本；其他錯誤白話提示。
+ * - 機構題庫（C4）：`organizationId` 有值時，公開設定顯示「僅機構／公開」、新增的來源建成機構來源；
+ *   重複題本的「打開那次匯入」帶著那次所在的題庫（切到對應題庫再打開）。
  * 全部用標準元件（components/ui、components/shared），不新增元件。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -47,7 +49,7 @@ import {
   preparePageSource,
   type PageSource,
 } from "./pageSource";
-import type { StartInput } from "./useExamImport";
+import type { ExistingImportTarget, StartInput } from "./useExamImport";
 
 const ACCENTS = TTS_ACCENTS.filter((a) => a !== "Random");
 const ACCEPT = "application/pdf,image/png,image/jpeg,image/webp";
@@ -60,7 +62,9 @@ interface ExamImportUploadFormProps {
   programs: Program[];
   onStart: (input: StartInput) => Promise<void>;
   onCancel: () => void;
-  onOpenExisting: (importId: number) => void;
+  onOpenExisting: (target: ExistingImportTarget) => void;
+  /** 機構題庫的機構 id；不給＝我的題庫 */
+  organizationId?: string | null;
 }
 
 export default function ExamImportUploadForm({
@@ -68,6 +72,7 @@ export default function ExamImportUploadForm({
   onStart,
   onCancel,
   onOpenExisting,
+  organizationId = null,
 }: ExamImportUploadFormProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +92,10 @@ export default function ExamImportUploadForm({
     null,
   );
   const [dragOver, setDragOver] = useState(false);
-  const createSource = useMemo(() => makeCreateSource(), []);
+  const createSource = useMemo(
+    () => makeCreateSource(organizationId ?? undefined),
+    [organizationId],
+  );
   // 選了檔案卻沒開始擷取就關掉：釋放 PDF（開始後由 useExamImport 接手）
   const ownedSource = useRef<PageSource | null>(null);
   ownedSource.current = source;
@@ -295,6 +303,7 @@ export default function ExamImportUploadForm({
                 onChange={setVisibility}
                 disabled={submitting}
                 required
+                scope={organizationId ? "organization" : "personal"}
                 data-testid="exam-upload-visibility"
               />
             </div>
@@ -345,7 +354,14 @@ export default function ExamImportUploadForm({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => onOpenExisting(submitError.existingImportId!)}
+                  onClick={() =>
+                    onOpenExisting({
+                      id: submitError.existingImportId!,
+                      organizationId:
+                        submitError.existingOrganizationId ?? null,
+                      schoolId: submitError.existingSchoolId ?? null,
+                    })
+                  }
                   data-testid="exam-upload-open-existing"
                 >
                   {t("questionBank.examImport.upload.openExisting")}
