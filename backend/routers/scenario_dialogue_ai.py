@@ -3,6 +3,7 @@
 - POST /api/teachers/scenario-dialogue/generate-article   依訓練目標生成情境文章
 - POST /api/teachers/scenario-dialogue/generate-questions 依情境文章與出題設定產題
 - POST /api/teachers/scenario-dialogue/extract-article    從圖片/PDF 擷取情境文章
+- POST /api/teachers/scenario-dialogue/compose            對話框打字：判斷意圖並加題／出題（#1158 C 段）
 
 #1146：generate-article / generate-questions 多回 ``usable`` / ``reask`` /
 ``suggested_title``（答非所問不產內容、不扣額度）；generate-questions 接受無情境＋
@@ -52,13 +53,14 @@ from services.scenario_dialogue_image import (
     ScenarioImageUpstreamError,
     get_scenario_dialogue_image_service,
 )
-from utils.scenario_dialogue import MAX_IMAGE_URL_CHARS, MAX_SCENARIO_IMAGES
+from utils.scenario_dialogue import MAX_IMAGE_URL_CHARS, MAX_ITEMS, MAX_SCENARIO_IMAGES
 from services.scenario_dialogue_ai import (
     MAX_TRANSLATE_LANGUAGE_CHARS,
     ScenarioDialogueAIError,
     ScenarioDialogueAIOutputError,
     get_scenario_dialogue_ai_service,
 )
+from services.scenario_dialogue_compose import get_scenario_dialogue_compose_service
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,8 @@ MAX_IMAGE_PROMPT_CHARS = ScenarioDialogueImageService.MAX_DESCRIPTION_CHARS
 MAX_DIRECTION_CHARS = MAX_GOAL_CHARS
 # 介面語言代碼（zh-TW / en），決定重問句與標題建議用什麼語言
 MAX_UI_LANGUAGE_CHARS = 10
+# #1158 C 段 compose：老師在對話框一次打的內容（可能是好幾題）
+MAX_COMPOSE_TEXT_CHARS = 8000
 
 
 class GenerateArticleRequest(BaseModel):
@@ -160,6 +164,36 @@ class GenerateQuestionsRequest(BaseModel):
     translate_language: str = Field(default="", max_length=MAX_LANGUAGE_CHARS)
     # 已經在清單上的題目，避免「再產一批」給出重複的。
     # 上限比 MAX_ITEMS（10）寬一點，避免老師剛好卡在邊界時整個請求被擋掉。
+    existing_questions: List[
+        Annotated[str, StringConstraints(max_length=MAX_EXISTING_QUESTION_CHARS)]
+    ] = Field(default_factory=list, max_length=MAX_EXISTING_QUESTIONS)
+
+
+class ComposeRequest(BaseModel):
+    """對話框打字（#1158 C 段）：前端 ``questionRequestBase()`` 的欄位＋``text``。
+
+    與 GenerateQuestionsRequest 的差別：沒有 ``count`` —— 題數由後端依
+    ``existing_questions``（只算非空白題）算出剩餘名額，再由 AI 依老師的話決定。
+    """
+
+    # 空白輸入在進到額度之前就擋掉（同 _ImageDescription 的理由）
+    text: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True, min_length=1, max_length=MAX_COMPOSE_TEXT_CHARS
+        ),
+    ]
+    scenario_content: str = Field(default="", max_length=MAX_SCENARIO_CHARS)
+    direction: str = Field(default="", max_length=MAX_DIRECTION_CHARS)
+    scenario_images: List[
+        Annotated[str, StringConstraints(max_length=MAX_IMAGE_URL_CHARS)]
+    ] = Field(default_factory=list, max_length=MAX_SCENARIO_IMAGES)
+    ui_language: str = Field(default="zh-TW", max_length=MAX_UI_LANGUAGE_CHARS)
+    question_level: str = Field(default="", max_length=MAX_LEVEL_CHARS)
+    global_tense: Optional[Dict[str, str]] = None
+    global_voice: str = Field(default="", max_length=MAX_LEVEL_CHARS)
+    global_rubric: str = Field(default="", max_length=MAX_RUBRIC_CHARS)
+    translate_language: str = Field(default="", max_length=MAX_LANGUAGE_CHARS)
     existing_questions: List[
         Annotated[str, StringConstraints(max_length=MAX_EXISTING_QUESTION_CHARS)]
     ] = Field(default_factory=list, max_length=MAX_EXISTING_QUESTIONS)
@@ -340,6 +374,64 @@ async def generate_questions(
             raise _ai_failed("generate-questions", e)
 
     return await _with_text_quota(db, current_teacher, "generate-questions", run)
+
+
+@router.post("/compose")
+async def compose(
+    payload: ComposeRequest,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """老師在對話框打字（#1158 C 段）：一次 AI 呼叫判斷意圖並產出。
+
+    回傳 ``{usable, reask, intent, questions, skipped_count, truncated_count}``：
+
+    * ``intent="add_questions"``：老師自己打的題目拆成一題一格，translation 為空字串。
+      **不截斷**到剩餘名額，``truncated_count`` 告訴前端超出幾題，由前端提示後截斷。
+    * ``intent="generate"``：依目前設定出 min(老師要的題數, 剩餘名額) 題
+      （沒說題數時 min(5, 剩餘)）。
+    * ``usable=False``：整段都與題目無關，只回重問句，不計次。
+
+    計入文字 AI 次數池（一次呼叫算一次）。清單已滿 10 題時在**佔位之前**回 409
+    ``SCENARIO_QUESTIONS_FULL`` —— 沒有名額就不該打 AI，也不該扣次數。
+    """
+    existing = [q.strip() for q in payload.existing_questions if q.strip()]
+    remaining = MAX_ITEMS - len(existing)
+    if remaining <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "SCENARIO_QUESTIONS_FULL",
+                "message": f"已滿 {MAX_ITEMS} 題，請先刪除題目",
+            },
+        )
+
+    service = get_scenario_dialogue_compose_service()
+
+    async def run():
+        try:
+            return await service.compose(
+                text=payload.text,
+                remaining=remaining,
+                scenario_content=payload.scenario_content,
+                direction=payload.direction,
+                scenario_images=payload.scenario_images,
+                question_level=payload.question_level,
+                global_tense=payload.global_tense,
+                global_voice=payload.global_voice,
+                global_rubric=payload.global_rubric,
+                translate_language=payload.translate_language,
+                existing_questions=existing,
+                ui_language=payload.ui_language,
+            )
+        except ScenarioDialogueAIOutputError as e:
+            raise _ai_failed("compose", e)
+        except ScenarioDialogueAIError as e:
+            raise _bad_request(e)
+        except Exception as e:
+            raise _ai_failed("compose", e)
+
+    return await _with_text_quota(db, current_teacher, "compose", run)
 
 
 @router.post("/extract-article")
