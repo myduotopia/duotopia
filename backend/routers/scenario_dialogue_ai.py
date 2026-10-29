@@ -384,12 +384,17 @@ async def compose(
 ):
     """老師在對話框打字（#1158 C 段）：一次 AI 呼叫判斷意圖並產出。
 
-    回傳 ``{usable, reask, intent, questions, skipped_count, truncated_count}``：
+    回傳 ``{usable, reask, intent, questions, skipped_count, truncated_count,
+    requested_count, suggested_title, output_truncated}``：
 
-    * ``intent="add_questions"``：老師自己打的題目拆成一題一格，translation 為空字串。
-      **不截斷**到剩餘名額，``truncated_count`` 告訴前端超出幾題，由前端提示後截斷。
+    * ``intent="add_questions"``：老師自己打的題目拆成一題一格，translation 為空字串，
+      不去重。**不截斷**到剩餘名額（安全上限 30 題），``truncated_count`` 告訴前端超出
+      幾題，由前端提示後截斷。
     * ``intent="generate"``：依目前設定出 min(老師要的題數, 剩餘名額) 題
-      （沒說題數時 min(5, 剩餘)）。
+      （沒說題數時 min(5, 剩餘)；模型多給時以剩餘名額為上限）。``requested_count``
+      是模型讀出的老師要求題數（沒說為 0），大於剩餘名額時前端說明只出得了幾題。
+    * ``suggested_title``：標題建議（何時套用由前端依 #1146 規則決定）。
+    * ``output_truncated``：輸出被截斷、只救回部分題目，前端提示老師分次輸入。
     * ``usable=False``：整段都與題目無關，只回重問句，不計次。
 
     計入文字 AI 次數池（一次呼叫算一次）。清單已滿 10 題時在**佔位之前**回 409
