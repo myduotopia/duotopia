@@ -6405,7 +6405,9 @@
       },
       "preview": {
         "questionsTitle": "小題",
-        "textViewNotice": "文字版（學生作答時不會看到）"
+        "textViewNotice": "文字版（學生作答時不會看到）",
+        "expandAll": "展開全文",
+        "collapse": "收起"
       },
       "glossary": {
         "title": "單字註解",

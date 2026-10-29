@@ -15,6 +15,8 @@
  * 重複偵測每卡各自 debounce 呼叫 similar API；結果存回 draft.similar。
  * 考點／年段／教材關聯用共用元件（ExamPointPicker / GradeRangeSlider / ProgramLessonPicker），
  * 與左側批次設定同一套。
+ * 上傳題本核對畫面（#1112 C4）嵌入時：`hideScopeSettings` 不顯示「進階設定」（教材、年段由整份設定
+ * 統一套用）；`audioDisabledReason` 有值時麥克風停用、滑鼠移上去說明原因（語音功能即將推出）。
  * 驗證顯示：`errorMessage`（底部紅字＋紅框）由外層在老師按過儲存後才傳；考點空值的紅框
  * 由 `showErrors` 控制（sheet 傳 saveAttempted），打開面板時不會一片紅。後端 `serverError` 一律顯示。
  */
@@ -87,6 +89,10 @@ export interface QuestionCardProps {
    * （同一篇文章的問法常重複），前端若照查會被 exact_duplicate 擋住無法儲存。
    */
   checkSimilar?: boolean;
+  /** 不顯示「進階設定」（教材關聯、年段）：由外層整份設定統一套用（上傳題本核對畫面） */
+  hideScopeSettings?: boolean;
+  /** 有值＝麥克風（產生語音）停用，滑鼠移上去顯示這段原因（例如「即將推出」） */
+  audioDisabledReason?: string | null;
 }
 
 function absoluteAudioUrl(url: string): string {
@@ -110,6 +116,8 @@ export default function QuestionCard({
   testIdPrefix = "qc",
   compact = false,
   checkSimilar = true,
+  hideScopeSettings = false,
+  audioDisabledReason = null,
 }: QuestionCardProps) {
   const { t } = useTranslation();
   const [ttsBusy, setTtsBusy] = useState(false);
@@ -320,7 +328,20 @@ export default function QuestionCard({
             />
             {/* 語音按鈕組（直排，樣式同單字集）：沒語音 → 只有麥克風；有語音 → 只有播放＋移除 */}
             <div className="flex flex-col items-center gap-1 shrink-0 self-start">
-              {!draft.stem_audio_url && (
+              {!draft.stem_audio_url && audioDisabledReason && (
+                <span title={audioDisabledReason}>
+                  <button
+                    type="button"
+                    disabled
+                    className="p-1.5 rounded opacity-50 text-gray-600 bg-yellow-100"
+                    aria-label={`${t("questionBank.form.generateAudio")}（${audioDisabledReason}）`}
+                    data-testid={tid("mic")}
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+                </span>
+              )}
+              {!draft.stem_audio_url && !audioDisabledReason && (
                 <button
                   type="button"
                   onClick={generateAudio}
@@ -500,52 +521,54 @@ export default function QuestionCard({
         data-testid={tid("explanation")}
       />
 
-      {/* ▼ 進階設定 */}
-      <div className="border-t border-gray-100 pt-2">
-        <button
-          type="button"
-          onClick={() => patch({ advancedOpen: !draft.advancedOpen })}
-          className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900"
-          aria-expanded={draft.advancedOpen}
-          data-testid={tid("advanced-toggle")}
-        >
-          {draft.advancedOpen ? (
-            <ChevronDown size={14} />
-          ) : (
-            <ChevronRight size={14} />
+      {/* ▼ 進階設定（核對畫面由整份設定套用，不顯示） */}
+      {!hideScopeSettings && (
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => patch({ advancedOpen: !draft.advancedOpen })}
+            className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900"
+            aria-expanded={draft.advancedOpen}
+            data-testid={tid("advanced-toggle")}
+          >
+            {draft.advancedOpen ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
+            {t("questionBank.form.advancedSettings")}
+          </button>
+          {draft.advancedOpen && (
+            <div className="mt-2 space-y-3" data-testid={tid("advanced")}>
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-600">
+                  {t("questionBank.form.programLinks")}
+                </Label>
+                <ProgramLessonPicker
+                  programs={programs}
+                  value={draft.program_link}
+                  onChange={(program_link) => patch({ program_link })}
+                  disabled={locked}
+                  compact
+                  data-testid={tid("program-link")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-600">
+                  {t("questionBank.form.grade")}
+                </Label>
+                <GradeRangeSlider
+                  value={draft.grade}
+                  onChange={(grade) => patch({ grade })}
+                  disabled={locked}
+                  compact
+                  data-testid={tid("grade")}
+                />
+              </div>
+            </div>
           )}
-          {t("questionBank.form.advancedSettings")}
-        </button>
-        {draft.advancedOpen && (
-          <div className="mt-2 space-y-3" data-testid={tid("advanced")}>
-            <div className="space-y-1">
-              <Label className="text-xs text-gray-600">
-                {t("questionBank.form.programLinks")}
-              </Label>
-              <ProgramLessonPicker
-                programs={programs}
-                value={draft.program_link}
-                onChange={(program_link) => patch({ program_link })}
-                disabled={locked}
-                compact
-                data-testid={tid("program-link")}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-gray-600">
-                {t("questionBank.form.grade")}
-              </Label>
-              <GradeRangeSlider
-                value={draft.grade}
-                onChange={(grade) => patch({ grade })}
-                disabled={locked}
-                compact
-                data-testid={tid("grade")}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {(errorMessage || draft.serverError) && (
         <p className="text-xs text-red-600" data-testid={tid("error")}>

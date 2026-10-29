@@ -6362,7 +6362,9 @@
       },
       "preview": {
         "questionsTitle": "Questions",
-        "textViewNotice": "Text version (students won't see this)"
+        "textViewNotice": "Text version (students won't see this)",
+        "expandAll": "Show full text",
+        "collapse": "Show less"
       },
       "glossary": {
         "title": "Glossary",

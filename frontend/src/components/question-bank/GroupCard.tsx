@@ -19,6 +19,8 @@
  * 圖中有人物對話時（#1083）文字版改為唯讀對話樣式（`DialogueTranscriptView`）：逐句
  * 「說話者: 台詞」由 AI 整理、是題組對話音檔的來源，老師不可修改（原因見 PassageTextTab）。
  * 小題的考點、來源、教材關聯仍在各自的 QuestionCard；公開設定與年段跟隨題組（左欄套用）。
+ * 上傳題本核對畫面（#1112 C4）嵌入時：`hideScopeSettings` 不顯示年段（小題也不顯示進階設定，由整份設定
+ * 統一套用）；`audioDisabledReason` 傳給小題的麥克風（停用並說明原因）。
  * 驗證紅框／紅字（整組 `errorMessage`、小題錯誤）由 sheet 以 `showErrors` 控制：老師按過儲存
  * 才顯示；克漏字「找不到空格」警告是結構提示，一律即時顯示。
  */
@@ -110,6 +112,10 @@ export interface GroupCardProps {
   showErrors?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
+  /** 不顯示年段與小題的進階設定（教材、年段由外層整份設定套用；上傳題本核對畫面） */
+  hideScopeSettings?: boolean;
+  /** 小題麥克風停用的原因（有值＝停用；例如「即將推出」） */
+  audioDisabledReason?: string | null;
 }
 
 function SortableQuestion({
@@ -299,6 +305,8 @@ export default function GroupCard({
   showErrors = true,
   readOnly = false,
   disabled = false,
+  hideScopeSettings = false,
+  audioDisabledReason = null,
 }: GroupCardProps) {
   const { t } = useTranslation();
   const locked = readOnly || disabled;
@@ -494,24 +502,26 @@ export default function GroupCard({
           )}
         </div>
 
-        {/* 年段 */}
-        <div className="space-y-1">
-          <Label className="text-xs text-gray-600">
-            {t("questionBank.form.grade")}
-          </Label>
-          <GradeRangeSlider
-            value={draft.grade}
-            onChange={(grade) =>
-              patch({
-                grade,
-                questions: draft.questions.map((q) => ({ ...q, grade })),
-              })
-            }
-            disabled={locked}
-            compact
-            data-testid={`qg-${index}-grade`}
-          />
-        </div>
+        {/* 年段（核對畫面由整份設定套用，不顯示） */}
+        {!hideScopeSettings && (
+          <div className="space-y-1">
+            <Label className="text-xs text-gray-600">
+              {t("questionBank.form.grade")}
+            </Label>
+            <GradeRangeSlider
+              value={draft.grade}
+              onChange={(grade) =>
+                patch({
+                  grade,
+                  questions: draft.questions.map((q) => ({ ...q, grade })),
+                })
+              }
+              disabled={locked}
+              compact
+              data-testid={`qg-${index}-grade`}
+            />
+          </div>
+        )}
 
         {/* 主圖文：排版｜文字版 */}
         <Tabs
@@ -680,6 +690,8 @@ export default function GroupCard({
                     testIdPrefix={`qg-${index}-q`}
                     compact
                     checkSimilar={false}
+                    hideScopeSettings={hideScopeSettings}
+                    audioDisabledReason={audioDisabledReason}
                   />
                 </div>
               ))}
@@ -725,6 +737,8 @@ export default function GroupCard({
                         testIdPrefix={`qg-${index}-q`}
                         compact
                         checkSimilar={false}
+                        hideScopeSettings={hideScopeSettings}
+                        audioDisabledReason={audioDisabledReason}
                       />
                     </SortableQuestion>
                   ))}

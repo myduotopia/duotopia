@@ -161,3 +161,37 @@ describe("QuestionsPreview", () => {
     expect(screen.queryByTestId("qp-q-0-number")).toBeNull();
   });
 });
+
+describe("QuestionsPreview 核對畫面擴充（#1112 C4）", () => {
+  it("showAnswers：正確選項綠字＋✓；numberLabels 換成原卷題號；aside 右邊欄", () => {
+    render(
+      <QuestionsPreview
+        questions={twoQuestions()}
+        testId="qp"
+        showAnswers
+        numberLabels={["41", null]}
+        aside={(_, i) => <span>aside-{i}</span>}
+        itemAttrs={(_, i) => ({ id: `item-${i}` })}
+      />,
+    );
+    expect(screen.getByTestId("qp-q-0-number")).toHaveTextContent("41.");
+    expect(screen.getByTestId("qp-q-1-number")).toHaveTextContent("2.");
+    const correct = screen.getByTestId("qp-q-0-opt-0");
+    expect(correct.getAttribute("data-correct")).toBe("true");
+    expect(correct.className).toContain("text-green-700");
+    expect(correct.textContent).toContain("✓");
+    expect(
+      screen.getByTestId("qp-q-0-opt-1").getAttribute("data-correct"),
+    ).toBeNull();
+    expect(screen.getByTestId("qp-q-1-aside")).toHaveTextContent("aside-1");
+    expect(screen.getByTestId("qp-q-0").id).toBe("item-0");
+  });
+
+  it("不傳擴充 props 時不顯示答案", () => {
+    render(<QuestionsPreview questions={twoQuestions()} testId="qp" />);
+    expect(
+      screen.getByTestId("qp-q-0-opt-0").getAttribute("data-correct"),
+    ).toBeNull();
+    expect(screen.queryByTestId("qp-q-0-aside")).toBeNull();
+  });
+});

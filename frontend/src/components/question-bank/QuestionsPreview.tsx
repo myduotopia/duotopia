@@ -17,10 +17,16 @@
  * - 選項排版：四個以內且每個文字都短（≤ 30 字）→ 桌機 2×2（手機寬度自動單欄）；
  *   否則直排；`forceStack`（手機預覽）一律直排
  * - 長單字／網址以 `break-words` 換行，不撐破版面
+ * - 上傳題本核對畫面（#1112 C4）用的擴充（不傳時外觀不變）：
+ *   - `showAnswers`：正確選項綠字＋✓（老師核對用；學生端不傳）
+ *   - `numberLabels`：編號改顯示原卷題號（依位置對應；某題沒有就用流水號）
+ *   - `aside`：每題右邊欄（對齊第一行；手機改放在題目下方）
+ *   - `itemAttrs`：每題外層的 id／class（捲動定位、需注意的短豎線）
  * - testid：每題 `${testId}-q-${i}`，其下 `-number`／`-blank`／`-blank-missing`／`-stem-image`／
  *   `-options`／`-opt-${j}`／`-opt-${j}-image`
  */
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
@@ -41,6 +47,17 @@ export interface QuestionsPreviewProps {
   forceStack?: boolean;
   className?: string;
   testId?: string;
+  /** 正確選項綠字＋✓（核對畫面） */
+  showAnswers?: boolean;
+  /** 編號改顯示這些字（依位置；null／空字串用流水號） */
+  numberLabels?: (string | null | undefined)[];
+  /** 每題右邊欄 */
+  aside?: (q: QuestionDraft, index: number) => ReactNode;
+  /** 每題外層的 id／class */
+  itemAttrs?: (
+    q: QuestionDraft,
+    index: number,
+  ) => { id?: string; className?: string } | undefined;
 }
 
 /** 選項文字在這個長度以內才算「短」，可排 2×2 */
@@ -63,6 +80,10 @@ function PreviewQuestion({
   blankMissing,
   forceStack,
   testId,
+  showAnswers,
+  label,
+  aside,
+  attrs,
 }: {
   q: QuestionDraft;
   index: number;
@@ -70,6 +91,10 @@ function PreviewQuestion({
   blankMissing: boolean;
   forceStack: boolean;
   testId: string;
+  showAnswers: boolean;
+  label: string | null;
+  aside: ReactNode;
+  attrs?: { id?: string; className?: string };
 }) {
   const { t } = useTranslation();
   const options = q.options.filter(optionFilled);
@@ -80,7 +105,7 @@ function PreviewQuestion({
   if (!cloze) {
     marker = (
       <span className="shrink-0 font-semibold" data-testid={`${testId}-number`}>
-        {index + 1}.
+        {label || index + 1}.
       </span>
     );
   } else if (blankMissing) {
@@ -107,8 +132,8 @@ function PreviewQuestion({
     );
   }
 
-  return (
-    <li className="min-w-0 space-y-2 break-words" data-testid={testId}>
+  const body = (
+    <>
       <div className="flex items-start gap-2">
         {marker}
         {stem && (
@@ -141,8 +166,12 @@ function PreviewQuestion({
           {options.map((o, j) => (
             <li
               key={j}
-              className="flex min-w-0 items-start gap-2"
+              className={cn(
+                "flex min-w-0 items-start gap-2",
+                showAnswers && o.is_correct && "font-medium text-green-700",
+              )}
               data-testid={`${testId}-opt-${j}`}
+              data-correct={showAnswers && o.is_correct ? "true" : undefined}
             >
               <span className="shrink-0 font-medium">
                 ({String.fromCharCode(65 + j)})
@@ -162,9 +191,37 @@ function PreviewQuestion({
                   />
                 )}
               </div>
+              {showAnswers && o.is_correct && (
+                <span className="shrink-0" aria-hidden="true">
+                  ✓
+                </span>
+              )}
             </li>
           ))}
         </ol>
+      )}
+    </>
+  );
+
+  return (
+    <li
+      id={attrs?.id}
+      className={cn(
+        "min-w-0 break-words",
+        !aside && "space-y-2",
+        attrs?.className,
+      )}
+      data-testid={testId}
+    >
+      {aside ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+          <div className="min-w-0 flex-1 space-y-2">{body}</div>
+          <div className="shrink-0 sm:w-44" data-testid={`${testId}-aside`}>
+            {aside}
+          </div>
+        </div>
+      ) : (
+        body
       )}
     </li>
   );
@@ -177,6 +234,10 @@ export default function QuestionsPreview({
   forceStack = false,
   className,
   testId = "questions-preview",
+  showAnswers = false,
+  numberLabels,
+  aside,
+  itemAttrs,
 }: QuestionsPreviewProps) {
   const cloze = numbering === "blank";
   return (
@@ -193,6 +254,10 @@ export default function QuestionsPreview({
           }
           forceStack={forceStack}
           testId={`${testId}-q-${i}`}
+          showAnswers={showAnswers}
+          label={numberLabels?.[i] ?? null}
+          aside={aside ? aside(q, i) : null}
+          attrs={itemAttrs?.(q, i)}
         />
       ))}
     </ol>

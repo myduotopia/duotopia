@@ -18,10 +18,14 @@
  *     小題指向的空格已不在文章裡時顯示「找不到空格」標記、沒有編號時顯示「未指定空格」
  *   - 題幹／選項的規則（無字無圖不顯示、2×2／直排、圖片可放大）見 `QuestionsPreview`
  * - 根元素 `break-words`，長單字／網址不撐破版面
+ * - 上傳題本核對畫面（#1112 C4）用的擴充（不傳時外觀不變）：`collapsibleStimulus` 長文章只顯示前幾行，
+ *   下方「展開全文」；`showAnswers`／`numberLabels`（克漏字不用，仍是「空格 n」）／`aside`／`itemAttrs`
+ *   原樣傳給 `QuestionsPreview`
  * - 全空（無主圖文、無小題）顯示「還沒有內容」；判斷式匯出為 `groupPreviewHasContent`，面板標題列
  *   「預覽」按鈕（`SheetPreviewButton`）據此決定 disabled
  */
 
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
@@ -30,7 +34,9 @@ import LayoutRenderer, {
   InlineText,
   ZoomableImage,
 } from "./LayoutRenderer";
-import QuestionsPreview from "./QuestionsPreview";
+import QuestionsPreview, {
+  type QuestionsPreviewProps,
+} from "./QuestionsPreview";
 import { DialogueTranscriptView } from "./DialogueTranscriptView";
 import { dialogueNarration } from "./dialogueTranscript";
 import {
@@ -95,6 +101,63 @@ export interface GroupPreviewProps {
   stimulusView?: "layout" | "text";
   className?: string;
   testId?: string;
+  /** 長文章收合：只顯示前幾行，下方「展開全文」 */
+  collapsibleStimulus?: boolean;
+  showAnswers?: boolean;
+  numberLabels?: QuestionsPreviewProps["numberLabels"];
+  aside?: QuestionsPreviewProps["aside"];
+  itemAttrs?: QuestionsPreviewProps["itemAttrs"];
+}
+
+/** 主圖文收合時的高度（約前幾行） */
+const COLLAPSED_HEIGHT_PX = 160;
+
+function CollapsibleStimulus({
+  enabled,
+  testId,
+  children,
+}: {
+  enabled: boolean;
+  testId: string;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  useLayoutEffect(() => {
+    if (!enabled || !ref.current) return;
+    setOverflowing(ref.current.scrollHeight > COLLAPSED_HEIGHT_PX + 8);
+  }, [enabled, children]);
+  if (!enabled) return <>{children}</>;
+  const collapsed = overflowing && !expanded;
+  return (
+    <div data-testid={`${testId}-stimulus`}>
+      <div
+        ref={ref}
+        className={collapsed ? "relative overflow-hidden" : undefined}
+        style={collapsed ? { maxHeight: COLLAPSED_HEIGHT_PX } : undefined}
+      >
+        {children}
+        {collapsed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white" />
+        )}
+      </div>
+      {overflowing && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+          aria-expanded={expanded}
+          data-testid={`${testId}-stimulus-toggle`}
+        >
+          {expanded
+            ? t("questionBank.group.preview.collapse")
+            : t("questionBank.group.preview.expandAll")}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function GroupPreview({
@@ -103,6 +166,11 @@ export default function GroupPreview({
   stimulusView = "layout",
   className,
   testId = "group-preview",
+  collapsibleStimulus = false,
+  showAnswers = false,
+  numberLabels,
+  aside,
+  itemAttrs,
 }: GroupPreviewProps) {
   const { t } = useTranslation();
   const cloze = draft.question_type === "cloze";
@@ -147,72 +215,74 @@ export default function GroupPreview({
           {title}
         </h2>
       )}
-      {textView ? (
-        <div className="space-y-3" data-testid={`${testId}-text-view`}>
-          <p
-            className="rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700"
-            data-testid={`${testId}-text-notice`}
-          >
-            {t("questionBank.group.preview.textViewNotice")}
-          </p>
-          <div
-            className={cn(
-              draft.layout?.frame && "rounded border border-gray-400 p-4",
-            )}
-            data-testid={`${testId}-text-body`}
-            data-framed={draft.layout?.frame ? "true" : undefined}
-          >
-            {segments.length > 0 ? (
-              <DialogueTranscriptView
-                narration={dialogueNarration(draft.passage_text, segments)}
-                segments={segments}
-                testId={`${testId}-text`}
-                hideReadonlyNote
-              />
-            ) : textVersion ? (
-              <p
-                className="whitespace-pre-wrap break-words leading-relaxed"
-                data-testid={`${testId}-text-passage`}
-              >
-                {textVersion}
-              </p>
-            ) : (
-              <p
-                className="py-4 text-center text-sm text-gray-400"
-                data-testid={`${testId}-text-empty`}
-              >
-                {t("questionBank.group.layout.empty")}
-              </p>
-            )}
-          </div>
-          <GlossaryBox glossary={draft.glossary} />
-        </div>
-      ) : hasLayout ? (
-        <LayoutRenderer
-          layout={draft.layout}
-          glossary={draft.glossary}
-          forceStack={forceStack}
-        />
-      ) : (
-        hasStimulus && (
-          <div className="space-y-3" data-testid={`${testId}-fallback`}>
-            {draft.image_url && (
-              <div className="flex justify-center">
-                <ZoomableImage
-                  src={draft.image_url}
-                  className="h-auto max-w-full"
+      <CollapsibleStimulus enabled={collapsibleStimulus} testId={testId}>
+        {textView ? (
+          <div className="space-y-3" data-testid={`${testId}-text-view`}>
+            <p
+              className="rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700"
+              data-testid={`${testId}-text-notice`}
+            >
+              {t("questionBank.group.preview.textViewNotice")}
+            </p>
+            <div
+              className={cn(
+                draft.layout?.frame && "rounded border border-gray-400 p-4",
+              )}
+              data-testid={`${testId}-text-body`}
+              data-framed={draft.layout?.frame ? "true" : undefined}
+            >
+              {segments.length > 0 ? (
+                <DialogueTranscriptView
+                  narration={dialogueNarration(draft.passage_text, segments)}
+                  segments={segments}
+                  testId={`${testId}-text`}
+                  hideReadonlyNote
                 />
-              </div>
-            )}
-            {passage && (
-              <p className="whitespace-pre-wrap leading-relaxed">
-                <InlineText text={draft.passage_text} />
-              </p>
-            )}
+              ) : textVersion ? (
+                <p
+                  className="whitespace-pre-wrap break-words leading-relaxed"
+                  data-testid={`${testId}-text-passage`}
+                >
+                  {textVersion}
+                </p>
+              ) : (
+                <p
+                  className="py-4 text-center text-sm text-gray-400"
+                  data-testid={`${testId}-text-empty`}
+                >
+                  {t("questionBank.group.layout.empty")}
+                </p>
+              )}
+            </div>
             <GlossaryBox glossary={draft.glossary} />
           </div>
-        )
-      )}
+        ) : hasLayout ? (
+          <LayoutRenderer
+            layout={draft.layout}
+            glossary={draft.glossary}
+            forceStack={forceStack}
+          />
+        ) : (
+          hasStimulus && (
+            <div className="space-y-3" data-testid={`${testId}-fallback`}>
+              {draft.image_url && (
+                <div className="flex justify-center">
+                  <ZoomableImage
+                    src={draft.image_url}
+                    className="h-auto max-w-full"
+                  />
+                </div>
+              )}
+              {passage && (
+                <p className="whitespace-pre-wrap leading-relaxed">
+                  <InlineText text={draft.passage_text} />
+                </p>
+              )}
+              <GlossaryBox glossary={draft.glossary} />
+            </div>
+          )
+        )}
+      </CollapsibleStimulus>
       {questions.length > 0 && (
         <section
           className={cn("space-y-4", hasStimulus && "border-t pt-4")}
@@ -227,6 +297,10 @@ export default function GroupPreview({
             missingBlanks={missingBlanks}
             forceStack={forceStack}
             testId={testId}
+            showAnswers={showAnswers}
+            numberLabels={cloze ? undefined : numberLabels}
+            aside={aside}
+            itemAttrs={itemAttrs}
           />
         </section>
       )}
