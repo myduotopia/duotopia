@@ -6685,6 +6685,19 @@
           "duplicate": "題庫已有（會略過）",
           "sameStem": "題目文字相同（會略過）",
           "pending": "等下一頁"
+        },
+        "tabs": {
+          "questions": "逐題核對",
+          "compare": "整頁對照原卷"
+        },
+        "compare": {
+          "hint": "原卷第 {{n}} 頁（滑鼠停在右邊的題目，左邊會框出位置；點圖可放大）",
+          "noImage": "這一頁還沒有頁面圖",
+          "page": "第 {{n}}／{{total}} 頁",
+          "prevPage": "上一頁",
+          "nextPage": "下一頁",
+          "firstPage": "已經是第一頁",
+          "lastPage": "已經是最後一頁"
         }
       },
       "openOtherOrg": "那次匯入在另一個機構的題庫，請先切換到那個機構再打開。",

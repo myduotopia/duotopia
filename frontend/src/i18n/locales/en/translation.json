@@ -6653,6 +6653,19 @@
           "duplicate": "Already in bank (will skip)",
           "sameStem": "Same question text (will skip)",
           "pending": "Waiting for next page"
+        },
+        "tabs": {
+          "questions": "Question by question",
+          "compare": "Compare with paper"
+        },
+        "compare": {
+          "hint": "Page {{n}} of the paper (hover a question on the right to outline it here; click the image to zoom)",
+          "noImage": "No page image yet",
+          "page": "Page {{n}} / {{total}}",
+          "prevPage": "Previous page",
+          "nextPage": "Next page",
+          "firstPage": "This is the first page",
+          "lastPage": "This is the last page"
         }
       },
       "openOtherOrg": "That import belongs to another organization's question bank. Switch to that organization first.",
