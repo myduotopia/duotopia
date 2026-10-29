@@ -58,6 +58,29 @@ describe("GradeRangeSlider", () => {
     expect(onChange).toHaveBeenLastCalledWith([null, null]);
   });
 
+  it("emptyLabel：還沒選時標籤改成提示字；選了之後照常顯示範圍", () => {
+    const { rerender } = render(
+      <GradeRangeSlider
+        value={[null, null]}
+        onChange={vi.fn()}
+        emptyLabel="drag to pick"
+      />,
+    );
+    expect(screen.getByTestId("grade-range-slider-label").textContent).toBe(
+      "drag to pick",
+    );
+    rerender(
+      <GradeRangeSlider
+        value={[2, 6]}
+        onChange={vi.fn()}
+        emptyLabel="drag to pick"
+      />,
+    );
+    expect(screen.getByTestId("grade-range-slider-label").textContent).toBe(
+      "g2-6",
+    );
+  });
+
   it("只設一端時另一端用全範圍畫", () => {
     render(<GradeRangeSlider value={[7, null]} onChange={vi.fn()} />);
     expect(

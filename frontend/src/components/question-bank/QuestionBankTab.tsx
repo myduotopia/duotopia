@@ -22,6 +22,12 @@
  * 批次刪除含題組（deleteQuestionGroup）、列尾「刪除題組」Dialog 確認；批次編輯／派發只對單題。
  * 題型篩選與題組列的題型顯示「閱讀題組」（groupTypeLabel），新增清單仍顯示「閱讀測驗」。
  *
+ * 上傳題本（#1112 C3，只在 scope="mine"）：最上方未完成匯入提示列（ExamImportBanner）、
+ * 「新增題目 ▽ → 上傳題本」開上傳／進度 Sheet。狀態（useExamImport）與 Sheet（ExamImportSheet）
+ * 放在外層頁面（TeacherTemplatePrograms），由 `examImport` prop 傳進來——切到「教材」分頁時本元件
+ * 會卸載，處理要繼續。有一份正在處理時「上傳題本」停用並說明原因。沒傳 `examImport`（機構題庫）
+ * 「上傳題本」停用，標「即將推出」（C4 開放）。
+ *
  * 拆檔（#1082）：QuestionBankToolbar（工具列）、QuestionRow（單題列）、GroupRow（題組列）、
  * QuestionBankPagination（分頁列）、listCells（共用格子）。此檔只持有狀態與資料流。
  */
@@ -53,6 +59,8 @@ import QuestionRow, { type RowEdit } from "./QuestionRow";
 import GroupRow from "./GroupRow";
 import { examPointsFromQuestion } from "./questionDraft";
 import { makeCreateSource, sourceToItem } from "./sourcesCombobox";
+import ExamImportBanner from "./exam-import/ExamImportBanner";
+import type { ExamImportController } from "./exam-import/useExamImport";
 
 function editFromQuestion(q: Question): RowEdit {
   return {
@@ -78,6 +86,11 @@ export interface QuestionBankTabProps {
   onDispatch?: (questions: Question[]) => void;
   /** 勾選的題型全相同時的批次編輯（開編輯面板多張卡） */
   onBulkEdit?: (questions: Question[]) => void;
+  /**
+   * 上傳題本（#1112）的狀態，由外層頁面持有（不隨題庫分頁卸載）。只有「我的題庫」傳；
+   * 沒傳＝「上傳題本」停用（機構題庫 C4 開放）、不顯示提示列。
+   */
+  examImport?: ExamImportController;
 }
 
 export default function QuestionBankTab({
@@ -90,6 +103,7 @@ export default function QuestionBankTab({
   refreshKey = 0,
   onDispatch,
   onBulkEdit,
+  examImport,
 }: QuestionBankTabProps) {
   const { t } = useTranslation();
   // 列表列：單題 + 題組列（#1082）。題組列可勾選、快速改公開、批次刪除；
@@ -480,10 +494,13 @@ export default function QuestionBankTab({
 
   return (
     <div className="space-y-4 pb-24" data-testid="question-bank-tab">
+      {examImport && <ExamImportBanner controller={examImport} />}
       <QuestionBankToolbar
         scope={scope}
         canCreate={canCreate}
         onCreate={handleCreate}
+        onUploadExam={examImport?.openUpload}
+        uploadExamBusy={!!examImport?.running}
         typeLabel={typeLabel}
         filterTypeLabel={groupTypeLabel}
         search={search}

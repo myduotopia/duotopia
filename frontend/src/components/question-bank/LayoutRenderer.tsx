@@ -13,7 +13,7 @@
  * - 文字經 `parseInline` 成節點樹渲染：粗體、底線、雙底線、`{{n}}` 畫成底線＋編號；
  *   不使用 dangerouslySetInnerHTML；文字元素 `whitespace-pre-wrap`，段落開頭與連續空格照原樣
  * - glossary 有「word 與中文都非空」的項目時才渲染底部框；全空就不佔位
- * - `InlineText`、`ZoomableImage`（圖＋點擊放大 Dialog）、`GlossaryBox`（單字註解框）另外匯出，
+ * - `InlineText`、`ZoomableImage`（圖＋點擊放大 Dialog；`buttonClassName` 可讓按鈕撐滿縮圖框）、`GlossaryBox`（單字註解框）另外匯出，
  *   題組預覽（GroupPreview）／小題預覽（QuestionsPreview）共用，不另寫一套
  */
 
@@ -98,11 +98,14 @@ export function InlineText({
 /**
  * 圖片＋點擊放大 Dialog；主圖文的圖片區塊與題組預覽的題幹／選項圖共用。
  * `zoomable=false`（考卷輸出）只畫 `<img>`。
+ * `className` 套在圖上；`buttonClassName` 套在外層放大按鈕上（例如固定大小的縮圖框要按鈕撐滿：
+ * `block h-full w-full`），不傳時外觀不變。
  */
 export function ZoomableImage({
   src,
   alt = "",
   className,
+  buttonClassName,
   style,
   zoomable = true,
   testId,
@@ -110,6 +113,8 @@ export function ZoomableImage({
   src: string;
   alt?: string;
   className?: string;
+  /** 外層放大按鈕的額外 class（和預設 `cursor-zoom-in` 合併） */
+  buttonClassName?: string;
   style?: React.CSSProperties;
   zoomable?: boolean;
   testId?: string;
@@ -131,7 +136,7 @@ export function ZoomableImage({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="cursor-zoom-in"
+        className={cn("cursor-zoom-in", buttonClassName)}
         aria-label={t("questionBank.group.render.zoomImage")}
       >
         {img}

@@ -35,6 +35,8 @@ import MaterialsPageTabs, {
   type MaterialsPageTab,
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
+import ExamImportSheet from "@/components/question-bank/exam-import/ExamImportSheet";
+import { useExamImport } from "@/components/question-bank/exam-import/useExamImport";
 import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
 import type { Question, QuestionType } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
@@ -71,6 +73,9 @@ function TeacherTemplateProgramsInner() {
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  // 上傳題本（#1112 C3）：狀態放在頁面層，不跟題庫分頁一起卸載——切到「教材」分頁時處理繼續；
+  // 提示列在題庫分頁（QuestionBankTab），上傳／進度 Sheet 在這一層
+  const examImport = useExamImport(true);
   // 題庫：新增／編輯選擇題 dialog（issue #1064）
   const [questionDialog, setQuestionDialog] = useState<{
     open: boolean;
@@ -809,6 +814,7 @@ function TeacherTemplateProgramsInner() {
           <QuestionBankTab
             scope="mine"
             refreshKey={questionRefreshKey}
+            examImport={examImport}
             onCreateQuestion={(type) =>
               setQuestionDialog({
                 open: true,
@@ -1524,6 +1530,13 @@ function TeacherTemplateProgramsInner() {
         onClose={() => setQuestionDialog({ open: false, questions: null })}
         onSaved={() => setQuestionRefreshKey((k) => k + 1)}
         onDeleted={() => setQuestionRefreshKey((k) => k + 1)}
+      />
+
+      {/* 上傳題本（#1112 C3）：放在分頁外，切到教材分頁也不卸載 */}
+      <ExamImportSheet
+        controller={examImport}
+        programs={programs}
+        sidebarWidth={sidebarWidth}
       />
 
       <ProgramDialog

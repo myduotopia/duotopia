@@ -4,6 +4,19 @@
 > 影響：題庫（`frontend/src/components/question-bank/`、`backend/routers/question_bank*.py`）新增任何題型時都必須遵守。
 > 資料表定義見 [`question-bank-schema.md`](./question-bank-schema.md)；layout 格式與驗收樣本見 [`question-bank-layout-samples/README.md`](./question-bank-layout-samples/README.md)。
 > 逐步執行流程：skill `/qb-add-type <題型名稱>`（`.claude/skills/qb-add-type/SKILL.md`）。
+> 「上傳題本」流程與綜合確認畫面原則（#1112）見 [`question-bank-exam-import.md`](./question-bank-exam-import.md)。
+
+## 題型總表
+
+| 題型 | 狀態 | issue |
+|------|------|-------|
+| 單題選擇題 `multiple_choice` | 已實作 | #1061 |
+| 閱讀題組 `reading` | 已實作 | #1079 |
+| 克漏字題組 `cloze` | 已實作 | #1080、#1085 |
+| 填空、題組填空、句子重組、寫整句、中翻英、英文作文、配對 | 規劃中 | #1110 |
+| 聽力類（`listening`／`listening_image`，已在 `QUESTION_TYPES` 預留） | 規劃中 | — |
+
+**三條新增路徑**（列表「新增題目 ▽」）：**上傳題本**（綜合確認畫面，#1112）、**AI 出題**（綜合確認畫面，#1114，未開放）、**自己出題**（本文件的單一題型畫面 `QuestionSheet`，一次一種題型）。單一題型畫面裡現有的「上傳圖片擷取」保持不動。綜合確認畫面依原卷順序混排各種題型，加題型時要一併支援（見第四節第 12～15 步）。
 
 ## 核心原則
 
@@ -26,7 +39,8 @@
 5. 預覽編號方式（`QuestionsPreview` 的 `numbering`）
 6. 列表新增下拉、篩選與 i18n 名稱
 7. AI 作答／考點分析送出的題幹與上下文
-8. 擷取（magic paste）的模式與正規化
+8. 擷取（magic paste）的模式與正規化（含上傳題本 `exam_paper` 的分派）
+9. 上傳題本的確認畫面顯示、重複判定與自動語音（[`question-bank-exam-import.md`](./question-bank-exam-import.md)）
 
 ## 一、單元／題組骨架
 
@@ -83,8 +97,9 @@ type UnitDraft =
 ### blank_index 規則（克漏字）
 
 - `{{n}}` 的 n = 小題 `blank_index` = 畫面徽章「空格 n」。空格編號是權威，拖拉區塊不改號。
-- 題庫內的編號是**題組內的 1..k**：AI 擷取一律把印刷題號（`__40__`）重編成 `{{1}}`…`{{k}}`；手動插入取 max + 1，老師可按「依閱讀順序重新編號」變回 1..k。**題庫不存原卷題號**。
-- 考卷上印出的題號（例如 1–4 顯示為 10–13）由 **P4 組卷時以前面題數為偏移計算**（`LayoutRenderer`／`QuestionsPreview`／`GroupPreview` 屆時加起始題號參數），不改題庫資料。原卷題號另規劃記在「考題來源連結」（見 memory／schema 文件 P4 段落）。
+- 題庫內的編號是**題組內的 1..k**：AI 擷取一律把印刷題號（`__40__`）重編成 `{{1}}`…`{{k}}`；手動插入取 max + 1，老師可按「依閱讀順序重新編號」變回 1..k。
+- **原卷題號另外存**：`blank_index` 只管題組內 1..k；原卷上印的題號（例如 40–43）記在來源連結 `question_source_links.source_question_no`（#1112），每個小題各記一筆，同一題屬於多份考卷就各記各的題號。題組本身沒有來源連結，題組的題號範圍由小題推算；以圖為準題組的題號也記在小題上。規則見 schema 文件 `question_sources` 段。
+- 考卷上印出的題號（例如 1–4 顯示為 10–13）由 **P4 組卷時以前面題數為偏移計算**（`LayoutRenderer`／`QuestionsPreview`／`GroupPreview` 屆時加起始題號參數），不改題庫資料，也不讀 `source_question_no`。
 - 前後端同規則驗證：前端 `clozeBlankError`、後端 `validate_cloze_blanks`；非克漏字題組文章不得含 `{{n}}`（`assert_no_cloze_blanks`）。
 
 ## 三、現有三種題型對照表
@@ -100,6 +115,10 @@ type UnitDraft =
 | 題型專屬驗證 | 批內／庫內重複（`normalized_stem`） | 文章不得有 `{{n}}`（`assert_no_cloze_blanks`） | 空格集合 = 小題 `blank_index` 集合、不重複（`validate_cloze_blanks`／`clozeBlankError`）；`DELETE /questions/{id}` 拒刪克漏字小題 |
 | 擷取 extract_mode | `multiple_choice` → `_normalize_mc_items` → `draftsFromExtracted` | `reading_group` → `_normalize_reading_group` → `groupDraftFromExtracted`；拿到 `{{n}}` 轉回 `____`（`stripBlankTokens`） | `reading_group`（同上）；保留 AI 重編的 `{{1..k}}`，小題 `blank` 對位或 `matchClozeBlanks` 依閱讀順序補配 |
 | 擷取素材 `stimulus.kind` | — | `text`（段落＋`figures`）或 `image`（整塊裁圖＋可選 `dialogue`） | 實務上 `text`（空格在文字裡） |
+| 上傳題本 `exam_paper`（#1112 C2） | 題目卡 `kind: single` | 題目卡 `kind: group`（`group_type: "reading"`） | 題目卡 `kind: group`（`group_type: "cloze"`），空格與小題沿用 #1086 空格對位規則（`exam_paper_cards.match_cloze_blanks`）；`cloze_group` 模式為匯入內部使用、沒有端點 |
+| 原卷題號 | 單題自己的 `source_question_no` | 記在每個小題上 | 記在每個小題上（`blank_index` 維持 1..k） |
+| 自動語音（上傳題本） | 題幹：Azure | 小題題幹：Azure；文章：Gemini 單聲；對話 segments：Gemini 多說話者；以圖為準無文字：不產生 | 小題：Azure；文章：Gemini，`{{n}}` 唸成 "blank" |
+| 與自己題庫重複（上傳題本） | 題目＋選項都相同 | 題組文字（`passage_text`／segments 串接）＋每個小題題目相同，選項不同也算 | 同閱讀題組 |
 | AI 作答／考點分析輸入 | `stem` | `stem` + `passage`（`groupPassageText`） | 空題幹送 `Fill in blank (n).`（`clozeAiStem`）+ 保留編號的 passage（`layoutToNumberedText`：`(n)____`）；後端 `PASSAGE_RULE` 說明 |
 | 預覽 | `SheetPreviewButton` → `QuestionsPreview numbering="sequential"` | `GroupPreview`（`LayoutRenderer` + `QuestionsPreview` sequential） | `GroupPreview` + `QuestionsPreview numbering="blank"`（不顯示題幹、缺空格琥珀標記） |
 | 列表名稱 | `questionBank.types.multiple_choice` | 篩選／列表 `groupTypes.reading`；新增下拉 `types.reading` | `groupTypes.cloze`／`types.cloze` |
@@ -186,16 +205,39 @@ type UnitDraft =
   - 新 extract mode 才需要：`EXTRACT_MODE_*` 常數、`EXTRACT_MODES`（`backend/routers/magic_paste.py` 用它驗 422）、`_build_prompt` 分支、`extract` 內的 normalize 分派
   - 沿用 `reading_group` 時：在 prompt 補新素材欄位（例如聽力稿），`_normalize_reading_group` 正規化（`stimulus.kind` 值域 `STIMULUS_KINDS`、`_normalize_figures`、`_normalize_dialogue`、`_normalize_mc_items`）
 - 前端：`frontend/src/components/shared/MagicPasteInput.tsx`（`MagicPasteExtractMode`、`MagicPasteGroupResult` 與後端回傳對應）；`QuestionSheet.tsx` 傳的 `extractMode`；`QuestionBankBatchPanel.tsx` `extractMode` 聯集；`extractedGroup.ts` `groupDraftFromExtracted`（依 `base.question_type` 分支，比照 `isCloze`）；裁圖上傳 `extractedImages.ts`、`useExtractedGroup.ts` 一般不用改。
-- 驗：`backend/tests/test_magic_paste_endpoint.py`、`test_magic_paste_reading_group_frame.py`（normalize 單元測試）；前端 `__tests__/extractedGroup.test.ts`、`useExtractedGroup.test.tsx`。
+- **上傳題本 `exam_paper`（#1112）**：單頁圖片 → 題目卡陣列（單題／題組混排，依原卷順序）。新題型要能被辨識成對應的 `kind`（`single`／`group`）與 `question_type`，並在 `exam_paper` 的正規化分派裡加分支；每張題目卡要帶原卷題號、在頁面上的位置（框）、答案（答案頁或 AI 作答）。跨頁題組標「延續上一頁的題組」依原卷題號合併。**不改動現有四種擷取模式**。
+- 驗：`backend/tests/test_magic_paste_endpoint.py`、`test_magic_paste_reading_group_frame.py`（normalize 單元測試）；前端 `__tests__/extractedGroup.test.ts`、`useExtractedGroup.test.tsx`；`exam_paper` 另以後端 JSON 對照驗收樣本。
 
 ### 11. 驗收樣本
 
 - 題組題型：在 `docs/design/question-bank-layout-samples/` 加一份手寫 JSON（真實考卷一組題目），README 表格加一列；後端 `backend/tests/test_question_bank_layout.py` 會把樣本當正向資料（新題型若有專屬驗證，再用樣本跑一次）。
 - 測試資料要用真實情境（例如克漏字小題就是空題幹無圖），不要塞內容繞過驗證。
 
-### 12. 文件同步
+### 12. 綜合確認畫面（上傳題本，#1112）
 
-- 本文件第三節對照表加一欄、第一節題型清單加一列。
+- 確認畫面能顯示這個題型（逐題核對的紙本樣式、整頁對照），題號導覽能標色（缺答案、處理失敗、處理中、我的題庫已有這題）。
+- 編輯時沿用 `QuestionCard`／`GroupCard` 的分流，不另做卡片。
+- 與自己題庫重複的判定：寫出這個題型「相同」的定義（單題比題目＋選項；題組比題組文字＋小題題目），比對前忽略空白、大小寫、標點。
+- 規則見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第五、六節。
+
+### 13. 語音
+
+- 決定這個題型要不要自動產生音檔、用哪個引擎：單題與小題用 Azure；題組主圖文（文章、對話、克漏字）用 Gemini；沒有文字的不產生。
+- 新素材送 TTS 前要轉什麼（例如克漏字 `{{n}}` → "blank"）。
+- 規則見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第七節。
+
+### 14. 標準答案與 AI 作答
+
+- 所有題型都必須有標準答案才能儲存：前端 `validateDraft`／`validateGroupDraft`、後端驗證都要擋。
+- 接上 AI 作答（第 9 步）；上傳題本時答案頁的答案依原卷題號回填，老師改過的不覆蓋。
+
+### 15. AI 檢查與 AI 出題
+
+- #1113（AI 檢查）、#1114（AI 出題）完成後，這兩條路徑也要支援新題型。尚未完成前在此步標「不適用」。
+
+### 16. 文件同步
+
+- 本文件「題型總表」更新狀態、第三節對照表加一欄、「核心原則」題型表加一列。
 - `docs/design/question-bank-schema.md`：題型專屬欄位或規則段落（比照「克漏字題組（#1085）」）。
 - 改到的檔案頂部 JSDoc／docstring（例如 `QuestionSheet.tsx` 模式說明、`QuestionUnitList.tsx`、`question_bank_groups.py`）。
 
@@ -213,10 +255,11 @@ type UnitDraft =
 - 題型判斷集中在草稿層函式（`isClozeGroup` 類），元件不散寫字串比較；目前已知的散寫點是 `QuestionBankTab.tsx` `groupTypeLabel`、`GroupPreview.tsx`、`aiDraft.ts`、`extractedGroup.ts`，加題型時一併檢查。
 - 不為了題型建新表；「加題型不動 migration」是原則（P0 migration 已一次建齊題組／分段／聽力欄位），必要時加 nullable 欄位（冪等寫法）。
 - 單檔 ≤ 1000 行（`check-file-size.py`）。`GroupCard.tsx`（~780 行）、`QuestionSheet.tsx`（~790 行）已接近上限，新題型的 UI 優先拆成子元件。
+- 上傳題本的上傳畫面、綜合確認畫面**另開新檔**，不塞進 `QuestionSheet.tsx`；也不是新路由，從列表「新增題目 ▽」進入。
 
 ## 六、已知缺口（下一個題型會碰到）
 
-- 題組整段音檔 `question_groups.audio_url`：DB 有、`_group_out` 有輸出，但建立／PATCH schema 不收、`GroupDraft` 沒有欄位、GroupCard 沒有播放／上傳 UI。
-- segments 的 `audio_url`／`tts_voice`／`pause_after_ms` 尚未使用；題組對話音檔生成（Gemini 2.5 Flash TTS 多說話者，上限 2 人，三人以上分段串接）尚未實作。
+- 題組整段音檔 `question_groups.audio_url`：DB 有、`_group_out` 有輸出，但建立／PATCH schema 不收、`GroupDraft` 沒有欄位、GroupCard 沒有播放／上傳 UI。#1112 語音段會補上（上傳題本匯入的題組）。
+- segments 的 `audio_url`／`pause_after_ms` 尚未使用；`tts_voice` 由 #1112 開始使用（AI 替每個角色挑的 Gemini 聲音）。題組對話音檔生成（Gemini 2.5 Flash TTS 多說話者，上限 2 人，三人以上分段串接）由 #1112 實作，規格見 [`question-bank-exam-import.md`](./question-bank-exam-import.md) 第七節。
 - `questions.segment_id`（小題只針對某一段）預留，無 UI。
 - 學生端作答與考卷題號偏移屬 P4／P5。

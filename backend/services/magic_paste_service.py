@@ -46,6 +46,14 @@ EXTRACT_MODES = {
     EXTRACT_MODE_MULTIPLE_CHOICE,
     EXTRACT_MODE_READING_GROUP,
 }
+# 上傳題本（#1112）專用的兩種模式：一頁圖片 → 題目卡陣列（exam_paper），以及只擷取一個
+# 克漏字題組（cloze_group，匯入內部使用、目前沒有端點；克漏字由 exam_paper 的題組
+# group_type "cloze" 產出）。實作在 services/exam_paper_service.py，exam_paper 只經
+# /api/question-bank/exam-imports 呼叫（不佔每月擷取額度），所以**刻意不放進
+# EXTRACT_MODES**：既有 /api/programs/magic-paste 端點的四種模式與行為完全不變。
+EXTRACT_MODE_EXAM_PAPER = "exam_paper"
+EXTRACT_MODE_CLOZE_GROUP = "cloze_group"
+EXAM_IMPORT_EXTRACT_MODES = {EXTRACT_MODE_EXAM_PAPER, EXTRACT_MODE_CLOZE_GROUP}
 MC_MIN_OPTIONS = 2
 MC_MAX_OPTIONS = 6
 # reading_group 的素材區域座標：Gemini 慣用 [ymin, xmin, ymax, xmax]，0–1000 正規化

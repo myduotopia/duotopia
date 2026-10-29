@@ -228,7 +228,7 @@
 | **批次操作列** BulkActionBar | `frontend/src/components/shared/BulkActionBar.tsx` | **標準**：列表勾選後的底部深藍膠囊操作列。目前用在「我的班級」、機構班級管理、題庫列表。呼叫端傳完整計數句子（`countLabel`）與動作；動作可設 `variant: "danger"`（不寫＝一般，膠囊上不分主次）、`disabledReason`、`disabledBadge`、`loading`、`testId`，計數旁可加 `countNote` 附註 |
 | CreatableCombobox | `frontend/src/components/shared/CreatableCombobox.tsx` | 可搜尋、可新增的下拉 |
 | ExamPointPicker | `frontend/src/components/shared/ExamPointPicker.tsx` | 選考點 |
-| GradeRangeSlider | `frontend/src/components/shared/GradeRangeSlider.tsx` | 年段 1–12 兩點拉桿 |
+| GradeRangeSlider | `frontend/src/components/shared/GradeRangeSlider.tsx` | 年段 1–12 兩點拉桿（必選的畫面用 `emptyLabel` 把未選的「不限」換成提示字） |
 | LabeledSwitch | `frontend/src/components/shared/LabeledSwitch.tsx` | 文字寫在軌道裡的開關（含深色底版本） |
 | MagicPasteDialog | `frontend/src/components/shared/MagicPasteDialog.tsx` | 手機版魔術貼上對話框 |
 | MagicPasteInput | `frontend/src/components/shared/MagicPasteInput.tsx` | 上傳圖片／PDF 由 AI 擷取內容 |
@@ -289,7 +289,7 @@
 | OneCampusBindSection | `frontend/src/components/settings/OneCampusBindSection.tsx` | 1Campus 綁定與信箱驗證狀態 |
 | StudentLoginQRShare | `frontend/src/components/teacher/StudentLoginQRShare.tsx` | 分享學生登入 QR code |
 | ImageCarousel | `frontend/src/components/ImageCarousel.tsx` | 圖片輪播（左右箭頭、圓點、觸控滑動、鍵盤左右鍵）。預設為首頁功能特色外觀（圓點在上、下方說明文字）；`compact`（#1133）：圓點在圖下、無說明文字區、單張不顯示控制；`zoomable`：點圖放大（ZoomableImage），放大視窗內滑動／按鍵不會讓背後輪播換張 |
-| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。題庫與 `ImageCarousel` 的 `zoomable` 模式（#1133 情境對話）使用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出 |
+| ZoomableImage | `frontend/src/components/question-bank/LayoutRenderer.tsx`（具名匯出） | 圖片＋點擊放大。題庫與 `ImageCarousel` 的 `zoomable` 模式（#1133 情境對話）使用，是 `question-bank/LayoutRenderer.tsx` 的具名匯出。`className` 套在圖上；選用 `buttonClassName` 套在外層放大按鈕上（例如固定大小的縮圖框傳 `block h-full w-full` 讓按鈕撐滿），不傳時不變 |
 
 ### 6.5 淘汰中
 

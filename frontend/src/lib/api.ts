@@ -1,5 +1,9 @@
 /**
  * API Client for Duotopia
+ *
+ * - 錯誤一律丟 `ApiError`（status ＋ 後端 `detail`；網路錯誤 status = 0），401 經
+ *   `handleUnauthorized` 導回登入頁。
+ * - 成功回應 204 或空 body 回 `undefined`，不解析 JSON（`parseSuccessBody`，#1112）。
  */
 
 import { API_URL } from "../config/api";
@@ -38,6 +42,44 @@ const DEBUG = false; // 暫時關閉以便追蹤其他問題
 
 // Prevent multiple simultaneous 401 redirects
 let isRedirectingToLogin = false;
+
+/**
+ * 401（token 過期／無效）→ 清登入資料並導回登入頁；`/auth/` 端點除外。
+ * `request` 與 `postForm` 共用（#1112）。
+ */
+function handleUnauthorized(status: number, endpoint: string): void {
+  if (status !== 401 || endpoint.includes("/auth/")) return;
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  // Preserve the in-progress URL across this hard navigation.
+  saveRedirectTarget(
+    window.location.pathname + window.location.search + window.location.hash,
+  );
+  clearAllAuth();
+  const loginPath = window.location.pathname.startsWith("/student")
+    ? "/student/login"
+    : "/teacher/login";
+  window.location.href = loginPath;
+  // Reset flag after a short delay so future 401s can still redirect
+  setTimeout(() => {
+    isRedirectingToLogin = false;
+  }, 3000);
+}
+
+/**
+ * 成功回應的 body：204 或空 body（`Content-Length: 0`）回 `undefined`，其餘照常解析 JSON。
+ * 刪除 API 回 204，原本一律 `response.json()` 會丟 SyntaxError、被當成失敗（#1112）。
+ * `request` 與 `postForm` 共用。`headers` 用 optional chaining：測試的假回應常沒有 headers。
+ */
+function parseSuccessBody<T>(response: Response): Promise<T> {
+  if (
+    response.status === 204 ||
+    response.headers?.get("content-length") === "0"
+  ) {
+    return Promise.resolve(undefined as T);
+  }
+  return response.json() as Promise<T>;
+}
 
 /**
  * Custom API Error class for better error handling
@@ -400,33 +442,13 @@ class ApiClient {
             : `HTTP ${response.status} Error`;
 
         // Auto-logout on 401 (expired/invalid token)
-        if (response.status === 401 && !endpoint.includes("/auth/")) {
-          if (!isRedirectingToLogin) {
-            isRedirectingToLogin = true;
-            // Preserve the in-progress URL across this hard navigation.
-            saveRedirectTarget(
-              window.location.pathname +
-                window.location.search +
-                window.location.hash,
-            );
-            clearAllAuth();
-            const loginPath = window.location.pathname.startsWith("/student")
-              ? "/student/login"
-              : "/teacher/login";
-            window.location.href = loginPath;
-            // Reset flag after a short delay so future 401s can still redirect
-            setTimeout(() => {
-              isRedirectingToLogin = false;
-            }, 3000);
-          }
-        }
+        handleUnauthorized(response.status, endpoint);
 
         // Throw ApiError instead of generic Error
         throw new ApiError(response.status, detail, error);
       }
 
-      const result = await response.json();
-      return result;
+      return await parseSuccessBody<T>(response);
     } catch (err) {
       // If it's already an ApiError, re-throw it
       if (err instanceof ApiError) {
@@ -515,6 +537,44 @@ class ApiClient {
     return this.request<T>(endpoint, {
       method: "DELETE",
     });
+  }
+
+  /**
+   * multipart/form-data POST（上傳題本逐頁送頁圖，#1112）。不經 `request`：它固定加
+   * `Content-Type: application/json`，會蓋掉 multipart 的 boundary。錯誤一樣丟 `ApiError`，
+   * 保留後端結構化的 `detail`（例如 `{ error, message }`）；網路錯誤 status = 0。
+   * 401 與 `request` 相同，經 `handleUnauthorized` 導回登入頁。
+   */
+  async postForm<T>(endpoint: string, formData: FormData): Promise<T> {
+    const currentToken = this.getToken();
+    const headers: HeadersInit = {};
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    } catch (err) {
+      throw new ApiError(
+        0,
+        err instanceof Error ? err.message : "Network error occurred",
+        err,
+      );
+    }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const detail =
+        typeof error === "object" && error !== null && "detail" in error
+          ? error.detail
+          : `HTTP ${response.status} Error`;
+      handleUnauthorized(response.status, endpoint);
+      throw new ApiError(response.status, detail, error);
+    }
+    return parseSuccessBody<T>(response);
   }
 
   getCurrentUser() {

@@ -5,6 +5,19 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // #1112：`?url` 引入的 .mjs（pdf.js worker）產出時改成 .js。
+        // nginx:alpine 的 mime.types 沒有 mjs，會回 application/octet-stream，
+        // 加上 nosniff 瀏覽器就不肯當 module worker 載入。
+        assetFileNames: (assetInfo) =>
+          assetInfo.name?.endsWith('.mjs')
+            ? 'assets/[name]-[hash].js'
+            : 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

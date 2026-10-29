@@ -9,6 +9,8 @@
  * 底部批次操作列為共用 BulkActionBar（#1116）：膠囊用 `bulk-action-bar` 找，
  * 各按鈕沿用 `qb-bulk-save`／`qb-bulk-edit`／`qb-bulk-delete` 等 testId；
  * 沒有修改時儲存停用且 title 說明原因（nothingToSave）。
+ * 上傳題本（#1112）：狀態由外層頁面持有、經 `examImport` prop 傳入（測試用 MineTab 模擬）；
+ * 沒傳＝停用「即將推出」，處理中＝停用「目前有一份題本正在處理」。
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -16,7 +18,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
-import QuestionBankTab from "../QuestionBankTab";
+import QuestionBankTab, { type QuestionBankTabProps } from "../QuestionBankTab";
+import { useExamImport } from "../exam-import/useExamImport";
 import { PAGE_SIZES } from "../QuestionBankPagination";
 import type {
   Question,
@@ -30,6 +33,7 @@ const updateQuestion = vi.fn();
 const deleteQuestion = vi.fn();
 const updateQuestionGroup = vi.fn();
 const deleteQuestionGroup = vi.fn();
+const apiGet = vi.fn().mockResolvedValue({ items: [] });
 vi.mock("@/lib/api", () => ({
   apiClient: {
     listQuestions: (...args: unknown[]) => listQuestions(...args),
@@ -39,6 +43,8 @@ vi.mock("@/lib/api", () => ({
     deleteQuestionGroup: (...args: unknown[]) => deleteQuestionGroup(...args),
     listSources: vi.fn().mockResolvedValue({ items: [] }),
     createSource: vi.fn(),
+    // 上傳題本（#1112）：未完成的匯入列表
+    get: (...args: unknown[]) => apiGet(...args),
     listExamPoints: vi.fn().mockResolvedValue({
       items: [
         {
@@ -155,6 +161,16 @@ function makeQuestion(overrides: Partial<Question> = {}): Question {
 function LocationProbe() {
   const loc = useLocation();
   return <span data-testid="loc">{loc.search}</span>;
+}
+
+/** 模擬「我的教材」頁：useExamImport 在外層，傳給題庫分頁 */
+function MineTab({
+  busy = false,
+  ...props
+}: Partial<QuestionBankTabProps> & { busy?: boolean }) {
+  const examImport = useExamImport(true);
+  const controller = busy ? { ...examImport, running: true } : examImport;
+  return <QuestionBankTab scope="mine" examImport={controller} {...props} />;
 }
 
 function renderTab(ui: React.ReactElement, initialEntries: string[] = ["/"]) {
@@ -362,6 +378,71 @@ describe("QuestionBankTab", () => {
 
     await user.click(cloze);
     expect(onCreate).toHaveBeenCalledWith("cloze");
+  });
+
+  it("「新增題目」下拉：上傳題本在我的題庫可點、AI 出題停用；沒有未完成的匯入不顯示提示列（#1112）", async () => {
+    listQuestions.mockResolvedValue(respond([]));
+    const user = userEvent.setup();
+    renderTab(<MineTab />);
+    await screen.findByTestId("question-bank-empty");
+    expect(apiGet).toHaveBeenCalledWith("/api/question-bank/exam-imports");
+    expect(screen.queryByTestId("exam-import-banner")).toBeNull();
+
+    await user.click(screen.getByTestId("question-bank-add"));
+    const upload = await screen.findByTestId("question-bank-add-exam-import");
+    expect(upload.getAttribute("data-disabled")).toBeNull();
+    const ai = screen.getByTestId("question-bank-add-ai-generate");
+    expect(ai.getAttribute("data-disabled")).not.toBeNull();
+  });
+
+  it("上傳題本停用時小字說明原因：處理中／機構題庫即將推出（#1112）", async () => {
+    listQuestions.mockResolvedValue(respond([]));
+    const user = userEvent.setup();
+    const { unmount } = renderTab(<MineTab busy />);
+    await screen.findByTestId("question-bank-empty");
+    await user.click(screen.getByTestId("question-bank-add"));
+    const busy = await screen.findByTestId("question-bank-add-exam-import");
+    expect(busy.getAttribute("data-disabled")).not.toBeNull();
+    expect(
+      screen.getByTestId("question-bank-add-exam-import-hint").textContent,
+    ).toBe("questionBank.examImport.menu.uploadBusy");
+    unmount();
+
+    // 沒傳 examImport（機構題庫）：C4 開放，先標「即將推出」
+    renderTab(<QuestionBankTab scope="organization" organizationId="org-1" />);
+    await user.click(await screen.findByTestId("question-bank-add"));
+    const org = await screen.findByTestId("question-bank-add-exam-import");
+    expect(org.getAttribute("data-disabled")).not.toBeNull();
+    expect(
+      screen.getByTestId("question-bank-add-exam-import-hint").textContent,
+    ).toBe("questionBank.examImport.menu.uploadComingSoon");
+  });
+
+  it("有未完成的匯入時，我的題庫上方顯示提示列（#1112）", async () => {
+    listQuestions.mockResolvedValue(respond([]));
+    apiGet.mockResolvedValueOnce({
+      items: [
+        {
+          id: 5,
+          file_name: "paper.pdf",
+          file_hash: "a".repeat(64),
+          page_count: 16,
+          status: "processing",
+          settings: {},
+          tts_accents: ["American English"],
+          question_count: 30,
+          pages_done: 12,
+          pages_failed: 0,
+          pages_blank: 0,
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+    });
+    renderTab(<MineTab />);
+    expect(await screen.findByTestId("exam-import-banner")).toBeTruthy();
+    expect(screen.getByTestId("exam-banner-continue-5")).toBeTruthy();
+    expect(screen.getByTestId("exam-banner-abandon-5")).toBeTruthy();
   });
 
   it("沒傳 onCreateQuestion 時點選擇題顯示提示", async () => {
