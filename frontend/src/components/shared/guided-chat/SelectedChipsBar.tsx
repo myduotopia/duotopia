@@ -48,6 +48,8 @@ export interface SelectedChipsBarProps {
   chips: SelectedChip[];
   /** Popover 內容。`close()` 關掉 Popover */
   renderContent: (chipId: string, close: () => void) => ReactNode;
+  /** 個別標籤的 Popover 寬度等（例如設定小框內容多，要寬一點、可捲動）；預設 `w-80` */
+  popoverClassName?: (chipId: string) => string | undefined;
   /** 是否提供收合（預設：窄版才提供） */
   collapsible?: boolean;
   className?: string;
@@ -56,6 +58,7 @@ export interface SelectedChipsBarProps {
 export function SelectedChipsBar({
   chips,
   renderContent,
+  popoverClassName,
   collapsible,
   className,
 }: SelectedChipsBarProps) {
@@ -107,7 +110,10 @@ export function SelectedChipsBar({
                 ) : null}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-80">
+            <PopoverContent
+              align="start"
+              className={cn("w-80", popoverClassName?.(chip.id))}
+            >
               {renderContent(chip.id, () => setOpenId(null))}
             </PopoverContent>
           </Popover>
