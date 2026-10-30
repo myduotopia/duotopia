@@ -34,10 +34,19 @@ export interface ScenarioChatItem {
   /** 參考答案 —— 只有老師預覽會帶，學生端一律不傳 */
   referenceAnswer?: string;
   /**
-   * 學生已存的錄音（學生端 payload 的 recording_url）。只用在「已提交」唯讀紀錄
-   * （SubmittedTranscript，#1158 E6）；作答中的錄音由 useScenarioChat 自己管。
+   * 學生已存的錄音（學生端 payload 的 recording_url，伺服器存的最後一次）。
+   * 用在「已提交」唯讀紀錄（SubmittedTranscript，#1158 E6）與「接著上次進度」
+   * （#1158 E-4：有錄音＝上次答過，按「開始對話」後以紀錄排在上方、從第一題沒答的開始）。
+   * 本次作答的錄音由 useScenarioChat 自己管。
    */
   submittedAudioUrl?: string;
+  /**
+   * 上次離開前這題已用掉的正式作答次數（payload 的 ai_analysis_count，伺服器為準，#1158 E-4）。
+   * 剩餘次數＝maxAttempts − 這個 − 本次作答次數，與後端一致，免得前端以為還有次數、後端回 429。
+   */
+  priorAttempts?: number;
+  /** 上次離開前這題已用掉的求助次數（payload 的 help_count，#1158 E-4） */
+  priorHelp?: number;
 }
 
 /** 情境（題組文章＋圖）；content 與 images 皆空時不顯示情境卡 */

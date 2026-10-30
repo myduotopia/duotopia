@@ -6,6 +6,7 @@
  * 顯示（AudioPlayer fallbackDuration），不顯示 `--:--`。打字回答顯示文字。
  * 重答往下流動：舊的回答變淡（faded）但仍可播放；有多次時標「第 N 次」。
  * 老師預覽時旁邊顯示 mock AI 分數徽章（學生畫面一律不顯示分數）。
+ * `label`：氣泡上方的小字（例如接著上次進度時的「上次的回答」，#1158 E-4）。
  */
 
 import { useTranslation } from "react-i18next";
@@ -20,6 +21,8 @@ interface Props {
   faded: boolean;
   /** 只有老師預覽會傳 */
   score?: number;
+  /** 氣泡上方的小字（#1158 E-4「上次的回答」） */
+  label?: string;
 }
 
 export function AnswerBubble({
@@ -28,6 +31,7 @@ export function AnswerBubble({
   showAttemptNo,
   faded,
   score,
+  label,
 }: Props) {
   const { t } = useTranslation();
   return (
@@ -38,6 +42,7 @@ export function AnswerBubble({
       )}
     >
       <div className="flex items-center gap-2 text-xs text-gray-500">
+        {label && <span>{label}</span>}
         {showAttemptNo && (
           <span>{t("scenarioDialogue.chat.attemptNo", { no: attemptNo })}</span>
         )}

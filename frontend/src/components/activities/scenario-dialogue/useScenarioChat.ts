@@ -27,6 +27,12 @@
  * - AI 建議以 adapters.getFeedback 注入；過期的回應（卸載／跳題後才回來）以 sessionRef 丟棄。
  * - 暫停（paused，#1158 修正 E3 手機橫放）：「輸入中…」時間到但正在暫停 → 題目先不出、不朗讀
  *   （維持「輸入中…」），轉回直立才出題並朗讀；暫停中要自動朗讀的（例如自動進下一題）也等轉回才唸。
+ * - 接著上次進度（#1158 E-4）：題目有 `submittedAudioUrl`（伺服器存的錄音）＝上次答過（restored）。
+ *   按「開始對話」後，從第一題「沒答過、也沒答滿」的題目開始問（會朗讀）；它前面的題目一起出現，
+ *   以紀錄呈現（題目＋上次的錄音，沒有 AI 建議，見 ChatTranscript）。之後主流程往下走時，
+ *   上次答過的題目同樣直接以紀錄出現、不再問。全部都答過 → 直接到「提交作業」（finished）。
+ *   次數以伺服器為準：`priorAttempts`（ai_analysis_count）＋本次正式作答＝已用次數；
+ *   求助上限同理加 `priorHelp`。上次答過、還有次數的題目可以「再試一次」（回頭重答）。
  * - 卸載時：停止朗讀、清計時器、revoke 所有錄音 blob URL。
  */
 
@@ -103,6 +109,10 @@ export const capHelpFeedback = (
  */
 export const usedAttempts = (list: ScenarioAttempt[] | undefined): number =>
   (list ?? []).filter((a) => !isHelpFeedback(a.feedback)).length;
+
+/** 上次已答過（伺服器有錄音，#1158 E-4） */
+const isRestored = (item: ScenarioChatItem | undefined): boolean =>
+  Boolean(item?.submittedAudioUrl);
 
 export function useScenarioChat({
   items,
@@ -234,11 +244,6 @@ export function useScenarioChat({
     else if (speak !== null) speakItem(speak);
   }, [paused, revealItem, speakItem]);
 
-  const start = useCallback(() => {
-    if (n === 0) return;
-    typeThenReveal(0);
-  }, [n, typeThenReveal]);
-
   const finishAll = useCallback(() => {
     setPhase("aiTyping");
     later(() => {
@@ -247,22 +252,59 @@ export function useScenarioChat({
     }, TYPING_MS);
   }, [later]);
 
-  const isExhausted = useCallback(
-    (i: number) => usedAttempts(attemptsRef.current[i]) >= maxAttempts,
-    [maxAttempts],
+  /** 第 i 題已用掉的正式作答次數：上次（伺服器）＋本次（#1158 E-4） */
+  const usedFor = useCallback(
+    (i: number, list: ScenarioAttempt[][] = attemptsRef.current) =>
+      (items[i]?.priorAttempts ?? 0) + usedAttempts(list[i]),
+    [items],
   );
 
+  const isExhausted = useCallback(
+    (i: number) => usedFor(i) >= maxAttempts,
+    [usedFor, maxAttempts],
+  );
+
+  /** 主流程不必再問的題目：答滿了，或上次已答過（以紀錄呈現，#1158 E-4） */
+  const isSettled = useCallback(
+    (i: number) => isRestored(items[i]) || isExhausted(i),
+    [items, isExhausted],
+  );
+
+  const start = useCallback(() => {
+    if (n === 0) return;
+    let first = 0;
+    while (first < n && isSettled(first)) first += 1;
+    if (first >= n) {
+      // 全部都答過：題目全部以紀錄列出，直接到「提交作業」（#1158 E-4）
+      setRevealedCount(n);
+      setCurrent(n - 1);
+      setClosingShown(true);
+      setPhase("finished");
+      return;
+    }
+    // 前面答過的題目以紀錄出現，從第一題沒答的開始問
+    setRevealedCount(first);
+    typeThenReveal(first);
+  }, [n, isSettled, typeThenReveal]);
+
   const goNext = useCallback(() => {
-    // 老師往回跳過：後面已出現的題目直接接著答，答滿的跳過
+    // 已出現的題目（老師往回跳過）答滿的跳過；還沒出現的、上次已答過的也跳過，
+    // 直接以紀錄出現（#1158 E-4）
     let nextIdx = current + 1;
-    while (nextIdx < revealedCount && isExhausted(nextIdx)) nextIdx += 1;
+    while (
+      nextIdx < n &&
+      (nextIdx < revealedCount ? isExhausted(nextIdx) : isSettled(nextIdx))
+    )
+      nextIdx += 1;
     if (nextIdx >= n) {
+      setRevealedCount(n);
       finishAll();
     } else if (nextIdx < revealedCount) {
       setCurrent(nextIdx);
       setPhase("awaitingAnswer");
       if (!retryRef.current) speakItem(nextIdx);
     } else {
+      setRevealedCount(nextIdx);
       typeThenReveal(nextIdx);
     }
   }, [
@@ -271,6 +313,7 @@ export function useScenarioChat({
     revealedCount,
     speakItem,
     isExhausted,
+    isSettled,
     finishAll,
     typeThenReveal,
   ]);
@@ -282,7 +325,8 @@ export function useScenarioChat({
       const q = isRetry ? r.index : current;
       // slot＝這筆在紀錄裡的位置（含求助）；attemptIndex＝第幾次正式作答（不含求助）
       const slot = attemptsRef.current[q].length;
-      const attemptIndex = usedAttempts(attemptsRef.current[q]);
+      // 含上次（伺服器計數）用掉的次數（#1158 E-4）
+      const attemptIndex = usedFor(q);
       if (attemptIndex >= maxAttempts) return;
       setAttempts((prev) =>
         prev.map((list, i) => (i === q ? [...list, { answer }] : list)),
@@ -296,7 +340,8 @@ export function useScenarioChat({
           if (session !== sessionRef.current) return;
           const feedback = capHelpFeedback(
             raw,
-            helpCount(attemptsRef.current[q].slice(0, slot)),
+            (items[q].priorHelp ?? 0) +
+              helpCount(attemptsRef.current[q].slice(0, slot)),
           );
           setAttempts((prev) =>
             prev.map((list, i) =>
@@ -329,14 +374,14 @@ export function useScenarioChat({
           else setPhase("awaitingAnswer");
         });
     },
-    [current, items, maxAttempts],
+    [current, items, maxAttempts, usedFor],
   );
 
   const goNextRef = useRef(goNext);
   goNextRef.current = goNext;
 
   // 目前這題用完次數 → 停一下自動進下一題
-  const exhausted = usedAttempts(attempts[current]) >= maxAttempts;
+  const exhausted = usedFor(current, attempts) >= maxAttempts;
   useEffect(() => {
     if (phase === "feedbackShown" && exhausted) {
       later(() => goNextRef.current(), AUTO_NEXT_MS);
@@ -346,7 +391,7 @@ export function useScenarioChat({
   }, [phase, exhausted]);
 
   /**
-   * 第 i 題能不能按「再試一次」：已出現、有建議、沒答滿；
+   * 第 i 題能不能按「再試一次」：已出現、有建議（或上次已答過、本次還沒答，#1158 E-4）、沒答滿；
    * 目前這題正在作答／等建議時不算（底部輸入區本來就在答它）；
    * 另一題重答正在等建議時暫時不行（處理中）。
    */
@@ -354,8 +399,10 @@ export function useScenarioChat({
     (i: number) => {
       if (phase === "intro" || i >= revealedCount) return false;
       const list = attempts[i];
-      if (list.length === 0 || usedAttempts(list) >= maxAttempts) return false;
-      if (!list[list.length - 1].feedback) return false;
+      if (usedFor(i, attempts) >= maxAttempts) return false;
+      if (list.length === 0) {
+        if (!isRestored(items[i])) return false;
+      } else if (!list[list.length - 1].feedback) return false;
       if (
         i === current &&
         (phase === "awaitingAnswer" || phase === "awaitingFeedback")
@@ -364,7 +411,16 @@ export function useScenarioChat({
       if (retry?.index === i) return false;
       return true;
     },
-    [phase, revealedCount, attempts, maxAttempts, current, retry],
+    [
+      phase,
+      revealedCount,
+      attempts,
+      maxAttempts,
+      current,
+      retry,
+      usedFor,
+      items,
+    ],
   );
 
   const retryBusy = retry?.status === "waiting";
@@ -418,13 +474,15 @@ export function useScenarioChat({
         return true;
       }
       setSkipped((prev) =>
-        prev.map((s, j) => s || (j >= revealedCount && j < i)),
+        prev.map(
+          (s, j) => s || (j >= revealedCount && j < i && !isRestored(items[j])),
+        ),
       );
       setRevealedCount(i);
       typeThenReveal(i);
       return true;
     },
-    [revealedCount, speakItem, isExhausted, clearTimers, typeThenReveal],
+    [revealedCount, speakItem, isExhausted, clearTimers, typeThenReveal, items],
   );
 
   /** 英／翻譯文字切換：收起英文時翻譯一起收；翻譯要英文開著、且本題可翻譯才能開 */
@@ -469,6 +527,13 @@ export function useScenarioChat({
     return `${revealedCount}-${total}-${fb}-${phase}-${closingShown}`;
   }, [attempts, revealedCount, phase, closingShown]);
 
+  /** 每題答過沒：本次至少一次正式作答，或上次已答過（伺服器有錄音，#1158 E-4） */
+  const answered = useMemo(
+    () =>
+      attempts.map((list, i) => usedAttempts(list) > 0 || isRestored(items[i])),
+    [attempts, items],
+  );
+
   return {
     phase,
     current,
@@ -482,6 +547,8 @@ export function useScenarioChat({
     retryBusy,
     retryReturn,
     exhausted,
+    answered,
+    usedFor,
     flowKey,
     start,
     submitAnswer,

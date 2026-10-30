@@ -229,6 +229,7 @@ describe("重答中求助回來：最後一筆求助不變淡（#1158 E2b）", (
       retryBusy: false,
       closingShown: false,
       canRetry: () => false,
+      usedFor: () => 1,
       averageFor: () => null,
       toggleText: () => {},
       goNext: () => {},

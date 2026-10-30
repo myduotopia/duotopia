@@ -110,6 +110,12 @@ function scenarioImages(raw: unknown): ScenarioChatContext["images"] {
 const text = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
+/** 計數欄位：非負整數才算，其他（null、負數、字串）一律 0 */
+const count = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+
 /**
  * 老師端 content detail → 對話式 UI 的 context／items。
  *
@@ -171,8 +177,12 @@ export interface ScenarioStudentActivity {
     text?: string | null;
     translation?: string | null;
     image_url?: string | null;
-    /** 學生自己已存的錄音（已提交唯讀紀錄用，#1158 E6） */
+    /** 學生自己已存的錄音（已提交唯讀紀錄、接著上次進度用，#1158 E6／E-4） */
     recording_url?: string | null;
+    /** 這題已用掉的正式作答次數（伺服器計數，#1158 E-4） */
+    ai_analysis_count?: number | null;
+    /** 這題已用掉的求助次數（伺服器計數，#1158 E-4） */
+    help_count?: number | null;
     scenario_dialogue?: {
       keywords?: string[];
       rubric_note?: string;
@@ -218,6 +228,13 @@ export function scenarioChatFromStudentActivity(
         images: imageUrl ? [{ src: imageUrl, alt: imageAlt(index + 1) }] : [],
         ...(text(item.recording_url)
           ? { submittedAudioUrl: text(item.recording_url) }
+          : {}),
+        // 伺服器計數（#1158 E-4）：重新進入後的剩餘次數以它為準
+        ...(count(item.ai_analysis_count)
+          ? { priorAttempts: count(item.ai_analysis_count) }
+          : {}),
+        ...(count(item.help_count)
+          ? { priorHelp: count(item.help_count) }
           : {}),
       };
     },

@@ -26,6 +26,7 @@ from models import (
     Assignment,
     AssignmentContent,
     StudentAssignment,
+    StudentContentProgress,
     StudentItemProgress,
 )
 
@@ -663,3 +664,51 @@ class TestHelpLimit:
         assert body["kind"] == "feedback"
         assert body["verdict"] == "improve"
         assert body["ai_analysis_count"] == 1
+
+
+class TestResumePayload:
+    """接著上次進度（#1158 E-4）：作業 payload 帶這題的錄音、作答次數與求助次數。
+
+    前端重新進入時靠這三個欄位把上次答過的題目排成紀錄、從第一題沒答的開始，並讓
+    剩餘次數與求助上限和後端一致（避免前端以為還有次數、後端回 429）。
+    """
+
+    def _activities(self, client: TestClient, db: Session, world):
+        # 正式流程裡學生第一次打開作業時就建好了；這裡先建，免得端點自動補建題目進度
+        # 而和 fixture 的那一筆撞到唯一鍵
+        sa_id = world["progress"].student_assignment_id
+        db.add(
+            StudentContentProgress(
+                student_assignment_id=sa_id,
+                content_id=world["item"].content_id,
+                order_index=0,
+            )
+        )
+        db.commit()
+        resp = client.get(
+            f"/api/students/assignments/{sa_id}/activities",
+            headers=world["headers"],
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["activities"]
+
+    def test_payload_carries_recording_and_counts(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        world["progress"].ai_analysis_count = 2
+        world["progress"].retry_count = 1
+        db_session.commit()
+
+        activities = self._activities(test_client, db_session, world)
+        item = activities[0]["items"][0]
+        assert item["recording_url"] == world["progress"].recording_url
+        assert item["ai_analysis_count"] == 2
+        assert item["help_count"] == 1
+
+    def test_help_count_defaults_to_zero(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        world["progress"].retry_count = None
+        db_session.commit()
+        item = self._activities(test_client, db_session, world)[0]["items"][0]
+        assert item["help_count"] == 0

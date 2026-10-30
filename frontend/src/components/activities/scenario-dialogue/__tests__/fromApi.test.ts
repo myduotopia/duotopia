@@ -285,4 +285,27 @@ describe("scenarioChatFromStudentActivity", () => {
     const { items } = scenarioChatFromStudentActivity(activity);
     expect(items).toHaveLength(activity.items.length);
   });
+
+  it("接著上次進度：帶錄音與伺服器計數（#1158 E-4）", () => {
+    const { items } = scenarioChatFromStudentActivity({
+      items: [
+        {
+          id: 1,
+          text: "Q1",
+          recording_url: "https://example.com/r.webm",
+          ai_analysis_count: 2,
+          help_count: 1,
+        },
+        { id: 2, text: "Q2", ai_analysis_count: null, help_count: -1 },
+      ],
+    });
+    expect(items[0]).toMatchObject({
+      submittedAudioUrl: "https://example.com/r.webm",
+      priorAttempts: 2,
+      priorHelp: 1,
+    });
+    expect(items[1].submittedAudioUrl).toBeUndefined();
+    expect(items[1].priorAttempts).toBeUndefined();
+    expect(items[1].priorHelp).toBeUndefined();
+  });
 });

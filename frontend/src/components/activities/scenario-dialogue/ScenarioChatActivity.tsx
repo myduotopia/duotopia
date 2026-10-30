@@ -41,6 +41,11 @@
  *   「輸入中…」到了也先不出題，轉回直立才出題並朗讀）；轉回直立提示消失、狀態保留。老師預覽一樣擋。
  *   倒數的進度只在 RubricIntro 裡（這裡只記倒數中／倒數完），不讓整個畫面每 100ms 重繪。
  *
+ * - 接著上次進度（#1158 E-4）：答到一半離開再進來，按「開始對話」（作答要求倒數照常）後，上次答過的
+ *   題目（伺服器有錄音）以紀錄排在上方（題目＋上次的錄音），從第一題沒答的開始問；已答過的方格
+ *   因為已出現而可點、捲到該題；還有次數的可「再試一次」（次數以伺服器 ai_analysis_count 為準）。
+ *   全部都答過就直接到「提交作業」。規則在 useScenarioChat，紀錄外觀在 ChatTranscript。
+ *
  * - 已提交唯讀（readOnly，#1158 E6）：不顯示「開始對話」與錄音區，改列出每題題目＋學生
  *   自己的錄音（SubmittedTranscript）；作答要求／情境卡照樣顯示。題號方格每題都能點、捲到該題。
  *
@@ -78,7 +83,7 @@ import {
   usePhoneLandscape,
 } from "./PhoneLandscapeOverlay";
 import { RubricIntro } from "./RubricCountdown";
-import { usedAttempts, useScenarioChat } from "./useScenarioChat";
+import { useScenarioChat } from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
   ScenarioChatContext,
@@ -182,8 +187,9 @@ export function ScenarioChatActivity({
   });
   const { phase, current, retry } = chat;
 
-  // 答過＝這一題至少送出過一次正式回答（略過的題目 attempts 會是空的；求助不算，#1158）
-  const answered = chat.attempts.map((list) => usedAttempts(list) > 0);
+  // 答過＝這一題至少送出過一次正式回答（略過的題目 attempts 會是空的；求助不算，#1158），
+  // 或上次已答過（伺服器有錄音，接著上次進度，#1158 E-4）
+  const answered = chat.answered;
   const answeredKey = answered.join(",");
   useEffect(() => {
     onProgressChange?.(answered);

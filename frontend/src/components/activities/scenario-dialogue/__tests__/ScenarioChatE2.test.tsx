@@ -314,6 +314,7 @@ describe("回頭重答（#1158 E-2）", () => {
       retryBusy: false,
       closingShown: false,
       canRetry: () => false,
+      usedFor: () => 1,
       averageFor: () => null,
       toggleText: () => {},
       goNext: () => {},

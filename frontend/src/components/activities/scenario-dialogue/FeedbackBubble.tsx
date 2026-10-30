@@ -23,6 +23,9 @@
  * - `none`：這題正在作答／等建議中，不放操作
  * 另一題重答正在等 AI 建議時，「再試一次」暫時停用（retryDisabled，處理中不另說明）。
  * 回頭重答這一題時，舊的建議變淡（faded，#1158 E-2 重答流程）。
+ *
+ * 操作列另外匯出成 `FeedbackActionRow`：接著上次進度（#1158 E-4）的「上次答過」紀錄沒有建議氣泡，
+ * 但同樣要在學生回答下方放「↺ 再試一次」／「已達 N 次」，用同一份按鈕與規則，不另做一份。
  */
 
 import { ArrowRight, RotateCcw, Volume2 } from "lucide-react";
@@ -54,6 +57,71 @@ interface Props {
 }
 
 const PILL = "h-9 rounded-full px-3 text-sm";
+
+interface ActionRowProps {
+  actions: FeedbackActions;
+  maxAttempts: number;
+  retryDisabled?: boolean;
+  onRetry: () => void;
+  onNext: () => void;
+}
+
+/** 建議氣泡下方的操作列（規則見檔頭）；`none` 不畫任何東西 */
+export function FeedbackActionRow({
+  actions,
+  maxAttempts,
+  retryDisabled = false,
+  onRetry,
+  onNext,
+}: ActionRowProps) {
+  const { t } = useTranslation();
+  const retryButton = (primary: boolean) => (
+    <Button
+      type="button"
+      variant={primary ? "default" : "outline"}
+      className={PILL}
+      disabled={retryDisabled}
+      onClick={onRetry}
+    >
+      <RotateCcw className="mr-1 h-4 w-4" aria-hidden />
+      {t("scenarioDialogue.chat.retry")}
+    </Button>
+  );
+  if (actions === "current") {
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={PILL}
+          onClick={onNext}
+        >
+          {t("scenarioDialogue.chat.next")}
+          <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+        </Button>
+        {retryButton(true)}
+      </div>
+    );
+  }
+  if (actions === "retry") {
+    return <div className="flex justify-end">{retryButton(false)}</div>;
+  }
+  if (actions === "autoNext") {
+    return (
+      <p className="text-xs text-gray-500">
+        {t("scenarioDialogue.chat.attemptsUsedUp", { max: maxAttempts })}
+      </p>
+    );
+  }
+  if (actions === "reached") {
+    return (
+      <p className="text-xs text-gray-500">
+        {t("scenarioDialogue.chat.attemptsReached", { max: maxAttempts })}
+      </p>
+    );
+  }
+  return null;
+}
 
 export function FeedbackBubble({
   feedback,
@@ -110,19 +178,6 @@ export function FeedbackBubble({
     </div>
   );
 
-  const retryButton = (primary: boolean) => (
-    <Button
-      type="button"
-      variant={primary ? "default" : "outline"}
-      className={PILL}
-      disabled={retryDisabled}
-      onClick={onRetry}
-    >
-      <RotateCcw className="mr-1 h-4 w-4" aria-hidden />
-      {t("scenarioDialogue.chat.retry")}
-    </Button>
-  );
-
   return (
     <AiRow>
       <div
@@ -170,33 +225,13 @@ export function FeedbackBubble({
           </>
         )}
 
-        {actions === "current" && (
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className={PILL}
-              onClick={onNext}
-            >
-              {t("scenarioDialogue.chat.next")}
-              <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-            </Button>
-            {retryButton(true)}
-          </div>
-        )}
-        {actions === "retry" && (
-          <div className="flex justify-end">{retryButton(false)}</div>
-        )}
-        {actions === "autoNext" && (
-          <p className="text-xs text-gray-500">
-            {t("scenarioDialogue.chat.attemptsUsedUp", { max: maxAttempts })}
-          </p>
-        )}
-        {actions === "reached" && (
-          <p className="text-xs text-gray-500">
-            {t("scenarioDialogue.chat.attemptsReached", { max: maxAttempts })}
-          </p>
-        )}
+        <FeedbackActionRow
+          actions={actions}
+          maxAttempts={maxAttempts}
+          retryDisabled={retryDisabled}
+          onRetry={onRetry}
+          onNext={onNext}
+        />
       </div>
     </AiRow>
   );

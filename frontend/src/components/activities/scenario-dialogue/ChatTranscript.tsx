@@ -13,12 +13,21 @@
  * 每題「最後一則」建議氣泡的操作（FeedbackBubble actions）：
  * 目前這題剛看完建議＝再試一次＋下一題；已答滿＝「已達 N 次」（目前這題附「即將進入下一題」）；
  * 其他可重答的題目＝再試一次（回頭重答）。學生畫面不顯示分數；老師預覽顯示 mock 分數與本題平均。
+ *
+ * 接著上次進度（#1158 E-4）：上次答過的題目（item.submittedAudioUrl）在題目下方放一則學生回答氣泡，
+ * 小字「上次的回答」、可播放伺服器存的錄音；沒有 AI 建議（當時的建議沒有存）。下方用同一份操作列
+ * （FeedbackActionRow）：還有次數＝「↺ 再試一次」，用完＝「已達 N 次」。本次再答之後，新的回答與建議
+ * 接在它下面、它變淡。次數（含「第 N 次」編號）都把上次用掉的算進去（chat.usedFor）。
  */
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AnswerBubble } from "./AnswerBubble";
-import { FeedbackBubble, type FeedbackActions } from "./FeedbackBubble";
+import {
+  FeedbackActionRow,
+  FeedbackBubble,
+  type FeedbackActions,
+} from "./FeedbackBubble";
 import { QuestionBubble } from "./QuestionBubble";
 import { AiRow, TypingIndicator, aiBubbleClass } from "./TypingIndicator";
 import {
@@ -63,13 +72,19 @@ export function ChatTranscript({
   const isPreview = settings.isPreviewMode;
 
   const actionsFor = (i: number): FeedbackActions => {
-    // 求助（#1158）不算次數
-    const used = usedAttempts(attempts[i]);
+    // 求助（#1158）不算次數；上次（伺服器）用掉的也算（#1158 E-4）
+    const used = chat.usedFor(i);
     const isCurrentDone = i === current && phase === "feedbackShown";
     if (used >= maxAttempts) return isCurrentDone ? "autoNext" : "reached";
     if (isCurrentDone && !chat.retry) return "current";
     if (chat.canRetry(i)) return "retry";
     return "none";
+  };
+
+  /** 上次答過的紀錄下方的操作（本次還沒再答時才有） */
+  const restoredActionsFor = (i: number): FeedbackActions => {
+    if (chat.usedFor(i) >= maxAttempts) return "reached";
+    return chat.canRetry(i) ? "retry" : "none";
   };
 
   return (
@@ -93,6 +108,8 @@ export function ChatTranscript({
         const lastIsHelp = last >= 0 && isHelpFeedback(list[last].feedback);
         const fadedAt = (j: number) =>
           j < last || (fadeAll && !(j === last && lastIsHelp));
+        const prior = item.priorAttempts ?? 0;
+        const totalUsed = prior + usedAttempts(list);
         return (
           <div
             key={item.id}
@@ -112,15 +129,35 @@ export function ChatTranscript({
               onPlay={() => adapters.speak(item.text)}
               onToggle={(w) => chat.toggleText(i, w)}
             />
+            {item.submittedAudioUrl && (
+              <div className="space-y-2" data-testid="scenario-previous-answer">
+                <AnswerBubble
+                  answer={{ kind: "voice", audioUrl: item.submittedAudioUrl }}
+                  attemptNo={prior}
+                  showAttemptNo={false}
+                  label={t("scenarioDialogue.chat.previousAnswer")}
+                  faded={list.length > 0 || fadeAll}
+                />
+                {list.length === 0 && (
+                  <div className="flex justify-end">
+                    <FeedbackActionRow
+                      actions={restoredActionsFor(i)}
+                      maxAttempts={maxAttempts}
+                      retryDisabled={chat.retryBusy}
+                      onRetry={() => onRetry(i)}
+                      onNext={chat.goNext}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             {list.map((a, j) => (
               <div key={j} className="space-y-3">
                 <AnswerBubble
                   answer={a.answer}
                   // 次數編號只數正式回答；求助的那一則不標（#1158）
-                  attemptNo={usedAttempts(list.slice(0, j + 1))}
-                  showAttemptNo={
-                    usedAttempts(list) > 1 && !isHelpFeedback(a.feedback)
-                  }
+                  attemptNo={prior + usedAttempts(list.slice(0, j + 1))}
+                  showAttemptNo={totalUsed > 1 && !isHelpFeedback(a.feedback)}
                   faded={fadedAt(j)}
                   score={isPreview ? a.feedback?.score : undefined}
                 />
