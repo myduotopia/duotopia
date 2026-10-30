@@ -111,3 +111,32 @@ describe("AudioRecorderChatControls — 四種狀態", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 });
+
+describe("AudioRecorderChatControls — 浮在對話區上（#1158 E2）", () => {
+  it("每顆按鈕與試聽鈕可點（pointer-events-auto），按鈕列本身不擋", () => {
+    render(
+      <AudioRecorderChatControls
+        {...base}
+        audioUrl="blob:x"
+        onSend={vi.fn()}
+      />,
+    );
+    const row = screen.getByTestId("chat-recorder-controls");
+    expect(row.className).not.toContain("pointer-events-auto");
+    for (const b of buttons()) {
+      expect(b.closest(".pointer-events-auto")).not.toBeNull();
+    }
+  });
+
+  it("錯誤訊息有淡白底、一行截斷，完整訊息在 title", () => {
+    const long = "錄音太短或麥克風沒有收到聲音，請再錄一次並靠近麥克風說話";
+    render(
+      <AudioRecorderChatControls {...base} showError errorMessage={long} />,
+    );
+    const err = screen.getByTestId("chat-recorder-error");
+    expect(err.className).toContain("bg-white/90");
+    expect(err.className).toContain("max-w-[40%]");
+    expect(err).toHaveAttribute("title", long);
+    expect(screen.getByText(long).className).toContain("truncate");
+  });
+});

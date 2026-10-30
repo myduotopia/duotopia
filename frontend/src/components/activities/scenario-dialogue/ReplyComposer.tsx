@@ -12,7 +12,8 @@
  * 語音錄音區（answer／waiting，#1158 E3）固定在作答畫面最下方，像通訊軟體的語音訊息：
  * 只有圖示按鈕；淺藍底色條（blue-50＋上緣 blue-100 細線）高度＝主按鈕一半（36px，h-9），
  * 再加 safe-area 底部留白同色；按鈕列垂直置中在底色條上緣，上半浮在對話區上（外框 -mt-9、
- * 不擋點擊的地方 pointer-events-none）。對話捲動區要在底部多留按鈕上半的高度（
+ * 整個錄音區 pointer-events-none，只有按鈕／試聽鈕／重答膠囊 pointer-events-auto，按鈕之間的
+ * 空白不吃對話區的點擊與滾輪）。錄音失敗（AudioRecorder onError）也視同停止錄音。對話捲動區要在底部多留按鈕上半的高度（
  * ScenarioChatActivity 依 isFloatingDock 加 padding），最新訊息才不會被擋住。
  * 「正在重答第 N 題 ✕」是深藍小膠囊，浮在按鈕列上方；✕＝放棄重答回到目前題，錄音中隱藏 ✕
  * 免得誤按（#1158 E-2 重答流程）。intro／finished 維持文字主按鈕（白底區塊，不浮）。
@@ -166,7 +167,7 @@ export function ReplyComposer({
               {canCancelRetry && !recording && (
                 <button
                   type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/30"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
                   onClick={onCancelRetry}
                   aria-label={t("scenarioDialogue.chat.cancelRetry")}
                   title={t("scenarioDialogue.chat.cancelRetry")}
@@ -192,7 +193,8 @@ export function ReplyComposer({
               {waitingHint}
             </p>
           )}
-          <div className="pointer-events-auto relative">
+          {/* 按鈕列整列仍不擋點擊／滾輪，只有按鈕本身可點（AudioRecorderChatControls 內 pointer-events-auto） */}
+          <div className="relative">
             <AudioRecorder
               key={recorderKey}
               variant="chat"
@@ -201,6 +203,9 @@ export function ReplyComposer({
               onSend={sendVoice}
               onRecordingStart={() => setRecording(true)}
               onRecordingStop={() => setRecording(false)}
+              // 錄音失敗（太短、驗證失敗、例外）不會呼叫 onRecordingStop，
+              // 這裡也要收起「錄音中」，重答的 ✕ 才會再出現
+              onError={() => setRecording(false)}
               // 上限要擋在前端：超過的話上傳端會回 400，而學生只會看到一句看不懂的
               // 錯誤（夥伴 staging 回報）。到時間自動停，並在計時器上顯示上限。
               autoStop={SCENARIO_MAX_RECORDING_SECONDS}

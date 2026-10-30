@@ -44,7 +44,10 @@ vi.mock("@/utils/audioFormatDetection", () => ({
 vi.mock("@/utils/retryHelper", () => ({
   retryAudioUpload: (fn: () => Promise<unknown>) => fn(),
 }));
-vi.mock("@/utils/speakEnglish", () => ({ speakEnglish: vi.fn() }));
+vi.mock("@/utils/speakEnglish", () => ({
+  speakEnglish: vi.fn(),
+  primeSpeechSynthesis: vi.fn(),
+}));
 vi.mock("i18next", () => ({
   default: { language: "zh-TW", t: (k: string) => k },
 }));

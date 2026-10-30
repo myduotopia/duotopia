@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { speakEnglish } from "../speakEnglish";
+import { primeSpeechSynthesis, speakEnglish } from "../speakEnglish";
 
 // jsdom does not implement the Web Speech API — provide minimal mocks
 class MockSpeechSynthesisUtterance {
@@ -139,6 +139,53 @@ describe("speakEnglish", () => {
       expect.stringContaining("No English voice available"),
     );
     expect(synthMock.speak).toHaveBeenCalledOnce();
+  });
+
+  it("onError: fires on a real speech error but not on canceled/interrupted", () => {
+    synthMock = makeSynthMock([{ lang: "en-US", name: "US English" }]);
+    Object.defineProperty(window, "speechSynthesis", {
+      value: synthMock,
+      writable: true,
+      configurable: true,
+    });
+    const onError = vi.fn();
+
+    speakEnglish("hello", { onError });
+
+    const utterance = synthMock.speak.mock.calls[0][0] as {
+      onerror?: (e: { error: string }) => void;
+    };
+    utterance.onerror?.({ error: "interrupted" });
+    utterance.onerror?.({ error: "canceled" });
+    expect(onError).not.toHaveBeenCalled();
+    utterance.onerror?.({ error: "synthesis-failed" });
+    expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it("onError: fires when no English voice is found (still speaks)", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    synthMock = makeSynthMock([{ lang: "zh-TW", name: "Chinese TW" }]);
+    Object.defineProperty(window, "speechSynthesis", {
+      value: synthMock,
+      writable: true,
+      configurable: true,
+    });
+    const onError = vi.fn();
+
+    speakEnglish("hello", { onError });
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(synthMock.speak).toHaveBeenCalledOnce();
+  });
+
+  it("primeSpeechSynthesis speaks a silent empty utterance", () => {
+    primeSpeechSynthesis();
+
+    expect(synthMock.getVoices).toHaveBeenCalled();
+    const utterance = synthMock.speak.mock
+      .calls[0][0] as MockSpeechSynthesisUtterance;
+    expect(utterance.text).toBe("");
+    expect(utterance.volume).toBe(0);
   });
 
   it("cleanup function removes voiceschanged listener and cancels", () => {

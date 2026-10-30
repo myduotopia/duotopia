@@ -39,7 +39,7 @@ import {
   isRetryableUploadError,
   retryAudioUpload,
 } from "@/utils/retryHelper";
-import { speakEnglish } from "@/utils/speakEnglish";
+import { primeSpeechSynthesis, speakEnglish } from "@/utils/speakEnglish";
 
 import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
 
@@ -48,6 +48,7 @@ import type {
   ScenarioChatAdapters,
   ScenarioChatItem,
   ScenarioFeedback,
+  SpeakOptions,
 } from "./types";
 
 /** 後端的 429 detail code（`services/analysis_quota`）。 */
@@ -229,21 +230,13 @@ export function isQuotaExhausted(error: unknown): boolean {
  * 設計稿另外寫了一份簡化版，正式路徑不用那一份 —— 這個行為只能有一處實作。
  */
 const speechAdapters = {
-  speak: (text: string) => {
-    speakEnglish(text);
+  // onError：朗讀出錯／沒有英文 voice 時，題目改直接顯示英文（#1158 E2）
+  speak: (text: string, opts?: SpeakOptions) => {
+    speakEnglish(text, { onError: opts?.onError });
   },
   // 在「開始對話」的點擊裡先唸一段空字串並觸發載入語音清單，之後計時器裡的
   // 自動朗讀才不會被瀏覽器的手勢限制擋掉（#1158 E-2 先聽後看實測沒聲音）
-  primeSpeech: () => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return;
-    }
-    const synth = window.speechSynthesis;
-    synth.getVoices();
-    const u = new SpeechSynthesisUtterance("");
-    u.volume = 0;
-    synth.speak(u);
-  },
+  primeSpeech: primeSpeechSynthesis,
   stopSpeech: () => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();

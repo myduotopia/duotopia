@@ -17,6 +17,7 @@
  *   已答滿的題目任何方式（點點、再試一次、老師跳題）都不可再作答，只能重聽。
  * - 老師預覽可跳題（jumpTo）：往後跳時中間未出現的題目標「略過」；往回跳保留紀錄、
  *   從該題往下流。跳題會丟掉還在等 AI 建議的那筆回答（不佔次數）。
+ * - 自動朗讀出錯（或沒有英文語音）時，該題英文自動打開（#1158 E2）；正常朗讀維持先聽後看。
  * - 英／翻譯文字顯示（visible）可切換；`seen` 記錄是否點開過（收回不取消），回報給外層。
  *   翻譯（zh 欄位）只有 `translatable[i]` 為真的題目能開（老師開翻譯＋翻譯語言＝學生介面語言）。
  * - AI 建議以 adapters.getFeedback 注入；過期的回應（卸載／跳題後才回來）以 sessionRef 丟棄。
@@ -128,6 +129,25 @@ export function useScenarioChat({
     onRevealChange?.(seen);
   }, [seen, onRevealChange]);
 
+  /**
+   * 自動朗讀第 i 題。朗讀實際出錯（或沒有英文語音）時直接打開這題的英文，免得「先聽後看」
+   * 變成看不到也聽不到；不算學生自己點開，`seen` 不記（#1158 E2）。過期（卸載／跳題）的錯誤丟棄。
+   */
+  const speakItem = useCallback(
+    (i: number) => {
+      const session = sessionRef.current;
+      adaptersRef.current.speak(items[i].text, {
+        onError: () => {
+          if (session !== sessionRef.current) return;
+          setVisible((prev) =>
+            prev.map((v, j) => (j === i && !v.en ? { ...v, en: true } : v)),
+          );
+        },
+      });
+    },
+    [items],
+  );
+
   /** 「輸入中…」後揭露第 i 題並自動播一次（正在回頭重答時不播，免得錄進去） */
   const typeThenReveal = useCallback(
     (i: number) => {
@@ -136,10 +156,10 @@ export function useScenarioChat({
         setRevealedCount((c) => Math.max(c, i + 1));
         setCurrent(i);
         setPhase("awaitingAnswer");
-        if (!retryRef.current) adaptersRef.current.speak(items[i].text);
+        if (!retryRef.current) speakItem(i);
       }, TYPING_MS);
     },
-    [items, later],
+    [speakItem, later],
   );
 
   const start = useCallback(() => {
@@ -169,7 +189,7 @@ export function useScenarioChat({
     } else if (nextIdx < revealedCount) {
       setCurrent(nextIdx);
       setPhase("awaitingAnswer");
-      if (!retryRef.current) adaptersRef.current.speak(items[nextIdx].text);
+      if (!retryRef.current) speakItem(nextIdx);
     } else {
       typeThenReveal(nextIdx);
     }
@@ -177,7 +197,7 @@ export function useScenarioChat({
     current,
     n,
     revealedCount,
-    items,
+    speakItem,
     isExhausted,
     finishAll,
     typeThenReveal,
@@ -312,7 +332,7 @@ export function useScenarioChat({
       if (i < revealedCount) {
         setCurrent(i);
         setPhase("awaitingAnswer");
-        adaptersRef.current.speak(items[i].text);
+        speakItem(i);
         return true;
       }
       setSkipped((prev) =>
@@ -322,7 +342,7 @@ export function useScenarioChat({
       typeThenReveal(i);
       return true;
     },
-    [revealedCount, items, isExhausted, clearTimers, typeThenReveal],
+    [revealedCount, speakItem, isExhausted, clearTimers, typeThenReveal],
   );
 
   /** 英／翻譯文字切換：收起英文時翻譯一起收；翻譯要英文開著、且本題可翻譯才能開 */

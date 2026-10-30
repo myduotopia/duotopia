@@ -14,7 +14,8 @@
  *   標準 AudioPlayer minimal＋tone="soft"）＋時長。沒傳 onSend 就不顯示送出鈕。
  * - D 停用（`disabled`，例如等 AI 建議）：灰色麥克風，aria-label／title 帶停用原因
  *   （`disabledReason`）；原因文字由外層顯示在底色條右側。
- * 錄音失敗時左下角顯示紅字。
+ * 錄音失敗時左下角顯示紅字（淡白底、一行截斷，完整訊息在 title）。
+ * 按鈕與試聽鈕 pointer-events-auto，配合外層 pointer-events-none 的錄音區（#1158 E2）。
  */
 
 import {
@@ -52,12 +53,16 @@ interface Props {
   onError?: (error: AudioErrorData) => void;
 }
 
+/**
+ * 按鈕一律 pointer-events-auto：外層錄音區是 pointer-events-none（按鈕列上半浮在對話區，
+ * 按鈕之間的空白要讓點擊／滾輪穿到對話）。在一般版面裡這個 class 沒有作用。
+ */
 /** 主按鈕：72px 圓、白色外圈＋淡陰影 */
 const BIG =
-  "flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full border-4 border-white shadow-md transition-colors";
+  "pointer-events-auto flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full border-4 border-white shadow-md transition-colors";
 /** 兩側小按鈕：48px 圓 */
 const SMALL =
-  "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-white shadow transition-colors";
+  "pointer-events-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-white shadow transition-colors";
 /** 兩側附屬資訊：放在底色條那一半的高度 */
 const SIDE = "flex h-9 w-14 items-center self-end";
 
@@ -185,7 +190,7 @@ export default function AudioRecorderChatControls({
               <Send className="h-7 w-7" aria-hidden />
             </button>
           )}
-          <span className="relative">
+          <span className="pointer-events-auto relative">
             <AudioPlayer
               audioUrl={audioUrl}
               variant="minimal"
@@ -204,9 +209,16 @@ export default function AudioRecorderChatControls({
       )}
 
       {showError && !isRecording && (
-        <span className="absolute bottom-1 left-3 flex max-w-[40%] items-center gap-1 text-xs leading-tight text-red-600">
+        // 淡白底：錯誤字可能疊到對話區；限寬一行截斷，完整訊息放 title
+        <span
+          className="absolute bottom-1 left-3 flex max-w-[40%] items-center gap-1 rounded bg-white/90 px-1 text-xs leading-tight text-red-600"
+          title={errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
+          data-testid="chat-recorder-error"
+        >
           <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
-          {errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
+          <span className="truncate">
+            {errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
+          </span>
         </span>
       )}
     </div>

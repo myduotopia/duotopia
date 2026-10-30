@@ -81,6 +81,15 @@ export interface TextRevealState {
   zh: boolean;
 }
 
+/** 朗讀選項 */
+export interface SpeakOptions {
+  /**
+   * 朗讀實際出錯（不含被 cancel／打斷）或沒有英文語音時呼叫。題目自動朗讀用它在失敗時
+   * 直接打開英文，免得「先聽後看」變成學生看不到也聽不到題目（#1158 E2）。
+   */
+  onError?: () => void;
+}
+
 /** AI 建議與朗讀以注入方式提供：sample 傳 mock，正式版之後接後端 */
 export interface ScenarioChatAdapters {
   getFeedback: (
@@ -89,7 +98,7 @@ export interface ScenarioChatAdapters {
     attemptIndex: number,
   ) => Promise<ScenarioFeedback>;
   /** 朗讀（回傳值不使用；sample 的 speakEnglish 會回傳「唸完」的 Promise） */
-  speak: (text: string) => void | Promise<void>;
+  speak: (text: string, opts?: SpeakOptions) => void | Promise<void>;
   /** 停止朗讀（卸載／重置時呼叫） */
   stopSpeech?: () => void;
   /**

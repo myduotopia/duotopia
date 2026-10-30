@@ -17,13 +17,17 @@ vi.mock("@/components/shared/AudioRecorder", () => ({
   default: (props: {
     onRecordingStart?: () => void;
     onRecordingStop?: () => void;
+    onError?: () => void;
   }) => (
-    <div>
+    <div data-testid="recorder-stub">
       <button type="button" onClick={props.onRecordingStart}>
         stub-start
       </button>
       <button type="button" onClick={props.onRecordingStop}>
         stub-stop
+      </button>
+      <button type="button" onClick={() => props.onError?.()}>
+        stub-error
       </button>
     </div>
   ),
@@ -51,6 +55,9 @@ describe("ReplyComposer — 重答提示", () => {
     const banner = screen.getByTestId("scenario-retry-banner");
     expect(banner.className).toContain("bg-blue-900");
     expect(banner.className).toContain("rounded-full");
+    // 深藍膠囊規範：半透明白底、無外框（#1158 E2）
+    expect(cancelButton()!.className).toContain("bg-white/15");
+    expect(cancelButton()!.className).toContain("hover:bg-white/25");
     expect(banner).toHaveTextContent("scenarioDialogue.chat.retrying:1");
     fireEvent.click(cancelButton()!);
     expect(onCancelRetry).toHaveBeenCalled();
@@ -68,5 +75,26 @@ describe("ReplyComposer — 重答提示", () => {
       fireEvent.click(screen.getByText("stub-stop"));
     });
     expect(cancelButton()).not.toBeNull();
+  });
+
+  it("錄音失敗（太短等，只會呼叫 onError）後 ✕ 重新出現", () => {
+    render(<ReplyComposer {...props} />);
+    act(() => {
+      fireEvent.click(screen.getByText("stub-start"));
+    });
+    expect(cancelButton()).toBeNull();
+    act(() => {
+      fireEvent.click(screen.getByText("stub-error"));
+    });
+    expect(cancelButton()).not.toBeNull();
+  });
+
+  it("錄音區不擋對話區點擊：外層 pointer-events-none，錄音元件外層不再整列 auto", () => {
+    render(<ReplyComposer {...props} />);
+    const dock = screen.getByTestId("scenario-reply-dock");
+    expect(dock.className).toContain("pointer-events-none");
+    expect(
+      screen.getByTestId("recorder-stub").closest(".pointer-events-auto"),
+    ).toBeNull();
   });
 });
