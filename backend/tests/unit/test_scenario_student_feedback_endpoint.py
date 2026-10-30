@@ -589,3 +589,77 @@ class TestQuotaExhaustedBodyShape:
         assert detail["code"] == "AI_ANALYSIS_QUOTA_EXCEEDED"
         assert detail["ai_analysis_remaining"] == 0
         assert detail["max_attempts"] == MAX_AI_ANALYSIS_ATTEMPTS
+
+
+class TestHelpLimit:
+    """每題求助最多 3 次（#1158 E2b）；第 4 次起不退額度、當正式作答。
+
+    計數由後端自己記在 StudentItemProgress.retry_count（情境對話不用那一欄，借用免
+    migration），前端改不到。
+    """
+
+    HELP = {**AI_RESULT, "kind": "phrase", "verdict": None, "suggestion": "park"}
+
+    def test_three_helps_are_free_then_the_fourth_counts(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        spy = AsyncMock(return_value=self.HELP)
+        with patch(PATCH_TARGET, new=spy):
+            for _ in range(3):
+                body = _post(test_client, world).json()
+                assert body["kind"] == "phrase"
+                assert body["ai_analysis_count"] == 0
+            # 前三次都允許求助
+            assert [c.kwargs["allow_help"] for c in spy.await_args_list] == [True] * 3
+
+            body = _post(test_client, world).json()
+
+        # 第 4 次：告訴 service 不准求助；就算模型還是回 phrase，也當正式作答
+        assert spy.await_args.kwargs["allow_help"] is False
+        assert body["kind"] == "feedback"
+        assert body["verdict"] == "improve"
+        assert body["ai_analysis_count"] == 1
+        assert body["ai_analysis_remaining"] == 2
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 1
+        assert world["progress"].retry_count == 3
+
+    def test_formal_answers_do_not_use_up_help(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            _post(test_client, world)
+        db_session.refresh(world["progress"])
+        assert (world["progress"].retry_count or 0) == 0
+
+    def test_help_slot_is_atomic_and_capped(self, db_session: Session, world):
+        from routers.students.scenario_dialogue import take_help_slot
+
+        progress = world["progress"]
+        taken = [take_help_slot(progress, db_session) for _ in range(5)]
+        db_session.commit()
+        assert taken == [True, True, True, False, False]
+        db_session.refresh(progress)
+        assert progress.retry_count == 3
+
+    def test_lost_race_counts_as_an_answer(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        """讀計數時還有名額，但 AI 回來前名額被別的請求用完 → 不退額度、當作答。"""
+        progress = world["progress"]
+
+        async def fill_up_while_waiting(**kwargs):
+            assert kwargs["allow_help"] is True
+            db_session.query(StudentItemProgress).filter(
+                StudentItemProgress.id == progress.id
+            ).update({StudentItemProgress.retry_count: 3})
+            db_session.commit()
+            return self.HELP
+
+        with patch(PATCH_TARGET, new=AsyncMock(side_effect=fill_up_while_waiting)):
+            body = _post(test_client, world).json()
+
+        assert body["kind"] == "feedback"
+        assert body["verdict"] == "improve"
+        assert body["ai_analysis_count"] == 1
