@@ -81,6 +81,27 @@ describe("步驟展開", () => {
     expect(
       composerState(SCENARIO_FLOW, done, ctx({ hasQuestions: true })),
     ).toMatchObject({ phase: "done", intent: true, disabled: false });
+    // 題目已產生後老師打字交給 compose：對話框停用
+    expect(
+      composerState(
+        SCENARIO_FLOW,
+        done,
+        ctx({ hasQuestions: true, pending: "done" }),
+      ),
+    ).toMatchObject({ phase: "pending", disabled: true });
+  });
+
+  it("還沒答來源就先在右欄打了題目：來源仍可第一次選", () => {
+    const a: ScenarioAnswers = { mode: "none" };
+    const r = applyAnswer(
+      SCENARIO_FLOW,
+      a,
+      ctx({ hasQuestions: true }),
+      "source",
+      "manual",
+    );
+    expect(r.blocked).toBe(false);
+    expect(r.answers.source).toBe("manual");
   });
 
   it("有情境＋AI 出題：不問方向", () => {
@@ -168,6 +189,15 @@ describe("已選項目列：出現與消失", () => {
       key: "scenarioDialogue.setup.chipValues.mode.none",
     });
     expect(list.find((c) => c.stepId === "direction")?.value).toBe("週末活動");
+  });
+
+  it("方向：還沒填也顯示，值是空的（讓老師補填）", () => {
+    const list = chipsFor(
+      SCENARIO_FLOW,
+      { mode: "none", source: "ai", settings: true },
+      ctx(),
+    );
+    expect(list.find((c) => c.stepId === "direction")?.value).toBe("");
   });
 });
 
@@ -396,6 +426,7 @@ describe("i18n：步驟設定用到的文字中英文都有", () => {
       if (ref && typeof ref === "object") keys.push(ref.key);
     };
     push(SCENARIO_FLOW.choicePlaceholder);
+    push(SCENARIO_FLOW.textPlaceholder);
     push(SCENARIO_FLOW.cardPlaceholder);
     push(SCENARIO_FLOW.pendingPlaceholder);
     push(SCENARIO_FLOW.done.placeholder({}, ctx()));

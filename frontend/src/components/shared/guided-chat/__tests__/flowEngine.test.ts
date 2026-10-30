@@ -44,9 +44,14 @@ const CONFIRM = {
 
 const flow: FlowDef<Answers, Ctx, Saved> = {
   choicePlaceholder: text("x.choose"),
+  textPlaceholder: text("x.type"),
   cardPlaceholder: text("x.card"),
   pendingPlaceholder: text("x.pending"),
-  done: { placeholder: () => text("x.done"), intent: true },
+  done: {
+    placeholder: () => text("x.done"),
+    intent: true,
+    asyncState: (ctx) => (ctx.pending === "done" ? "pending" : "idle"),
+  },
   steps: [
     {
       id: "kind",
@@ -158,6 +163,19 @@ describe("改答案：清除、確認、不能改", () => {
     expect(r.answers).toBe(a);
   });
 
+  it("editable 只管改答案：第一次回答即使 editable 為否也放行", () => {
+    const r = applyAnswer(flow, {}, { ...idle, locked: true }, "kind", "a");
+    expect(r.blocked).toBe(false);
+    expect(r.answers).toEqual({ kind: "a" });
+  });
+
+  it("editable 為否時選回同一個答案不算被擋", () => {
+    const a: Answers = { kind: "a" };
+    const r = applyAnswer(flow, a, { ...idle, locked: true }, "kind", "a");
+    expect(r.blocked).toBe(false);
+    expect(r.changed).toBe(false);
+  });
+
   it("特殊確認：第一次、選回同一個都不問；改答案且會清東西才問", () => {
     expect(confirmForChange(flow, {}, idle, "kind", "a")).toBeNull();
     expect(
@@ -220,6 +238,34 @@ describe("底部對話框", () => {
       intent: true,
       stepId: null,
       placeholder: text("x.done"),
+    });
+  });
+
+  it("done 狀態也能是產生中：對話框停用", () => {
+    expect(
+      composerState(
+        flow,
+        { kind: "b", card: true },
+        { ...idle, pending: "done" },
+      ),
+    ).toMatchObject({
+      phase: "pending",
+      stepId: null,
+      disabled: true,
+      intent: false,
+      async: "pending",
+      placeholder: text("x.pending"),
+    });
+  });
+
+  it("打字步驟沒設灰字：用通用打字灰字，不是「請點選選項」", () => {
+    const f = {
+      ...flow,
+      steps: [{ ...flow.steps[1], when: undefined, placeholder: undefined }],
+    } as FlowDef<Answers, Ctx>;
+    expect(composerState(f, {}, idle)).toMatchObject({
+      phase: "text",
+      placeholder: text("x.type"),
     });
   });
 });

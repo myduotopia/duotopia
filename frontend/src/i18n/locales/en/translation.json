@@ -6804,6 +6804,7 @@
   "guidedChat": {
     "placeholders": {
       "choice": "Please pick one of the options above",
+      "text": "Type here…",
       "card": "Please finish the card above first",
       "pending": "Generating, one moment…"
     },

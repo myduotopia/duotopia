@@ -6841,6 +6841,7 @@
   "guidedChat": {
     "placeholders": {
       "choice": "請點選上面的選項",
+      "text": "請在這裡輸入…",
       "card": "請先完成上面的卡片",
       "pending": "產生中，請稍候…"
     },

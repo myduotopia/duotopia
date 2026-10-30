@@ -22,11 +22,11 @@
  * | `when` | 出現條件（預設一定出現） |
  * | `isAnswered` | 已答判斷（預設：值不是 undefined／null） |
  * | `terminal` | 永遠是最後一步、不會「已答」（例如舊版的出題設定卡） |
- * | `editable` | 這一步現在能不能改（例如「來源」只在還沒有題目時能改） |
+ * | `editable` | 已答過的這一步現在能不能改答案（例如「來源」只在還沒有題目時能改）。第一次回答不檢查 |
  * | `clears` | 改成不同答案時要一併清掉的步驟 |
  * | `confirm` | 改答案前要先跳的確認框（回 null ＝不必確認） |
  * | `asyncState` | 非同步狀態：`idle`／`pending`（產生中）／`failed` |
- * | `placeholder` / `pendingPlaceholder` | 底部對話框灰字（這一步、產生中） |
+ * | `placeholder` / `pendingPlaceholder` | 底部對話框灰字（這一步、產生中）。打字步驟沒設時用流程的 `textPlaceholder` |
  * | `intent` | 這一步打字要不要交給 AI 判斷意圖（例如情境對話的「自己打題目」） |
  * | `chip` | 已選項目列的標籤：出現條件、標籤文字、目前值、Popover 內容描述 |
  * | `answerText` | 老師這一步的回答怎麼寫進對話紀錄（還原摘要也用它） |
@@ -139,6 +139,8 @@ export interface FlowDef<A extends FlowAnswers, C, S = unknown> {
   steps: readonly StepDef<A, C, S>[];
   /** 選項步驟的灰字（送出不呼叫 AI，只回同一句提示） */
   choicePlaceholder: TextRef;
+  /** 打字步驟沒設 `placeholder` 時的通用灰字 */
+  textPlaceholder: TextRef;
   /** 卡片步驟的灰字（對話框停用，說明原因） */
   cardPlaceholder: TextRef;
   /** 產生中的預設灰字 */
@@ -146,6 +148,12 @@ export interface FlowDef<A extends FlowAnswers, C, S = unknown> {
   done: {
     placeholder: (a: A, ctx: C) => TextRef;
     intent: boolean;
+    /**
+     * 全部答完後仍可能在跑 AI（例如情境對話題目產生後，老師打字交給 compose）：
+     * `pending` 時對話框停用，灰字用 `pendingPlaceholder`（沒設就用流程的預設）。
+     */
+    asyncState?: (ctx: C) => AsyncState;
+    pendingPlaceholder?: TextRef;
   };
 }
 
@@ -239,8 +247,8 @@ export interface ApplyResult<A extends FlowAnswers> {
 }
 
 /**
- * 套用某一步的答案。之前已答、而且改成不同的值時，套用步驟的 `clears`；
- * 第一次回答不清任何東西。確認框由呼叫端先用 `confirmForChange` 問過。
+ * 套用某一步的答案。之前已答、而且改成不同的值時，先看 `editable`（不能改就回
+ * `blocked`），再套用步驟的 `clears`；第一次回答不檢查 `editable`、不清任何東西。確認框由呼叫端先用 `confirmForChange` 問過。
  */
 export function applyAnswer<A extends FlowAnswers, C>(
   flow: FlowDef<A, C>,
@@ -250,11 +258,13 @@ export function applyAnswer<A extends FlowAnswers, C>(
   value: unknown,
 ): ApplyResult<A> {
   const step = findStep(flow, stepId);
-  if (!isStepEditable(step, a, ctx)) {
-    return { answers: a, cleared: [], changed: false, blocked: true };
-  }
   const wasAnswered = isStepAnswered(step, a, ctx);
   const changed = !sameValue(a[stepId], value);
+  // editable 只管「已答過、要改答案」；第一次回答一律放行（例如老師還沒答「題目怎麼來」
+  // 就先在右欄打了題目，這時來源仍要能第一次選，不然流程會卡死）
+  if (wasAnswered && changed && !isStepEditable(step, a, ctx)) {
+    return { answers: a, cleared: [], changed: false, blocked: true };
+  }
   const cleared =
     wasAnswered && changed && step.clears ? step.clears(a, value, ctx) : [];
   const next = clearAnswers({ ...a, [stepId]: value } as A, cleared);
@@ -330,13 +340,24 @@ export function composerState<A extends FlowAnswers, C>(
 ): ComposerState {
   const step = activeStep(flow, a, ctx);
   if (!step) {
+    const async = flow.done.asyncState ? flow.done.asyncState(ctx) : "idle";
+    if (async === "pending") {
+      return {
+        stepId: null,
+        phase: "pending",
+        disabled: true,
+        placeholder: flow.done.pendingPlaceholder ?? flow.pendingPlaceholder,
+        intent: false,
+        async,
+      };
+    }
     return {
       stepId: null,
       phase: "done",
       disabled: false,
       placeholder: flow.done.placeholder(a, ctx),
       intent: flow.done.intent,
-      async: "idle",
+      async,
     };
   }
   const async = step.asyncState ? step.asyncState(ctx) : "idle";
@@ -376,7 +397,7 @@ export function composerState<A extends FlowAnswers, C>(
     disabled: false,
     placeholder: step.placeholder
       ? step.placeholder(a, ctx)
-      : flow.choicePlaceholder,
+      : flow.textPlaceholder,
     intent: !!step.intent,
     async,
   };

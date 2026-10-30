@@ -26,7 +26,7 @@
  * ## 已選項目列（規格第 0、2 點）
  * - 情境：答完 `mode` 就出現，一直存在。Popover＝三個方式選項＋「編輯情境內容」。
  * - 來源：答完 `source` 就出現；右欄有任一非空白題時隱藏，題目刪光就再出現。
- * - 方向：只在「不需要情境」且「AI 出題」、已答方向時出現。
+ * - 方向：只要是「不需要情境」且「AI 出題」就出現；還沒填方向時值是空的，老師可從這裡補填。
  * - 設定：AI 出題的第一次產生題目後出現；自己輸入的答完來源就出現。
  *
  * ## 清除規則
@@ -85,8 +85,11 @@ export interface ScenarioFlowContext {
   scenarioChars: number;
   imageCount: number;
   articleLevel: string;
-  /** 正在跑 AI 的步驟（寫情境、擷取、檢查方向、產生題目） */
-  pending: ScenarioStepId | null;
+  /**
+   * 正在跑 AI 的步驟（寫情境、擷取、檢查方向、產生題目）。`"done"` ＝題目已產生後
+   * 老師打字交給 compose（對話框停用）
+   */
+  pending: ScenarioStepId | "done" | null;
   /** 上一次 AI 失敗的步驟 */
   failed: ScenarioStepId | null;
 }
@@ -192,11 +195,13 @@ type Flow = FlowDef<ScenarioAnswers, ScenarioFlowContext, ScenarioSaved>;
 
 export const SCENARIO_FLOW: Flow = {
   choicePlaceholder: text("guidedChat.placeholders.choice"),
+  textPlaceholder: text("guidedChat.placeholders.text"),
   cardPlaceholder: text("guidedChat.placeholders.card"),
   pendingPlaceholder: text("guidedChat.placeholders.pending"),
   done: {
     placeholder: () => text(`${P}.placeholders.done`),
     intent: true,
+    asyncState: (ctx) => (ctx.pending === "done" ? "pending" : "idle"),
   },
   steps: [
     {
@@ -310,10 +315,10 @@ export const SCENARIO_FLOW: Flow = {
       placeholder: () => text(`${P}.directionPlaceholder`),
       answerText: (a) => (isText(a.direction) ? a.direction : null),
       chip: {
-        visible: (a) =>
-          a.mode === "none" && a.source === "ai" && isText(a.direction),
+        // 沒填方向也顯示（值空白），讓老師能從標籤補填
+        visible: (a) => a.mode === "none" && a.source === "ai",
         label: text(`${P}.chips.direction`),
-        value: (a) => (isText(a.direction) ? a.direction : null),
+        value: (a) => (isText(a.direction) ? a.direction : ""),
         popover: {
           type: "text",
           placeholder: text(`${P}.directionPlaceholder`),
@@ -346,7 +351,11 @@ export const SCENARIO_FLOW: Flow = {
   ],
 };
 
-/** 由已存資料還原答案（編輯既有內容） */
+/**
+ * 由已存資料還原答案。**只用在編輯既有內容**（打開已存的情境對話）；新建時答案從 `{}`
+ * 開始，不要呼叫這支 —— 舊資料的推斷規則（沒存模式就看有沒有情境）會把空白新內容
+ * 誤判成「不需要情境＋自己輸入」，直接跳過前兩個問題。
+ */
 export function scenarioAnswersFromSaved(
   saved: ScenarioSaved,
 ): ScenarioAnswers {
