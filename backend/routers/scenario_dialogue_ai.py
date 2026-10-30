@@ -3,7 +3,7 @@
 - POST /api/teachers/scenario-dialogue/generate-article   依訓練目標生成情境文章
 - POST /api/teachers/scenario-dialogue/generate-questions 依情境文章與出題設定產題
 - POST /api/teachers/scenario-dialogue/extract-article    從圖片/PDF 擷取情境文章
-- POST /api/teachers/scenario-dialogue/compose            對話框打字：判斷意圖並加題／出題（#1158 C 段）
+- POST /api/teachers/scenario-dialogue/compose            對話框打字：判斷意圖並加題／出題／修改題目／修改情境（#1158 C 段、修正 C6）
 
 #1146：generate-article / generate-questions 多回 ``usable`` / ``reask`` /
 ``suggested_title``（答非所問不產內容、不扣額度）；generate-questions 接受無情境＋
@@ -25,7 +25,17 @@
 
 import logging
 from collections import Counter
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional
+from typing import (
+    Annotated,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Union,
+)
 
 from fastapi import (
     APIRouter,
@@ -88,6 +98,10 @@ MAX_DIRECTION_CHARS = MAX_GOAL_CHARS
 MAX_UI_LANGUAGE_CHARS = 10
 # #1158 C 段 compose：老師在對話框一次打的內容（可能是好幾題）
 MAX_COMPOSE_TEXT_CHARS = 8000
+# 修正 C6：compose 收既有題目的完整欄位（與服務層收斂上限一致或更寬）
+MAX_KEYWORD_CHARS = 60
+MAX_KEYWORDS_PER_QUESTION = 10
+MAX_REFERENCE_ANSWER_CHARS = 2000
 
 
 class GenerateArticleRequest(BaseModel):
@@ -169,11 +183,31 @@ class GenerateQuestionsRequest(BaseModel):
     ] = Field(default_factory=list, max_length=MAX_EXISTING_QUESTIONS)
 
 
+class ComposeExistingQuestion(BaseModel):
+    """compose 的既有題目（修正 C6）：帶完整欄位，AI 才改得了「把第 2 題改成…」。
+
+    ``number`` 是右欄畫面上的題號（1 起算；清單中間有空白題時可能不連續），
+    修改題目時 AI 回的 ``revisions[].index`` 就是這個數字。沒給時依序編號。
+    """
+
+    number: Optional[int] = Field(default=None, ge=1, le=MAX_EXISTING_QUESTIONS)
+    question: str = Field(default="", max_length=MAX_EXISTING_QUESTION_CHARS)
+    translation: str = Field(default="", max_length=MAX_EXISTING_QUESTION_CHARS)
+    keywords: List[
+        Annotated[str, StringConstraints(max_length=MAX_KEYWORD_CHARS)]
+    ] = Field(default_factory=list, max_length=MAX_KEYWORDS_PER_QUESTION)
+    reference_answer: str = Field(default="", max_length=MAX_REFERENCE_ANSWER_CHARS)
+    image_prompt: str = Field(default="", max_length=MAX_IMAGE_PROMPT_CHARS)
+
+
 class ComposeRequest(BaseModel):
     """對話框打字（#1158 C 段）：前端 ``questionRequestBase()`` 的欄位＋``text``。
 
     與 GenerateQuestionsRequest 的差別：沒有 ``count`` —— 題數由後端依
     ``existing_questions``（只算非空白題）算出剩餘名額，再由 AI 依老師的話決定。
+
+    ``existing_questions`` 修正 C6 起可以是物件（``ComposeExistingQuestion``，帶題號與
+    完整欄位，修改題目要用）；純字串（舊格式）照收，題號依序編。
     """
 
     # 空白輸入在進到額度之前就擋掉（同 _ImageDescription 的理由）
@@ -195,7 +229,10 @@ class ComposeRequest(BaseModel):
     global_rubric: str = Field(default="", max_length=MAX_RUBRIC_CHARS)
     translate_language: str = Field(default="", max_length=MAX_LANGUAGE_CHARS)
     existing_questions: List[
-        Annotated[str, StringConstraints(max_length=MAX_EXISTING_QUESTION_CHARS)]
+        Union[
+            Annotated[str, StringConstraints(max_length=MAX_EXISTING_QUESTION_CHARS)],
+            ComposeExistingQuestion,
+        ]
     ] = Field(default_factory=list, max_length=MAX_EXISTING_QUESTIONS)
 
 
@@ -395,21 +432,28 @@ async def compose(
       是模型讀出的老師要求題數（沒說為 0），大於剩餘名額時前端說明只出得了幾題。
     * ``suggested_title``：標題建議（何時套用由前端依 #1146 規則決定）。
     * ``output_truncated``：輸出被截斷、只救回部分題目，前端提示老師分次輸入。
-    * ``usable=False``：整段都與題目無關，只回重問句，不計次。
+    * ``intent="revise_questions"``（修正 C6）：``revisions: [{index, question,
+      translation, keywords, reference_answer, image_prompt}]``，``index`` 是題號（1 起算，
+      ＝送來的 ``existing_questions[].number``），只含要改的題目。題數不變。
+    * ``intent="revise_scenario"``（修正 C6）：``scenario_content`` 是改寫後的整篇情境文章。
+    * ``suggested_title``：標題建議（何時套用由前端依 #1146 規則決定）。
+    * ``output_truncated``：輸出被截斷、只救回部分題目，前端提示老師分次輸入。
+    * ``usable=False``：整段都與題目無關，只回重問句，不計次。``refusal`` 有值時是
+      「沒辦法照做」的原因代碼（``full``／``no_questions``／``no_scenario``／
+      ``revise_out_of_range``），同樣不計次，前端依代碼顯示說明。
 
-    計入文字 AI 次數池（一次呼叫算一次）。清單已滿 10 題時在**佔位之前**回 409
-    ``SCENARIO_QUESTIONS_FULL`` —— 沒有名額就不該打 AI，也不該扣次數。
+    計入文字 AI 次數池（一次呼叫算一次）。修正 C6 起清單已滿 10 題**也照樣呼叫**
+    （老師可能是要修改既有題目或情境；前端事先分不出來）；判斷出是加題／出題時回
+    ``refusal="full"``、不計次。
     """
-    existing = [q.strip() for q in payload.existing_questions if q.strip()]
-    remaining = MAX_ITEMS - len(existing)
-    if remaining <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "SCENARIO_QUESTIONS_FULL",
-                "message": f"已滿 {MAX_ITEMS} 題，請先刪除題目",
-            },
-        )
+    existing: List[Union[str, Dict[str, Any]]] = []
+    for item in payload.existing_questions:
+        if isinstance(item, str):
+            if item.strip():
+                existing.append(item.strip())
+        elif item.question.strip():
+            existing.append(item.model_dump())
+    remaining = max(0, MAX_ITEMS - len(existing))
 
     service = get_scenario_dialogue_compose_service()
 
