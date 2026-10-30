@@ -233,3 +233,38 @@ describe("題目氣泡單層（#1158 E-2 A 方案）", () => {
     expect(bubble.className).not.toMatch(/(^|\s)border(\s|-)/);
   });
 });
+
+describe("AI 頭像（#1158 E-2）", () => {
+  it("AI 一側是線描熊熊（40px、purple），不是灰底 Bot；口鼻線條比較細", async () => {
+    const { AiRow } = await import("../TypingIndicator");
+    render(
+      <AiRow>
+        <p>hi</p>
+      </AiRow>,
+    );
+    const avatar = screen.getByTestId("bear-avatar");
+    for (const c of ["h-10", "w-10", "rounded-full", "bg-purple-100"]) {
+      expect(avatar.className).toContain(c);
+    }
+    expect(avatar).toHaveAttribute("aria-hidden");
+    const snout = avatar.querySelector("ellipse")!;
+    expect(snout.getAttribute("stroke-width")).toBe("1.1");
+    expect(snout.getAttribute("rx")).toBe("3.3");
+    expect(avatar.querySelector("svg")!.getAttribute("stroke-width")).toBe(
+      "1.8",
+    );
+  });
+
+  it("學生的回答氣泡沒有頭像", async () => {
+    const { AnswerBubble } = await import("../AnswerBubble");
+    render(
+      <AnswerBubble
+        answer={{ kind: "text", text: "hello" }}
+        attemptNo={1}
+        showAttemptNo={false}
+        faded={false}
+      />,
+    );
+    expect(screen.queryByTestId("bear-avatar")).toBeNull();
+  });
+});
