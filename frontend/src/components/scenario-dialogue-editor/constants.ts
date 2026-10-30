@@ -11,7 +11,8 @@ export const MAX_ITEMS = 10;
 /** 出題設定卡的題數預設值（#1146：範圍 MIN_ITEMS~MAX_ITEMS） */
 export const DEFAULT_GENERATE_COUNT = 5;
 
-export const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
+/** CEFR 程度清單：與共用的 CEFR 小方塊（`guided-chat/CefrChips`）同一份 */
+export { CEFR_LEVELS } from "@/components/shared/guided-chat/CefrChips";
 
 /**
  * 時態＝時間 × 動貌，共 12 種；被動是「語態」，與時態正交，因此獨立成第三個下拉

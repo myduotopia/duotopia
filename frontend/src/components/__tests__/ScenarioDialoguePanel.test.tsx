@@ -194,7 +194,8 @@ const K = {
   writeArticle: "scenarioDialogue.setup.writeArticle",
   next: "scenarioDialogue.setup.next",
   stepBack: "scenarioDialogue.setup.back",
-  change: "scenarioDialogue.setup.change",
+  // 「改選」改由共用的 TeacherBubble 畫（#1158 C 段 commit 3）
+  change: "guidedChat.change",
   reopenConfirm: "scenarioDialogue.setup.reopenConfirm",
   uploadImage: "scenarioDialogue.buttons.uploadImage",
   generateImage: "scenarioDialogue.buttons.generateImage",

@@ -6810,6 +6810,21 @@
     },
     "log": {
       "changed": "Changed {{label}} to: {{value}}"
+    },
+    "change": "Change",
+    "tabs": {
+      "chat": "Chat",
+      "side": "Questions ({{count}})"
+    },
+    "chips": {
+      "label": "Selected options",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "apply": "Apply"
+    },
+    "composer": {
+      "label": "Message box",
+      "send": "Send"
     }
   }
 }

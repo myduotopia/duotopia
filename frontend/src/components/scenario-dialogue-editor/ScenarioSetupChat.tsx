@@ -30,29 +30,30 @@
  * - 頂端有 Beta 標籤＋灰色小字「測試版本，可能會有錯誤」（#1158）。情境步驟的情境圖列
  *   有「AI 生圖」（`ScenarioImageStrip`，依情境文章預填描述）。
  *
+ * - 泡泡（`BotBubble`／`TeacherBubble`）、選項卡（`ChoiceCards`）、CEFR 程度小方塊
+ *   （`CefrChips`）從 #1158 C 段 commit 3 起改用 `components/shared/guided-chat/` 的共用
+ *   版本（從這支檔抽出去的，行為不變）。
+ *
  * state 全部由面板持有（存檔、題目清單都要用），這個元件只負責畫與回報老師的選擇。
  */
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Bot,
-  Loader2,
-  Sparkles,
-  Upload,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
-import { CEFR_LEVELS } from "./constants";
+import {
+  BotBubble,
+  TeacherBubble,
+} from "@/components/shared/guided-chat/ChatBubbles";
+import { ChoiceCards } from "@/components/shared/guided-chat/ChoiceCards";
+import { CefrChips } from "@/components/shared/guided-chat/CefrChips";
 import { ScenarioImageStrip } from "./ScenarioImageStrip";
 import { ScenarioActionBar, ScenarioScrollArea } from "./ScenarioSheetLayout";
 import type { ScenarioImageActions } from "./useScenarioImages";
@@ -113,96 +114,8 @@ export interface ScenarioSetupChatProps {
   onViewList: () => void;
 }
 
-function BotBubble({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-        <Bot className="h-4 w-4" />
-      </span>
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-gray-100 px-3 py-2 text-sm text-gray-800 whitespace-pre-wrap break-words">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function TeacherBubble({
-  children,
-  onChange,
-}: {
-  children: ReactNode;
-  onChange?: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center justify-end gap-2">
-      {onChange && (
-        <button
-          type="button"
-          onClick={onChange}
-          className="text-xs text-blue-600 hover:underline"
-        >
-          {t("scenarioDialogue.setup.change")}
-        </button>
-      )}
-      <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-blue-600 px-3 py-2 text-sm text-white whitespace-pre-wrap break-words">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 /** 有灰色說明行的情境選項（其餘選項只有主句） */
 const MODE_HINTS: ReadonlySet<ScenarioMode> = new Set(["existing"]);
-
-interface ChoiceOption<T extends string> {
-  value: T;
-  /** 粗體主句 —— 也是按鈕的無障礙名稱，選完後老師泡泡只顯示這一句 */
-  label: string;
-  /** 選填的灰色說明行（以 aria-describedby 掛上，不併入按鈕名稱） */
-  hint?: string;
-}
-
-/**
- * 選項型步驟的直排選項卡（第 3 輪）：等寬、左對齊、粗體主句＋可選灰色說明行。
- * 選項文字變長後橫排按鈕會換行換得很亂，直排比較好讀。
- * 「需要情境嗎？」與「題目怎麼來？」共用，兩步的外觀一致。
- */
-function ChoiceCards<T extends string>({
-  options,
-  onChoose,
-}: {
-  options: ChoiceOption<T>[];
-  onChoose: (value: T) => void;
-}) {
-  const idPrefix = useId();
-  return (
-    <div className="flex max-w-xl flex-col gap-2 sm:pl-9">
-      {options.map((opt) => {
-        const hintId = opt.hint ? `${idPrefix}-${opt.value}` : undefined;
-        return (
-          <Button
-            key={opt.value}
-            variant="outline"
-            aria-label={opt.label}
-            aria-describedby={hintId}
-            onClick={() => onChoose(opt.value)}
-            className="h-auto w-full flex-col items-start justify-start gap-0.5 whitespace-normal px-4 py-3 text-left"
-          >
-            <span className="text-sm font-semibold text-gray-800">
-              {opt.label}
-            </span>
-            {opt.hint && (
-              <span id={hintId} className="text-xs font-normal text-gray-500">
-                {opt.hint}
-              </span>
-            )}
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
 
 export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   const { t } = useTranslation();
@@ -329,23 +242,10 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
               <span className="text-xs text-gray-600 mb-1 block">
                 {t("scenarioDialogue.labels.articleLevel")}
               </span>
-              <div className="flex flex-wrap gap-1">
-                {CEFR_LEVELS.map((lv) => (
-                  <button
-                    key={lv}
-                    type="button"
-                    aria-pressed={props.articleLevel === lv}
-                    onClick={() => props.onArticleLevelChange(lv)}
-                    className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                      props.articleLevel === lv
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }`}
-                  >
-                    {lv}
-                  </button>
-                ))}
-              </div>
+              <CefrChips
+                value={props.articleLevel}
+                onChange={props.onArticleLevelChange}
+              />
             </div>
             {props.generatingArticle && (
               <BotBubble>

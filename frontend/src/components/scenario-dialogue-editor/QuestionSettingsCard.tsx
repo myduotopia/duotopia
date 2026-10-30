@@ -9,6 +9,8 @@
  *
  * 卡片只放設定欄位（修正第 2 輪）：「開始產生」、「查看題目清單」、額度提示都移到對話的
  * 底部列右側（`ScenarioSetupChat`），跟「回上一步」同一列。
+ *
+ * 題目難度的 CEFR 小方塊改用共用的 `guided-chat/CefrChips`（#1158 C 段 commit 3）。
  */
 import { useTranslation } from "react-i18next";
 import {
@@ -25,12 +27,8 @@ import {
   type TTSSettingsState,
 } from "@/components/shared/BatchTTSSettings";
 import type { TenseSetting } from "@/lib/scenarioDialogue";
-import {
-  CEFR_LEVELS,
-  MAX_ITEMS,
-  MIN_ITEMS,
-  TRANSLATION_LANGUAGES,
-} from "./constants";
+import { CefrChips } from "@/components/shared/guided-chat/CefrChips";
+import { MAX_ITEMS, MIN_ITEMS, TRANSLATION_LANGUAGES } from "./constants";
 import { TenseSelects } from "./TenseSelects";
 
 export interface QuestionSettingsCardProps {
@@ -74,23 +72,10 @@ export function QuestionSettingsCard(props: QuestionSettingsCardProps) {
           <span className="text-xs font-semibold text-gray-700 mb-1 block">
             {t("scenarioDialogue.labels.questionLevel")}
           </span>
-          <div className="flex flex-wrap gap-1">
-            {CEFR_LEVELS.map((lv) => (
-              <button
-                key={lv}
-                type="button"
-                aria-pressed={props.questionLevel === lv}
-                onClick={() => props.onQuestionLevelChange(lv)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                  props.questionLevel === lv
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }`}
-              >
-                {lv}
-              </button>
-            ))}
-          </div>
+          <CefrChips
+            value={props.questionLevel}
+            onChange={props.onQuestionLevelChange}
+          />
         </div>
 
         <div className="flex flex-col gap-1">

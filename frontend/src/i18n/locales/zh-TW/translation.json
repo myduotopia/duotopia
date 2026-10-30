@@ -6847,6 +6847,21 @@
     },
     "log": {
       "changed": "已把{{label}}改成：{{value}}"
+    },
+    "change": "改選",
+    "tabs": {
+      "chat": "對話",
+      "side": "題目（{{count}}）"
+    },
+    "chips": {
+      "label": "已選項目",
+      "expand": "展開",
+      "collapse": "收合",
+      "apply": "確定"
+    },
+    "composer": {
+      "label": "對話輸入框",
+      "send": "送出"
     }
   }
 }
