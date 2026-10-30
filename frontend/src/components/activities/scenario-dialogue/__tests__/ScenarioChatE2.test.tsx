@@ -1,7 +1,7 @@
 /**
  * #1158 E-2：情境對話畫面修正
  * - E1：對話標題列不重複情境標題，改寫「對話」、灰色系
- * - E4：🔊／英／中、作答要求／情境切換鈕開啟時用次要樣式（淺藍底藍字＋藍框），不用藍底主按鈕
+ * - E4：🔊／英／中、作答要求／情境切換鈕開啟時淺藍底藍字、關閉白底，都沒有外框，不用藍底主按鈕
  * - E5：情境卡顯示情境圖（ImageCarousel）
  * - E6：已提交唯讀：列出題目＋自己的錄音，不顯示「開始對話」與錄音區
  */
@@ -63,7 +63,7 @@ const ADAPTERS = {
 const onClasses = TOGGLE_ON_CLASS.split(" ");
 
 describe("E4 切換鈕樣式", () => {
-  it("英／中開啟時是次要樣式（淺藍底藍字＋藍框），關閉是白底灰框", () => {
+  it("英／中開啟時淺藍底藍字、關閉白底，沒有外框", () => {
     render(
       <RevealCapsules
         enOn
@@ -77,7 +77,7 @@ describe("E4 切換鈕樣式", () => {
     const en = screen.getByRole("button", {
       name: "scenarioDialogue.chat.hideEnglish",
     });
-    for (const c of ["bg-blue-50", "text-blue-700", "border-blue-300"]) {
+    for (const c of ["bg-blue-100", "text-blue-700"]) {
       expect(en.className).toContain(c);
     }
     // 不是藍底主按鈕
@@ -85,7 +85,11 @@ describe("E4 切換鈕樣式", () => {
     const zh = screen.getByRole("button", {
       name: "scenarioDialogue.chat.showChineseFull",
     });
-    expect(zh.className).not.toContain("bg-blue-50");
+    expect(zh.className).not.toContain("bg-blue-100");
+    expect(zh.className).toContain("bg-white");
+    // 沒有外框（ghost，不是 outline）
+    expect(en.className).not.toContain("border-input");
+    expect(zh.className).not.toContain("border-input");
   });
 
   it("情境卡的「作答要求／情境」切換鈕開啟時套同一樣式", () => {
@@ -106,7 +110,8 @@ describe("E4 切換鈕樣式", () => {
       (b) => b.getAttribute("aria-expanded") === "false",
     )!;
     for (const c of onClasses) expect(rubric.className).toContain(c);
-    expect(scenario.className).not.toContain("bg-blue-50");
+    expect(scenario.className).not.toContain("bg-blue-100");
+    expect(scenario.className).not.toContain("border-input");
     expect(rubric.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
   });
 });
@@ -203,5 +208,28 @@ describe("E6 已提交唯讀", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /scenarioDialogue\.chat\.start/ }),
     );
+  });
+});
+
+describe("題目氣泡單層（#1158 E-2 A 方案）", () => {
+  it("沒有外框線，只有淡灰底", async () => {
+    const { QuestionBubble } = await import("../QuestionBubble");
+    render(
+      <QuestionBubble
+        index={0}
+        total={2}
+        item={ITEMS[0]}
+        visible={{ en: true, zh: false }}
+        showTranslation={false}
+        isPreviewMode={false}
+        skipped={false}
+        averageScore={null}
+        onPlay={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    const bubble = screen.getByTestId("scenario-question");
+    expect(bubble.className).toContain("bg-gray-100");
+    expect(bubble.className).not.toMatch(/(^|\s)border(\s|-)/);
   });
 });
