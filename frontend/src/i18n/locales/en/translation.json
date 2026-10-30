@@ -5177,7 +5177,7 @@
       "placeholders": {
         "goal": "e.g. ordering food at a night market, asking for directions",
         "manualInput": "Type questions here, several at once is fine",
-        "done": "Type new questions, or say \"3 more questions about…\""
+        "done": "Type new questions, or say \"3 more questions about…\" or \"change question 2 to past tense\""
       },
       "chips": {
         "scenario": "Context",
@@ -5222,7 +5222,23 @@
       "tooLong": "That's too long. Please enter it in smaller batches.",
       "overLimitTitle": "Too many questions",
       "overLimitDescription": "Only the first {{count}} will be added (limit {{max}}). Add them?",
-      "overLimitConfirm": "Add"
+      "overLimitConfirm": "Add",
+      "reviseQuestionsTitle": "Revise questions",
+      "reviseQuestionsDescription_one": "{{count}} question will be rewritten. The original will be replaced.",
+      "reviseQuestionsDescription_other": "{{count}} questions will be rewritten. The originals will be replaced.",
+      "reviseScenarioTitle": "Revise scenario",
+      "reviseScenarioDescription": "The scenario text will be rewritten.",
+      "reviseConfirm": "Rewrite",
+      "revisedQuestions_one": "Rewrote {{count}} question",
+      "revisedQuestions_other": "Rewrote {{count}} questions",
+      "revisedScenario": "Rewrote the scenario text",
+      "reviseQuestionsCancelled": "No questions were changed",
+      "reviseScenarioCancelled": "The scenario text was not changed",
+      "noQuestionsToRevise": "There are no questions to revise yet.",
+      "noScenarioToRevise": "There is no scenario to revise.",
+      "reviseOutOfRange_one": "Couldn't find that question (there is {{count}} question now).",
+      "reviseOutOfRange_other": "Couldn't find that question (there are {{count}} questions now).",
+      "reviseTruncated": "Some questions weren't changed. Please say again which ones to change."
     },
     "context": {
       "title": "Scenario",

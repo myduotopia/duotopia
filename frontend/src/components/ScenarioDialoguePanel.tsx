@@ -27,7 +27,6 @@
  * - **對話框打字（compose，C 段第 5 段，`handleCompose`）**：「自己打題目」那一步，以及題目
  *   已產生、沒有進行中的步驟時，老師在對話框打的字交給 AI 判斷是「自己打的題目」
  *   （`add_questions`）還是「請 AI 再出題」（`generate`）。
- *   - 已滿 10 題不呼叫 AI，直接回「已滿 10 題，請先在右邊刪除題目」。
  *   - 超過 `MAX_COMPOSE_TEXT_CHARS`（8000 字，和後端同值）不呼叫 AI，回「內容太長，請分次
  *     輸入」；後端回 422 也對到這句。
  *   - 處理中：對話框與已選項目列停用（引擎的 pending）。
@@ -40,6 +39,17 @@
  *     翻譯與語音（只替實際加入的題目）。老師要的題數大於剩餘名額時回「只剩 N 個空位，
  *     先出 N 題」。
  *   - 加入後：對話加一句「已加入 N 題」，窄版切到「題目」分頁；「自己打題目」那一步答完。
+ *   - **修改既有內容（修正 C6）**：AI 也會判斷出「修改題目」（`revise_questions`，例如
+ *     「把問題改為過去式」「把第 2 題改成…」）或「修改情境」（`revise_scenario`，例如
+ *     「情境改成在學校」）。送出時既有題目帶題號（右欄畫面上的第幾題）與完整欄位
+ *     （`composeExisting`）。回來後先跳 `ConfirmDialog`（「會改寫 N 題，原本的內容會被
+ *     取代」／「會改寫情境文章」），確認才改：題目依列 id 原地替換（`reviseRow`，題目圖
+ *     不動；題目文字變了的題重產語音、翻譯依開關）；情境只換文章、右欄即時更新、情境圖
+ *     不動。紀錄寫「已改寫 N 題」／「已改寫情境文章」。取消不改，紀錄寫「沒有修改…」，
+ *     原文放回對話框。
+ *   - 已滿 10 題**不在前端擋**（可能是修改）；後端判斷出是加題／出題時回 `refusal`
+ *     「full」。沒有題目卻要改題目、沒有情境卻要改情境、題號不存在，同樣由後端回
+ *     `refusal`，對話裡說明（「目前還沒有題目可以修改」等），不計次。
  *   - 失敗（402 額度、409 已滿、422 太長、其他）：對話裡說明，對話框留著原文、恢復可用。
  *   題目刪光後（AI 出題來源）流程仍在「題目已產生」，老師可以直接在對話框請 AI 出題。
  *
@@ -98,7 +108,12 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { apiClient, ApiError } from "@/lib/api";
+import {
+  apiClient,
+  ApiError,
+  type ScenarioComposeExistingQuestion,
+  type ScenarioComposeRevision,
+} from "@/lib/api";
 import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import {
@@ -250,6 +265,69 @@ interface ComposedBatch {
   replies: { role: "bot" | "note"; text: string }[];
 }
 
+/**
+ * compose 送出的既有題目（修正 C6）：非空白題，題號＝右欄畫面上的第幾題（含空白題的位置），
+ * 欄位截到後端收的上限（題目／翻譯 1000、字詞 10 個各 60、參考答案 2000、圖片描述 1000），
+ * 免得老師某一欄特別長整個請求被 422 擋掉。
+ */
+const composeExisting = (rows: ScenarioDialogueRow[]) =>
+  rows.flatMap<{
+    rowId: string;
+    number: number;
+    payload: ScenarioComposeExistingQuestion;
+  }>((r, i) =>
+    isBlankRow(r) || !r.question.trim()
+      ? []
+      : [
+          {
+            rowId: r.id,
+            number: i + 1,
+            payload: {
+              number: i + 1,
+              question: r.question.trim().slice(0, 1000),
+              translation: r.translation.trim().slice(0, 1000),
+              keywords: r.keywords.slice(0, 10).map((k) => k.slice(0, 60)),
+              reference_answer: r.referenceAnswer.trim().slice(0, 2000),
+              image_prompt: r.imagePrompt.trim().slice(0, 1000),
+            },
+          },
+        ],
+  );
+
+/**
+ * 套用一筆 AI 改寫（修正 C6）：題目、翻譯、必用字詞、參考答案、圖片描述換成新的；題目圖、
+ * 單題評分標準、補充說明、題號位置不動。題目文字變了，舊語音就對不上（清掉，由呼叫端重產）。
+ * 翻譯：開關開著用 AI 的翻譯；關著時題目沒變就留原本的，變了就清空（舊翻譯已對不上）。
+ */
+const reviseRow = (
+  row: ScenarioDialogueRow,
+  r: ScenarioComposeRevision,
+  autoTranslate: boolean,
+): ScenarioDialogueRow => {
+  const changed = r.question.trim() !== row.question.trim();
+  return {
+    ...row,
+    question: r.question,
+    translation: autoTranslate ? r.translation : changed ? "" : row.translation,
+    keywords: r.keywords,
+    referenceAnswer: r.reference_answer,
+    imagePrompt: r.image_prompt || row.imagePrompt,
+    audioUrl: changed ? null : row.audioUrl,
+  };
+};
+
+/** 等老師確認的修改（修正 C6）：改寫題目或改寫情境文章 */
+interface PendingRevise {
+  kind: "questions" | "scenario";
+  typed: string;
+  atManual: boolean;
+  replies: { role: "bot" | "note"; text: string }[];
+  /** kind=questions：列 id → 改寫內容（送出時依題號對到的列） */
+  revisions: Map<string, ScenarioComposeRevision>;
+  /** kind=scenario：改寫後的情境文章 */
+  scenarioContent: string;
+}
+
 const ScenarioDialoguePanel = forwardRef<
   ScenarioDialoguePanelHandle,
   ScenarioDialoguePanelProps
@@ -319,6 +397,14 @@ const ScenarioDialoguePanel = forwardRef<
    * 老師的原文，和失敗時一致）
    */
   const pendingAddResolveRef = useRef<((handled: boolean) => void) | null>(
+    null,
+  );
+  /** AI 要改寫題目或情境，等老師確認（修正 C6；確認框結果的處理同 pendingAdd） */
+  const [pendingRevise, setPendingRevise] = useState<PendingRevise | null>(
+    null,
+  );
+  const pendingReviseRef = useRef<PendingRevise | null>(null);
+  const pendingReviseResolveRef = useRef<((handled: boolean) => void) | null>(
     null,
   );
   /** 非空白題數（流程的「右欄有沒有題目」、剩餘名額都看這個） */
@@ -588,6 +674,25 @@ const ScenarioDialoguePanel = forwardRef<
   };
 
   /**
+   * compose 沒辦法照做的原因（修正 C6）→ 對話裡那一句；一般答非所問（沒有代碼）回空字串，
+   * 由呼叫端改用後端的重問句。`count` 是送出時的非空白題數（題號不存在時說「目前共 N 題」）。
+   */
+  const refusalText = (refusal: string | undefined, count: number) => {
+    switch (refusal) {
+      case "full":
+        return t("scenarioDialogue.compose.full", { max: MAX_ITEMS });
+      case "no_questions":
+        return t("scenarioDialogue.compose.noQuestionsToRevise");
+      case "no_scenario":
+        return t("scenarioDialogue.compose.noScenarioToRevise");
+      case "revise_out_of_range":
+        return t("scenarioDialogue.compose.reviseOutOfRange", { count });
+      default:
+        return "";
+    }
+  };
+
+  /**
    * 對話框打字（compose，C 段第 5 段）。回傳 true ＝已處理（對話框清空），false ＝沒處理
    * （已滿、失敗），對話框留著原文讓老師重送。規則見檔頭。
    */
@@ -596,36 +701,93 @@ const ScenarioDialoguePanel = forwardRef<
     const atManual = setup.current?.id === "manualInput";
     const kept = rowsRef.current.filter((r) => !isBlankRow(r));
     const room = MAX_ITEMS - kept.length;
-    if (room <= 0) {
-      setup.replyCompose(
-        atManual,
-        t("scenarioDialogue.compose.full", { max: MAX_ITEMS }),
-      );
-      return false;
-    }
+    // 已滿 10 題不在這裡擋（修正 C6）：老師可能是要修改既有題目或情境，前端分不出來；
+    // 判斷出是加題／出題時後端回 refusal "full"（不計次）
     if (typed.trim().length > MAX_COMPOSE_TEXT_CHARS) {
       setup.replyCompose(atManual, t("scenarioDialogue.compose.tooLong"));
       return false;
     }
+    const existing = composeExisting(rowsRef.current);
 
     setComposing(true);
     try {
       const result = await apiClient.composeScenarioQuestions({
         ...setup.questionRequestBase(),
         text: typed,
-        existing_questions: kept.map((r) => r.question.trim()).filter(Boolean),
+        existing_questions: existing.map((e) => e.payload),
       });
 
       if (!result.usable) {
         setup.replyCompose(
           atManual,
-          result.reask || t("scenarioDialogue.setup.reaskFallback"),
+          refusalText(result.refusal, existing.length) ||
+            result.reask ||
+            t("scenarioDialogue.setup.reaskFallback"),
           typed,
         );
         setTab("chat");
         return true;
       }
       applySuggestedTitle(result.suggested_title);
+
+      // 修改既有題目／情境（修正 C6）：先跳確認框，確認才改；取消時原文放回對話框
+      if (
+        result.intent === "revise_questions" ||
+        result.intent === "revise_scenario"
+      ) {
+        const replies: PendingRevise["replies"] = [];
+        if ((result.skipped_count ?? 0) > 0) {
+          replies.push({
+            role: "bot",
+            text: t("scenarioDialogue.compose.skipped", {
+              count: result.skipped_count,
+            }),
+          });
+        }
+        if (result.intent === "revise_questions" && result.output_truncated) {
+          replies.push({
+            role: "bot",
+            text: t("scenarioDialogue.compose.reviseTruncated"),
+          });
+        }
+        // 題號 → 列：用送出當下的清單對（等待期間老師拖曳排序也不會改錯題）
+        const idByNumber = new Map(existing.map((e) => [e.number, e.rowId]));
+        const revisions = new Map<string, ScenarioComposeRevision>();
+        for (const r of result.revisions ?? []) {
+          const id = idByNumber.get(r.index);
+          if (id && !revisions.has(id)) revisions.set(id, r);
+        }
+        const pending: PendingRevise = {
+          kind: result.intent === "revise_questions" ? "questions" : "scenario",
+          typed,
+          atManual,
+          replies,
+          revisions,
+          scenarioContent: result.scenario_content ?? "",
+        };
+        if (
+          (pending.kind === "questions" && revisions.size === 0) ||
+          (pending.kind === "scenario" && !pending.scenarioContent.trim())
+        ) {
+          // 後端已經擋過；這裡是保險（例如回來時那幾題已被刪掉）
+          setup.replyCompose(
+            atManual,
+            t(
+              pending.kind === "questions"
+                ? "scenarioDialogue.compose.noQuestionsToRevise"
+                : "scenarioDialogue.compose.noScenarioToRevise",
+            ),
+            typed,
+          );
+          return true;
+        }
+        setComposing(false);
+        return new Promise<boolean>((resolve) => {
+          pendingReviseResolveRef.current = resolve;
+          pendingReviseRef.current = pending;
+          setPendingRevise(pending);
+        });
+      }
 
       const isAdd = result.intent === "add_questions";
       const replies: ComposedBatch["replies"] = [];
@@ -722,6 +884,96 @@ const ScenarioDialoguePanel = forwardRef<
         atManual: batch.atManual,
         replies: [
           { role: "note", text: t("scenarioDialogue.compose.noneAdded") },
+        ],
+        added: false,
+      });
+    }
+    resolve?.(false);
+  };
+
+  /**
+   * 改寫確認框（修正 C6）。確認＝改寫、對話框清空；取消（含關閉）＝不改，紀錄只加一句
+   * 「沒有修改…」，老師的原文留在對話框（同「只會加入前 N 題」取消的作法）。
+   *
+   * 改寫題目：用最新的 rows（functional setRows）依列 id 原地替換，題號位置、題目圖不動；
+   * 等待確認期間被刪掉的題目就跳過。題目文字變了的題，原本有語音或「AI 生成語音」開著時
+   * 重新產生語音（只對這幾題）；翻譯依翻譯開關（見 `reviseRow`）。
+   * 改寫情境：只換情境文章，右欄情境區即時更新；情境圖不動。
+   */
+  const takePendingRevise = () => {
+    const pending = pendingReviseRef.current;
+    const resolve = pendingReviseResolveRef.current;
+    pendingReviseRef.current = null;
+    pendingReviseResolveRef.current = null;
+    setPendingRevise(null);
+    return { pending, resolve };
+  };
+  const confirmPendingRevise = () => {
+    const { pending, resolve } = takePendingRevise();
+    if (!pending) {
+      resolve?.(false);
+      return;
+    }
+    let note: string;
+    if (pending.kind === "questions") {
+      const autoTranslate = setup.autoTranslate;
+      const before = rowsRef.current;
+      const revised = before
+        .filter((r) => pending.revisions.has(r.id))
+        .map((r) => ({
+          old: r,
+          next: reviseRow(
+            r,
+            pending.revisions.get(r.id) as ScenarioComposeRevision,
+            autoTranslate,
+          ),
+        }));
+      setRows((prev) =>
+        prev.map((r) => {
+          const rev = pending.revisions.get(r.id);
+          return rev ? reviseRow(r, rev, autoTranslate) : r;
+        }),
+      );
+      note = t("scenarioDialogue.compose.revisedQuestions", {
+        count: revised.length,
+      });
+      const audioTargets = revised
+        .filter(
+          ({ old, next }) =>
+            next.question.trim() !== old.question.trim() &&
+            (!!old.audioUrl || setup.autoTTS),
+        )
+        .map(({ next }) => next);
+      if (revised.length) setTab("side");
+      if (audioTargets.length) void autoGenerateAudio(audioTargets);
+    } else {
+      setup.setScenarioContent(pending.scenarioContent);
+      note = t("scenarioDialogue.compose.revisedScenario");
+      setTab("side");
+    }
+    setup.recordCompose({
+      typed: pending.typed,
+      atManual: pending.atManual,
+      replies: [...pending.replies, { role: "note", text: note }],
+      added: false,
+    });
+    resolve?.(true);
+  };
+  const cancelPendingRevise = () => {
+    const { pending, resolve } = takePendingRevise();
+    if (pending) {
+      setup.recordCompose({
+        typed: null,
+        atManual: pending.atManual,
+        replies: [
+          {
+            role: "note",
+            text: t(
+              pending.kind === "questions"
+                ? "scenarioDialogue.compose.reviseQuestionsCancelled"
+                : "scenarioDialogue.compose.reviseScenarioCancelled",
+            ),
+          },
         ],
         added: false,
       });
@@ -1226,6 +1478,29 @@ const ScenarioDialoguePanel = forwardRef<
         confirmText={t("scenarioDialogue.compose.overLimitConfirm")}
         cancelText={t("contentEditor.buttons.cancel")}
         onConfirm={confirmPendingAdd}
+      />
+
+      {/* AI 要改寫既有題目或情境文章：先確認，確認才替換（修正 C6） */}
+      <ConfirmDialog
+        open={pendingRevise !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelPendingRevise();
+        }}
+        title={t(
+          pendingRevise?.kind === "scenario"
+            ? "scenarioDialogue.compose.reviseScenarioTitle"
+            : "scenarioDialogue.compose.reviseQuestionsTitle",
+        )}
+        description={
+          pendingRevise?.kind === "scenario"
+            ? t("scenarioDialogue.compose.reviseScenarioDescription")
+            : t("scenarioDialogue.compose.reviseQuestionsDescription", {
+                count: pendingRevise?.revisions.size ?? 0,
+              })
+        }
+        confirmText={t("scenarioDialogue.compose.reviseConfirm")}
+        cancelText={t("contentEditor.buttons.cancel")}
+        onConfirm={confirmPendingRevise}
       />
 
       {/* 單題語音設定（Issue #1051） */}

@@ -133,7 +133,8 @@ export interface StepDef<A extends FlowAnswers, C, S = unknown> {
 
 /**
  * 整個流程。`done` 是「全部答完、沒有下一步」時的狀態 —— 情境對話就是「題目已產生」：
- * 對話框可以直接打新題目或請 AI 再出題（`intent: true`）。
+ * 對話框可以直接打新題目或請 AI 再出題，也可以請 AI 修改既有題目或情境（`intent: true`；
+ * 要做哪一件由 AI 判斷，見 ScenarioDialoguePanel 的 compose，#1158 修正 C6）。
  */
 export interface FlowDef<A extends FlowAnswers, C, S = unknown> {
   steps: readonly StepDef<A, C, S>[];

@@ -5196,7 +5196,7 @@
       "placeholders": {
         "goal": "例如：在夜市點餐、問路",
         "manualInput": "直接打題目，一次可以打好幾題",
-        "done": "可以直接打新題目，或說「再出 3 題關於…」"
+        "done": "可以直接打新題目，或說「再出 3 題關於…」；也可以說「把第 2 題改成過去式」"
       },
       "chips": {
         "scenario": "情境",
@@ -5238,7 +5238,20 @@
       "requestedOverRoom": "只剩 {{count}} 個空位，先出 {{count}} 題",
       "overLimitTitle": "題目超過上限",
       "overLimitDescription": "只會加入前 {{count}} 題（上限 {{max}} 題），要加入嗎？",
-      "overLimitConfirm": "加入"
+      "overLimitConfirm": "加入",
+      "reviseQuestionsTitle": "改寫題目",
+      "reviseQuestionsDescription": "會改寫 {{count}} 題，原本的內容會被取代",
+      "reviseScenarioTitle": "改寫情境文章",
+      "reviseScenarioDescription": "會改寫情境文章",
+      "reviseConfirm": "改寫",
+      "revisedQuestions": "已改寫 {{count}} 題",
+      "revisedScenario": "已改寫情境文章",
+      "reviseQuestionsCancelled": "沒有修改題目",
+      "reviseScenarioCancelled": "沒有修改情境文章",
+      "noQuestionsToRevise": "目前還沒有題目可以修改",
+      "noScenarioToRevise": "目前沒有情境可以修改",
+      "reviseOutOfRange": "找不到要修改的題目（目前共 {{count}} 題）",
+      "reviseTruncated": "部分題目沒改到，請再說一次要改哪幾題"
     },
     "context": {
       "title": "情境",

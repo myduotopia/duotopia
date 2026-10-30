@@ -84,6 +84,37 @@ function parseSuccessBody<T>(response: Response): Promise<T> {
 /** 生圖種類（#1158）：情境圖或題目圖 */
 export type ScenarioImageKind = "scenario" | "question";
 
+/**
+ * compose 送出的既有題目（#1158 修正 C6）。`number` 是右欄畫面上的題號（1 起算；
+ * 中間有空白題時不連續），AI 修改題目時回的 `revisions[].index` 就是這個數字。
+ */
+export interface ScenarioComposeExistingQuestion {
+  number: number;
+  question: string;
+  translation: string;
+  keywords: string[];
+  reference_answer: string;
+  image_prompt: string;
+}
+
+/** compose 修改題目的一筆結果（#1158 修正 C6）：`index` ＝題號（1 起算） */
+export interface ScenarioComposeRevision {
+  index: number;
+  question: string;
+  translation: string;
+  keywords: string[];
+  reference_answer: string;
+  image_prompt: string;
+}
+
+/** compose 沒辦法照做的原因代碼（#1158 修正 C6）；空字串＝一般答非所問 */
+export type ScenarioComposeRefusal =
+  | ""
+  | "full"
+  | "no_questions"
+  | "no_scenario"
+  | "revise_out_of_range";
+
 /** `GET /scenario-dialogue/image-quota` 的回傳（#1158） */
 export interface ScenarioImageQuota {
   billing: "admin" | "org" | "subscription" | "points" | "free_daily";
@@ -1658,7 +1689,16 @@ class ApiClient {
    * - `usable=false`：整段與題目無關，只回 `reask`，不計次。
    * - `output_truncated`：AI 輸出被截斷，只救回部分題目（提示老師分次輸入）。
    *
-   * 錯誤：402 本月額度用完、409 `SCENARIO_QUESTIONS_FULL`（已滿 10 題）、502 AI 失敗。
+   * - `revise_questions`（修正 C6）：`revisions` 是要改的題目，`index` ＝題號（1 起算，
+   *   ＝送出的 `existing_questions[].number`，右欄畫面上的第幾題），其餘是改寫後的完整欄位。
+   * - `revise_scenario`（修正 C6）：`scenario_content` 是改寫後的整篇情境文章。
+   * - `refusal`（usable=false 時）：沒辦法照做的原因代碼 —— `full`（已滿 10 題卻要加題／
+   *   出題）、`no_questions`、`no_scenario`、`revise_out_of_range`；空字串＝一般答非所問。
+   *
+   * `existing_questions` 修正 C6 起送物件（題號＋完整欄位，修改題目要用），只放非空白題。
+   * 已滿 10 題也照樣呼叫（可能是修改），後端判斷出是加題／出題時回 `refusal: "full"`。
+   *
+   * 錯誤：402 本月額度用完、422 輸入過長、502 AI 失敗。
    */
   async composeScenarioQuestions(data: {
     text: string;
@@ -1671,11 +1711,17 @@ class ApiClient {
     global_voice?: string;
     global_rubric?: string;
     translate_language?: string;
-    existing_questions?: string[];
+    existing_questions?: ScenarioComposeExistingQuestion[];
   }): Promise<{
     usable: boolean;
     reask?: string;
-    intent: "add_questions" | "generate" | null;
+    refusal?: ScenarioComposeRefusal;
+    intent:
+      | "add_questions"
+      | "generate"
+      | "revise_questions"
+      | "revise_scenario"
+      | null;
     questions: Array<{
       question: string;
       translation: string;
@@ -1683,6 +1729,8 @@ class ApiClient {
       reference_answer: string;
       image_prompt: string;
     }>;
+    revisions?: ScenarioComposeRevision[];
+    scenario_content?: string;
     skipped_count?: number;
     truncated_count?: number;
     requested_count?: number;

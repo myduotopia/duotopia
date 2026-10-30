@@ -2943,10 +2943,19 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
     await flush();
 
     expect(questionValues()).toEqual(["Mine?", "A1?", "A2?"]);
-    // 送出去的既有題目只算非空白題
+    // 送出去的既有題目只算非空白題；帶題號與完整欄位（修正 C6）
     expect(
       composeScenarioQuestions.mock.calls[0][0].existing_questions,
-    ).toEqual(["Mine?"]);
+    ).toEqual([
+      {
+        number: 1,
+        question: "Mine?",
+        translation: "",
+        keywords: [],
+        reference_answer: "",
+        image_prompt: "",
+      },
+    ]);
   });
 
   it("請 AI 再出題（generate）：照目前設定出題、加在後面；帶上目前設定", async () => {
@@ -3156,16 +3165,27 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
     expect(zh.tooLong).toBeTruthy();
   });
 
-  it("已滿 10 題：不呼叫 AI，直接回「已滿 10 題，請先在右邊刪除題目」，對話框留著原文", async () => {
+  it("已滿 10 題：照樣交給 AI（可能是修改）；後端回 refusal「full」時說「已滿 10 題」，不加題（修正 C6）", async () => {
     renderPanel();
     toManualInput();
     for (let i = 1; i <= 10; i++) addTypedQuestion(`Q${i}?`);
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      usable: false,
+      intent: null,
+      reask: "已滿 10 題，請先在右邊刪除題目",
+      refusal: "full",
+    });
 
     await say("Another one?");
+    await flush();
 
-    expect(composeScenarioQuestions).not.toHaveBeenCalled();
+    expect(composeScenarioQuestions).toHaveBeenCalledTimes(1);
+    expect(
+      composeScenarioQuestions.mock.calls[0][0].existing_questions,
+    ).toHaveLength(10);
     expect(screen.getByText(C("full"))).toBeInTheDocument();
-    expect(composerBox()).toHaveValue("Another one?");
+    expect(questionValues()).toHaveLength(10);
   });
 
   it("AI 出題要的題數超過剩餘名額：回覆「只剩 N 個空位，先出 N 題」", async () => {
@@ -3333,5 +3353,264 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
 
     expect(composeScenarioQuestions).toHaveBeenCalledTimes(1);
     expect(questionValues()).toEqual(["G1?", "G2?", "G3?"]);
+  });
+  // ---------------------------------------------------------------- 修正 C6：修改既有內容
+
+  const revised = (
+    revisions: { index: number; question: string }[],
+    extra: Record<string, unknown> = {},
+  ) => ({
+    ...composed("add_questions", []),
+    intent: "revise_questions",
+    revisions: revisions.map((r) => ({
+      index: r.index,
+      question: r.question,
+      translation: `譯：${r.question}`,
+      keywords: ["past"],
+      reference_answer: `Ref ${r.question}`,
+      image_prompt: "",
+    })),
+    ...extra,
+  });
+  const turnOnAutoTTS = () => {
+    fireEvent.click(
+      within(openChip("settings"))
+        .getByText("contentEditor.labels.aiGenerateTTS")
+        .parentElement!.querySelector<HTMLInputElement>(
+          "input[type=checkbox]",
+        )!,
+    );
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  };
+
+  it("修改題目：先跳確認「會改寫 N 題」，確認才原地替換指定的題（其他題不動），紀錄寫「已改寫 N 題」", async () => {
+    renderPanel();
+    toManualInput();
+    addTypedQuestion("What do you do?");
+    addTypedQuestion("Where do you go?");
+    addTypedQuestion("Who do you see?");
+    composeScenarioQuestions.mockResolvedValueOnce(
+      revised([{ index: 2, question: "Where did you go?" }]),
+    );
+
+    await say("把第 2 題改成過去式");
+    await flush();
+
+    // 送出時帶題號
+    expect(
+      composeScenarioQuestions.mock.calls[0][0].existing_questions.map(
+        (e: { number: number; question: string }) => [e.number, e.question],
+      ),
+    ).toEqual([
+      [1, "What do you do?"],
+      [2, "Where do you go?"],
+      [3, "Who do you see?"],
+    ]);
+    // 確認前不改
+    expect(
+      screen.getByText(C("reviseQuestionsDescription")),
+    ).toBeInTheDocument();
+    expect(questionValues()).toEqual([
+      "What do you do?",
+      "Where do you go?",
+      "Who do you see?",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+
+    expect(questionValues()).toEqual([
+      "What do you do?",
+      "Where did you go?",
+      "Who do you see?",
+    ]);
+    expect(chatText()).toContain("把第 2 題改成過去式");
+    expect(chatText()).toContain(C("revisedQuestions"));
+    // 題數不變、不是加題
+    expect(chatText()).not.toContain(C("added"));
+    expect(composerBox()).toHaveValue("");
+  });
+
+  it("修改題目：取消就不改，紀錄寫「沒有修改題目」，原文放回對話框", async () => {
+    renderPanel();
+    toManualInput();
+    addTypedQuestion("What do you do?");
+    composeScenarioQuestions.mockResolvedValueOnce(
+      revised([{ index: 1, question: "What did you do?" }]),
+    );
+
+    await say("改為過去式");
+    await flush();
+    fireEvent.click(
+      screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
+    );
+    await flush();
+
+    expect(questionValues()).toEqual(["What do you do?"]);
+    expect(chatText()).toContain(C("reviseQuestionsCancelled"));
+    expect(chatText()).not.toContain(C("revisedQuestions"));
+    expect(composerBox()).toHaveValue("改為過去式");
+    expect(composerBox()).not.toBeDisabled();
+  });
+
+  it("修改題目：只替被改的題重新產生語音（AI 生成語音開著時）", async () => {
+    renderPanel();
+    toManualInput();
+    addTypedQuestion("What do you do?");
+    addTypedQuestion("Where do you go?");
+    turnOnAutoTTS();
+    composeScenarioQuestions.mockResolvedValueOnce(
+      revised([{ index: 2, question: "Where did you go?" }]),
+    );
+
+    await say("第 2 題改成過去式");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+    await flush();
+
+    expect(generateTTS).toHaveBeenCalledTimes(1);
+    expect(generateTTS.mock.calls[0][0]).toBe("Where did you go?");
+  });
+
+  it("修改題目：已滿 10 題也可以改", async () => {
+    renderPanel();
+    toManualInput();
+    for (let i = 1; i <= 10; i++) addTypedQuestion(`Q${i}?`);
+    composeScenarioQuestions.mockResolvedValueOnce(
+      revised([{ index: 10, question: "Q10 changed?" }]),
+    );
+
+    await say("第 10 題改一下");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+
+    expect(questionValues()).toHaveLength(10);
+    expect(questionValues()[9]).toBe("Q10 changed?");
+  });
+
+  it("沒有題目卻要改題目：後端回 refusal，對話裡說「目前還沒有題目可以修改」", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      usable: false,
+      intent: null,
+      reask: "目前還沒有題目可以修改",
+      refusal: "no_questions",
+    });
+    renderPanel();
+    toManualInput();
+
+    await say("把問題改為過去式");
+    await flush();
+
+    expect(screen.getByText(C("noQuestionsToRevise"))).toBeInTheDocument();
+    expect(questionValues()).toEqual([]);
+  });
+
+  it("修改情境：先跳確認「會改寫情境文章」，確認才替換，右欄即時更新，紀錄寫「已改寫情境文章」", async () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "Tom goes to school.");
+    fireEvent.click(screen.getByText(K.useScenario));
+    chooseSource("manual");
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      intent: "revise_scenario",
+      scenario_content: "Tom went to school.",
+    });
+
+    await say("幫我修改情境，請都用過去式");
+    await flush();
+
+    expect(composeScenarioQuestions.mock.calls[0][0].scenario_content).toBe(
+      "Tom goes to school.",
+    );
+    expect(
+      screen.getByText(C("reviseScenarioDescription")),
+    ).toBeInTheDocument();
+    const text = () => screen.getByTestId("reference-scenario-text");
+    expect(text()).toHaveTextContent("Tom goes to school.");
+
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+
+    expect(text()).toHaveTextContent("Tom went to school.");
+    expect(chatText()).toContain(C("revisedScenario"));
+    expect(composerBox()).toHaveValue("");
+  });
+
+  it("修改情境：取消就不改，紀錄寫「沒有修改情境文章」，原文放回對話框", async () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "Tom goes to school.");
+    fireEvent.click(screen.getByText(K.useScenario));
+    chooseSource("manual");
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      intent: "revise_scenario",
+      scenario_content: "Tom went to school.",
+    });
+
+    await say("情境改成過去式");
+    await flush();
+    fireEvent.click(
+      screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
+    );
+    await flush();
+
+    expect(screen.getByTestId("reference-scenario-text")).toHaveTextContent(
+      "Tom goes to school.",
+    );
+    expect(chatText()).toContain(C("reviseScenarioCancelled"));
+    expect(composerBox()).toHaveValue("情境改成過去式");
+  });
+
+  it("沒有情境卻要改情境：後端回 refusal，對話裡說「目前沒有情境可以修改」", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      usable: false,
+      intent: null,
+      reask: "目前沒有情境可以修改",
+      refusal: "no_scenario",
+    });
+    renderPanel();
+    toManualInput();
+
+    await say("情境改成在學校");
+    await flush();
+
+    expect(screen.getByText(C("noScenarioToRevise"))).toBeInTheDocument();
+  });
+
+  it("題目產生後的灰字帶修改的例子；英文修改句子有單複數", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("add_questions", ["Q1?"]),
+    );
+    renderPanel();
+    toManualInput();
+    await say("Q1?");
+    await flush();
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "scenarioDialogue.setup.placeholders.done",
+    );
+
+    const en = (await import("@/i18n/locales/en/translation.json")).default
+      .scenarioDialogue;
+    const zh = (await import("@/i18n/locales/zh-TW/translation.json")).default
+      .scenarioDialogue;
+    expect(zh.setup.placeholders.done).toContain("把第 2 題改成過去式");
+    expect(en.setup.placeholders.done).toContain("change question 2");
+    const enCompose = en.compose as Record<string, string>;
+    for (const key of [
+      "reviseQuestionsDescription",
+      "revisedQuestions",
+      "reviseOutOfRange",
+    ]) {
+      expect(enCompose[`${key}_one`]).toBeTruthy();
+      expect(enCompose[`${key}_other`]).toBeTruthy();
+      expect((zh.compose as Record<string, string>)[key]).toBeTruthy();
+    }
   });
 });
