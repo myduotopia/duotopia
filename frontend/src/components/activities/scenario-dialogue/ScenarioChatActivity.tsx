@@ -36,6 +36,8 @@
  *   自己的錄音（SubmittedTranscript）；作答要求／情境卡照樣顯示。題號方格每題都能點、捲到該題。
  *
  * AI 建議與朗讀由 `adapters` 注入（sample 傳 mock；正式版之後接後端）。
+ * 按「開始對話」時先呼叫 `adapters.primeSpeech`（點擊當下解鎖朗讀），第 1 題「輸入中…」後的
+ * 自動朗讀才不會被瀏覽器擋掉（先聽後看，#1158 E-2）。
  * 學生畫面不顯示分數；老師預覽（settings.isPreviewMode）多「預覽模式」標示、跳題、
  * 參考答案開關與 mock 分數；「提交作業」停用並寫明「預覽不會送出」（#1158 E2）。
  */
@@ -361,6 +363,8 @@ export function ScenarioChatActivity({
   }, [onNavChange, navStarted, navRevealed, navCurrent, canJump]);
 
   const handleStart = () => {
+    // 點擊當下解鎖朗讀：第 1 題在「輸入中…」之後才自動唸（先聽後看，#1158 E-2）
+    adapters.primeSpeech?.();
     setInfoOpen(null);
     stickRef.current = true;
     chat.start();

@@ -60,22 +60,28 @@ export interface ChatSettingsInput {
  * 對話式 UI 的 settings。**預覽與學生作答共用這一份** —— 兩邊各寫一份就會漂移，
  * 而預覽的全部意義就是「老師看到的＝學生看到的」。
  *
- * 兩個欄位目前**沒有對應的派發設定**，先在這裡定死並寫明理由：
+ * 兩個欄位目前**沒有對應的派發設定**，在這裡決定並寫明理由：
  *
  * * `replyMode: "voice"` —— 情境對話的定位就是開口錄音作答（`practiceMode.ts` 的
  *   註解與 `scoreCategory: speaking` 都是這個語意）。文字作答是設計稿的變體，要開放
  *   得先有一個派發設定。
- * * `textDefaultHidden: false` —— 設計稿的「先聽後看」預設隱藏題目文字，但那要有題目
- *   語音才成立（沒有語音又把文字藏起來，學生就沒有東西可依據）。題目語音是選配的，
- *   所以這裡先一律顯示；要做「先聽後看」同樣需要一個派發設定。
+ * * `textDefaultHidden` —— 「先聽後看」（#1133 設計）：題目出現時自動唸、文字先藏起來，
+ *   學生按「英」才看。題目語音是**瀏覽器朗讀題目文字**（speakEnglish，不依賴老師有沒有上傳
+ *   音檔），所以只要瀏覽器能朗讀就預設隱藏；不能朗讀（沒有 speechSynthesis）才一律顯示，
+ *   免得學生沒有東西可依據（#1158 E-2：實測沒聽到語音、直接看到文字，就是這裡原本寫死 false）。
  */
+/** 瀏覽器能不能朗讀題目（見 scenarioChatSettings 的 textDefaultHidden） */
+export function canSpeakQuestions(): boolean {
+  return typeof window !== "undefined" && "speechSynthesis" in window;
+}
+
 export function scenarioChatSettings({
   showTranslation,
   isPreviewMode,
 }: ChatSettingsInput) {
   return {
     replyMode: "voice" as const,
-    textDefaultHidden: false,
+    textDefaultHidden: canSpeakQuestions(),
     showTranslation,
     isPreviewMode,
     maxAttempts: SCENARIO_MAX_ATTEMPTS,

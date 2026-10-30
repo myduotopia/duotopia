@@ -232,6 +232,18 @@ const speechAdapters = {
   speak: (text: string) => {
     speakEnglish(text);
   },
+  // 在「開始對話」的點擊裡先唸一段空字串並觸發載入語音清單，之後計時器裡的
+  // 自動朗讀才不會被瀏覽器的手勢限制擋掉（#1158 E-2 先聽後看實測沒聲音）
+  primeSpeech: () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+    const synth = window.speechSynthesis;
+    synth.getVoices();
+    const u = new SpeechSynthesisUtterance("");
+    u.volume = 0;
+    synth.speak(u);
+  },
   stopSpeech: () => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();

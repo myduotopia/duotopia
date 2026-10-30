@@ -92,6 +92,11 @@ export interface ScenarioChatAdapters {
   speak: (text: string) => void | Promise<void>;
   /** 停止朗讀（卸載／重置時呼叫） */
   stopSpeech?: () => void;
+  /**
+   * 在使用者點擊當下「解鎖」朗讀（按「開始對話」時呼叫）。第 1 題要等「輸入中…」之後才唸，
+   * 那時已不在點擊事件裡，iOS Safari 等瀏覽器會擋掉沒有使用者手勢的朗讀（#1158 E-2）。
+   */
+  primeSpeech?: () => void;
 }
 
 export interface ScenarioChatSettings {
