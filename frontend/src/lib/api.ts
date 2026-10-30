@@ -1646,6 +1646,58 @@ class ApiClient {
   }
 
   /**
+   * 對話框打字（#1158 C 段）：一次 AI 呼叫判斷老師是「自己打題目」（`add_questions`）
+   * 還是「請 AI 再出題」（`generate`），並產出題目。
+   *
+   * 輸入是產題請求的共通部分（不含 `count`）＋老師打的 `text`；`existing_questions` 只放
+   * 非空白題，後端依此算剩餘名額。
+   *
+   * - `add_questions`：translation 一律空字串；**不截斷**到剩餘名額，`truncated_count`
+   *   告訴前端超出幾題，由前端確認後截斷。
+   * - `generate`：最多出剩餘名額那麼多題；`requested_count` 是老師要的題數（沒說為 0）。
+   * - `usable=false`：整段與題目無關，只回 `reask`，不計次。
+   * - `output_truncated`：AI 輸出被截斷，只救回部分題目（提示老師分次輸入）。
+   *
+   * 錯誤：402 本月額度用完、409 `SCENARIO_QUESTIONS_FULL`（已滿 10 題）、502 AI 失敗。
+   */
+  async composeScenarioQuestions(data: {
+    text: string;
+    scenario_content: string;
+    direction?: string;
+    scenario_images?: string[];
+    ui_language?: string;
+    question_level?: string;
+    global_tense?: { time: string; aspect: string } | null;
+    global_voice?: string;
+    global_rubric?: string;
+    translate_language?: string;
+    existing_questions?: string[];
+  }): Promise<{
+    usable: boolean;
+    reask?: string;
+    intent: "add_questions" | "generate" | null;
+    questions: Array<{
+      question: string;
+      translation: string;
+      keywords: string[];
+      reference_answer: string;
+      image_prompt: string;
+    }>;
+    skipped_count?: number;
+    truncated_count?: number;
+    requested_count?: number;
+    suggested_title?: string;
+    output_truncated?: boolean;
+    usage?: { input_tokens: number; output_tokens: number };
+    estimated_cost_usd?: number;
+  }> {
+    return this.request("/api/teachers/scenario-dialogue/compose", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
    * AI 生圖（Issue #1024；#1158 起情境圖與題目圖共用）。
    *
    * `description` 是老師在生圖對話框裡確認過的描述。錯誤以狀態碼區分：

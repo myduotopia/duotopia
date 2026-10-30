@@ -34,6 +34,7 @@ const generateTTS = vi.fn();
 const generateScenarioImage = vi.fn();
 const getScenarioImageQuota = vi.fn();
 const suggestScenarioImageDescription = vi.fn();
+const composeScenarioQuestions = vi.fn();
 
 const fakeQuestion = (n: number) => ({
   question: `Generated question ${n}?`,
@@ -102,6 +103,8 @@ vi.mock("@/lib/api", () => ({
     getScenarioImageQuota: (...a: unknown[]) => getScenarioImageQuota(...a),
     suggestScenarioImageDescription: (...a: unknown[]) =>
       suggestScenarioImageDescription(...a),
+    composeScenarioQuestions: (...a: unknown[]) =>
+      composeScenarioQuestions(...a),
   },
 }));
 
@@ -320,6 +323,7 @@ beforeEach(() => {
     points_per_image_estimate: 10,
     can_generate: true,
   });
+  composeScenarioQuestions.mockReset();
   suggestScenarioImageDescription.mockReset();
   suggestScenarioImageDescription.mockResolvedValue({
     description: "A suggested scene",
@@ -380,17 +384,18 @@ describe("ScenarioDialoguePanel 引導式對話（#1146／#1158 同頁版面）"
     expect(screen.queryAllByPlaceholderText(K.questionPlaceholder)).toEqual([]);
   });
 
-  it("「自己打題目」要交給 AI 判斷（C 段第 5 段才接上）：對話框先停用，灰字是步驟提示", () => {
+  it("「自己打題目」：對話框可以打字送出（交給 compose），灰字是步驟提示", () => {
     renderPanel();
     chooseMode("none");
     chooseSource("manual");
 
-    expect(composerBox()).toBeDisabled();
+    expect(composerBox()).not.toBeDisabled();
     expect(composerBox()).toHaveAttribute(
       "placeholder",
       "scenarioDialogue.setup.placeholders.manualInput",
     );
-    expect(sendButton()).toBeDisabled();
+    fireEvent.change(composerBox(), { target: { value: "What is it?" } });
+    expect(sendButton()).not.toBeDisabled();
   });
 
   it("對話紀錄是連續的：已答的步驟是泡泡，沒有「改選」，也沒有上一步／下一步", () => {
@@ -2607,6 +2612,41 @@ describe("ScenarioDialoguePanel 窄版分頁（#1158 C commit 4）", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 
+  it("窄版從對話框加題（compose）後，自動切到「題目」分頁", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce({
+      usable: true,
+      reask: "",
+      intent: "add_questions",
+      questions: [
+        {
+          question: "Q1?",
+          translation: "",
+          keywords: [],
+          reference_answer: "",
+          image_prompt: "",
+        },
+      ],
+      skipped_count: 0,
+      truncated_count: 0,
+      requested_count: 0,
+      suggested_title: "",
+      output_truncated: false,
+    });
+    renderPanel();
+    resizeTo(800);
+    chooseMode("none");
+    chooseSource("manual");
+    expect(sideColumn()).toHaveClass("hidden");
+
+    await say("Q1?");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sideColumn()).not.toHaveClass("hidden");
+    expect(chatColumn()).toHaveClass("hidden");
+  });
+
   it("題目卡依右欄寬度決定窄版排法（不看 viewport）", () => {
     renderPanel();
     goToListManually();
@@ -2816,5 +2856,405 @@ describe("ScenarioDialoguePanel 修正 C4（#1158）", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/**
+ * C 段第 5 段：對話框打字交給 compose（「自己打題目」那一步、題目已產生後）。
+ */
+describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段第 5 段）", () => {
+  const C = (k: string) => `scenarioDialogue.compose.${k}`;
+  const composed = (
+    intent: "add_questions" | "generate",
+    questions: string[],
+    extra: Record<string, unknown> = {},
+  ) => ({
+    usable: true,
+    reask: "",
+    intent,
+    questions: questions.map((q) => ({
+      question: q,
+      translation: intent === "generate" ? `譯：${q}` : "",
+      keywords: ["kw"],
+      reference_answer: `Ref ${q}`,
+      image_prompt: "",
+    })),
+    skipped_count: 0,
+    truncated_count: 0,
+    requested_count: 0,
+    suggested_title: "",
+    output_truncated: false,
+    ...extra,
+  });
+  const questionValues = () =>
+    screen
+      .queryAllByPlaceholderText(K.questionPlaceholder)
+      .map((el) => (el as HTMLTextAreaElement).value);
+  const chatText = () => chatColumn().textContent ?? "";
+  const toManualInput = () => {
+    chooseMode("none");
+    chooseSource("manual");
+  };
+  /** 等 compose 的 promise 與之後的 state 更新跑完 */
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  it("自己打題目（add_questions）：拆好的題目加進右欄，不產翻譯和語音，紀錄留下老師的話與「已加入」", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("add_questions", ["What is your name?", "How old are you?"]),
+    );
+    renderPanel();
+    toManualInput();
+
+    await say("What is your name? How old are you?");
+    await flush();
+
+    const req = composeScenarioQuestions.mock.calls[0][0];
+    expect(req.text).toBe("What is your name? How old are you?");
+    expect(req.existing_questions).toEqual([]);
+    expect(questionValues()).toEqual([
+      "What is your name?",
+      "How old are you?",
+    ]);
+    expect(generateTTS).not.toHaveBeenCalled();
+    expect(chatText()).toContain("What is your name? How old are you?");
+    expect(chatText()).toContain(C("added"));
+    // 對話框清空，進入「題目已產生」
+    expect(composerBox()).toHaveValue("");
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "scenarioDialogue.setup.placeholders.done",
+    );
+  });
+
+  it("加題一律加在後面，清單裡的空白題先被填入", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("add_questions", ["A1?", "A2?"]),
+    );
+    renderPanel();
+    toManualInput();
+    addTypedQuestion("Mine?");
+    fireEvent.click(screen.getByText(K.addQuestion)); // 一張空白卡
+
+    await say("A1? A2?");
+    await flush();
+
+    expect(questionValues()).toEqual(["Mine?", "A1?", "A2?"]);
+    // 送出去的既有題目只算非空白題
+    expect(
+      composeScenarioQuestions.mock.calls[0][0].existing_questions,
+    ).toEqual(["Mine?"]);
+  });
+
+  it("請 AI 再出題（generate）：照目前設定出題、加在後面；帶上目前設定", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    await runGenerate(K.generate);
+    const before = questionValues();
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("generate", ["G1?", "G2?"]),
+    );
+
+    await say("再出 2 題關於運動");
+    await flush();
+
+    expect(questionValues()).toEqual([...before, "G1?", "G2?"]);
+    expect(chatText()).toContain("再出 2 題關於運動");
+    expect(chatText()).toContain(C("added"));
+    // 出題設定照帶（方向等）
+    expect(composeScenarioQuestions.mock.calls[0][0].direction).toBe(
+      "問學生週末通常做什麼",
+    );
+  });
+
+  it("部分無關：提示「已略過 N 段」；輸出被截斷：提示「請分次輸入」", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("add_questions", ["Q1?"], {
+        skipped_count: 2,
+        output_truncated: true,
+      }),
+    );
+    renderPanel();
+    toManualInput();
+
+    await say("Q1? 今天天氣真好 晚餐吃什麼");
+    await flush();
+
+    expect(chatText()).toContain(C("skipped"));
+    expect(chatText()).toContain(C("outputTruncated"));
+    expect(questionValues()).toEqual(["Q1?"]);
+  });
+
+  it("全部無關（自己打題目那一步）：重問句放在問句的位置，不加題、還在同一步", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      usable: false,
+      intent: null,
+      reask: "請打英文題目",
+    });
+    renderPanel();
+    toManualInput();
+
+    await say("今天天氣真好");
+    await flush();
+
+    expect(screen.getByText("請打英文題目")).toBeInTheDocument();
+    expect(chatText()).toContain("今天天氣真好");
+    expect(questionValues()).toEqual([]);
+    expect(chatText()).not.toContain(C("added"));
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "scenarioDialogue.setup.placeholders.manualInput",
+    );
+  });
+
+  it("全部無關（題目已產生後）：往下加一個機器人泡泡重問", async () => {
+    composeScenarioQuestions
+      .mockResolvedValueOnce(composed("add_questions", ["Q1?"]))
+      .mockResolvedValueOnce({
+        ...composed("add_questions", []),
+        usable: false,
+        intent: null,
+        reask: "這段和題目無關喔",
+      });
+    renderPanel();
+    toManualInput();
+    await say("Q1?");
+    await flush();
+
+    await say("隨便聊聊");
+    await flush();
+
+    expect(screen.getByText("這段和題目無關喔")).toBeInTheDocument();
+    expect(questionValues()).toEqual(["Q1?"]);
+  });
+
+  it("超過剩餘名額：先跳確認「只會加入前 N 題」，確認才寫入", async () => {
+    renderPanel();
+    toManualInput();
+    for (let i = 1; i <= 8; i++) addTypedQuestion(`Q${i}?`);
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("add_questions", ["N1?", "N2?", "N3?", "N4?"], {
+        truncated_count: 2,
+      }),
+    );
+
+    await say("N1? N2? N3? N4?");
+    await flush();
+
+    expect(screen.getByText(C("overLimitDescription"))).toBeInTheDocument();
+    expect(questionValues()).toHaveLength(8);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: C("overLimitConfirm") }),
+    );
+
+    expect(questionValues()).toEqual([
+      ...Array.from({ length: 8 }, (_, i) => `Q${i + 1}?`),
+      "N1?",
+      "N2?",
+    ]);
+    expect(chatText()).toContain(C("added"));
+  });
+
+  it("超過剩餘名額：取消就不寫入，紀錄寫「沒有加入題目」", async () => {
+    renderPanel();
+    toManualInput();
+    for (let i = 1; i <= 8; i++) addTypedQuestion(`Q${i}?`);
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("add_questions", ["N1?", "N2?", "N3?"]),
+    );
+
+    await say("N1? N2? N3?");
+    await flush();
+    fireEvent.click(
+      screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
+    );
+
+    expect(questionValues()).toHaveLength(8);
+    expect(chatText()).toContain(C("noneAdded"));
+    expect(chatText()).not.toContain(C("added"));
+  });
+
+  it("已滿 10 題：不呼叫 AI，直接回「已滿 10 題，請先在右邊刪除題目」，對話框留著原文", async () => {
+    renderPanel();
+    toManualInput();
+    for (let i = 1; i <= 10; i++) addTypedQuestion(`Q${i}?`);
+
+    await say("Another one?");
+
+    expect(composeScenarioQuestions).not.toHaveBeenCalled();
+    expect(screen.getByText(C("full"))).toBeInTheDocument();
+    expect(composerBox()).toHaveValue("Another one?");
+  });
+
+  it("AI 出題要的題數超過剩餘名額：回覆「只剩 N 個空位，先出 N 題」", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    await runGenerate(K.generate); // 預設 5 題
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("generate", ["G1?", "G2?", "G3?", "G4?", "G5?"], {
+        requested_count: 8,
+      }),
+    );
+
+    await say("再出 8 題");
+    await flush();
+
+    expect(chatText()).toContain(C("requestedOverRoom"));
+    expect(questionValues()).toHaveLength(10);
+  });
+
+  it("要的題數沒超過剩餘名額時不提空位", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    await runGenerate(K.generate);
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("generate", ["G1?", "G2?"], { requested_count: 2 }),
+    );
+
+    await say("再出 2 題");
+    await flush();
+
+    expect(chatText()).not.toContain(C("requestedOverRoom"));
+  });
+
+  it("AI 出題開著語音：只替這次加入的題目產語音", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    await runGenerate(K.generate);
+    fireEvent.click(
+      within(openChip("settings"))
+        .getByText("contentEditor.labels.aiGenerateTTS")
+        .parentElement!.querySelector<HTMLInputElement>(
+          "input[type=checkbox]",
+        )!,
+    );
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("generate", ["G1?"]),
+    );
+
+    await say("再出 1 題");
+    await flush();
+    await flush();
+
+    expect(generateTTS).toHaveBeenCalledTimes(1);
+    expect(generateTTS.mock.calls[0][0]).toBe("G1?");
+  });
+
+  it("標題建議只在標題空白時填入", async () => {
+    composeScenarioQuestions
+      .mockResolvedValueOnce(
+        composed("add_questions", ["Q1?"], { suggested_title: "自我介紹" }),
+      )
+      .mockResolvedValueOnce(
+        composed("add_questions", ["Q2?"], { suggested_title: "別的標題" }),
+      );
+    renderPanel();
+    toManualInput();
+
+    await say("Q1?");
+    await flush();
+    expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
+      "自我介紹",
+    );
+
+    await say("Q2?");
+    await flush();
+    expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
+      "自我介紹",
+    );
+  });
+
+  it("處理中：對話框與已選項目列停用、對話最後轉圈；回來後恢復", async () => {
+    let resolve: (v: unknown) => void = () => {};
+    composeScenarioQuestions.mockImplementationOnce(
+      () => new Promise((r) => (resolve = r)),
+    );
+    renderPanel();
+    toManualInput();
+
+    await say("Q1?");
+
+    expect(composerBox()).toBeDisabled();
+    expect(composerBox()).toHaveValue("Q1?");
+    expect(chip("mode")).toBeDisabled();
+    expect(screen.getByTestId("scenario-compose-pending")).toBeInTheDocument();
+
+    await act(async () => {
+      resolve(composed("add_questions", ["Q1?"]));
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(composerBox()).not.toBeDisabled();
+    expect(chip("mode")).not.toBeDisabled();
+    expect(screen.queryByTestId("scenario-compose-pending")).toBeNull();
+  });
+
+  it("額度用完（402）：對話裡說明，對話框恢復可用、原文留著", async () => {
+    composeScenarioQuestions.mockRejectedValueOnce(
+      new MockApiError(402, { message: "quota" }),
+    );
+    renderPanel();
+    toManualInput();
+
+    await say("Q1?");
+    await flush();
+
+    expect(
+      screen.getByText("scenarioDialogue.messages.textQuotaExceeded"),
+    ).toBeInTheDocument();
+    expect(composerBox()).not.toBeDisabled();
+    expect(composerBox()).toHaveValue("Q1?");
+    expect(questionValues()).toEqual([]);
+  });
+
+  it("後端回 409 已滿：對話裡說「已滿 10 題」；其他錯誤說「產生失敗」", async () => {
+    composeScenarioQuestions
+      .mockResolvedValueOnce(composed("add_questions", ["Q1?"]))
+      .mockRejectedValueOnce(
+        new MockApiError(409, { error: "SCENARIO_QUESTIONS_FULL" }),
+      )
+      .mockRejectedValueOnce(new MockApiError(502, { message: "boom" }));
+    renderPanel();
+    toManualInput();
+    await say("Q1?");
+    await flush();
+
+    await say("Q2?");
+    await flush();
+    expect(screen.getByText(C("full"))).toBeInTheDocument();
+
+    await say("Q3?");
+    await flush();
+    expect(
+      screen.getByText("scenarioDialogue.messages.generateFailed"),
+    ).toBeInTheDocument();
+    expect(composerBox()).toHaveValue("Q3?");
+  });
+
+  it("AI 出題的題目刪光後，不必改來源，直接在對話框請 AI 出題", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    await runGenerate(K.generate);
+    while (screen.queryAllByTitle("contentEditor.tooltips.delete").length) {
+      fireEvent.click(screen.getAllByTitle("contentEditor.tooltips.delete")[0]);
+    }
+    expect(questionValues()).toEqual([]);
+    expect(composerBox()).not.toBeDisabled();
+    composeScenarioQuestions.mockResolvedValueOnce(
+      composed("generate", ["G1?", "G2?", "G3?"]),
+    );
+
+    await say("出 3 題關於運動");
+    await flush();
+
+    expect(composeScenarioQuestions).toHaveBeenCalledTimes(1);
+    expect(questionValues()).toEqual(["G1?", "G2?", "G3?"]);
   });
 });

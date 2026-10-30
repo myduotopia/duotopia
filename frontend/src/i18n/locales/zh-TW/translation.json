@@ -5242,6 +5242,17 @@
       "fullReason": "已滿 {{max}} 題",
       "sourceLocked": "已經有題目了，不能改題目來源"
     },
+    "compose": {
+      "full": "已滿 {{max}} 題，請先在右邊刪除題目",
+      "added": "已加入 {{count}} 題",
+      "noneAdded": "沒有加入題目",
+      "skipped": "已略過 {{count}} 段與題目無關的內容",
+      "outputTruncated": "部分題目沒讀到，請分次輸入",
+      "requestedOverRoom": "只剩 {{count}} 個空位，先出 {{count}} 題",
+      "overLimitTitle": "題目超過上限",
+      "overLimitDescription": "只會加入前 {{count}} 題（上限 {{max}} 題），要加入嗎？",
+      "overLimitConfirm": "加入"
+    },
     "context": {
       "title": "情境",
       "edit": "編輯",

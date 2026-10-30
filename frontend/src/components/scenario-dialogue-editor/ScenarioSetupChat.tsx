@@ -31,7 +31,10 @@
  *    - 選項步驟：送出不呼叫 AI，只回「請點選上面的選項」。
  *    - 訓練目標：送出＝請 AI 寫情境；出題方向：送出＝記下方向。
  *    - 卡片未完成、產生中：停用，灰字說明原因。
- *    - 「自己打題目」與「題目已產生」要交給 AI 判斷意圖（compose），C 段第 5 段才接上：
+ *    - 「自己打題目」與「題目已產生」：送出交給 AI 判斷意圖（compose，`onComposeSubmit`，
+ *      #1158 C 段第 5 段）。處理中對話框停用、框裡的字留著（框下寫「產生中，請稍候…」），
+ *      對話最後多一個轉圈的機器人泡泡；回傳 true 才清空對話框（失敗時留著讓老師重送）。
+ *      「自己打題目」那一步全部無關或失敗時，那句話放在問句的位置（`setup.manualReask`）。
  *      呼叫端沒給 `onComposeSubmit` 時，這兩個情境的對話框停用，灰字是該步驟的提示。
  *    - Enter＝換行，只能按送出鈕送出（使用者 10/30 決定，`submitOnEnter` 關）。
  *
@@ -104,9 +107,10 @@ export interface ScenarioSetupChatProps {
   onEditScenario: () => void;
   /**
    * 「自己打題目」與「題目已產生」時，老師在對話框打的字交給 compose 判斷意圖
-   * （C 段第 5 段接上）。沒給時這兩個情境的對話框停用。
+   * （C 段第 5 段）。回傳 true ＝已處理，清空對話框；false ＝沒處理（失敗、已滿），
+   * 留著讓老師改了再送。沒給時這兩個情境的對話框停用。
    */
-  onComposeSubmit?: (text: string) => void;
+  onComposeSubmit?: (text: string) => Promise<boolean>;
 }
 
 /** 有灰色說明行的情境選項（其餘選項只有主句） */
@@ -151,7 +155,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [setup.log.length, current?.id]);
+  }, [setup.log.length, current?.id, composer.phase]);
 
   const busy = setup.busy || props.generating;
   /** AI 工作進行中：已選項目列整列停用（修正 C4） */
@@ -289,7 +293,9 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
         ? setup.goalReask
         : id === "direction" && setup.directionReask
           ? setup.directionReask
-          : r(findStep(SCENARIO_FLOW, id).question(answers, ctx));
+          : id === "manualInput" && setup.manualReask
+            ? setup.manualReask
+            : r(findStep(SCENARIO_FLOW, id).question(answers, ctx));
 
     let body: ReactNode = null;
     switch (id) {
@@ -476,8 +482,7 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
       return;
     }
     if (composer.intent && props.onComposeSubmit) {
-      props.onComposeSubmit(value);
-      setDraft("");
+      if (await props.onComposeSubmit(value)) setDraft("");
     }
   };
 
@@ -503,6 +508,18 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
             </div>
           ))}
           {renderActive()}
+          {/* compose 處理中（自己打題目、題目已產生）：對話最後一個轉圈的機器人泡泡 */}
+          {composer.phase === "pending" &&
+            (composer.stepId === null || composer.stepId === "manualInput") && (
+              <div data-testid="scenario-compose-pending">
+                <BotBubble>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {t("guidedChat.placeholders.pending")}
+                  </span>
+                </BotBubble>
+              </div>
+            )}
         </div>
       </ScenarioScrollArea>
 

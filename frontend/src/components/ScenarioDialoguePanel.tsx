@@ -24,9 +24,21 @@
  * - **題數上限**：出題設定卡的題數選項上限＝剩餘名額（10 − 已有非空白題數），預設
  *   min(5, 剩餘)；剩餘 0 時「開始產生」停用，旁邊寫「已滿 10 題」。
  *
- * - 「自己打題目」那一步與題目產生後的打字送出（compose）是 C 段第 5 段：目前面板沒有給
- *   `ScenarioSetupChat` 的 `onComposeSubmit`，這兩個情境的對話框停用、灰字是步驟提示；
- *   自己出題的老師用右欄的「＋ 新增題目」直接打。
+ * - **對話框打字（compose，C 段第 5 段，`handleCompose`）**：「自己打題目」那一步，以及題目
+ *   已產生、沒有進行中的步驟時，老師在對話框打的字交給 AI 判斷是「自己打的題目」
+ *   （`add_questions`）還是「請 AI 再出題」（`generate`）。
+ *   - 已滿 10 題不呼叫 AI，直接回「已滿 10 題，請先在右邊刪除題目」。
+ *   - 處理中：對話框與已選項目列停用（引擎的 pending）。
+ *   - 全部無關：重問（後端不計次）。部分無關：提示「已略過 N 段…」。輸出被截斷：提示
+ *     「部分題目沒讀到，請分次輸入」。
+ *   - 加題一律加在後面，清單裡的空白題先被填入（`mergeComposed`）；寫入時用最新的 rows
+ *     重算剩餘名額。自己打的題目超過剩餘名額時先跳 `ConfirmDialog`「只會加入前 N 題」，
+ *     確認才寫入、取消不寫入。`add_questions` 不產翻譯和語音；`generate` 照出題設定處理
+ *     翻譯與語音（只替實際加入的題目）。老師要的題數大於剩餘名額時回「只剩 N 個空位，
+ *     先出 N 題」。
+ *   - 加入後：對話加一句「已加入 N 題」，窄版切到「題目」分頁；「自己打題目」那一步答完。
+ *   - 失敗（402 額度、409 已滿、其他）：對話裡說明，對話框留著原文、恢復可用。
+ *   題目刪光後（AI 出題來源）流程仍在「題目已產生」，老師可以直接在對話框請 AI 出題。
  *
  * 編輯既有內容時，答案由已存資料還原（`scenarioAnswersFromSaved`），對話紀錄由
  * `summaryLog` 拼出摘要。
@@ -83,7 +95,8 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
+import { ConfirmDialog } from "@/components/organization/ConfirmDialog";
 import { getVoiceAndRate } from "@/utils/ttsVoiceResolver";
 import {
   createScenarioRow as createRow,
@@ -190,6 +203,45 @@ const mergeGenerated = (
   return { rows: [...kept, ...added], added };
 };
 
+/**
+ * 把對話框（compose）產出的題目併進清單：**一律加在後面**，清單裡的空白題先被填入
+ * （原位置換成新題），其餘接在最後；不超過剩餘名額（10 − 非空白題數）。
+ * `dedupe`：AI 出題（`generate`）時避開清單上已有的題目；老師自己打的照收。
+ */
+const mergeComposed = (
+  prev: ScenarioDialogueRow[],
+  created: ScenarioDialogueRow[],
+  dedupe: boolean,
+) => {
+  const kept = prev.filter((r) => !isBlankRow(r));
+  const room = Math.max(0, MAX_ITEMS - kept.length);
+  const used = new Set(kept.map((r) => r.question.trim()).filter(Boolean));
+  const added = (
+    dedupe ? created.filter((r) => !used.has(r.question.trim())) : created
+  ).slice(0, room);
+  const queue = [...added];
+  const filled = prev.map((r) =>
+    isBlankRow(r) && queue.length ? (queue.shift() as ScenarioDialogueRow) : r,
+  );
+  return { rows: [...filled, ...queue], added };
+};
+
+/** compose 的錯誤 → 對話裡那一句（已滿、額度用完、其他失敗） */
+const composeErrorKey = (error: unknown) => {
+  if (error instanceof ApiError && error.status === 409) {
+    return "scenarioDialogue.compose.full";
+  }
+  return textAiErrorKey(error);
+};
+
+/** 等老師確認「只會加入前 N 題」的那一批（或直接寫入的那一批） */
+interface ComposedBatch {
+  typed: string;
+  atManual: boolean;
+  created: ScenarioDialogueRow[];
+  replies: { role: "bot" | "note"; text: string }[];
+}
+
 const ScenarioDialoguePanel = forwardRef<
   ScenarioDialoguePanelHandle,
   ScenarioDialoguePanelProps
@@ -248,6 +300,12 @@ const ScenarioDialoguePanel = forwardRef<
   }, []);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  /** 對話框打的字交給 compose 中 */
+  const [composing, setComposing] = useState(false);
+  /** 自己打的題目超過剩餘名額，等老師確認「只會加入前 N 題」 */
+  const [pendingAdd, setPendingAdd] = useState<ComposedBatch | null>(null);
+  /** 確認框按「加入」時也會觸發關閉；用 ref 分辨是確認還是取消 */
+  const pendingAddRef = useRef<ComposedBatch | null>(null);
   /** 非空白題數（流程的「右欄有沒有題目」、剩餘名額都看這個） */
   const keptCount = rows.filter((r) => !isBlankRow(r)).length;
   /** 剩餘名額：AI 出題的題數選項上限 */
@@ -261,6 +319,7 @@ const ScenarioDialoguePanel = forwardRef<
     onSuggestedTitle: applySuggestedTitle,
     hasQuestions: keptCount > 0,
     generatingQuestions: isGenerating,
+    composing,
   });
   const { imageActions } = setup;
   /** 缺標題存檔時，切到題目那一側並把游標帶到標題欄 */
@@ -269,7 +328,7 @@ const ScenarioDialoguePanel = forwardRef<
   const contextRef = useRef<HTMLElement>(null);
   const [editingScenario, setEditingScenario] = useState(false);
   /** 對話（寫情境、擷取、情境圖）、產題、存檔任一進行中 */
-  const busy = isGenerating || setup.busy || isSaving;
+  const busy = isGenerating || composing || setup.busy || isSaving;
 
   /**
    * 把 busy 狀態同步到 SidebarContext。
@@ -481,6 +540,165 @@ const ScenarioDialoguePanel = forwardRef<
       setIsGenerating(false);
     }
   };
+  /**
+   * 把 compose 的題目寫進清單並記紀錄（直接寫入，或老師確認「只會加入前 N 題」之後）。
+   * 實際加入哪幾題用最新的 rows 算（等待或確認期間老師可能又改了清單）。
+   */
+  const commitComposed = (
+    batch: ComposedBatch,
+    opts: { dedupe: boolean; audio: boolean },
+  ) => {
+    const { added } = mergeComposed(
+      rowsRef.current,
+      batch.created,
+      opts.dedupe,
+    );
+    setRows((prev) => mergeComposed(prev, batch.created, opts.dedupe).rows);
+    setup.recordCompose({
+      typed: batch.typed,
+      atManual: batch.atManual,
+      replies: [
+        ...batch.replies,
+        {
+          role: "note",
+          text: added.length
+            ? t("scenarioDialogue.compose.added", { count: added.length })
+            : t("scenarioDialogue.compose.noneAdded"),
+        },
+      ],
+      added: added.length > 0,
+    });
+    if (added.length) setTab("side");
+    if (opts.audio && added.length) void autoGenerateAudio(added);
+  };
+
+  /**
+   * 對話框打字（compose，C 段第 5 段）。回傳 true ＝已處理（對話框清空），false ＝沒處理
+   * （已滿、失敗），對話框留著原文讓老師重送。規則見檔頭。
+   */
+  const handleCompose = async (typed: string): Promise<boolean> => {
+    // 送出這一刻在不在「自己打題目」那一步（await 之後的 setup.current 可能是舊的）
+    const atManual = setup.current?.id === "manualInput";
+    const kept = rowsRef.current.filter((r) => !isBlankRow(r));
+    const room = MAX_ITEMS - kept.length;
+    if (room <= 0) {
+      setup.replyCompose(
+        atManual,
+        t("scenarioDialogue.compose.full", { max: MAX_ITEMS }),
+      );
+      return false;
+    }
+
+    setComposing(true);
+    try {
+      const result = await apiClient.composeScenarioQuestions({
+        ...setup.questionRequestBase(),
+        text: typed,
+        existing_questions: kept.map((r) => r.question.trim()).filter(Boolean),
+      });
+
+      if (!result.usable) {
+        setup.replyCompose(
+          atManual,
+          result.reask || t("scenarioDialogue.setup.reaskFallback"),
+          typed,
+        );
+        setTab("chat");
+        return true;
+      }
+      applySuggestedTitle(result.suggested_title);
+
+      const isAdd = result.intent === "add_questions";
+      const replies: ComposedBatch["replies"] = [];
+      const requested = result.requested_count ?? 0;
+      if (!isAdd && requested > room) {
+        replies.push({
+          role: "bot",
+          text: t("scenarioDialogue.compose.requestedOverRoom", {
+            count: room,
+          }),
+        });
+      }
+      if ((result.skipped_count ?? 0) > 0) {
+        replies.push({
+          role: "bot",
+          text: t("scenarioDialogue.compose.skipped", {
+            count: result.skipped_count,
+          }),
+        });
+      }
+      // 輸出被截斷時 truncated_count 只算救回的題數，不能只靠它提示
+      if (result.output_truncated) {
+        replies.push({
+          role: "bot",
+          text: t("scenarioDialogue.compose.outputTruncated"),
+        });
+      }
+
+      const created = result.questions.map((q) =>
+        createRow({
+          question: q.question,
+          // 自己打的題目不產翻譯；AI 出題照翻譯開關
+          translation: !isAdd && setup.autoTranslate ? q.translation : "",
+          keywords: q.keywords,
+          referenceAnswer: q.reference_answer,
+          imagePrompt: q.image_prompt,
+        }),
+      );
+      const batch: ComposedBatch = { typed, atManual, created, replies };
+
+      if (isAdd) {
+        const latestRoom = Math.max(
+          0,
+          MAX_ITEMS - rowsRef.current.filter((r) => !isBlankRow(r)).length,
+        );
+        if (created.length > latestRoom) {
+          // 超過剩餘名額：先問「只會加入前 N 題」，確認才寫入
+          pendingAddRef.current = batch;
+          setPendingAdd(batch);
+          return true;
+        }
+        commitComposed(batch, { dedupe: false, audio: false });
+      } else {
+        commitComposed(batch, { dedupe: true, audio: setup.autoTTS });
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to compose scenario questions:", error);
+      setup.replyCompose(
+        atManual,
+        t(composeErrorKey(error), { max: MAX_ITEMS }),
+      );
+      return false;
+    } finally {
+      setComposing(false);
+    }
+  };
+
+  /** 「只會加入前 N 題」確認框：確認寫入；取消（含關閉）不寫入，紀錄寫「沒有加入題目」 */
+  const confirmPendingAdd = () => {
+    const batch = pendingAddRef.current;
+    pendingAddRef.current = null;
+    setPendingAdd(null);
+    if (batch) commitComposed(batch, { dedupe: false, audio: false });
+  };
+  const cancelPendingAdd = () => {
+    const batch = pendingAddRef.current;
+    pendingAddRef.current = null;
+    setPendingAdd(null);
+    if (batch) {
+      setup.recordCompose({
+        typed: batch.typed,
+        atManual: batch.atManual,
+        replies: [
+          ...batch.replies,
+          { role: "note", text: t("scenarioDialogue.compose.noneAdded") },
+        ],
+        added: false,
+      });
+    }
+  };
+
   /**
    * 單題重新生成（Issue #1021 起改為真的呼叫後端）。
    *
@@ -792,6 +1010,7 @@ const ScenarioDialoguePanel = forwardRef<
             generating={isGenerating}
             onGenerate={() => void handleGenerate()}
             onEditScenario={editScenario}
+            onComposeSubmit={handleCompose}
             settingsCard={
               <QuestionSettingsCard {...settingsFields} maxCount={remaining} />
             }
@@ -961,6 +1180,22 @@ const ScenarioDialoguePanel = forwardRef<
           const id = imageDialogRowId;
           return id ? generateRowImage(id, description) : Promise.resolve();
         }}
+      />
+
+      {/* 自己打的題目超過剩餘名額：先確認「只會加入前 N 題」（C 段第 5 段） */}
+      <ConfirmDialog
+        open={pendingAdd !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelPendingAdd();
+        }}
+        title={t("scenarioDialogue.compose.overLimitTitle")}
+        description={t("scenarioDialogue.compose.overLimitDescription", {
+          count: remaining,
+          max: MAX_ITEMS,
+        })}
+        confirmText={t("scenarioDialogue.compose.overLimitConfirm")}
+        cancelText={t("contentEditor.buttons.cancel")}
+        onConfirm={confirmPendingAdd}
       />
 
       {/* 單題語音設定（Issue #1051） */}

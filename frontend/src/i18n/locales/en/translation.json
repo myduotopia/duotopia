@@ -5223,6 +5223,17 @@
       "fullReason": "Already {{max}} questions",
       "sourceLocked": "There are questions already, so the question source can’t be changed"
     },
+    "compose": {
+      "full": "Already {{max}} questions. Please delete some on the right first.",
+      "added": "Added {{count}} questions",
+      "noneAdded": "No questions were added",
+      "skipped": "Skipped {{count}} part(s) unrelated to the questions",
+      "outputTruncated": "Some questions couldn't be read. Please enter them in smaller batches.",
+      "requestedOverRoom": "Only {{count}} spot(s) left, so I'll make {{count}} for now.",
+      "overLimitTitle": "Too many questions",
+      "overLimitDescription": "Only the first {{count}} will be added (limit {{max}}). Add them?",
+      "overLimitConfirm": "Add"
+    },
     "context": {
       "title": "Scenario",
       "edit": "Edit",

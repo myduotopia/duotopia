@@ -17,6 +17,10 @@
  * - 在已選項目列改答案：前面的紀錄不動，只往下加一句「已把○○改成：…」（`changeFromChip`）。
  * - 卡片步驟（情境卡、出題設定卡）確認後，卡片本身不留在對話裡，只留一句摘要（舊卡片唯讀）。
  * - 編輯既有內容：由已存資料還原答案（`scenarioAnswersFromSaved`），再用 `summaryLog` 拼出摘要。
+ * - 對話框交給 compose（#1158 C 段第 5 段）：結果回來才寫紀錄（`recordCompose`）——「自己打
+ *   題目」那一步連問句一起記，題目已產生後只記老師的話；接著是機器人的回覆（略過幾段、只剩
+ *   幾個空位、已加入幾題…）。全部無關時重問句放在「自己打題目」問句的位置（`manualReask`，
+ *   同訓練目標的作法）；題目已產生後則往下加一個機器人泡泡。
  * 目前這一步的問句與輸入 UI 不在 log 裡，由 `ScenarioSetupChat` 依 `activeStep` 畫在最後。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -100,6 +104,8 @@ export interface UseScenarioSetupOptions {
   hasQuestions: boolean;
   /** 面板正在產題（出題設定卡顯示產生中、對話框停用） */
   generatingQuestions: boolean;
+  /** 面板正在把對話框的字交給 compose（對話框、已選項目列停用） */
+  composing?: boolean;
 }
 
 export function useScenarioSetup({
@@ -109,6 +115,7 @@ export function useScenarioSetup({
   onSuggestedTitle,
   hasQuestions,
   generatingQuestions,
+  composing = false,
 }: UseScenarioSetupOptions) {
   const { t } = useTranslation();
 
@@ -137,6 +144,8 @@ export function useScenarioSetup({
   /** 答非所問時 AI 回的重問句（同一次呼叫判斷，不額外打 AI）；顯示在那一步的問句位置 */
   const [goalReask, setGoalReask] = useState("");
   const [directionReask, setDirectionReask] = useState("");
+  /** 「自己打題目」那一步 compose 判斷全部無關（或失敗）時，顯示在問句位置的那一句 */
+  const [manualReask, setManualReask] = useState("");
   /** 生成情境內容與產題是兩件事，loading 各自獨立 */
   const [generatingArticle, setGeneratingArticle] = useState(false);
   /** 上傳圖片／PDF 擷取情境文章中 */
@@ -144,24 +153,6 @@ export function useScenarioSetup({
 
   const hasScenarioMaterial =
     !!scenarioContent.trim() || scenarioImages.length > 0;
-
-  // ===== 流程 context（答案以外、會影響流程的外部事實）=====
-  const pending: ScenarioStepId | null = generatingArticle
-    ? "goal"
-    : extracting
-      ? "scenario"
-      : generatingQuestions
-        ? "settings"
-        : null;
-  const ctx: ScenarioFlowContext = {
-    hasQuestions,
-    hasScenarioMaterial,
-    scenarioChars: scenarioContent.trim().length,
-    imageCount: scenarioImages.length,
-    articleLevel,
-    pending,
-    failed: null,
-  };
 
   // ===== 答案與對話紀錄 =====
   /**
@@ -182,6 +173,35 @@ export function useScenarioSetup({
         })
       : {},
   );
+  // ===== 流程 context（答案以外、會影響流程的外部事實）=====
+  const baseCtx: ScenarioFlowContext = {
+    hasQuestions,
+    hasScenarioMaterial,
+    scenarioChars: scenarioContent.trim().length,
+    imageCount: scenarioImages.length,
+    articleLevel,
+    pending: null,
+    failed: null,
+  };
+  /**
+   * compose 進行中掛在哪一步：「自己打題目」那一步就是 `manualInput`，題目已產生後是 `done`
+   * （引擎據此讓對話框停用、灰字換成產生中）。
+   */
+  const composingAt = (): ScenarioFlowContext["pending"] =>
+    activeStep(SCENARIO_FLOW, answers, baseCtx)?.id === "manualInput"
+      ? "manualInput"
+      : "done";
+  const pending: ScenarioFlowContext["pending"] = generatingArticle
+    ? "goal"
+    : extracting
+      ? "scenario"
+      : generatingQuestions
+        ? "settings"
+        : composing
+          ? composingAt()
+          : null;
+  const ctx: ScenarioFlowContext = { ...baseCtx, pending };
+
   const [log, setLog] = useState<FlowLogEntry[]>(() =>
     initialData?.rows?.length ? summaryLog(SCENARIO_FLOW, answers, ctx) : [],
   );
@@ -318,6 +338,79 @@ export function useScenarioSetup({
         },
       ),
     );
+  };
+
+  // ----- 對話框交給 compose（#1158 C 段第 5 段）-----
+
+  /**
+   * 寫 compose 的對話紀錄。`typed` 有值＝記下老師這句（`atManual`：在「自己打題目」那一步，
+   * 連問句一起記）；`replies` 是之後的機器人回覆與結果摘要。`added` ＝這次真的加了題目：
+   * 「自己打題目」那一步因此答完，進入「題目已產生」。
+   *
+   * `atManual` 由呼叫端在**送出時**判斷（await 之後的 `current` 可能是舊的）。
+   */
+  const recordCompose = ({
+    typed,
+    atManual,
+    replies,
+    added,
+  }: {
+    typed: string | null;
+    atManual: boolean;
+    replies: { role: "bot" | "note"; text: TextRef | string }[];
+    added: boolean;
+  }) => {
+    setLog((prev) => {
+      let next: FlowLogEntry[] = [...prev];
+      if (typed !== null) {
+        if (atManual) {
+          next = appendLog(next, {
+            role: "bot",
+            stepId: "manualInput",
+            text: questionOf("manualInput"),
+          });
+        }
+        next = appendLog(next, {
+          role: "teacher",
+          stepId: atManual ? "manualInput" : undefined,
+          text: typed,
+        });
+      }
+      for (const reply of replies) next = appendLog(next, reply);
+      return next;
+    });
+    setManualReask("");
+    if (added && atManual) {
+      setAnswers(
+        (prev) =>
+          applyAnswer(SCENARIO_FLOW, prev, ctx, "manualInput", true).answers,
+      );
+    }
+  };
+
+  /**
+   * compose 沒有加題、要老師重來的一句話（全部無關的重問、已滿 10 題、額度用完、失敗）。
+   * 「自己打題目」那一步：放在問句的位置；題目已產生後：往下加一個機器人泡泡。
+   * `typed` 有值時先記下老師這句（重問時要；失敗時對話框保留原文，不記）。
+   */
+  const replyCompose = (
+    atManual: boolean,
+    message: string,
+    typed: string | null = null,
+  ) => {
+    if (atManual) {
+      if (typed !== null) {
+        recordCompose({ typed, atManual, replies: [], added: false });
+      }
+      setManualReask(message);
+      return;
+    }
+    recordCompose({
+      typed,
+      atManual,
+      replies: [{ role: "bot", text: message }],
+      added: false,
+    });
   };
 
   // ----- 在已選項目列改答案 -----
@@ -617,6 +710,9 @@ export function useScenarioSetup({
     reaskDirection,
     clearDirectionReask,
     markGenerated,
+    recordCompose,
+    replyCompose,
+    manualReask,
     checkChange,
     changeFromChip,
     logSettingsChanged,
