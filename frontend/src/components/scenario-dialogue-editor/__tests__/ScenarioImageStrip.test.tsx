@@ -135,7 +135,7 @@ describe("ScenarioImageStrip AI 生圖", () => {
     );
     const [aiTile, savedTile] = screen
       .getAllByRole("img")
-      .map((img) => img.parentElement as HTMLElement);
+      .map((img) => img.closest("div.relative") as HTMLElement);
 
     expect(
       within(aiTile).queryByLabelText("scenarioDialogue.images.crop"),
@@ -146,5 +146,41 @@ describe("ScenarioImageStrip AI 生圖", () => {
     expect(
       within(savedTile).getByLabelText("scenarioDialogue.images.crop"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ScenarioImageStrip 點圖放大（修正 C6）", () => {
+  it("點縮圖開放大檢視（編輯與唯讀都可以）", () => {
+    const { unmount } = render(
+      <ScenarioImageStrip actions={actionsWith([image(1)])} />,
+    );
+    fireEvent.click(
+      screen.getByLabelText("questionBank.group.render.zoomImage"),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    unmount();
+
+    render(<ScenarioImageStrip actions={actionsWith([image(2)])} readOnly />);
+    fireEvent.click(
+      screen.getByLabelText("questionBank.group.render.zoomImage"),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("點刪除、裁切鈕不觸發放大", () => {
+    const actions = actionsWith([
+      image(1, {
+        source: {
+          file: new File([], "a.png"),
+        } as unknown as ScenarioImage["source"],
+      }),
+    ]);
+    render(<ScenarioImageStrip actions={actions} />);
+
+    fireEvent.click(screen.getByLabelText("scenarioDialogue.images.remove"));
+    expect(actions.remove).toHaveBeenCalledWith("img-1");
+    fireEvent.click(screen.getByLabelText("scenarioDialogue.images.crop"));
+    expect(actions.setCropping).toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

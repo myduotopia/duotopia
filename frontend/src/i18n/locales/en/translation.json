@@ -4943,7 +4943,8 @@
       "scenarioContent": "Scenario",
       "articleLevel": "Text difficulty",
       "questionLevel": "Question difficulty",
-      "scenarioText": "Scenario text"
+      "scenarioText": "Scenario text",
+      "questionImage": "Question image"
     },
     "rubricPresets": {
       "tenseTime": "Time",

@@ -4962,7 +4962,8 @@
       "scenarioContent": "情境內容",
       "articleLevel": "文章難度",
       "questionLevel": "題目難度",
-      "scenarioText": "情境文章"
+      "scenarioText": "情境文章",
+      "questionImage": "題目圖片"
     },
     "rubricPresets": {
       "tenseTime": "時間",

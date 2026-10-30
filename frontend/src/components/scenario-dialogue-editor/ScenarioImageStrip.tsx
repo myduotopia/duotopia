@@ -1,7 +1,9 @@
 /**
  * 情境圖列（Issue #1146）：縮圖、刪除、補傳、調整裁切。
  *
- * 一份情境最多 5 張。縮圖點下去開重裁對話框（`ScenarioImageCropDialog`）；存檔後重開的
+ * 一份情境最多 5 張。修正 C6 起縮圖用標準元件 `ZoomableImage`：點縮圖放大看（唯讀、編輯都
+ * 可以）；縮圖下方的裁切鈕開重裁對話框（`ScenarioImageCropDialog`），刪除／裁切鈕和縮圖是
+ * 兄弟節點，點按鈕不會觸發放大。存檔後重開的
  * 圖沒有原圖可裁，「調整裁切」停用並說明原因（REVIEW.md 按鈕層級第 3 條）。
  *
  * `readOnly` 給題目清單左欄的對照區用：只看不改（修改要回對話）。
@@ -9,11 +11,15 @@
  * #1158：新增鈕旁加「AI 生圖」（`FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION`），開共用的
  * `AiImageGenerateDialog`，打開時依情境文章請 AI 擬描述。AI 生的圖沒有原圖，不顯示
  * 「調整裁切」。已滿 5 張時停用並說明原因。
+ *
+ * 修正 C6：縮圖改用標準元件 （點圖放大，唯讀與編輯都可以）。裁切改由
+ * 縮圖下方的裁切鈕開（點縮圖本身是放大）。
  */
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Crop, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
+import { ZoomableImage } from "@/components/question-bank/LayoutRenderer";
 import { AiImageGenerateDialog } from "./AiImageGenerateDialog";
 import { ScenarioImageCropDialog } from "./ScenarioImageCropDialog";
 import { MAX_SCENARIO_IMAGES } from "./scenarioImages";
@@ -62,10 +68,13 @@ export function ScenarioImageStrip({
             key={image.id}
             className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100"
           >
-            <img
+            {/* 點圖放大（修正 C6）；下方刪除／裁切鈕是兄弟節點，點它們不會觸發放大 */}
+            <ZoomableImage
               src={image.url}
               alt={t("scenarioDialogue.images.alt", { n: index + 1 })}
               className="h-full w-full object-cover"
+              buttonClassName="block h-full w-full"
+              testId="scenario-image-thumb"
             />
             {!readOnly && (
               <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/50 p-0.5">

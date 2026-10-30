@@ -4,7 +4,8 @@
  *
  * - `SortableRow`：題目、翻譯、參考答案／補充說明、單題評分標準（預設＋覆寫）、題目圖、題目語音。
  * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標，#1158 起開
- *   共用的 `AiImageGenerateDialog`，對話框由面板持有）。
+ *   共用的 `AiImageGenerateDialog`，對話框由面板持有）。修正 C6 起圖用標準元件 `ZoomableImage`，
+ *   點圖放大；滑過時的替換／移除遮罩不接點擊（只有按鈕接），點按鈕不會觸發放大。
  * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：小工具（#1158 C commit 4 起右欄情境區不再
  *   顯示評分標準，目前只有這支檔用到）。
  *
@@ -35,6 +36,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 import type { ScenarioDialogueRow, TenseSetting } from "@/lib/scenarioDialogue";
+import { ZoomableImage } from "@/components/question-bank/LayoutRenderer";
 import { TenseSelects } from "./TenseSelects";
 
 /** 只取字面翻譯用；型別放寬成字串以免每個呼叫點都要轉型 i18next 的 TFunction */
@@ -87,9 +89,9 @@ export function Chip({
  * 情境圖片欄位 —— AI 生成與手動上傳共用同一個位置。
  *
  * 沒有圖時並列兩個入口：自己上傳，或「AI 生成」（#1158：開生圖對話框，由面板處理）。
- * 有圖時可以點縮圖換成自己的圖或移除。
+ * 有圖時滑過縮圖可以換成自己的圖或移除；點圖本身放大（修正 C6）。
  */
-function ScenarioImageSlot({
+export function ScenarioImageSlot({
   imageUrl,
   loading,
   onPick,
@@ -134,9 +136,17 @@ function ScenarioImageSlot({
         </div>
       ) : imageUrl ? (
         <>
-          <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-          {/* 有圖時才出現的替換／移除，平常不擋住圖 */}
-          <div className="absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50">
+          {/* 修正 C6：點圖放大（標準元件 ZoomableImage） */}
+          <ZoomableImage
+            src={imageUrl}
+            alt={t("scenarioDialogue.labels.questionImage")}
+            className="w-full h-full object-cover"
+            buttonClassName="block h-full w-full"
+            testId="scenario-question-image"
+          />
+          {/* 有圖時才出現的替換／移除，平常不擋住圖。遮罩本身不接點擊（pointer-events-none），
+              點按鈕以外的地方會穿到下面的圖、照樣放大；按鈕自己接點擊，不會觸發放大 */}
+          <div className="pointer-events-none absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50 [&>button]:pointer-events-auto">
             <button
               type="button"
               onClick={pick}
