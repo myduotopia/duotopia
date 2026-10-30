@@ -2066,6 +2066,15 @@
         "scenarioPreviewNeedsContent": "請先選擇要派發的情境對話教材",
         "scenarioPreviewEmpty": "此教材沒有題目可預覽",
         "scenarioPreviewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
+        "replyMode": "作答方式",
+        "replyModeOption": {
+          "voice": "語音",
+          "text": "打字"
+        },
+        "replyModeDesc": {
+          "voice": "學生錄音回答"
+        },
+        "replyModeComingSoon": "即將上線",
         "selectModePrompt": "選擇一個模式查看預覽",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
@@ -5094,6 +5103,8 @@
       "goToNo": "捲到第 {{no}} 題",
       "dotLocked": "第 {{no}} 題：還沒到這題",
       "notYet": "還沒到這題",
+      "currentQuestion": "第 {{no}} 題：目前這題",
+      "previewNoSubmit": "預覽不會送出",
       "attemptsReached": "已達 {{max}} 次",
       "retrying": "正在重答第 {{no}} 題",
       "cancelRetry": "取消重答"

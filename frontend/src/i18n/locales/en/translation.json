@@ -1922,6 +1922,15 @@
         "scenarioPreviewNeedsContent": "Select a scenario dialogue material to preview",
         "scenarioPreviewEmpty": "This material has no questions to preview",
         "scenarioPreviewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
+        "replyMode": "Answer method",
+        "replyModeOption": {
+          "voice": "Voice",
+          "text": "Typing"
+        },
+        "replyModeDesc": {
+          "voice": "Students record their answers"
+        },
+        "replyModeComingSoon": "Coming soon",
         "selectModePrompt": "Select a mode to see the preview",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
@@ -5075,6 +5084,8 @@
       "goToNo": "Scroll to question {{no}}",
       "dotLocked": "Question {{no}}: not reached yet",
       "notYet": "Not there yet",
+      "currentQuestion": "Question {{no}}: current",
+      "previewNoSubmit": "Previews are not submitted",
       "attemptsReached": "{{max}} attempts used",
       "retrying": "Re-answering question {{no}}",
       "cancelRetry": "Cancel re-answer"

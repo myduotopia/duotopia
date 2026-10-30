@@ -194,3 +194,31 @@ export function segmentedScoreCategory(
         : value.play_audio;
   return resolveScoreCategoryFE(mode, playAudio);
 }
+
+/**
+ * 派發的「作答方式」選項（#1158，只有情境對話有）。
+ *
+ * 目前純前端顯示，**不送任何值給後端**：語音是唯一可用、也是預設的方式；打字作答
+ * （`Assignment.reply_mode`）延到之後的 issue，先以停用＋「即將上線」標示。
+ * 打字真的開放時，把 `available` 改成 true 並接上 formData／後端欄位。
+ */
+export interface ReplyModeOption {
+  value: "voice" | "text";
+  /** false＝停用，按鈕上寫明「即將上線」 */
+  available: boolean;
+}
+
+const SCENARIO_REPLY_MODES: readonly ReplyModeOption[] = [
+  { value: "voice", available: true },
+  { value: "text", available: false },
+];
+
+/** 這個模式在派發時要不要顯示「作答方式」；不顯示回 null。 */
+export function replyModeOptions(
+  mode: PracticeMode,
+): readonly ReplyModeOption[] | null {
+  return mode === "scenario_dialogue" ? SCENARIO_REPLY_MODES : null;
+}
+
+/** 目前選中的作答方式：只有語音可用，所以固定是語音。 */
+export const DEFAULT_REPLY_MODE: ReplyModeOption["value"] = "voice";
