@@ -22,11 +22,15 @@
  * （FeedbackActionRow）：還有次數＝「↺ 再試一次」，用完＝「已達 N 次」。本次再答之後，新的回答與建議
  * 接在它下面、它變淡。次數（含「第 N 次」編號）都把上次用掉的算進去（chat.usedFor）。
  * 老師已通過的題目（item.teacherPassed）操作列一律是「老師已通過」，不能再試（#1158 修正 E4）。
+ * #1158 修正 E4b：上次答過（priorAttempts > 0）但伺服器沒有錄音的題目，回答氣泡換成一行小字
+ * 「上次有作答，但沒有留下錄音」，下方操作列照常（還有次數＝再試一次）；學生沒答、老師就通過的
+ * 題目，題目下方只放操作列「老師已通過」（不放回答氣泡）。
  * 結尾語：學生＝請點綠色按鈕提交；老師預覽＝「全部答完了！（預覽不會送出）」。
  */
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import { AnswerBubble } from "./AnswerBubble";
 import {
   FeedbackActionRow,
@@ -143,15 +147,33 @@ export function ChatTranscript({
               onPlay={() => adapters.speak(item.text)}
               onToggle={(w) => chat.toggleText(i, w)}
             />
-            {item.submittedAudioUrl && isRestored(item) && (
+            {(isRestored(item) || item.teacherPassed) && (
               <div className="space-y-2" data-testid="scenario-previous-answer">
-                <AnswerBubble
-                  answer={{ kind: "voice", audioUrl: item.submittedAudioUrl }}
-                  attemptNo={prior}
-                  showAttemptNo={false}
-                  label={t("scenarioDialogue.chat.previousAnswer")}
-                  faded={list.length > 0 || fadeAll}
-                />
+                {isRestored(item) &&
+                  (item.submittedAudioUrl ? (
+                    <AnswerBubble
+                      answer={{
+                        kind: "voice",
+                        audioUrl: item.submittedAudioUrl,
+                      }}
+                      attemptNo={prior}
+                      showAttemptNo={false}
+                      label={t("scenarioDialogue.chat.previousAnswer")}
+                      faded={list.length > 0 || fadeAll}
+                    />
+                  ) : (
+                    // 上次有正式作答但伺服器沒有錄音（#1158 修正 E4b）：說明一句，
+                    // 不讓題目看起來像沒答過；次數照舊算，下方操作列照常
+                    <p
+                      className={cn(
+                        "text-right text-xs text-gray-500",
+                        (list.length > 0 || fadeAll) && "opacity-50",
+                      )}
+                      data-testid="scenario-previous-answer-no-audio"
+                    >
+                      {t("scenarioDialogue.chat.previousAnswerNoAudio")}
+                    </p>
+                  ))}
                 {list.length === 0 && (
                   <div className="flex justify-end">
                     <FeedbackActionRow

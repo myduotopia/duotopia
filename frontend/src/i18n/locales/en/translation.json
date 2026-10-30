@@ -5110,6 +5110,7 @@
       "submittedRecord": "Your answers",
       "noAnswer": "Not answered",
       "previousAnswer": "Previous answer",
+      "previousAnswerNoAudio": "You answered last time, but no recording was saved",
       "conversation": "Conversation",
       "attemptsReached": "{{max}} attempts used",
       "teacherPassed": "Passed by your teacher",

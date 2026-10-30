@@ -29,7 +29,8 @@
  *   （維持「輸入中…」），轉回直立才出題並朗讀；暫停中要自動朗讀的（例如自動進下一題）也等轉回才唸。
  * - 接著上次進度（#1158 E-4）：`priorAttempts > 0`（至少一次正式作答，#1158 修正 E4）＝上次答過
  *   （restored）；只求助或取建議失敗的題目不算，重新進入後仍會被問。
- *   老師已通過（`teacherPassed`）的題目視同答滿：不再問、不能再試（畫面標「老師已通過」）。
+ *   老師已通過（`teacherPassed`）的題目視同答滿：不再問、不能再試（畫面標「老師已通過」）；
+ *   學生沒答、老師就通過的也算答過（answered，#1158 修正 E4b）。
  *   按「開始對話」後，從第一題「沒答過、也沒答滿」的題目開始問（會朗讀）；它前面的題目一起出現，
  *   以紀錄呈現（題目＋上次的錄音，沒有 AI 建議，見 ChatTranscript）。之後主流程往下走時，
  *   上次答過的題目同樣直接以紀錄出現、不再問。全部都答過 → 直接到「提交作業」（finished）。
@@ -572,10 +573,17 @@ export function useScenarioChat({
   /** 每題上次答過沒（至少一次正式作答，#1158 修正 E4）；ChatTranscript 據此放「上次的回答」 */
   const restored = useMemo(() => items.map((it) => isRestored(it)), [items]);
 
-  /** 每題答過沒：本次至少一次正式作答，或上次已答過（#1158 E-4） */
+  /**
+   * 每題答過沒：本次至少一次正式作答，或上次已答過（#1158 E-4），或老師已通過
+   * （學生沒答、老師就通過也算，方格綠、提交前不列未答，#1158 修正 E4b）
+   */
   const answered = useMemo(
-    () => attempts.map((list, i) => usedAttempts(list) > 0 || restored[i]),
-    [attempts, restored],
+    () =>
+      attempts.map(
+        (list, i) =>
+          usedAttempts(list) > 0 || restored[i] || isTeacherPassed(items[i]),
+      ),
+    [attempts, restored, items],
   );
 
   return {
