@@ -197,6 +197,32 @@ describe("StudentActivityPageContent — 情境對話外框（#1158 E1）", () =
     expect(screen.queryByText("scenarioDialogue.chat.notYet")).toBeNull();
   });
 
+  test("已提交重開：顯示作答紀錄、沒有「開始對話」；題號每題都能點並捲到該題（#1158 E6）", async () => {
+    const user = userEvent.setup();
+    render(
+      <StudentActivityPageContent
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        activities={scenarioActivities as any}
+        assignmentTitle="情境作業"
+        assignmentId={1}
+        practiceMode="scenario_dialogue"
+        assignmentStatus="SUBMITTED"
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByTestId("scenario-submitted-transcript"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "scenarioDialogue.chat.start" }),
+    ).toBeNull();
+    await waitFor(() =>
+      expect(navButton(3)).not.toHaveAttribute("aria-disabled"),
+    );
+    await user.click(navButton(3));
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
   test("預覽：對話裡沒有上一題／下一題按鈕", () => {
     renderScenario(true);
     expect(

@@ -14,6 +14,8 @@
  *   顏色沿用方格既有規則（答過＝綠），答過與否用對話回報的 scenarioAnswered 判斷。
  *   答過（綠）但對話還沒走到的題目也不能點，提示改成「已作答，對話到這題後可查看」。
  *   每格的規則與外觀在共用的 ScenarioQuestionNav（派發預覽欄、sample 頁也用同一份）。
+ * - 已提交重開（isReadOnly）：對話改成唯讀作答紀錄（題目＋自己的錄音），沒有「開始對話」與
+ *   錄音區；題號方格每題都能點、捲到該題（#1158 E6）。
  * - 整頁改成固定高度的直式排版（h-[100dvh] max-h-full），對話只佔外框剩下的高度、
  *   自己捲動，不會和頁面各有一層捲動，頂部列也不會蓋住對話標題列。
  */
@@ -2230,6 +2232,8 @@ export default function StudentActivityPageContent({
             onProgressChange={setScenarioAnswered}
             onNavChange={setScenarioNav}
             navigateRef={scenarioNavigateRef}
+            // #1158 E6：已提交重開＝只看作答紀錄（題目＋自己的錄音），不能再作答
+            readOnly={isReadOnly && !isPreviewMode}
             onSubmit={() => {
               // 略過的題目 attempts 是空的 —— 全部略過也走得到「送出」。這裡沿用
               // 其他模式那個「未完成」dialog（可以取消，也可以堅持送出），而不是

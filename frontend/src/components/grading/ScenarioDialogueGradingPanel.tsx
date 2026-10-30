@@ -20,10 +20,27 @@
  * **不是拿來逐字比對** —— 同一題每個學生講的內容本來就不同（#864 規格 3-3）。
  * 所以畫面上它被標示為「參考」而不是「答案」，並與必用字詞、本題說明放在一起。
  *
+ * ## 情境卡（#1158 E5）
+ *
+ * 題目常是「圖中的人在做什麼？」這類只看題目答不出來的問題，老師批改也要看得到情境文章
+ * 與情境圖。批改 API 不帶整份情境設定，所以用目前這組的 `content_id` 抓老師端內容詳情
+ * （`GET /api/teachers/contents/{id}`，作業副本也有權限），經 `scenarioChatFromTeacherContent`
+ * 轉成和學生頁同一份資料形狀，用學生頁同一張 `ScenarioContextCard` 顯示（圖在上、文章在下，
+ * 點圖放大）。抓不到或沒有情境（情境 C）就不顯示，不影響批改。
+ *
  * 詳見 docs/design/grading-page-architecture.md
  */
 
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { apiClient } from "@/lib/api";
+import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
+import {
+  ScenarioContextCard,
+  hasContextCard,
+} from "@/components/activities/scenario-dialogue/ScenarioContextCard";
+import { scenarioChatFromTeacherContent } from "@/components/activities/scenario-dialogue/fromApi";
+import type { ScenarioChatContext } from "@/components/activities/scenario-dialogue/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -60,6 +77,37 @@ interface ScenarioDialogueGradingPanelProps {
   // （同 SentenceRearrangementPanel 的作法；#1034 review 指出原本是無註解的死 prop）：
   // 分組切換由左欄與共用元件負責，這個 Panel 只渲染當前組。
   onSelectGroup?: (idx: number) => void;
+}
+
+/** 依 content_id 抓情境（文章＋情境圖）；失敗或沒有情境就回 null（見檔頭「情境卡」） */
+function useScenarioContext(
+  contentId: number | undefined,
+): ScenarioChatContext | null {
+  const [ctx, setCtx] = useState<{
+    id: number;
+    context: ScenarioChatContext;
+  } | null>(null);
+  useEffect(() => {
+    if (contentId == null) return;
+    let cancelled = false;
+    apiClient
+      .getContentDetail(contentId)
+      .then((data) => {
+        if (cancelled) return;
+        const { context } = scenarioChatFromTeacherContent(
+          data as ScenarioContentDetail,
+        );
+        setCtx({ id: contentId, context });
+      })
+      .catch(() => {
+        // 情境卡只是輔助資訊，抓不到不擋批改
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contentId]);
+  if (!ctx || ctx.id !== contentId || !hasContextCard(ctx.context)) return null;
+  return ctx.context;
 }
 
 /** 時態／語態的穩定代碼 → 顯示字串。空值代表老師沒指定，就不顯示這個 chip。 */
@@ -170,6 +218,7 @@ export function ScenarioDialogueGradingPanel({
   const items: SubmissionItem[] = currentGroup
     ? currentGroup.submissions
     : submission.submissions;
+  const scenarioContext = useScenarioContext(currentGroup?.content_id);
 
   return (
     <div
@@ -178,6 +227,7 @@ export function ScenarioDialogueGradingPanel({
       }`}
     >
       <Card className="p-4 space-y-3">
+        {scenarioContext && <ScenarioContextCard context={scenarioContext} />}
         {items.length === 0 && (
           <p className="text-sm text-gray-500">
             {t("gradingPage.messages.noItems")}

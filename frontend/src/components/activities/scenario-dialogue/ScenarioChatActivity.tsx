@@ -25,6 +25,13 @@
  *   高度，不會和頁面各有一層捲動，也不會被頁面頂部列蓋住（#1158 E1）。呼叫端要給有高度的容器。
  *   底部輸入區留 safe-area。
  *
+ * - 標題列（#1158 E1／E4）：作業標題只留一處 —— 外框（作答頁頂部列／派發預覽欄標題）有標題，
+ *   這裡不再重複情境標題，只寫「對話」＋難度／預覽模式徽章。灰色系（紫色只留在情境卡標頭，
+ *   減少色塊疊加）；圖示用對話框，不用麥克風（像錄音鍵，會被誤按）。
+ *
+ * - 已提交唯讀（readOnly，#1158 E6）：不顯示「開始對話」與錄音區，改列出每題題目＋學生
+ *   自己的錄音（SubmittedTranscript）；作答要求／情境卡照樣顯示。題號方格每題都能點、捲到該題。
+ *
  * AI 建議與朗讀由 `adapters` 注入（sample 傳 mock；正式版之後接後端）。
  * 學生畫面不顯示分數；老師預覽（settings.isPreviewMode）多「預覽模式」標示、跳題、
  * 參考答案開關與 mock 分數；「提交作業」停用並寫明「預覽不會送出」（#1158 E2）。
@@ -38,11 +45,12 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import { ArrowDown, Mic } from "lucide-react";
+import { ArrowDown, MessagesSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChatTranscript } from "./ChatTranscript";
+import { SubmittedTranscript } from "./SubmittedTranscript";
 import { ReplyComposer, type ComposerState } from "./ReplyComposer";
 import {
   InfoStrip,
@@ -94,6 +102,11 @@ interface Props {
    * 學生：只捲到那一題；老師預覽且已開始：跳題。還沒出現的題目由外層擋掉。
    */
   navigateRef?: MutableRefObject<((index: number) => void) | null>;
+  /**
+   * 已提交（學生重開已交的作業）：只看作答紀錄，不能再作答（#1158 E6）。
+   * 錄音來源是 items[i].submittedAudioUrl。
+   */
+  readOnly?: boolean;
 }
 
 /** 給外層題號方格的對話進度（#1158 E 段） */
@@ -123,6 +136,7 @@ export function ScenarioChatActivity({
   layout = "auto",
   onNavChange,
   navigateRef,
+  readOnly = false,
 }: Props) {
   const { t, i18n } = useTranslation();
   const lang = uiLanguage ?? i18n.language ?? "";
@@ -294,6 +308,11 @@ export function ScenarioChatActivity({
   const canJump = isPreview && started;
   const handleNavigate = (i: number) => {
     if (i < 0 || i >= items.length) return;
+    // 已提交：每題都列出來了，直接捲過去
+    if (readOnly) {
+      scrollToBlock(i, "start");
+      return;
+    }
     // 還沒出現的題目：學生與開始前的老師預覽都不能去（外層方格也會擋）
     if (i >= chat.revealedCount && !canJump) return;
     clearReturnTimer();
@@ -321,15 +340,19 @@ export function ScenarioChatActivity({
     [navigateRef],
   );
 
-  const navCurrent = started ? Math.min(current, items.length - 1) : null;
+  const navCurrent =
+    started && !readOnly ? Math.min(current, items.length - 1) : null;
+  // 已提交：每題都「已出現」，沒有目前題
+  const navStarted = started || readOnly;
+  const navRevealed = readOnly ? items.length : chat.revealedCount;
   useEffect(() => {
     onNavChange?.({
-      started,
-      revealedCount: chat.revealedCount,
+      started: navStarted,
+      revealedCount: navRevealed,
       current: navCurrent,
       canJump,
     });
-  }, [onNavChange, started, chat.revealedCount, navCurrent, canJump]);
+  }, [onNavChange, navStarted, navRevealed, navCurrent, canJump]);
 
   const handleStart = () => {
     setInfoOpen(null);
@@ -370,15 +393,15 @@ export function ScenarioChatActivity({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-50">
-      {/* 標題列（紫色點綴）；題號改由外層作答頁的方格負責（#1158 E 段） */}
-      <header className="shrink-0 border-b border-purple-200 bg-white">
+      {/* 標題列（灰色系、不重複作業標題）；題號改由外層作答頁的方格負責（#1158 E 段） */}
+      <header className="shrink-0 border-b border-gray-200 bg-gray-50">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-600">
-            <Mic className="h-4 w-4" />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 text-gray-600">
+            <MessagesSquare className="h-4 w-4" aria-hidden />
           </span>
-          <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-gray-900 sm:text-lg">
-            {context.title}
-          </h1>
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-gray-700">
+            {t("scenarioDialogue.chat.conversation")}
+          </h2>
           {context.level && (
             <Badge variant="outline" className="shrink-0">
               {context.level}
@@ -410,7 +433,7 @@ export function ScenarioChatActivity({
         )}
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {started && hasLeft && (
+          {started && !readOnly && hasLeft && (
             <div className={cn("shrink-0 px-3 pt-3", wide && "lg:hidden")}>
               <InfoStrip
                 context={context}
@@ -430,20 +453,29 @@ export function ScenarioChatActivity({
                 aria-live="polite"
               >
                 <div ref={contentRef} className="space-y-3">
-                  {!started && hasLeft && (
+                  {(!started || readOnly) && hasLeft && (
                     <div className={cn("space-y-3", wide && "lg:hidden")}>
                       {fullCards}
                     </div>
                   )}
-                  <ChatTranscript
-                    chat={chat}
-                    items={items}
-                    settings={settings}
-                    adapters={adapters}
-                    translatable={translatable}
-                    registerBlock={registerBlock}
-                    onRetry={handleRetry}
-                  />
+                  {readOnly ? (
+                    <SubmittedTranscript
+                      items={items}
+                      adapters={adapters}
+                      translatable={translatable}
+                      registerBlock={registerBlock}
+                    />
+                  ) : (
+                    <ChatTranscript
+                      chat={chat}
+                      items={items}
+                      settings={settings}
+                      adapters={adapters}
+                      translatable={translatable}
+                      registerBlock={registerBlock}
+                      onRetry={handleRetry}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -460,21 +492,25 @@ export function ScenarioChatActivity({
             </div>
           </div>
 
-          <ReplyComposer
-            key={retry ? `retry-${retry.index}` : "main"}
-            state={composerState}
-            replyMode={settings.replyMode}
-            waitingHint={waitingHint}
-            retryNo={retry ? retry.index + 1 : null}
-            canCancelRetry={retry?.status === "answering"}
-            onStart={handleStart}
-            onSubmitAnswer={chat.submitAnswer}
-            onCancelRetry={chat.cancelRetry}
-            onSubmitAssignment={onSubmit}
-            submitDisabledReason={
-              isPreview ? t("scenarioDialogue.chat.previewNoSubmit") : undefined
-            }
-          />
+          {!readOnly && (
+            <ReplyComposer
+              key={retry ? `retry-${retry.index}` : "main"}
+              state={composerState}
+              replyMode={settings.replyMode}
+              waitingHint={waitingHint}
+              retryNo={retry ? retry.index + 1 : null}
+              canCancelRetry={retry?.status === "answering"}
+              onStart={handleStart}
+              onSubmitAnswer={chat.submitAnswer}
+              onCancelRetry={chat.cancelRetry}
+              onSubmitAssignment={onSubmit}
+              submitDisabledReason={
+                isPreview
+                  ? t("scenarioDialogue.chat.previewNoSubmit")
+                  : undefined
+              }
+            />
+          )}
         </main>
       </div>
     </div>

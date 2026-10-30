@@ -5050,6 +5050,9 @@
     "tenseCombo": "{{time}}{{aspect}}",
     "chat": {
       "typing": "AI 輸入中",
+      "conversation": "對話",
+      "submittedRecord": "你的作答紀錄",
+      "noAnswer": "沒有作答",
       "previewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
       "recordingTooLong": "錄音太長了（最多 {{seconds}} 秒），請重新錄一段短一點的。",
       "recordingTooShort": "這段錄音太短，聽不到內容，請再錄一次。",

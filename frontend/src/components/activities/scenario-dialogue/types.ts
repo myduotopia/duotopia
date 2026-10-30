@@ -33,6 +33,11 @@ export interface ScenarioChatItem {
   images: ScenarioImage[];
   /** 參考答案 —— 只有老師預覽會帶，學生端一律不傳 */
   referenceAnswer?: string;
+  /**
+   * 學生已存的錄音（學生端 payload 的 recording_url）。只用在「已提交」唯讀紀錄
+   * （SubmittedTranscript，#1158 E6）；作答中的錄音由 useScenarioChat 自己管。
+   */
+  submittedAudioUrl?: string;
 }
 
 /** 情境（題組文章＋圖）；content 與 images 皆空時不顯示情境卡 */

@@ -5088,6 +5088,9 @@
       "dotAnsweredLocked": "Question {{no}}: answered. You can view it once the conversation gets there",
       "currentQuestion": "Question {{no}}: current",
       "previewNoSubmit": "Previews are not submitted",
+      "submittedRecord": "Your answers",
+      "noAnswer": "Not answered",
+      "conversation": "Conversation",
       "attemptsReached": "{{max}} attempts used",
       "retrying": "Re-answering question {{no}}",
       "cancelRetry": "Cancel re-answer"

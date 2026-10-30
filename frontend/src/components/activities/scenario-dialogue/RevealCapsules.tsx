@@ -2,7 +2,9 @@
  * RevealCapsules — 情境對話題目氣泡的「先聽後看」小膠囊列（#1133）：`[🔊] [Aa 英] [中]`。
  *
  * - 🔊 只放圖示，播放（重播）題目。
- * - 英／翻譯是切換鈕：按下＝藍色實心（顯示中），再按＝白底灰框（收起）；
+ * - 英／翻譯是切換鈕：按下＝次要樣式的開啟狀態（淺藍底藍字＋藍框，`TOGGLE_ON_CLASS`），
+ *   再按＝白底灰框（收起）。不用藍底主按鈕 —— 它不是這個畫面的「下一步」（#1158 E4，
+ *   REVIEW.md 按鈕層級 1）；情境卡的「作答要求／情境」切換鈕也套同一樣式；
  *   `aria-pressed`，`aria-label` 寫完整「顯示／隱藏英文（中文）」。
  * - 字：≤ 480px 用短字「英」「中」，更寬用「看英文」「看中文」（字串取自頁面 i18n）。
  * - 翻譯鈕三個條件都成立才渲染（不是反灰，所以沒有停用說明）：
@@ -14,6 +16,13 @@ import { Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+/**
+ * 切換鈕「開啟」樣式（疊在 Button variant="outline" 上）：淺藍底藍字＋藍框。
+ * 情境對話裡的切換鈕（🔊／英／中、作答要求／情境）共用這一份（#1158 E4）。
+ */
+export const TOGGLE_ON_CLASS =
+  "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800";
 
 interface Props {
   enOn: boolean;
@@ -49,8 +58,8 @@ export function RevealCapsules({
       </Button>
       <Button
         type="button"
-        variant={enOn ? "default" : "outline"}
-        className={pill}
+        variant="outline"
+        className={cn(pill, enOn && TOGGLE_ON_CLASS)}
         onClick={onToggleEn}
         aria-pressed={enOn}
         aria-label={
@@ -72,8 +81,8 @@ export function RevealCapsules({
       {showTranslation && enOn && (
         <Button
           type="button"
-          variant={zhOn ? "default" : "outline"}
-          className={pill}
+          variant="outline"
+          className={cn(pill, zhOn && TOGGLE_ON_CLASS)}
           onClick={onToggleZh}
           aria-pressed={zhOn}
           aria-label={

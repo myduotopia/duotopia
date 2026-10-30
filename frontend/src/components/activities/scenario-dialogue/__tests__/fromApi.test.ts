@@ -65,14 +65,27 @@ describe("scenarioChatFromTeacherContent", () => {
     expect(context.level).toBe("A2");
   });
 
-  /**
-   * 情境文章的配圖**目前沒有資料欄位**（`scenario_settings` 只有 scenario_content /
-   * question_level / global_rubric / global_tense / global_voice / translate_language /
-   * tts_settings）。設計稿那幾張情境圖是 `public/samples/` 的 mock。
-   * 這裡回空陣列而不是硬湊 —— 要有情境配圖得先加欄位。
-   */
-  it("情境配圖回空陣列（後端還沒有這個欄位）", () => {
+  it("沒有情境圖時回空陣列", () => {
     expect(scenarioChatFromTeacherContent(detail).context.images).toEqual([]);
+  });
+
+  it("讀 scenario_settings.scenario_images 當情境圖，略過空值與非字串（#1158 E5）", () => {
+    const withImages = {
+      ...detail,
+      scenario_settings: {
+        ...detail.scenario_settings,
+        scenario_images: [
+          "https://example.com/s1.jpg",
+          "",
+          "https://example.com/s2.jpg",
+          3,
+        ],
+      },
+    } as unknown as typeof detail;
+    expect(scenarioChatFromTeacherContent(withImages).context.images).toEqual([
+      { src: "https://example.com/s1.jpg", alt: "Scenario image 1" },
+      { src: "https://example.com/s2.jpg", alt: "Scenario image 2" },
+    ]);
   });
 
   it("題目本文、翻譯、翻譯語言、必用字詞、本題說明都帶過去", () => {
@@ -200,6 +213,19 @@ describe("scenarioChatFromStudentActivity", () => {
       },
     ],
   };
+
+  it("學生端也讀情境圖（#1158 E5）", () => {
+    const { context } = scenarioChatFromStudentActivity({
+      ...activity,
+      scenario_settings: {
+        ...activity.scenario_settings,
+        scenario_images: ["https://example.com/s1.jpg"],
+      },
+    });
+    expect(context.images).toEqual([
+      { src: "https://example.com/s1.jpg", alt: "Scenario image 1" },
+    ]);
+  });
 
   it("情境文章與作答指引進 context", () => {
     const { context } = scenarioChatFromStudentActivity(activity);

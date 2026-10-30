@@ -18,12 +18,12 @@
  * 所以這裡**逐欄白名單**，不做物件展開：老師端的欄位只要原樣往下傳一次，參考答案就
  * 跟著進了學生畫面的資料裡 —— 即使今天沒有元件渲染它，哪天多渲染一個欄位就漏了。
  *
- * ## 情境配圖沒有資料來源
+ * ## 情境圖（#1158 E5）
  *
- * `ScenarioChatContext.images` 目前一律空陣列。`scenario_settings` 只存
- * scenario_content / question_level / global_rubric / global_tense / global_voice /
- * translate_language / tts_settings —— **沒有情境圖片欄位**。設計稿那幾張情境圖是
- * `public/samples/` 的 mock。要有情境配圖得先加欄位，不在這裡硬湊。
+ * `ScenarioChatContext.images` 讀 `scenario_settings.scenario_images`（網址陣列，最多 5 張，
+ * #1146 起由老師上傳／擷取／AI 生成）。老師端拿到的是整份設定；學生端是後端
+ * `public_settings_view` 濾過的版本，情境圖本來就給學生看，兩邊都有這個欄位。
+ * 非字串、空字串一律略過；替代文字用固定格式（理由同題目圖片的 imageAlt）。
  */
 import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
 import type { ScenarioChatContext, ScenarioChatItem } from "./types";
@@ -92,6 +92,15 @@ function imageAlt(questionNumber: number): string {
   return `Question ${questionNumber} image`;
 }
 
+/** 情境圖網址陣列 → 對話式 UI 的圖片（見檔頭「情境圖」） */
+function scenarioImages(raw: unknown): ScenarioChatContext["images"] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(text)
+    .filter(Boolean)
+    .map((src, i) => ({ src, alt: `Scenario image ${i + 1}` }));
+}
+
 const text = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
@@ -111,8 +120,7 @@ export function scenarioChatFromTeacherContent(
   const context: ScenarioChatContext = {
     title: text(detail.title),
     content: text(settings.scenario_content),
-    // 見檔頭：後端還沒有情境配圖欄位
-    images: [],
+    images: scenarioImages(settings.scenario_images),
     rubric: text(settings.global_rubric),
     level: text(settings.question_level),
   };
@@ -150,12 +158,15 @@ export interface ScenarioStudentActivity {
     scenario_content?: string | null;
     global_rubric?: string | null;
     translate_language?: string | null;
+    scenario_images?: string[] | null;
   } | null;
   items?: Array<{
     id?: number;
     text?: string | null;
     translation?: string | null;
     image_url?: string | null;
+    /** 學生自己已存的錄音（已提交唯讀紀錄用，#1158 E6） */
+    recording_url?: string | null;
     scenario_dialogue?: {
       keywords?: string[];
       rubric_note?: string;
@@ -182,8 +193,7 @@ export function scenarioChatFromStudentActivity(
   const context: ScenarioChatContext = {
     title: text(activity.title),
     content: text(settings.scenario_content),
-    // 見檔頭：後端還沒有情境配圖欄位
-    images: [],
+    images: scenarioImages(settings.scenario_images),
     rubric: text(settings.global_rubric),
   };
 
@@ -200,6 +210,9 @@ export function scenarioChatFromStudentActivity(
         keywords: [...(block.keywords ?? [])],
         rubricNote: rubricNote || undefined,
         images: imageUrl ? [{ src: imageUrl, alt: imageAlt(index + 1) }] : [],
+        ...(text(item.recording_url)
+          ? { submittedAudioUrl: text(item.recording_url) }
+          : {}),
       };
     },
   );
