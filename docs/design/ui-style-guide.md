@@ -279,6 +279,7 @@
 | QuizOptionChip | `frontend/src/components/activities/shared/QuizOptionChip.tsx` | 小考選項唯讀格（檢討頁、批改頁） |
 | QuizReviewView | `frontend/src/components/activities/shared/QuizReviewView.tsx` | 小考提交後的複盤畫面 |
 | ScoreOverlay | `frontend/src/components/activities/shared/ScoreOverlay.tsx` | 答對／答錯分數動畫 |
+| SpeakableWords | `frontend/src/components/activities/shared/SpeakableWords.tsx` | 英文句子點單字聽發音（例句朗讀題目、情境對話建議說法） |
 | VirtualKeyboard | `frontend/src/components/activities/shared/VirtualKeyboard.tsx` | 觸控裝置的螢幕鍵盤 |
 | WordActivityCard | `frontend/src/components/activities/shared/WordActivityCard.tsx` | 單字活動卡片 |
 | WordCard | `frontend/src/components/activities/shared/WordCard.tsx` | 答對後的正解單字卡 |

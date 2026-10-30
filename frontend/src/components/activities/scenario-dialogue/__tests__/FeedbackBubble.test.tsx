@@ -5,10 +5,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { FeedbackBubble } from "../FeedbackBubble";
+import { speakEnglish } from "@/utils/speakEnglish";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
+
+vi.mock("@/utils/speakEnglish", () => ({ speakEnglish: vi.fn() }));
 
 const FEEDBACK = {
   verdict: "improve" as const,
@@ -45,15 +48,29 @@ describe("FeedbackBubble — A 方案", () => {
 
   it("建議說法加粗單獨一行，旁邊 🔊 圖示鈕（aria-label 聽建議說法）", () => {
     const props = renderBubble();
-    expect(screen.getByText("She ate a lot of food.").className).toContain(
-      "font-bold",
-    );
+    const suggestion = screen.getByTestId("scenario-suggestion");
+    expect(suggestion.className).toContain("font-bold");
+    expect(suggestion.textContent).toContain("She ate a lot of food.");
     const speak = screen.getByRole("button", {
       name: "scenarioDialogue.chat.listenSuggestion",
     });
     expect(speak.textContent).toBe("");
     fireEvent.click(speak);
     expect(props.onSpeak).toHaveBeenCalledWith("She ate a lot of food.");
+  });
+
+  it("建議說法每個字可點，只唸那個字（標點不唸）；🔊 才播整句（#1158 E2）", () => {
+    const props = renderBubble();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "groupedQuestionsTemplate.labels.clickToPronounciate: food",
+      }),
+    );
+    expect(vi.mocked(speakEnglish)).toHaveBeenLastCalledWith(
+      "food",
+      expect.anything(),
+    );
+    expect(props.onSpeak).not.toHaveBeenCalled();
   });
 
   it("目前題：整列靠右，下一題（次要）在左、再試一次（主色）在最右", () => {

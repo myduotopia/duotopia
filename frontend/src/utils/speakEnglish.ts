@@ -12,6 +12,7 @@
  * - 每次呼叫前 cancel() 既有發音
  * - `onError`（可選，#1158 E2）：朗讀實際出錯（utterance 的 error 事件，被 cancel／打斷的
  *   "canceled"／"interrupted" 不算）或找不到英文 voice 時呼叫，讓呼叫端改用文字補救
+ * - `onEnd`（可選）：這一句結束（唸完、出錯、被打斷）時呼叫，給 SpeakableWords 清播放中標示
  *
  * `primeSpeechSynthesis()`：在使用者點擊當下先唸一段音量 0 的空字串並觸發載入語音清單，
  * 之後計時器裡的自動朗讀才不會被瀏覽器（iOS Safari 等）的手勢限制擋掉（#1158 E-2）。
@@ -23,6 +24,8 @@ export interface SpeakEnglishOptions {
   volume?: number;
   /** 朗讀出錯或沒有英文 voice 時呼叫 */
   onError?: () => void;
+  /** 這一句結束時呼叫：唸完、出錯、被 cancel／打斷都算（播放中標示用） */
+  onEnd?: () => void;
 }
 
 /** 這兩種 error 是 cancel()／下一句打斷造成的，不是朗讀失敗 */
@@ -54,10 +57,12 @@ export function speakEnglish(
     utterance.pitch = options.pitch ?? 1.0;
     utterance.volume = options.volume ?? 1.0;
 
-    const { onError } = options;
-    if (onError) {
+    const { onError, onEnd } = options;
+    if (onEnd) utterance.onend = () => onEnd();
+    if (onError || onEnd) {
       utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
-        if (!BENIGN_SPEECH_ERRORS.has(event.error)) onError();
+        onEnd?.();
+        if (onError && !BENIGN_SPEECH_ERRORS.has(event.error)) onError();
       };
     }
 

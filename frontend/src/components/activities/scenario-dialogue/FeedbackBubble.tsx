@@ -3,7 +3,8 @@
  *
  * 單層氣泡：沒有外框線、沒有內框，只有淺底色（需改進 amber-50、很棒 green-50）。
  * - 評語一行：「可以更好・」（amber 字）／「很棒・」（green 字）接評語。
- * - 建議說法（有的話）：放大加粗單獨一行，旁邊一顆 🔊 小圓圖示鈕（aria-label「聽建議說法」）。
+ * - 建議說法（有的話）：放大加粗單獨一行，旁邊一顆 🔊 小圓圖示鈕（aria-label「聽建議說法」）播整句；
+ *   句子裡每個字可點、只唸那個字（共用 activities/shared/SpeakableWords，與例句朗讀同一份，#1158 E2）。
  * 分數不在這裡顯示 —— 學生作答時只看建議。
  *
  * 每題「最後一則」建議氣泡下方保留操作（`actions`，規則不變），按鈕是小膠囊、整列靠右：
@@ -20,6 +21,7 @@ import { ArrowRight, RotateCcw, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SpeakableWords } from "@/components/activities/shared/SpeakableWords";
 import { AiRow } from "./TypingIndicator";
 import type { ScenarioFeedback } from "./types";
 
@@ -93,11 +95,15 @@ export function FeedbackBubble({
 
         {feedback.suggestion && (
           <div className="flex items-center gap-2">
-            <p className="min-w-0 text-base font-bold text-gray-900">
+            <p
+              className="min-w-0 text-base font-bold text-gray-900"
+              data-testid="scenario-suggestion"
+            >
               <span className="sr-only">
                 {t("scenarioDialogue.chat.suggestion")}：
               </span>
-              {feedback.suggestion}
+              {/* 每個字可點、只唸那個字（與例句朗讀共用）；🔊 照舊播整句 */}
+              <SpeakableWords text={feedback.suggestion} />
             </p>
             <button
               type="button"

@@ -178,6 +178,30 @@ describe("speakEnglish", () => {
     expect(synthMock.speak).toHaveBeenCalledOnce();
   });
 
+  it("onEnd: fires on end and on any error (including interrupted)", () => {
+    synthMock = makeSynthMock([{ lang: "en-US", name: "US English" }]);
+    Object.defineProperty(window, "speechSynthesis", {
+      value: synthMock,
+      writable: true,
+      configurable: true,
+    });
+    const onEnd = vi.fn();
+
+    speakEnglish("a", { onEnd });
+    speakEnglish("b", { onEnd });
+
+    const [a, b] = synthMock.speak.mock.calls.map(
+      (c) =>
+        c[0] as {
+          onend?: () => void;
+          onerror?: (e: { error: string }) => void;
+        },
+    );
+    a.onerror?.({ error: "interrupted" });
+    b.onend?.();
+    expect(onEnd).toHaveBeenCalledTimes(2);
+  });
+
   it("primeSpeechSynthesis speaks a silent empty utterance", () => {
     primeSpeechSynthesis();
 
