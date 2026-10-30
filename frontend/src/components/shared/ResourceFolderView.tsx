@@ -59,13 +59,16 @@ function ResourceProgramCard({
   isSelected,
   onClick,
   onCopy,
+  copyDisabledReason,
 }: {
   material: ResourceMaterial;
   isSelected: boolean;
   onClick: () => void;
   onCopy: () => void;
+  copyDisabledReason?: string;
 }) {
   const { t } = useTranslation();
+  const copyDisabled = material.copied_today || !!copyDisabledReason;
 
   return (
     <div
@@ -107,16 +110,17 @@ function ResourceProgramCard({
             e.stopPropagation();
             onCopy();
           }}
-          disabled={material.copied_today}
+          disabled={copyDisabled}
           className={`absolute right-3 bottom-3 p-1.5 rounded-lg transition-colors ${
-            material.copied_today
+            copyDisabled
               ? "text-gray-300 cursor-not-allowed"
               : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"
           }`}
           title={
-            material.copied_today
+            copyDisabledReason ??
+            (material.copied_today
               ? t("resourceMaterials.card.copiedToday", "今日已複製")
-              : t("resourceMaterials.card.copyToMy", "複製到我的教材")
+              : t("resourceMaterials.card.copyToMy", "複製到我的教材"))
           }
         >
           <Copy size={18} />
@@ -402,6 +406,8 @@ export interface ResourceFolderViewProps {
   materials: ResourceMaterial[];
   onSelect: (material: ResourceMaterial) => void;
   onCopy: (material: ResourceMaterial) => void;
+  /** When set, copy buttons are disabled and this text explains why. */
+  copyDisabledReason?: string;
   onContentClick?: (content: ResourceContentItem) => void;
   selectedDetail: ResourceMaterialDetail | null;
   loadingDetail: boolean;
@@ -413,6 +419,7 @@ export default function ResourceFolderView({
   materials,
   onSelect,
   onCopy,
+  copyDisabledReason,
   onContentClick,
   selectedDetail,
   loadingDetail,
@@ -473,6 +480,7 @@ export default function ResourceFolderView({
                 isSelected={material.id === selectedId}
                 onClick={() => onSelect(material)}
                 onCopy={() => onCopy(material)}
+                copyDisabledReason={copyDisabledReason}
               />
             ))}
           </div>
