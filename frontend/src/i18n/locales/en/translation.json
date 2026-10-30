@@ -5225,11 +5225,15 @@
     },
     "compose": {
       "full": "Already {{max}} questions. Please delete some on the right first.",
-      "added": "Added {{count}} questions",
+      "added_one": "Added {{count}} question",
+      "added_other": "Added {{count}} questions",
       "noneAdded": "No questions were added",
-      "skipped": "Skipped {{count}} part(s) unrelated to the questions",
+      "skipped_one": "Skipped {{count}} part unrelated to the questions",
+      "skipped_other": "Skipped {{count}} parts unrelated to the questions",
       "outputTruncated": "Some questions couldn't be read. Please enter them in smaller batches.",
-      "requestedOverRoom": "Only {{count}} spot(s) left, so I'll make {{count}} for now.",
+      "requestedOverRoom_one": "Only {{count}} spot left, so I'll make {{count}} for now.",
+      "requestedOverRoom_other": "Only {{count}} spots left, so I'll make {{count}} for now.",
+      "tooLong": "That's too long. Please enter it in smaller batches.",
       "overLimitTitle": "Too many questions",
       "overLimitDescription": "Only the first {{count}} will be added (limit {{max}}). Add them?",
       "overLimitConfirm": "Add"

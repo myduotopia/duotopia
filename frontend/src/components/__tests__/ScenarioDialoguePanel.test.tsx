@@ -3011,6 +3011,35 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
     );
   });
 
+  it("全部無關的重問句：改來源（清掉「自己打題目」）後就不見，改回自己輸入時問原本的問句（修正 C5）", async () => {
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      usable: false,
+      intent: null,
+      reask: "請打英文題目",
+    });
+    renderPanel();
+    toManualInput();
+    await say("今天天氣真好");
+    await flush();
+    expect(screen.getByText("請打英文題目")).toBeInTheDocument();
+
+    const changeSource = (s: "manual" | "ai") => {
+      fireEvent.click(
+        within(openChip("source")).getByRole("button", { name: K.source(s) }),
+      );
+      const confirm = screen.queryByRole("button", { name: K.reopenConfirm });
+      if (confirm) fireEvent.click(confirm);
+    };
+    changeSource("ai");
+    changeSource("manual");
+
+    expect(screen.queryByText("請打英文題目")).toBeNull();
+    expect(
+      screen.getAllByText("scenarioDialogue.setup.q.manualInput").length,
+    ).toBeGreaterThan(0);
+  });
+
   it("全部無關（題目已產生後）：往下加一個機器人泡泡重問", async () => {
     composeScenarioQuestions
       .mockResolvedValueOnce(composed("add_questions", ["Q1?"]))
@@ -3058,9 +3087,11 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
       "N2?",
     ]);
     expect(chatText()).toContain(C("added"));
+    await flush();
+    expect(composerBox()).toHaveValue("");
   });
 
-  it("超過剩餘名額：取消就不寫入，紀錄寫「沒有加入題目」", async () => {
+  it("超過剩餘名額：取消就不寫入，紀錄寫「沒有加入題目」，老師的原文放回對話框（修正 C5）", async () => {
     renderPanel();
     toManualInput();
     for (let i = 1; i <= 8; i++) addTypedQuestion(`Q${i}?`);
@@ -3074,9 +3105,55 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
       screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
     );
 
+    await flush();
     expect(questionValues()).toHaveLength(8);
     expect(chatText()).toContain(C("noneAdded"));
     expect(chatText()).not.toContain(C("added"));
+    // 和失敗時一致：原文留著、不記老師那句，改一改可以重送
+    expect(composerBox()).toHaveValue("N1? N2? N3?");
+    expect(composerBox()).not.toBeDisabled();
+    // 紀錄裡沒有老師那句的泡泡（只在對話框裡）
+    expect(within(chatColumn()).getAllByText("N1? N2? N3?")).toHaveLength(1);
+  });
+
+  it("內容超過 8000 字：不呼叫 AI，回「內容太長，請分次輸入」，原文留著（修正 C5）", async () => {
+    renderPanel();
+    toManualInput();
+    const long = "a".repeat(8001);
+
+    await say(long);
+
+    expect(composeScenarioQuestions).not.toHaveBeenCalled();
+    expect(screen.getByText(C("tooLong"))).toBeInTheDocument();
+    expect(composerBox()).toHaveValue(long);
+  });
+
+  it("後端回 422（字數超過）：也回「內容太長，請分次輸入」", async () => {
+    composeScenarioQuestions.mockRejectedValueOnce(
+      new MockApiError(422, { detail: [] }),
+    );
+    renderPanel();
+    toManualInput();
+
+    await say("Q1?");
+    await flush();
+
+    expect(screen.getByText(C("tooLong"))).toBeInTheDocument();
+    expect(composerBox()).toHaveValue("Q1?");
+  });
+
+  it("英文的題數句子有單複數（_one／_other），中文一句即可", async () => {
+    const en = (await import("@/i18n/locales/en/translation.json")).default
+      .scenarioDialogue.compose as Record<string, string>;
+    const zh = (await import("@/i18n/locales/zh-TW/translation.json")).default
+      .scenarioDialogue.compose as Record<string, string>;
+    for (const key of ["added", "skipped", "requestedOverRoom"]) {
+      expect(en[`${key}_one`]).toBeTruthy();
+      expect(en[`${key}_other`]).toBeTruthy();
+      expect(zh[key]).toBeTruthy();
+    }
+    expect(en.tooLong).toBeTruthy();
+    expect(zh.tooLong).toBeTruthy();
   });
 
   it("已滿 10 題：不呼叫 AI，直接回「已滿 10 題，請先在右邊刪除題目」，對話框留著原文", async () => {

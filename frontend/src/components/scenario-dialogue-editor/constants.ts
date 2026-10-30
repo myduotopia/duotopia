@@ -11,6 +11,13 @@ export const MAX_ITEMS = 10;
 /** 出題設定卡的題數預設值（#1146：範圍 MIN_ITEMS~MAX_ITEMS） */
 export const DEFAULT_GENERATE_COUNT = 5;
 
+/**
+ * 對話框一次送給 compose 的字數上限（去掉頭尾空白後算；後端
+ * `routers/scenario_dialogue_ai.py` 的 `MAX_COMPOSE_TEXT_CHARS` 同值）。超過就不送，
+ * 回「內容太長，請分次輸入」（#1158 修正 C5）。
+ */
+export const MAX_COMPOSE_TEXT_CHARS = 8000;
+
 /** CEFR 程度清單：與共用的 CEFR 小方塊（`guided-chat/CefrChips`）同一份 */
 export { CEFR_LEVELS } from "@/components/shared/guided-chat/CefrChips";
 

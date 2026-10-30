@@ -28,7 +28,7 @@
  * />
  * ```
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -78,6 +78,11 @@ export function SelectedChipsBar({
   const [collapsed, setCollapsed] = useState(false);
   const canCollapse = collapsible ?? !wide;
   const isCollapsed = canCollapse && collapsed;
+
+  // 停用時把「開著哪個 Popover」清掉：不然停用結束（AI 工作做完）時 Popover 會自己又跳出來
+  useEffect(() => {
+    if (disabled) setOpenId(null);
+  }, [disabled]);
 
   if (chips.length === 0) return null;
 

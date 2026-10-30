@@ -231,7 +231,7 @@ export function useScenarioSetup({
       ),
     );
 
-  /** 某一步被清掉時，連帶清掉它在面板上的資料（情境文章、情境圖、訓練目標、出題方向） */
+  /** 某一步被清掉時，連帶清掉它在面板上的資料（情境文章、情境圖、訓練目標、出題方向、「自己打題目」的重問句） */
   const clearStepData = (cleared: readonly ScenarioStepId[]) => {
     if (cleared.includes("direction")) {
       setDirection("");
@@ -244,6 +244,9 @@ export function useScenarioSetup({
     if (cleared.includes("scenario")) {
       setScenarioContent("");
       setScenarioImages([]);
+    }
+    if (cleared.includes("manualInput")) {
+      setManualReask("");
     }
   };
 

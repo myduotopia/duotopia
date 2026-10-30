@@ -150,6 +150,28 @@ describe("SelectedChipsBar：Popover 原地修改", () => {
     expect(screen.getByText("已有題目，不能改")).toBeInTheDocument();
   });
 
+  it("開著 Popover 時整列停用：Popover 關掉，停用結束也不會自己再跳出來（修正 C5）", async () => {
+    const user = userEvent.setup();
+    const bar = (disabled: boolean) => (
+      <SelectedChipsBar
+        collapsible={false}
+        disabled={disabled}
+        disabledReason="產生中，請稍候…"
+        chips={[{ id: "mode", label: "情境", value: "none" }]}
+        renderContent={() => <p>小框內容</p>}
+      />
+    );
+    const { rerender } = render(bar(false));
+    await user.click(screen.getByRole("button", { name: /情境/ }));
+    expect(screen.getByText("小框內容")).toBeInTheDocument();
+
+    rerender(bar(true));
+    expect(screen.queryByText("小框內容")).toBeNull();
+
+    rerender(bar(false));
+    expect(screen.queryByText("小框內容")).toBeNull();
+  });
+
   it("沒有標籤時不畫；窄版可收合成一行", async () => {
     const { container, rerender } = render(
       <SelectedChipsBar chips={[]} renderContent={() => null} />,
