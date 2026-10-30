@@ -4,6 +4,16 @@
  * 此元件包含完整的學生作業活動介面，可被以下場景使用：
  * 1. 學生作業頁面 (StudentActivityPage)
  * 2. 老師預覽示範頁面 (TeacherAssignmentPreviewPage)
+ *
+ * 情境對話（practice_mode === "scenario_dialogue"，#1158 E1）的外框差異，其他模式不受影響：
+ * - 不顯示頂部列的「提交」鈕（它會跳過「還有題目沒答」的檢查，對話最後的「提交作業」才有）、
+ *   外層進度條、卡片標題（第 N 題＋標題）、預覽時的上一題／下一題。
+ * - 保留題號方格並接到對話：已出現的題目點了捲到那一題（老師預覽開始對話後可跳題）；
+ *   還沒到的題目看得到但不能點（aria-disabled），點了提示「還沒到這題」；目前這題用現有的
+ *   藍色粗框標示並跟著對話進度更新（ScenarioChatActivity 經 onNavChange 回報）。
+ *   顏色沿用方格既有規則（答過＝綠），答過與否用對話回報的 scenarioAnswered 判斷。
+ * - 整頁改成固定高度的直式排版（h-[100dvh] max-h-full），對話只佔外框剩下的高度、
+ *   自己捲動，不會和頁面各有一層捲動，頂部列也不會蓋住對話標題列。
  */
 
 import {
@@ -32,7 +42,10 @@ import { QuizNavSlotContext } from "@/contexts/QuizNavSlotContext";
 import ReadingAssessmentTemplate from "@/components/activities/ReadingAssessmentTemplate";
 import ListeningClozeTemplate from "@/components/activities/ListeningClozeTemplate";
 import GroupedQuestionsTemplate from "@/components/activities/GroupedQuestionsTemplate";
-import { ScenarioChatActivity } from "@/components/activities/scenario-dialogue/ScenarioChatActivity";
+import {
+  ScenarioChatActivity,
+  type ScenarioChatNav,
+} from "@/components/activities/scenario-dialogue/ScenarioChatActivity";
 import {
   scenarioChatFromStudentActivity,
   scenarioChatSettings,
@@ -423,6 +436,17 @@ export default function StudentActivityPageContent({
   // #1140 A 項：情境對話每題「有沒有答過」。由 ScenarioChatActivity 回報 —— 它的
   // 錄音是在 adapters 裡上傳的，不會回寫 activities state，所以送出檢查讀不到。
   const [scenarioAnswered, setScenarioAnswered] = useState<boolean[]>([]);
+  // #1158 E1：情境對話的題號方格接對話 —— 對話進度由 ScenarioChatActivity 回報，
+  // 點方格時經 scenarioNavigateRef 叫對話捲到（或預覽跳到）那一題
+  const isScenarioDialogue = practiceMode === "scenario_dialogue";
+  const [scenarioNav, setScenarioNav] = useState<ScenarioChatNav | null>(null);
+  const scenarioNavigateRef = useRef<((index: number) => void) | null>(null);
+  const [scenarioLockedHint, setScenarioLockedHint] = useState(false);
+  useEffect(() => {
+    if (!scenarioLockedHint) return;
+    const id = setTimeout(() => setScenarioLockedHint(false), 2000);
+    return () => clearTimeout(id);
+  }, [scenarioLockedHint]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #835: Live quiz — 進入 guard + 收卷輪詢
@@ -2200,6 +2224,8 @@ export default function StudentActivityPageContent({
             })}
             adapters={scenarioAdapters}
             onProgressChange={setScenarioAnswered}
+            onNavChange={setScenarioNav}
+            navigateRef={scenarioNavigateRef}
             onSubmit={() => {
               // 略過的題目 attempts 是空的 —— 全部略過也走得到「送出」。這裡沿用
               // 其他模式那個「未完成」dialog（可以取消，也可以堅持送出），而不是
@@ -2644,10 +2670,24 @@ export default function StudentActivityPageContent({
 
   return (
     <QuizNavSlotContext.Provider value={quizNavSlot}>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div
+        className={cn(
+          "bg-gradient-to-br from-blue-50 via-white to-purple-50",
+          // #1158 E1：情境對話固定高度、直式排版，對話只佔剩下的高度並自己捲動。
+          // max-h-full：放在有高度的外框（學生版面的 main）裡時不超出；外框沒有高度時用 100dvh。
+          isScenarioDialogue
+            ? "flex h-[100dvh] max-h-full flex-col"
+            : "min-h-screen",
+        )}
+      >
         {/* Read-only mode banner */}
         {isReadOnly && !isPreviewMode && (
-          <div className="bg-blue-50 border-b border-blue-200 px-2 sm:px-4 py-2">
+          <div
+            className={cn(
+              "bg-blue-50 border-b border-blue-200 px-2 sm:px-4 py-2",
+              isScenarioDialogue && "shrink-0",
+            )}
+          >
             <div className="max-w-6xl mx-auto flex items-center gap-2">
               <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
               <span className="text-xs sm:text-sm text-blue-700 truncate">
@@ -2662,7 +2702,12 @@ export default function StudentActivityPageContent({
         )}
 
         {/* Header with progress */}
-        <div className="sticky top-0 bg-white border-b z-10">
+        <div
+          className={cn(
+            "sticky top-0 bg-white border-b z-10",
+            isScenarioDialogue && "shrink-0",
+          )}
+        >
           {/* #830: 單字選擇/拼寫/克漏字預覽：用較寬 max-w-7xl px-4 對齊小考卡片排版 */}
           <div
             className={
@@ -2728,7 +2773,9 @@ export default function StudentActivityPageContent({
                   practiceMode !== "word_selection" &&
                   practiceMode !== "word_reading" &&
                   practiceMode !== "word_spelling" &&
-                  practiceMode !== "word_cloze" && (
+                  practiceMode !== "word_cloze" &&
+                  // #1158 E1：情境對話由對話最後的「提交作業」送出（含未答檢查）
+                  !isScenarioDialogue && (
                     <Button
                       onClick={handleSubmit}
                       disabled={submitting || isSubmitBlockedByRecording}
@@ -2930,6 +2977,73 @@ export default function StudentActivityPageContent({
                                 assignmentStatus: assignmentStatus ?? null,
                               });
 
+                              // #1158 E1：情境對話的方格接到對話（只接目前這個 activity）
+                              if (isScenarioDialogue && isActiveActivity) {
+                                const nav = scenarioNav;
+                                const reached =
+                                  !!nav &&
+                                  nav.started &&
+                                  itemIndex < nav.revealedCount;
+                                const locked = !reached && !nav?.canJump;
+                                const isCurrentQ = nav?.current === itemIndex;
+                                // 顏色沿用既有規則（答過＝綠）；答過與否看對話回報，
+                                // 再加上伺服器已存的錄音（重開作業時）
+                                const done =
+                                  Boolean(isCompleted) ||
+                                  Boolean(scenarioAnswered[itemIndex]);
+                                const no = itemIndex + 1;
+                                const navLabel = locked
+                                  ? t("scenarioDialogue.chat.dotLocked", { no })
+                                  : isCurrentQ
+                                    ? t(
+                                        "scenarioDialogue.chat.currentQuestion",
+                                        {
+                                          no,
+                                        },
+                                      )
+                                    : nav?.canJump
+                                      ? t("scenarioDialogue.chat.jumpToNo", {
+                                          no,
+                                        })
+                                      : t("scenarioDialogue.chat.goToNo", {
+                                          no,
+                                        });
+                                return (
+                                  <button
+                                    key={itemIndex}
+                                    type="button"
+                                    data-testid={`scenario-nav-${itemIndex + 1}`}
+                                    onClick={() => {
+                                      if (locked) {
+                                        setScenarioLockedHint(true);
+                                        return;
+                                      }
+                                      scenarioNavigateRef.current?.(itemIndex);
+                                    }}
+                                    aria-disabled={locked || undefined}
+                                    aria-current={
+                                      isCurrentQ ? "step" : undefined
+                                    }
+                                    className={cn(
+                                      "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
+                                      "flex items-center justify-center text-sm sm:text-xs font-medium",
+                                      "min-w-[32px]",
+                                      done
+                                        ? "bg-green-100 text-green-800 border-green-400"
+                                        : "bg-white text-gray-600 border-gray-300",
+                                      locked
+                                        ? "cursor-not-allowed"
+                                        : !done && "hover:border-blue-400",
+                                      isCurrentQ && "border-2 border-blue-600",
+                                    )}
+                                    title={navLabel}
+                                    aria-label={navLabel}
+                                  >
+                                    {itemIndex + 1}
+                                  </button>
+                                );
+                              }
+
                               return (
                                 <button
                                   key={itemIndex}
@@ -3000,6 +3114,18 @@ export default function StudentActivityPageContent({
                             })}
                           </div>
 
+                          {/* #1158 E1：情境對話點了還沒到的題目 */}
+                          {isScenarioDialogue &&
+                            isActiveActivity &&
+                            scenarioLockedHint && (
+                              <p
+                                className="text-xs text-gray-500 whitespace-nowrap"
+                                role="status"
+                              >
+                                {t("scenarioDialogue.chat.notYet")}
+                              </p>
+                            )}
+
                           {activityIndex < activities.length - 1 && (
                             <div className="w-px h-8 bg-gray-300 ml-2" />
                           )}
@@ -3027,39 +3153,61 @@ export default function StudentActivityPageContent({
               </div>
             )}
 
-            <Progress value={progress} className="h-1 mt-1" />
+            {/* #1158 E1：情境對話的進度看題號方格，不另顯示進度條 */}
+            {!isScenarioDialogue && (
+              <Progress value={progress} className="h-1 mt-1" />
+            )}
           </div>
         </div>
 
         {/* Main content */}
-        <div className="w-full px-2 sm:px-4 mt-3">
-          <Card>
-            {/* CardHeader - 單字選擇模式不顯示（WordSelectionActivity 自帶 header） */}
-            {!isVocabularySetType(currentActivity?.type || "") && (
-              <CardHeader className="py-2 sm:py-3">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
-                  <CardTitle className="text-base sm:text-lg leading-tight">
-                    {t("studentActivityPage.labels.questionNumber", {
-                      number: currentActivity.order,
-                    })}{" "}
-                    {currentActivity.title}
-                  </CardTitle>
-                  {getActivityTypeBadge(currentActivity.type)}
-                </div>
-              </CardHeader>
+        <div
+          className={cn(
+            "w-full px-2 sm:px-4 mt-3",
+            isScenarioDialogue && "flex min-h-0 flex-1 flex-col pb-2",
+          )}
+        >
+          <Card
+            className={cn(
+              isScenarioDialogue &&
+                "flex min-h-0 flex-1 flex-col overflow-hidden",
             )}
+          >
+            {/* CardHeader - 單字選擇模式不顯示（WordSelectionActivity 自帶 header）；
+                情境對話也不顯示（對話自己有標題列，#1158 E1） */}
+            {!isVocabularySetType(currentActivity?.type || "") &&
+              !isScenarioDialogue && (
+                <CardHeader className="py-2 sm:py-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
+                    <CardTitle className="text-base sm:text-lg leading-tight">
+                      {t("studentActivityPage.labels.questionNumber", {
+                        number: currentActivity.order,
+                      })}{" "}
+                      {currentActivity.title}
+                    </CardTitle>
+                    {getActivityTypeBadge(currentActivity.type)}
+                  </div>
+                </CardHeader>
+              )}
 
             {/* #867: select-none 禁止反白選取作答內容（題目/翻譯/單字卡），
                 防學生反白後搜尋/翻譯查字。此容器涵蓋所有 practice_mode，
                 未來新模式自動繼承；input 答案另在 QuizAnswerInput 處理。 */}
-            <CardContent className="p-2 sm:p-3 select-none">
+            <CardContent
+              className={cn(
+                "p-2 sm:p-3 select-none",
+                isScenarioDialogue && "flex min-h-0 flex-1 flex-col",
+              )}
+            >
               {renderActivityContent(currentActivity)}
 
               {/* Navigation buttons */}
               {(() => {
                 // 🎯 單字選擇/朗讀/拼寫/克漏字（艾賓浩斯版）與三個小考模式：
                 //    自帶導航（內建於 Activity 元件的 Card footer），不顯示外部導航按鈕
+                // #1158 E1：情境對話用題號方格切題，預覽也不顯示上一題／下一題
                 if (
+                  isScenarioDialogue ||
                   practiceMode === "word_selection" ||
                   practiceMode === "word_reading" ||
                   practiceMode === "tug_of_war" ||

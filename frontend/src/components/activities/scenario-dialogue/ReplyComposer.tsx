@@ -7,7 +7,8 @@
  *   - 語音：標準 AudioRecorder（chat variant）錄音 → 試聽／重錄 →「送出」才成為對話中的語音訊息
  *   - 打字：聊天輸入框＋送出鈕（Enter 送出）
  * - waiting：AI 輸入中或等待使用者在建議氣泡上選「再試一次／下一題」時的提示
- * - finished：「提交作業」主按鈕
+ * - finished：「提交作業」主按鈕；傳了 submitDisabledReason（老師預覽，#1158 E2）就停用，
+ *   下方小字改成停用原因（「預覽不會送出」），title 也寫同一句
  * 回頭重答（retryNo）時上方多一條「正在重答第 N 題 ✕」；✕ 取消重答、回到進行中的題目
  * （等 AI 建議時不能取消，不顯示 ✕）。外層以 key 區分重答／主流程，切換時元件重掛、
  * 未送出的錄音丟掉；卸載時 revoke 未送出的錄音 URL。
@@ -36,6 +37,8 @@ interface Props {
   onSubmitAnswer: (answer: ScenarioAnswer) => void;
   onCancelRetry: () => void;
   onSubmitAssignment: () => void;
+  /** 有值＝「提交作業」停用，並把這句當作停用原因顯示（老師預覽） */
+  submitDisabledReason?: string;
 }
 
 interface PendingVoice {
@@ -53,6 +56,7 @@ export function ReplyComposer({
   onSubmitAnswer,
   onCancelRetry,
   onSubmitAssignment,
+  submitDisabledReason,
 }: Props) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
@@ -114,11 +118,13 @@ export function ReplyComposer({
           type="button"
           className="h-12 w-full"
           onClick={onSubmitAssignment}
+          disabled={Boolean(submitDisabledReason)}
+          title={submitDisabledReason || undefined}
         >
           {t("scenarioDialogue.chat.submitAssignment")}
         </Button>
         <p className="text-center text-xs text-gray-500">
-          {t("scenarioDialogue.chat.finishedHint")}
+          {submitDisabledReason || t("scenarioDialogue.chat.finishedHint")}
         </p>
       </div>
     );

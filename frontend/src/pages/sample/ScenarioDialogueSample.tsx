@@ -12,6 +12,8 @@
  * 「學生介面語言」只傳給情境對話元件的 uiLanguage（決定翻譯鈕是否出現），不切換整頁 i18n；
  * 英文介面沒有翻譯鈕。日韓系統有預留但 sample 不示範。
  * 控制面板文字只寫中文（設計稿用，不進 i18n）。
+ * 對話元件的高度跟著外層（#1158 E 段），這裡用 h-[100dvh] 的外框撐滿整頁；題號方格在正式
+ * 作答頁的外框上，sample 沒有外框，所以沒有題號導覽。
  */
 
 import { useMemo, useState } from "react";
@@ -139,7 +141,7 @@ export default function ScenarioDialogueSample() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative h-[100dvh]">
       <ScenarioChatActivity
         key={runKey}
         context={context}
@@ -158,8 +160,8 @@ export default function ScenarioDialogueSample() {
       />
 
       {/* Sample 控制面板 */}
-      {/* 放在標題列（手機版含題號點點）下方，避免蓋住題號與徽章 */}
-      <div className="fixed right-2 top-[6.5rem] z-50 flex flex-col items-end lg:top-14">
+      {/* 放在標題列下方，避免蓋住徽章 */}
+      <div className="fixed right-2 top-14 z-50 flex flex-col items-end">
         <Button
           type="button"
           variant="outline"

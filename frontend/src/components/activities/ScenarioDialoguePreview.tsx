@@ -28,10 +28,22 @@
  *
  * 情境對話只吃自己的資料集（`practiceMode.ts` 的 `supportedDatasets`），借示範單字集
  * 來預覽等於顯示一個永遠派不出去的畫面。缺 `contentId` 就說明原因。
+ *
+ * ## 預覽欄版面（#1158 E2）
+ *
+ * * 傳 `layout="compact"`：預覽欄很窄，不管螢幕多寬都用單欄；高度跟著外層（派發 sheet 的
+ *   預覽 Card 在情境對話時撐滿欄高，見 AssignmentDialog）。
+ * * 右側留白用引導式對話外框同一個 `TOOLBAR_GUTTER_CLASS`：老師後台右緣的數位教學工具列
+ *   （fixed、z-[150]）疊在派發 sheet 上，預覽欄貼著右緣，不留白會被它蓋住。工具列在 sheet
+ *   之外的層，預覽欄自己的 z-index 拉不過它，所以用留白讓開，而不是拉高整個 sheet 的層級
+ *   （那會連其他作業類型的派發畫面都一起蓋掉工具列）。
+ * * 「提交作業」由 ScenarioChatActivity 依 isPreviewMode 停用，寫明「預覽不會送出」。
  */
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiClient } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { TOOLBAR_GUTTER_CLASS } from "@/components/shared/guided-chat/GuidedChatLayout";
 import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
 import { ScenarioChatActivity } from "./scenario-dialogue/ScenarioChatActivity";
 import {
@@ -128,21 +140,27 @@ export default function ScenarioDialoguePreview({
   }
 
   return (
-    <ScenarioChatActivity
-      // 換教材要重新開始。**今天真正讓它歸零的是 loading 分支**：contentId 一變就
-      // 先 render PreviewNote，對話元件被 unmount，狀態跟著消失。
-      //
-      // 那為什麼還要 key？因為 `useScenarioChat` 的狀態是用 items 做 useState 的初值、
-      // **沒有任何 effect 在 items 變動時重置**。哪天有人為了少一次閃爍，改成「重新抓
-      // 資料時先留著舊畫面」，舊教材的對話就會立刻接到新題目上 —— 而那是個不會有人
-      // 察覺的錯。key 讓那個改動不會變成 bug（PR #1142 review 第 3 點）。
-      key={contentId}
-      context={chat.context}
-      items={chat.items}
-      settings={settings}
-      adapters={adapters}
-      onSubmit={() => {}}
-    />
+    <div
+      className={cn("min-h-0 flex-1", TOOLBAR_GUTTER_CLASS)}
+      data-testid="scenario-preview-frame"
+    >
+      <ScenarioChatActivity
+        // 換教材要重新開始。**今天真正讓它歸零的是 loading 分支**：contentId 一變就
+        // 先 render PreviewNote，對話元件被 unmount，狀態跟著消失。
+        //
+        // 那為什麼還要 key？因為 `useScenarioChat` 的狀態是用 items 做 useState 的初值、
+        // **沒有任何 effect 在 items 變動時重置**。哪天有人為了少一次閃爍，改成「重新抓
+        // 資料時先留著舊畫面」，舊教材的對話就會立刻接到新題目上 —— 而那是個不會有人
+        // 察覺的錯。key 讓那個改動不會變成 bug（PR #1142 review 第 3 點）。
+        key={contentId}
+        context={chat.context}
+        items={chat.items}
+        settings={settings}
+        adapters={adapters}
+        onSubmit={() => {}}
+        layout="compact"
+      />
+    </div>
   );
 }
 

@@ -119,6 +119,20 @@ describe("ScenarioDialoguePreview", () => {
     expect(screen.queryByText(/What did you do last weekend\?/)).toBeNull();
   });
 
+  it("預覽欄用單欄（compact）：情境卡只排一份，不分左欄（#1158 E2）", async () => {
+    render(<ScenarioDialoguePreview contentId={501} showTranslation />);
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    expect(document.querySelector('[data-layout="compact"]')).not.toBeNull();
+    expect(document.querySelector("aside")).toBeNull();
+    expect(
+      screen.getAllByText(/你和朋友在討論這個週末要做什麼。/),
+    ).toHaveLength(1);
+    // 右側留白讓開數位教學工具列
+    expect(screen.getByTestId("scenario-preview-frame").className).toMatch(
+      /pr-8/,
+    );
+  });
+
   it("沒有 contentId 時說明原因，不去抓任何教材", () => {
     render(<ScenarioDialoguePreview />);
     expect(getContentDetail).not.toHaveBeenCalled();

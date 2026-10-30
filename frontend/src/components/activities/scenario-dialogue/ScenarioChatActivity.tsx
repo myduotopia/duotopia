@@ -6,9 +6,12 @@
  *   按下後直接問第 1 題（沒有 AI 開場複述）。
  *   手機／平板直式顯示在對話區；平板橫式／電腦（≥ lg）放左欄、常駐展開（獨立捲動）。
  * - 開始後（< lg）：兩張卡收合成上方一條 `[📋 作答要求] [📖 情境]` 小膠囊，點哪個展開哪個。
- * - 題號小點點（QuestionDots）：< lg 在標題列下方橫排，≥ lg 在對話欄左側直排。
- *   學生點了只捲到那一題；老師預覽點了跳題（取代舊的跳題列）。開始對話前老師的點點
- *   與學生一致：還沒出現的題目＝灰點，點了提示「還沒到這題」。
+ * - layout="compact"（派發預覽欄，#1158 E2）：不管螢幕多寬都用單欄（上面那兩條的 < lg 版面），
+ *   因為預覽欄本身很窄，用螢幕寬度判斷會在寬螢幕排出兩欄、擠成一團。
+ * - 題號：#1158 E 段拿掉對話內的小點點（QuestionDots）和標題列的「N / M」，改由外層作答頁
+ *   的題號方格切題。本元件用 `onNavChange` 往外回報「開始了沒／已出現幾題／目前第幾題」，
+ *   外層點方格時呼叫 `navigateRef.current(i)`：學生只捲到那一題；老師預覽開始對話後跳題
+ *   （沿用「略過」邏輯）。題目泡泡裡的「第 N 題」保留，往回捲時用來定位。
  * - 再試一次：任何已出現、沒答滿的題目都能回頭重答；輸入區上方出現「正在重答第 N 題 ✕」。
  *   AI 建議回來後先停在該題讓學生看一下（RETURN_DELAY_MS），再自動捲回原本進行中的題目；
  *   按 ✕ 取消則立刻捲回。
@@ -18,20 +21,28 @@
  * - 翻譯鈕：老師開翻譯（settings.showTranslation）＋題目翻譯語言＝學生介面語言
  *   （uiLanguage，`zh` 開頭＝中文；英文介面沒有翻譯鈕）＋本題有翻譯文字，才算可翻譯；
  *   英文打開後才出現（RevealCapsules）。uiLanguage 不傳時用 i18n 目前語言。
- * - 高度用 100dvh；底部輸入區留 safe-area。
+ * - 高度＝外層給的高度（h-full），不自己用 100dvh：嵌在作答頁外框裡時只佔外框剩下的
+ *   高度，不會和頁面各有一層捲動，也不會被頁面頂部列蓋住（#1158 E1）。呼叫端要給有高度的容器。
+ *   底部輸入區留 safe-area。
  *
  * AI 建議與朗讀由 `adapters` 注入（sample 傳 mock；正式版之後接後端）。
- * 學生畫面不顯示分數；老師預覽（settings.isPreviewMode）多「預覽模式」標示、點點跳題、
- * 參考答案開關與 mock 分數。
+ * 學生畫面不顯示分數；老師預覽（settings.isPreviewMode）多「預覽模式」標示、跳題、
+ * 參考答案開關與 mock 分數；「提交作業」停用並寫明「預覽不會送出」（#1158 E2）。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { ArrowDown, Mic } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChatTranscript } from "./ChatTranscript";
-import { QuestionDots } from "./QuestionDots";
 import { ReplyComposer, type ComposerState } from "./ReplyComposer";
 import {
   InfoStrip,
@@ -71,6 +82,30 @@ interface Props {
    * sample 用控制面板的值，正式版傳學生實際介面語言。
    */
   uiLanguage?: string;
+  /**
+   * 版面：`auto`（預設）＝依螢幕寬度，≥ lg 左欄放作答要求／情境；
+   * `compact`＝一律單欄（派發預覽欄用，#1158 E2）。
+   */
+  layout?: "auto" | "compact";
+  /** 對話進度改變時回報給外層題號方格（#1158 E 段） */
+  onNavChange?: (nav: ScenarioChatNav) => void;
+  /**
+   * 外層題號方格點了某題時呼叫 `navigateRef.current(i)`（0 起算）。
+   * 學生：只捲到那一題；老師預覽且已開始：跳題。還沒出現的題目由外層擋掉。
+   */
+  navigateRef?: MutableRefObject<((index: number) => void) | null>;
+}
+
+/** 給外層題號方格的對話進度（#1158 E 段） */
+export interface ScenarioChatNav {
+  /** 按過「開始對話」了沒 */
+  started: boolean;
+  /** 已出現在對話裡的題數 */
+  revealedCount: number;
+  /** 目前進行中的題目（0 起算）；開始前為 null */
+  current: number | null;
+  /** 老師預覽且已開始：還沒出現的題目也能點（跳題） */
+  canJump: boolean;
 }
 
 const NEAR_BOTTOM_PX = 80;
@@ -85,6 +120,9 @@ export function ScenarioChatActivity({
   onRevealChange,
   onProgressChange,
   uiLanguage,
+  layout = "auto",
+  onNavChange,
+  navigateRef,
 }: Props) {
   const { t, i18n } = useTranslation();
   const lang = uiLanguage ?? i18n.language ?? "";
@@ -253,7 +291,11 @@ export function ScenarioChatActivity({
     chat.retryItem(i);
   };
 
-  const handleDot = (i: number) => {
+  const canJump = isPreview && started;
+  const handleNavigate = (i: number) => {
+    if (i < 0 || i >= items.length) return;
+    // 還沒出現的題目：學生與開始前的老師預覽都不能去（外層方格也會擋）
+    if (i >= chat.revealedCount && !canJump) return;
     clearReturnTimer();
     if (!isPreview) {
       scrollToBlock(i, "start");
@@ -268,6 +310,26 @@ export function ScenarioChatActivity({
       stickRef.current = true;
     }
   };
+  // 每次 render 後換成最新的 handler（它讀的是當下的 chat 狀態）
+  useEffect(() => {
+    if (navigateRef) navigateRef.current = handleNavigate;
+  });
+  useEffect(
+    () => () => {
+      if (navigateRef) navigateRef.current = null;
+    },
+    [navigateRef],
+  );
+
+  const navCurrent = started ? Math.min(current, items.length - 1) : null;
+  useEffect(() => {
+    onNavChange?.({
+      started,
+      revealedCount: chat.revealedCount,
+      current: navCurrent,
+      canJump,
+    });
+  }, [onNavChange, started, chat.revealedCount, navCurrent, canJump]);
 
   const handleStart = () => {
     setInfoOpen(null);
@@ -296,14 +358,8 @@ export function ScenarioChatActivity({
             : t("scenarioDialogue.chat.waitChoose");
   }
 
-  const dotProps = {
-    total: items.length,
-    revealedCount: chat.revealedCount,
-    current: started ? current : null,
-    // 老師預覽開始對話後才能跳題；開始前與學生一致（灰點＋「還沒到這題」）
-    allowAll: isPreview && started,
-    onSelect: handleDot,
-  };
+  // 寬螢幕兩欄只在 layout="auto" 時啟用；compact（派發預覽欄）一律單欄
+  const wide = layout !== "compact";
 
   const fullCards = (
     <>
@@ -313,8 +369,8 @@ export function ScenarioChatActivity({
   );
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-gray-50">
-      {/* 標題列（紫色點綴）＋手機版題號點點 */}
+    <div className="flex h-full min-h-0 flex-col bg-gray-50">
+      {/* 標題列（紫色點綴）；題號改由外層作答頁的方格負責（#1158 E 段） */}
       <header className="shrink-0 border-b border-purple-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-600">
@@ -333,28 +389,21 @@ export function ScenarioChatActivity({
               {t("scenarioDialogue.chat.previewMode")}
             </Badge>
           )}
-          {started && (
-            <span className="shrink-0 text-sm tabular-nums text-gray-500">
-              {Math.min(current + 1, items.length)} / {items.length}
-            </span>
-          )}
         </div>
-        <QuestionDots
-          {...dotProps}
-          orientation="horizontal"
-          className="mx-auto max-w-2xl px-2 lg:hidden"
-        />
       </header>
 
       <div
         className={cn(
           "mx-auto flex min-h-0 w-full flex-1 flex-col",
-          hasLeft
-            ? "max-w-2xl lg:max-w-6xl lg:flex-row lg:gap-4 lg:px-4"
-            : "max-w-2xl lg:max-w-3xl",
+          !wide
+            ? "max-w-2xl"
+            : hasLeft
+              ? "max-w-2xl lg:max-w-6xl lg:flex-row lg:gap-4 lg:px-4"
+              : "max-w-2xl lg:max-w-3xl",
         )}
+        data-layout={layout}
       >
-        {hasLeft && (
+        {hasLeft && wide && (
           <aside className="hidden min-h-0 space-y-3 overflow-y-auto py-4 lg:block lg:w-2/5">
             {fullCards}
           </aside>
@@ -362,7 +411,7 @@ export function ScenarioChatActivity({
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {started && hasLeft && (
-            <div className="shrink-0 px-3 pt-3 lg:hidden">
+            <div className={cn("shrink-0 px-3 pt-3", wide && "lg:hidden")}>
               <InfoStrip
                 context={context}
                 showScenario={showScenario}
@@ -373,11 +422,6 @@ export function ScenarioChatActivity({
           )}
 
           <div className="flex min-h-0 flex-1">
-            <QuestionDots
-              {...dotProps}
-              orientation="vertical"
-              className="hidden shrink-0 py-4 lg:flex"
-            />
             <div className="relative min-h-0 min-w-0 flex-1">
               <div
                 ref={scrollRef}
@@ -387,7 +431,9 @@ export function ScenarioChatActivity({
               >
                 <div ref={contentRef} className="space-y-3">
                   {!started && hasLeft && (
-                    <div className="space-y-3 lg:hidden">{fullCards}</div>
+                    <div className={cn("space-y-3", wide && "lg:hidden")}>
+                      {fullCards}
+                    </div>
                   )}
                   <ChatTranscript
                     chat={chat}
@@ -425,6 +471,9 @@ export function ScenarioChatActivity({
             onSubmitAnswer={chat.submitAnswer}
             onCancelRetry={chat.cancelRetry}
             onSubmitAssignment={onSubmit}
+            submitDisabledReason={
+              isPreview ? t("scenarioDialogue.chat.previewNoSubmit") : undefined
+            }
           />
         </main>
       </div>
