@@ -1,37 +1,39 @@
 /**
  * ScenarioDialoguePanel — 情境對話（口說練習）新增/編輯面板
  *
- * Issue #944 / #864 / #1146。面板分成兩個畫面，**不跳頁**，只在同一塊區域切換顯示：
+ * Issue #944 / #864 / #1146 / #1158。#1158 C commit 4 起改成**同頁版面**（共用的
+ * `components/shared/guided-chat/GuidedChatLayout`）：左邊對話、右邊題目，不再切換畫面，
+ * 也沒有「上一步／下一步」「查看題目清單」「回到對話」和底部操作列。儲存和 ✕ 在 sheet
+ * 標題列（`ScenarioDialogueEditorSheet`）。
  *
- * - **引導式對話**（#1146 取代舊的 Step 1 設定頁）—— `ScenarioSetupChat`。
- *   一次問一件事、選項是按鈕：「需要情境嗎？」（不需要／我有現成的／請 AI 幫我寫）→
- *   「題目怎麼來？」（我自己輸入／請 AI 出題）→（沒有情境時）想問的方向 → 出題設定卡
- *   （`QuestionSettingsCard`）→ 開始產生 → 題目清單。流程本身是純函式（`setupFlow.ts`）。
- *   情境圖（最多 5 張，學生看得到）在情境那一步管理：擷取自動裁切、補傳、刪除、重裁。
- *   對話的 state 與動作（已答步驟、情境、出題設定卡、AI 寫情境、上傳擷取）在
- *   `useScenarioSetup`；面板只留題目清單、標題、產題與存檔（#1146 review 6）。
+ * - **版面依面板寬度**（ResizeObserver，不看 viewport）：寬（≥ 925px）左右並列；窄時頂端
+ *   Tabs 切換「對話／題目（N）」，兩邊狀態都保留。從對話產生題目後自動切到「題目」分頁；
+ *   「編輯情境內容」、缺標題／題數不足存檔時也切過去。
  *
- * - 題目卡（`SortableRow`）與左欄對照（`ScenarioReferenceAside`）各自一個檔案，
- *   都在 `components/scenario-dialogue-editor/`。
+ * - **左欄：引導式對話**（`ScenarioSetupChat`）—— 已選項目列、連續的對話紀錄、底部對話框。
+ *   流程是「步驟設定」（`scenarioSteps.ts`）接上通用引擎（`guided-chat/flowEngine.ts`）；
+ *   對話的 state 與動作（答案、對話紀錄、情境、出題設定卡、AI 寫情境、上傳擷取）在
+ *   `useScenarioSetup`，面板只留題目清單、標題、產題與存檔。
  *
- * - **題目清單**（Step 2）—— 左右兩欄：
- *   - 左欄 280px（sticky）是對話結果的**唯讀對照**：情境內容、情境圖、作答指引、整體
- *     評分標準，外加「回對話修改」。
- *   - 右欄最上面是**標題**（AI 寫情境或出題時建議，老師可改），其下是可拖曳排序的
- *     題目卡、新增題目、題數計數。題數滿 10 題時新增鍵與每張卡的
- *     複製鍵都停用並說明上限（`hints.maxReached`）。
- *   - 「上一步：回到對話」（與手機的取消）在固定於 sheet 底端的操作列。
+ * - **右欄：題目**，由上到下：標題（AI 建議的規則照舊）→ 情境區（情境確認後才出現，
+ *   `ScenarioReferenceAside` 改寫，預設展開、可收合、「編輯」原地修改、AI 文章可重寫）→
+ *   題目卡（`SortableRow`，窄版排法 `compact` 依右欄實際寬度決定）→「＋ 新增題目」→ 題數計數。
+ *   沒有題目時顯示「題目會出現在這裡」。題數滿 10 題時新增鍵與每張卡的複製鍵都停用並說明上限。
+ *   清單上方的「再產一批」拿掉了（之後由對話框請 AI 再出題，C 段第 5 段）；每題的「重新產生」保留。
  *
- * - **版面**（修正第 4 輪）：兩個畫面都是「捲動區＋固定在 sheet 底端的操作列」
- *   （`ScenarioSheetLayout`），操作列位置一致、不隨內容捲動；對話內容從上往下排。
+ * - **題數上限**：出題設定卡的題數選項上限＝剩餘名額（10 − 已有非空白題數），預設
+ *   min(5, 剩餘)；剩餘 0 時「開始產生」停用，旁邊寫「已滿 10 題」。
  *
- * 兩個畫面共用同一份 state，只是切換顯示 —— 回對話改設定不會弄丟已產生的題目。
- * 編輯既有內容時直接落在題目清單；按「上一步」回到對話時，已答步驟由已存資料還原
- * （`answersFromSaved`）。
+ * - 「自己打題目」那一步與題目產生後的打字送出（compose）是 C 段第 5 段：目前面板沒有給
+ *   `ScenarioSetupChat` 的 `onComposeSubmit`，這兩個情境的對話框停用、灰字是步驟提示；
+ *   自己出題的老師用右欄的「＋ 新增題目」直接打。
+ *
+ * 編輯既有內容時，答案由已存資料還原（`scenarioAnswersFromSaved`），對話紀錄由
+ * `summaryLog` 拼出摘要。
  *
  * **兩種「必填」不一樣，別混在一起**：
- * - `title` 是內容本身的必要欄位 → 擋**儲存**（`handleSave`），缺的時候留在題目清單
- *   並把游標帶到標題欄（#1146 起不再跳回設定頁）
+ * - `title` 是內容本身的必要欄位 → 擋**儲存**（`handleSave`），缺的時候切到題目那一側
+ *   並把游標帶到標題欄
  * - 情境（文字或圖）／出題方向是 AI 出題的素材 → 只擋**產題**（`handleGenerate`）。
  *   老師完全不用 AI（自己貼情境＋自己出題）是合法路徑，標題留空由他自己填。
  *
@@ -59,11 +61,10 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Loader2, Plus, Sparkles } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 import { useSidebar } from "@/contexts/SidebarContext";
-import { Button } from "@/components/ui/button";
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
 import { TTSSettingsDialog } from "@/components/shared/TTSSettingsDialog";
 import { AiImageGenerateDialog } from "@/components/scenario-dialogue-editor/AiImageGenerateDialog";
@@ -95,13 +96,17 @@ import {
   MAX_ITEMS,
   MIN_ITEMS,
 } from "@/components/scenario-dialogue-editor/constants";
-import { QuestionSettingsCard } from "@/components/scenario-dialogue-editor/QuestionSettingsCard";
+import {
+  GuidedChatLayout,
+  type GuidedChatTab,
+} from "@/components/shared/guided-chat/GuidedChatLayout";
+import {
+  QuestionSettingsCard,
+  effectiveCount,
+} from "@/components/scenario-dialogue-editor/QuestionSettingsCard";
 import { ScenarioSetupChat } from "@/components/scenario-dialogue-editor/ScenarioSetupChat";
 import { ScenarioReferenceAside } from "@/components/scenario-dialogue-editor/ScenarioReferenceAside";
-import {
-  ScenarioActionBar,
-  ScenarioScrollArea,
-} from "@/components/scenario-dialogue-editor/ScenarioSheetLayout";
+import { ScenarioScrollArea } from "@/components/scenario-dialogue-editor/ScenarioSheetLayout";
 import { SortableRow } from "@/components/scenario-dialogue-editor/ScenarioQuestionRow";
 import {
   textAiErrorKey,
@@ -148,6 +153,12 @@ export interface ScenarioDialoguePanelProps {
   onCancel?: () => void;
 }
 
+/**
+ * 題目卡改用窄版排法的門檻：右欄內容寬度（不含右欄的工具列留白）。捲動區左右各有
+ * 24px 內距，所以卡片本身寬不到約 552px（＝原本 viewport sm 640px 時卡片的寬度）就用窄版。
+ */
+const COMPACT_SIDE_WIDTH = 600;
+
 /** 完全沒被動過的空白列 — 產題時可以直接取代掉，不留一張空卡在最前面 */
 const isBlankRow = (r: ScenarioDialogueRow) =>
   !r.question.trim() &&
@@ -163,7 +174,7 @@ const isBlankRow = (r: ScenarioDialogueRow) =>
 const ScenarioDialoguePanel = forwardRef<
   ScenarioDialoguePanelHandle,
   ScenarioDialoguePanelProps
->(({ programLevel, initialData, isSaving = false, onSave, onCancel }, ref) => {
+>(({ programLevel, initialData, isSaving = false, onSave }, ref) => {
   const { t, i18n } = useTranslation();
   /** 答非所問的重問句與 AI 標題建議用老師的介面語言 */
   const uiLanguage = i18n?.language?.startsWith("en") ? "en" : "zh-TW";
@@ -175,18 +186,17 @@ const ScenarioDialoguePanel = forwardRef<
    */
 
   /**
-   * 兩個畫面共用同一份 state，只是切換顯示 —— 回上一步不會弄丟已產生的題目。
-   * 1 = 引導式對話（#1146）、2 = 題目清單。
-   *
-   * 編輯既有內容時直接落在題目清單 —— 老師點進來多半是要改題目，停在設定頁
-   * 會讓他以為題目沒被讀進來。
+   * 窄版（< 925px）時顯示哪一個分頁。寬版兩欄並列，這個值仍保留，切回窄版回到原本那一頁。
+   * 編輯既有內容時先落在「題目」—— 老師點進來多半是要改題目。
    */
-  const [step, setStep] = useState<1 | 2>(initialData?.rows?.length ? 2 : 1);
+  const [tab, setTab] = useState<GuidedChatTab>(
+    initialData?.rows?.length ? "side" : "chat",
+  );
 
   const [title, setTitle] = useState(initialData?.title ?? "");
-  // 一開啟就給一張空白卡，老師可以直接打字，不必先產題
-  const [rows, setRows] = useState<ScenarioDialogueRow[]>(() =>
-    initialData?.rows?.length ? initialData.rows : [createRow()],
+  // 新建時沒有題目：右欄顯示「題目會出現在這裡」，老師可按「＋ 新增題目」自己打
+  const [rows, setRows] = useState<ScenarioDialogueRow[]>(
+    () => initialData?.rows ?? [],
   );
   /** 最新一次 render 的 rows，給 await 之後的非同步流程判斷用（#1158 修正 B1） */
   const rowsRef = useRef(rows);
@@ -218,17 +228,27 @@ const ScenarioDialoguePanel = forwardRef<
     if (value) setTitle((prev) => (prev.trim() ? prev : value));
   }, []);
 
-  // ===== 引導式對話（#1146）：已答步驟、情境、出題設定卡 —— 見 useScenarioSetup =====
+  const [isGenerating, setIsGenerating] = useState(false);
+  /** 非空白題數（流程的「右欄有沒有題目」、剩餘名額都看這個） */
+  const keptCount = rows.filter((r) => !isBlankRow(r)).length;
+  /** 剩餘名額：AI 出題的題數選項上限 */
+  const remaining = Math.max(0, MAX_ITEMS - keptCount);
+
+  // ===== 引導式對話：答案、對話紀錄、情境、出題設定卡 —— 見 useScenarioSetup =====
   const setup = useScenarioSetup({
     initialData,
     programLevel,
     uiLanguage,
     onSuggestedTitle: applySuggestedTitle,
+    hasQuestions: keptCount > 0,
+    generatingQuestions: isGenerating,
   });
   const { imageActions } = setup;
-  const [isGenerating, setIsGenerating] = useState(false);
-  /** 缺標題存檔時，留在題目清單並把游標帶到標題欄 */
+  /** 缺標題存檔時，切到題目那一側並把游標帶到標題欄 */
   const titleRef = useRef<HTMLInputElement>(null);
+  /** 右欄情境區：「編輯情境內容」捲過來並打開編輯 */
+  const contextRef = useRef<HTMLElement>(null);
+  const [editingScenario, setEditingScenario] = useState(false);
   /** 對話（寫情境、擷取、情境圖）、產題、存檔任一進行中 */
   const busy = isGenerating || setup.busy || isSaving;
 
@@ -282,14 +302,6 @@ const ScenarioDialoguePanel = forwardRef<
    */
   const overLimit = filledCount > MAX_ITEMS;
   const underLimit = filledCount < MIN_ITEMS;
-
-  /** 已經有題目了：對話裡多一顆「查看題目清單」，設定卡的主按鈕改成「再產一批」 */
-  const hasQuestions = filledCount > 0;
-
-  // 素材沒填不在這裡擋 —— 按下去要看到「請先提供情境或出題方向」的提示，
-  // 而不是一顆沒說明理由的灰色按鈕
-  const generateDisabled =
-    isGenerating || setup.generatingArticle || filledCount >= MAX_ITEMS;
 
   const sensors = useSensors(
     // 與 ReadingAssessmentPanel 一致：要移動 8px 才算拖曳，
@@ -390,11 +402,12 @@ const ScenarioDialoguePanel = forwardRef<
    * 不會給重複的。
    *
    * 答非所問（出題方向不可用）：後端同一次呼叫就判斷出來、不產題 → 回到對話的「想問的
-   * 方向」那一步，顯示重問句。
+   * 方向」那一步，顯示重問句（窄版切回「對話」分頁）。
    *
-   * `advance` 為 true 時產完直接翻到題目清單。
+   * 題數＝設定卡的題數，但不超過剩餘名額（＝min(5, 剩餘) 的預設）。產完：第一次產題時
+   * 出題設定卡在對話裡變成一句摘要（`markGenerated`），窄版自動切到「題目」分頁。
    */
-  const handleGenerate = async (advance = false) => {
+  const handleGenerate = async () => {
     if (!setup.hasMaterial()) {
       toast.error(t("scenarioDialogue.setup.materialRequired"));
       return;
@@ -411,13 +424,13 @@ const ScenarioDialoguePanel = forwardRef<
     try {
       const result = await apiClient.generateScenarioQuestions({
         ...setup.questionRequestBase(),
-        count: Math.min(setup.generateCount, room),
+        count: effectiveCount(setup.generateCount, room),
         existing_questions: kept.map((r) => r.question.trim()).filter(Boolean),
       });
 
       if (result.usable === false) {
         setup.reaskDirection(result.reask);
-        setStep(1);
+        setTab("chat");
         return;
       }
       setup.clearDirectionReask();
@@ -447,7 +460,8 @@ const ScenarioDialoguePanel = forwardRef<
         const fresh = created.filter((r) => !used.has(r.question.trim()));
         return [...latestKept, ...fresh.slice(0, latestRoom)];
       });
-      if (advance) setStep(2);
+      setup.markGenerated(created.length);
+      setTab("side");
       if (setup.autoTTS) void autoGenerateAudio(created);
     } catch (error) {
       console.error("Failed to generate scenario questions:", error);
@@ -508,12 +522,6 @@ const ScenarioDialoguePanel = forwardRef<
     } finally {
       setRegeneratingId(null);
     }
-  };
-
-  /** 進題目清單：至少留一張空白卡可以打字 */
-  const goToList = () => {
-    setRows((prev) => (prev.length === 0 ? [createRow()] : prev));
-    setStep(2);
   };
 
   /**
@@ -668,28 +676,28 @@ const ScenarioDialoguePanel = forwardRef<
   };
 
   /**
-   * 兩個畫面都能按儲存，但擋關的條件一樣 —— 缺什麼就把老師帶到那裡，
-   * 只跳 toast 卻停在別的畫面等於叫他自己去找問題在哪。
+   * 擋關時把老師帶到問題所在：缺什麼就切到題目那一側（窄版切到「題目」分頁），
+   * 只跳 toast 卻停在別的分頁等於叫他自己去找問題在哪。
    *
-   * 缺標題（#1146）：留在題目清單、游標帶到標題欄 —— 標題已經搬到清單頁，不再跳回設定。
+   * 缺標題（#1146）：游標帶到標題欄。
    */
   const handleSave = async () => {
     if (!title.trim()) {
-      setStep(2);
+      setTab("side");
       toast.error(t("contentEditor.messages.enterTitle"));
-      // 等清單頁畫出來再聚焦（從對話按儲存時，標題欄這一刻還不存在）
+      // 等分頁切過去再聚焦（窄版時標題欄這一刻還藏著）
       window.setTimeout(() => titleRef.current?.focus(), 0);
       return;
     }
     if (underLimit) {
-      setStep(2);
+      setTab("side");
       toast.error(
         t("contentEditor.messages.addAtLeastNItems", { limit: MIN_ITEMS }),
       );
       return;
     }
     if (overLimit) {
-      setStep(2);
+      setTab("side");
       toast.error(t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS }));
       return;
     }
@@ -704,243 +712,221 @@ const ScenarioDialoguePanel = forwardRef<
     save: handleSave,
   }));
 
+  /** 「編輯情境內容」（情境標籤小框）：切到題目那一側、打開情境區編輯並捲過去 */
+  const editScenario = () => {
+    setEditingScenario(true);
+    setTab("side");
+    // 等窄版分頁切過去（情境區這一刻可能還藏著）再捲
+    window.setTimeout(
+      () => contextRef.current?.scrollIntoView?.({ block: "start" }),
+      0,
+    );
+  };
+
+  /** 出題設定卡的欄位（對話裡的出題設定卡、「設定」標籤小框共用） */
+  const settingsFields = {
+    questionLevel: setup.questionLevel,
+    onQuestionLevelChange: setup.setQuestionLevel,
+    count: setup.generateCount,
+    onCountChange: setup.setGenerateCount,
+    globalTense: setup.globalTense,
+    onGlobalTenseChange: setup.setGlobalTense,
+    globalVoice: setup.globalVoice,
+    onGlobalVoiceChange: setup.setGlobalVoice,
+    autoTranslate: setup.autoTranslate,
+    onAutoTranslateChange: setup.setAutoTranslate,
+    translateLang: setup.translateLang,
+    onTranslateLangChange: setup.setTranslateLang,
+    customLang: setup.customLang,
+    onCustomLangChange: setup.setCustomLang,
+    autoTTS: setup.autoTTS,
+    onAutoTTSChange: setup.setAutoTTS,
+    ttsSettings: setup.ttsSettings,
+    onTTSSettingsChange: setup.setTTSSettings,
+    globalRubric: setup.globalRubric,
+    onGlobalRubricChange: setup.setGlobalRubric,
+  };
+
+  /** 情境確認過（固定在右欄）才顯示情境區 */
+  const contextMode =
+    (setup.answers.mode === "existing" || setup.answers.mode === "ai") &&
+    setup.answers.scenario === true
+      ? setup.answers.mode
+      : null;
+
+  const maxReached = t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS });
+
   return (
     /*
-      版面（#1146 修正第 4 輪）：面板撐滿 sheet 的剩餘高度，兩個畫面都是
-      「捲動區（ScenarioScrollArea）＋固定在底端的操作列（ScenarioActionBar）」，
-      操作列是捲動區的 flex 兄弟，捲動區高度本來就扣掉了它，最後的內容不會被蓋住。
-      右側工具列留白、手機鍵盤的欄位捲動都在 ScenarioSheetLayout。
-      外框（ScenarioDialogueEditorSheet）不再捲動、也不加內距，交給這裡。
+      版面（#1158 C commit 4）：同頁外框 GuidedChatLayout 撐滿 sheet 的剩餘高度。
+      左欄＝ScenarioSetupChat（已選項目列＋對話捲動區＋底部對話框），右欄＝題目捲動區。
+      右側工具列留白由外框加，捲動區自己不再留（ScenarioSheetLayout）。
+      外框（ScenarioDialogueEditorSheet）不捲動、也不加內距，交給這裡。
     */
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* ===== 引導式對話（#1146，取代舊的 Step 1 設定頁）===== */}
-      {step === 1 && (
-        <ScenarioSetupChat
-          answers={setup.answers}
-          onReopen={setup.reopen}
-          onChooseMode={setup.chooseMode}
-          wouldClearScenario={setup.wouldClearScenario}
-          onChooseSource={(source) => {
-            setup.chooseSource(source);
-            if (source === "manual") goToList();
-          }}
-          onScenarioDone={setup.markScenarioDone}
-          onDirectionDone={setup.markDirectionDone}
-          scenarioContent={setup.scenarioContent}
-          onScenarioContentChange={setup.setScenarioContent}
-          goal={setup.goal}
-          onGoalChange={setup.setGoal}
-          articleLevel={setup.articleLevel}
-          onArticleLevelChange={setup.setArticleLevel}
-          direction={setup.direction}
-          onDirectionChange={setup.setDirection}
-          goalReask={setup.goalReask}
-          directionReask={setup.directionReask}
-          imageActions={imageActions}
-          generatingArticle={setup.generatingArticle}
-          extracting={setup.extracting}
-          onGenerateArticle={() => void setup.generateArticle()}
-          onExtractFiles={(files) => void setup.extractFiles(files)}
-          hasQuestions={hasQuestions}
-          onViewList={goToList}
-          settingsCard={
-            <QuestionSettingsCard
-              questionLevel={setup.questionLevel}
-              onQuestionLevelChange={setup.setQuestionLevel}
-              count={setup.generateCount}
-              onCountChange={setup.setGenerateCount}
-              globalTense={setup.globalTense}
-              onGlobalTenseChange={setup.setGlobalTense}
-              globalVoice={setup.globalVoice}
-              onGlobalVoiceChange={setup.setGlobalVoice}
-              autoTranslate={setup.autoTranslate}
-              onAutoTranslateChange={setup.setAutoTranslate}
-              translateLang={setup.translateLang}
-              onTranslateLangChange={setup.setTranslateLang}
-              customLang={setup.customLang}
-              onCustomLangChange={setup.setCustomLang}
-              autoTTS={setup.autoTTS}
-              onAutoTTSChange={setup.setAutoTTS}
-              ttsSettings={setup.ttsSettings}
-              onTTSSettingsChange={setup.setTTSSettings}
-              globalRubric={setup.globalRubric}
-              onGlobalRubricChange={setup.setGlobalRubric}
-            />
-          }
-          generating={isGenerating}
-          generateBlockedReason={
-            filledCount >= MAX_ITEMS
-              ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
-              : null
-          }
-          onGenerate={() => void handleGenerate(true)}
-        />
-      )}
-
-      {/* ===== Step 2：題目清單 ===== */}
-      {step === 2 && (
-        <>
-          <ScenarioScrollArea>
-            <div className="min-w-0 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
-              {/* 左欄：對話結果的唯讀對照，讓老師邊看情境與作答指引邊確認題目 */}
-              <ScenarioReferenceAside
-                scenarioContent={setup.scenarioContent}
-                imageActions={imageActions}
-                globalRubric={setup.globalRubric}
-                globalTense={setup.globalTense}
-                globalVoice={setup.globalVoice}
-                onEditSettings={() => setStep(1)}
-              />
-
-              {/* 右欄：標題＋題目清單 */}
-              <div className="min-w-0">
-                {/*
-              標題（#1146 從設定頁搬來）：AI 寫情境或出題時已先填好建議，老師在這裡改。
-              缺標題存檔時游標會被帶到這裡。
-            */}
-                <div className="mb-3 space-y-1.5">
-                  <label
-                    className="text-xs font-semibold text-gray-700 block"
-                    htmlFor="sd-title"
-                  >
-                    {t("scenarioDialogue.labels.title")}
-                    <span className="text-red-500 ml-0.5">*</span>
-                  </label>
-                  <input
-                    id="sd-title"
-                    ref={titleRef}
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder={t("scenarioDialogue.placeholders.title")}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="mb-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleGenerate(false)}
-                    disabled={generateDisabled}
-                    className="flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {isGenerating ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    {t("scenarioDialogue.buttons.generateAnother")}
-                  </button>
-                </div>
-
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={rows.map((r) => r.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-3 pr-1">
-                      {rows.map((row, index) => (
-                        <SortableRow
-                          key={`${row.id}:${row.revision}`}
-                          row={row}
-                          index={index}
-                          langLabel={setup.langLabel}
-                          hasLanguage={setup.hasLanguage}
-                          globalTense={setup.globalTense}
-                          globalVoice={setup.globalVoice}
-                          canDelete={rows.length > 1}
-                          regenerating={regeneratingId === row.id}
-                          imageLoading={imageLoadingId === row.id}
-                          onChange={(patch) => patchRow(row.id, patch)}
-                          onDuplicate={() =>
-                            setRows((prev) =>
-                              prev.length >= MAX_ITEMS
-                                ? prev
-                                : [
-                                    ...prev.slice(0, index + 1),
-                                    createRow({ ...row, id: nextRowId() }),
-                                    ...prev.slice(index + 1),
-                                  ],
-                            )
-                          }
-                          duplicateBlockedReason={
-                            rows.length >= MAX_ITEMS
-                              ? t("scenarioDialogue.hints.maxReached", {
-                                  max: MAX_ITEMS,
-                                })
-                              : null
-                          }
-                          onDelete={() => deleteRow(row.id)}
-                          onRegenerate={() => regenerateRow(row.id)}
-                          onPickImage={(file) => pickRowImage(row.id, file)}
-                          onRemoveImage={() => removeRowImage(row.id)}
-                          onGenerateImage={() => setImageDialogRowId(row.id)}
-                          onGenerateAudio={() => setAudioDialogRowId(row.id)}
-                          onPlayAudio={() => playRowAudio(row.id)}
-                          audioLoading={audioLoadingId === row.id}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-
-                <button
-                  type="button"
-                  onClick={addRow}
-                  disabled={rows.length >= MAX_ITEMS}
-                  className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-600"
-                >
-                  <Plus className="h-5 w-5" />
-                  {rows.length >= MAX_ITEMS
-                    ? t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS })
-                    : t("scenarioDialogue.buttons.addQuestion")}
-                </button>
-
-                {/* 題目計數：對著題目看才有意義，所以跟著清單走而不是留在設定頁 */}
-                <div
-                  className={`mt-3 text-xs tabular-nums ${
-                    overLimit || underLimit
-                      ? "text-red-500 font-medium"
-                      : "text-gray-500"
-                  }`}
-                >
-                  {filledCount} {t("contentEditor.messages.items")}
-                  {` / ${MAX_ITEMS}`}
-                  {` (${t("scenarioDialogue.hints.itemRange", {
-                    min: MIN_ITEMS,
-                    max: MAX_ITEMS,
-                  })})`}
-                </div>
-              </div>
-            </div>
-          </ScenarioScrollArea>
-
-          {/* 固定在 sheet 最底端的操作列，位置與引導式對話一致（第 4 輪） */}
-          <ScenarioActionBar
-            left={
-              <Button variant="outline" onClick={() => setStep(1)}>
-                <ArrowLeft className="mr-1 h-4 w-4" />
-                {t("scenarioDialogue.buttons.backToSettings")}
-              </Button>
+      <GuidedChatLayout
+        tab={tab}
+        onTabChange={setTab}
+        sideCount={keptCount}
+        chat={
+          <ScenarioSetupChat
+            setup={setup}
+            remaining={remaining}
+            generating={isGenerating}
+            onGenerate={() => void handleGenerate()}
+            onEditScenario={editScenario}
+            settingsCard={
+              <QuestionSettingsCard {...settingsFields} maxCount={remaining} />
             }
-            right={
-              onCancel && (
-                <Button
-                  variant="outline"
-                  className="md:hidden"
-                  onClick={onCancel}
-                >
-                  {t("contentEditor.buttons.cancel")}
-                </Button>
-              )
+            settingsPopover={
+              <QuestionSettingsCard {...settingsFields} showCount={false} />
             }
           />
-        </>
-      )}
+        }
+        side={({ sideWidth }) => (
+          <ScenarioScrollArea testId="scenario-question-list">
+            {/*
+              標題（#1146）：AI 寫情境或出題時已先填好建議，老師在這裡改。
+              缺標題存檔時游標會被帶到這裡。
+            */}
+            <div className="mb-3 space-y-1.5">
+              <label
+                className="text-xs font-semibold text-gray-700 block"
+                htmlFor="sd-title"
+              >
+                {t("scenarioDialogue.labels.title")}
+                <span className="text-red-500 ml-0.5">*</span>
+              </label>
+              <input
+                id="sd-title"
+                ref={titleRef}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("scenarioDialogue.placeholders.title")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 情境區：情境確認後固定在題目上方，可收合、原地編輯 */}
+            {contextMode && (
+              <div className="mb-3">
+                <ScenarioReferenceAside
+                  ref={contextRef}
+                  mode={contextMode}
+                  scenarioContent={setup.scenarioContent}
+                  onScenarioContentChange={setup.setScenarioContent}
+                  imageActions={imageActions}
+                  goal={setup.goal}
+                  onGoalChange={setup.setGoal}
+                  articleLevel={setup.articleLevel}
+                  onArticleLevelChange={setup.setArticleLevel}
+                  onRewrite={() =>
+                    void setup.generateArticle(setup.goal, "rewrite")
+                  }
+                  rewriting={setup.generatingArticle}
+                  busy={setup.busy}
+                  editing={editingScenario}
+                  onEditingChange={setEditingScenario}
+                />
+              </div>
+            )}
+
+            {rows.length === 0 ? (
+              <p
+                data-testid="scenario-questions-empty"
+                className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-400"
+              >
+                {t("scenarioDialogue.hints.questionsEmpty")}
+              </p>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={rows.map((r) => r.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-3">
+                    {rows.map((row, index) => (
+                      <SortableRow
+                        key={`${row.id}:${row.revision}`}
+                        row={row}
+                        index={index}
+                        // 依右欄實際寬度（不看 viewport）：卡片寬不到約 552px 就用窄版排法
+                        compact={
+                          sideWidth !== null && sideWidth < COMPACT_SIDE_WIDTH
+                        }
+                        langLabel={setup.langLabel}
+                        hasLanguage={setup.hasLanguage}
+                        globalTense={setup.globalTense}
+                        globalVoice={setup.globalVoice}
+                        // 沒有題目時有空狀態，最後一題也可以刪
+                        canDelete
+                        regenerating={regeneratingId === row.id}
+                        imageLoading={imageLoadingId === row.id}
+                        onChange={(patch) => patchRow(row.id, patch)}
+                        onDuplicate={() =>
+                          setRows((prev) =>
+                            prev.length >= MAX_ITEMS
+                              ? prev
+                              : [
+                                  ...prev.slice(0, index + 1),
+                                  createRow({ ...row, id: nextRowId() }),
+                                  ...prev.slice(index + 1),
+                                ],
+                          )
+                        }
+                        duplicateBlockedReason={
+                          rows.length >= MAX_ITEMS ? maxReached : null
+                        }
+                        onDelete={() => deleteRow(row.id)}
+                        onRegenerate={() => regenerateRow(row.id)}
+                        onPickImage={(file) => pickRowImage(row.id, file)}
+                        onRemoveImage={() => removeRowImage(row.id)}
+                        onGenerateImage={() => setImageDialogRowId(row.id)}
+                        onGenerateAudio={() => setAudioDialogRowId(row.id)}
+                        onPlayAudio={() => playRowAudio(row.id)}
+                        audioLoading={audioLoadingId === row.id}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={rows.length >= MAX_ITEMS}
+              className="mt-3 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 flex items-center justify-center gap-2 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:hover:border-gray-300 disabled:hover:text-gray-600"
+            >
+              <Plus className="h-5 w-5" />
+              {rows.length >= MAX_ITEMS
+                ? maxReached
+                : t("scenarioDialogue.buttons.addQuestion")}
+            </button>
+
+            {/* 題目計數：對著題目看才有意義，所以跟著清單走 */}
+            <div
+              className={`mt-3 text-xs tabular-nums ${
+                overLimit || underLimit
+                  ? "text-red-500 font-medium"
+                  : "text-gray-500"
+              }`}
+            >
+              {filledCount} {t("contentEditor.messages.items")}
+              {` / ${MAX_ITEMS}`}
+              {` (${t("scenarioDialogue.hints.itemRange", {
+                min: MIN_ITEMS,
+                max: MAX_ITEMS,
+              })})`}
+            </div>
+          </ScenarioScrollArea>
+        )}
+      />
 
       {/* 單題 AI 生圖（#1158）：描述預填 imagePrompt，沒有就用題目本文 */}
       <AiImageGenerateDialog

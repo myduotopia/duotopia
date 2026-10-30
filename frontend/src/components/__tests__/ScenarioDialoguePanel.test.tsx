@@ -1,10 +1,10 @@
 /**
- * ScenarioDialoguePanel — 引導式對話（#1146）＋題目清單（#944）
+ * ScenarioDialoguePanel — 引導式對話（#1146）＋題目清單（#944），#1158 C commit 4 起是同頁版面
  *
  * 釘住幾件容易在改版時走鐘、但畫面看起來都正常的行為：
- * 1. 對話與題目清單共用同一份 state，來回切換不會弄丟填過的東西
+ * 1. 左對話、右題目共用同一份 state，切分頁、跨過寬度門檻都不會弄丟填過的東西
  * 2. 「標題必填」擋的是儲存、「情境／出題方向」擋的是 AI 產題 —— 兩者不同
- * 3. 回頭改前面的回答會先確認，已產生的題目保留
+ * 3. 在已選項目列改答案：要清東西時先確認，已產生的題目保留；對話紀錄只往下加一句
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createRef, type ReactNode } from "react";
@@ -19,6 +19,7 @@ import {
 import ScenarioDialoguePanel, {
   type ScenarioDialoguePanelHandle,
 } from "../ScenarioDialoguePanel";
+import { ScenarioDialogueEditorSheet } from "../ScenarioDialogueEditorSheet";
 import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext";
 
 const mockToastError = vi.fn();
@@ -186,16 +187,8 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 
 const K = {
   generate: "scenarioDialogue.setup.startGenerate",
-  generateAnother: "scenarioDialogue.buttons.generateAnother",
-  viewQuestions: "scenarioDialogue.buttons.viewQuestions",
-  back: "scenarioDialogue.buttons.backToSettings",
   addQuestion: "scenarioDialogue.buttons.addQuestion",
-  editSettings: "scenarioDialogue.buttons.editSettings",
-  writeArticle: "scenarioDialogue.setup.writeArticle",
-  next: "scenarioDialogue.setup.next",
-  stepBack: "scenarioDialogue.setup.back",
-  // 「改選」改由共用的 TeacherBubble 畫（#1158 C 段 commit 3）
-  change: "guidedChat.change",
+  useScenario: "scenarioDialogue.setup.useScenario",
   reopenConfirm: "scenarioDialogue.setup.reopenConfirm",
   uploadImage: "scenarioDialogue.buttons.uploadImage",
   generateImage: "scenarioDialogue.buttons.generateImage",
@@ -206,16 +199,24 @@ const K = {
   questionPlaceholder: "scenarioDialogue.placeholders.question",
   rubricPlaceholder: "scenarioDialogue.placeholders.globalRubric",
   noContextYet: "scenarioDialogue.hints.noContextYet",
-  noRubricYet: "scenarioDialogue.hints.noRubricYet",
+  questionsEmpty: "scenarioDialogue.hints.questionsEmpty",
   enterTitle: "contentEditor.messages.enterTitle",
   atLeastN: "contentEditor.messages.addAtLeastNItems",
   materialRequired: "scenarioDialogue.setup.materialRequired",
+  composer: "guidedChat.composer.label",
+  send: "guidedChat.composer.send",
+  choiceHint: "guidedChat.placeholders.choice",
+  changed: "guidedChat.log.changed",
+  apply: "guidedChat.chips.apply",
+  editScenario: "scenarioDialogue.setup.chips.editScenario",
+  contextEdit: "scenarioDialogue.context.edit",
+  contextDone: "scenarioDialogue.context.done",
+  rewrite: "scenarioDialogue.context.rewrite",
+  rewriteConfirm: "scenarioDialogue.setup.rewriteConfirm",
+  fullReason: "scenarioDialogue.setup.fullReason",
   mode: (m: "none" | "existing" | "ai") => `scenarioDialogue.setup.modes.${m}`,
   source: (s: "manual" | "ai") => `scenarioDialogue.setup.sources.${s}`,
 };
-
-/** 題目清單才有的「新增題目」按鈕，用來判斷現在在哪一個畫面 */
-const onQuestionList = () => screen.queryByText(K.addQuestion) !== null;
 
 const renderPanel = (
   props: Parameters<typeof ScenarioDialoguePanel>[0] = {},
@@ -236,18 +237,58 @@ const choose = (label: string) =>
 const chooseMode = (m: "none" | "existing" | "ai") => choose(K.mode(m));
 const chooseSource = (s: "manual" | "ai") => choose(K.source(s));
 
-/** 不需要情境＋自己出題 → 直接進題目清單（舊版的「跳過」） */
+/** 底部對話框 */
+const composerBox = () => screen.getByRole("textbox", { name: K.composer });
+const sendButton = () => screen.getByRole("button", { name: K.send });
+/** 在底部對話框打字並送出（等 AI 呼叫的 promise 跑完） */
+const say = async (value: string) => {
+  fireEvent.change(composerBox(), { target: { value } });
+  fireEvent.click(sendButton());
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
+
+/** 已選項目列的標籤 */
+const chip = (id: string) =>
+  document.querySelector<HTMLElement>(`[data-chip="${id}"]`);
+/** 點標籤打開 Popover，回傳 Popover 內容 */
+const openChip = (id: string) => {
+  fireEvent.click(chip(id)!);
+  return screen.getByRole("dialog");
+};
+
+/** 右欄（題目那一側）、左欄（對話那一側） */
+const sideColumn = () => screen.getByTestId("guided-chat-column-side");
+const chatColumn = () => screen.getByTestId("guided-chat-column-chat");
+
+/** 在右欄新增一題並打字 */
+const addTypedQuestion = (value: string) => {
+  fireEvent.click(screen.getByText(K.addQuestion));
+  const boxes = screen.getAllByPlaceholderText(K.questionPlaceholder);
+  fireEvent.change(boxes[boxes.length - 1], { target: { value } });
+};
+
+/** 不需要情境＋自己出題，並在右欄新增一張空白題目卡 */
 const goToListManually = () => {
   chooseMode("none");
   chooseSource("manual");
+  fireEvent.click(screen.getByText(K.addQuestion));
 };
 
-/** 貼上現成情境 → 請 AI 出題 → 停在出題設定卡 */
+/** 貼上現成情境 → 用這篇情境 → 請 AI 出題 → 停在出題設定卡 */
 const fillRequiredForGenerate = () => {
   chooseMode("existing");
   type(K.scenarioPlaceholder, "你和同學在星期一早上聊天，聊各自的週末。");
-  fireEvent.click(screen.getByText(K.next));
+  fireEvent.click(screen.getByText(K.useScenario));
   chooseSource("ai");
+};
+
+/** 不需要情境 → 請 AI 出題 → 在對話框給方向 → 停在出題設定卡 */
+const fillDirectionForGenerate = async (direction = "問學生週末通常做什麼") => {
+  chooseMode("none");
+  chooseSource("ai");
+  await say(direction);
 };
 
 /** 產題／生成情境文章都是 async API 呼叫（#1021），點下去等 promise 跑完即可 */
@@ -257,6 +298,10 @@ const runGenerate = async (label: string) => {
     await Promise.resolve();
   });
 };
+
+/** 對話紀錄裡的「已把○○改成：…」 */
+const changedNotes = () =>
+  within(chatColumn()).queryAllByText(K.changed).length;
 
 beforeEach(() => {
   mockToastError.mockClear();
@@ -280,7 +325,7 @@ beforeEach(() => {
     description: "A suggested scene",
   });
 
-  // 每次呼叫都給「還沒出現過」的題目，讓『再產一批』能像真的一樣長出新題
+  // 每次呼叫都給「還沒出現過」的題目
   let seq = 0;
   generateScenarioQuestions.mockImplementation(
     async ({ count }: { count: number }) => ({
@@ -300,8 +345,8 @@ beforeEach(() => {
   generateTTS.mockResolvedValue({ audio_url: "https://cdn/audio.mp3" });
 });
 
-describe("ScenarioDialoguePanel 引導式對話（#1146）", () => {
-  it("一開啟就是對話，第一題問「需要情境嗎？」，看不到題目清單", () => {
+describe("ScenarioDialoguePanel 引導式對話（#1146／#1158 同頁版面）", () => {
+  it("一開啟：左邊問「需要情境嗎？」，右邊是標題與「題目會出現在這裡」", () => {
     renderPanel();
 
     expect(
@@ -312,182 +357,165 @@ describe("ScenarioDialoguePanel 引導式對話（#1146）", () => {
         screen.getByRole("button", { name: K.mode(m) }),
       ).toBeInTheDocument();
     }
-    // 舊的三分頁設定頁已移除
-    expect(screen.queryByText("scenarioDialogue.tabs.sourceManual")).toBeNull();
-    expect(onQuestionList()).toBe(false);
-  });
-
-  it("不需要情境＋自己出題 → 直接進題目清單，標題在清單頁", () => {
-    renderPanel();
-    goToListManually();
-
-    expect(onQuestionList()).toBe(true);
     expect(screen.getByPlaceholderText(K.titlePlaceholder)).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-questions-empty")).toHaveTextContent(
+      K.questionsEmpty,
+    );
+    // 還沒回答任何一步：沒有已選項目列
+    expect(screen.queryByTestId("guided-chat-chips")).toBeNull();
+    // 選項步驟：灰字請老師點選項
+    expect(composerBox()).toHaveAttribute("placeholder", K.choiceHint);
   });
 
-  it("題目清單按「上一步」回到對話，已答步驟顯示為泡泡，標題不會掉", () => {
+  it("不需要情境＋自己出題：接著問「請直接把題目打在下面」，不跳到空白清單", () => {
     renderPanel();
-    goToListManually();
-    type(K.titlePlaceholder, "週末活動");
+    chooseMode("none");
+    chooseSource("manual");
 
-    fireEvent.click(screen.getByText(K.back));
-    expect(onQuestionList()).toBe(false);
+    expect(
+      screen.getByText("scenarioDialogue.setup.q.manualInput"),
+    ).toBeInTheDocument();
+    // 沒有自動塞空白卡：右欄仍是空狀態，老師可按「＋ 新增題目」自己打
+    expect(screen.getByTestId("scenario-questions-empty")).toBeInTheDocument();
+    expect(screen.queryAllByPlaceholderText(K.questionPlaceholder)).toEqual([]);
+  });
+
+  it("「自己打題目」要交給 AI 判斷（C 段第 5 段才接上）：對話框先停用，灰字是步驟提示", () => {
+    renderPanel();
+    chooseMode("none");
+    chooseSource("manual");
+
+    expect(composerBox()).toBeDisabled();
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "scenarioDialogue.setup.placeholders.manualInput",
+    );
+    expect(sendButton()).toBeDisabled();
+  });
+
+  it("對話紀錄是連續的：已答的步驟是泡泡，沒有「改選」，也沒有上一步／下一步", () => {
+    renderPanel();
+    chooseMode("none");
+    chooseSource("manual");
+
     expect(screen.getByText(K.mode("none"))).toBeInTheDocument();
     expect(screen.getByText(K.source("manual"))).toBeInTheDocument();
     // 已答的是泡泡，不是按鈕
     expect(screen.queryByRole("button", { name: K.mode("none") })).toBeNull();
-
-    fireEvent.click(screen.getByText(K.viewQuestions));
-    expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
-      "週末活動",
-    );
-  });
-
-  it("「回上一步」重開前一步，不必確認", () => {
-    renderPanel();
-    chooseMode("existing");
-
-    fireEvent.click(screen.getByText(K.stepBack));
-
+    expect(screen.queryByText("guidedChat.change")).toBeNull();
+    expect(screen.queryByText("scenarioDialogue.setup.back")).toBeNull();
+    expect(screen.queryByText("scenarioDialogue.setup.next")).toBeNull();
     expect(
-      screen.getByRole("button", { name: K.mode("ai") }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(K.reopenConfirm)).toBeNull();
-  });
-
-  it("改前面的回答而後面已經答過 → 先確認，確認後後面清空", () => {
-    renderPanel();
-    goToListManually();
-    fireEvent.click(screen.getByText(K.back));
-
-    // 第一個「改選」是「需要情境嗎？」那一步
-    fireEvent.click(screen.getAllByText(K.change)[0]);
-    expect(
-      screen.getByText("scenarioDialogue.setup.reopenConfirmDescription"),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
-
-    expect(
-      screen.getByRole("button", { name: K.mode("ai") }),
-    ).toBeInTheDocument();
-    // 「題目怎麼來？」的回答被清掉了
-    expect(screen.queryByText(K.source("manual"))).toBeNull();
-  });
-
-  it("重開「需要情境嗎？」而情境框有內容 → 確認文字講明情境也會清掉（review 2-2）", () => {
-    renderPanel();
-    chooseMode("existing");
-    type(K.scenarioPlaceholder, "老師貼好的情境。");
-    fireEvent.click(screen.getByText(K.next));
-    chooseSource("ai");
-
-    fireEvent.click(screen.getAllByText(K.change)[0]);
-    expect(
-      screen.getByText("scenarioDialogue.setup.modeChangeConfirmDescription"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("scenarioDialogue.setup.reopenConfirmDescription"),
+      screen.queryByText("scenarioDialogue.buttons.viewQuestions"),
     ).toBeNull();
   });
 
-  it("下一步／開始產生在底部列，不在輸入區或設定卡裡（修正第 2 輪）", () => {
+  it("選項步驟打字送出：不呼叫 AI，只回「請點選上面的選項」", async () => {
     renderPanel();
-    chooseMode("existing");
-    const scenarioStep = document.querySelector('[data-step="scenario"]')!;
-    expect(within(scenarioStep as HTMLElement).queryByText(K.next)).toBeNull();
-    expect(screen.getByText(K.next)).toBeInTheDocument();
+    await say("我想要 AI 幫我寫");
 
-    type(K.scenarioPlaceholder, "It is Monday.");
-    fireEvent.click(screen.getByText(K.next));
-    chooseSource("ai");
-
-    const card = screen.getByTestId("question-settings-card");
-    expect(within(card).queryByText(K.generate)).toBeNull();
-    expect(screen.getByText(K.generate)).toBeInTheDocument();
-  });
-
-  it("有現成的情境：沒貼東西「下一步」按不下去", () => {
-    renderPanel();
-    chooseMode("existing");
-
-    expect(screen.getByText(K.next).closest("button")).toBeDisabled();
-    type(K.scenarioPlaceholder, "It is Monday.");
-    expect(screen.getByText(K.next).closest("button")).not.toBeDisabled();
-  });
-
-  it("貼上情境 → 請 AI 出題 → 出題設定卡 → 開始產生 → 題目清單", async () => {
-    renderPanel();
-    fillRequiredForGenerate();
-
-    expect(screen.getByTestId("question-settings-card")).toBeInTheDocument();
-    await runGenerate(K.generate);
-
-    expect(onQuestionList()).toBe(true);
+    const chat = chatColumn();
+    expect(within(chat).getByText("我想要 AI 幫我寫")).toBeInTheDocument();
+    // 機器人回同一句提示（灰字也是這句，所以至少一個泡泡）
     expect(
-      screen.getAllByPlaceholderText(K.questionPlaceholder).length,
-    ).toBeGreaterThanOrEqual(3);
+      within(screen.getByTestId("scenario-setup-chat")).getByText(K.choiceHint),
+    ).toBeInTheDocument();
+    expect(generateScenarioArticle).not.toHaveBeenCalled();
+    expect(generateScenarioQuestions).not.toHaveBeenCalled();
+    // 還停在第一題，對話框清空
+    expect(
+      screen.getByRole("button", { name: K.mode("ai") }),
+    ).toBeInTheDocument();
+    expect(composerBox()).toHaveValue("");
   });
 
-  it("已有題目時回到對話，設定卡改成「再產一批」並可直接回清單", async () => {
+  it("情境卡：沒貼東西「用這篇情境」按不下去；卡片要按確認鈕，對話框停用", () => {
     renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
-    const before = screen.getAllByPlaceholderText(K.questionPlaceholder).length;
+    chooseMode("existing");
 
-    fireEvent.click(screen.getByText(K.back));
-    expect(screen.queryByText(K.generate)).toBeNull();
-    expect(screen.getByText(K.generateAnother)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText(K.viewQuestions));
-    expect(screen.getAllByPlaceholderText(K.questionPlaceholder).length).toBe(
-      before,
+    expect(screen.getByText(K.useScenario).closest("button")).toBeDisabled();
+    expect(composerBox()).toBeDisabled();
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "guidedChat.placeholders.card",
     );
-  });
-
-  it("再產一批題目不會貼出重複的題目", async () => {
-    renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
-
-    fireEvent.click(screen.getByText(K.back));
-    await runGenerate(K.generateAnother);
-
-    const all = screen
-      .getAllByPlaceholderText(K.questionPlaceholder)
-      .map((el) => (el as HTMLTextAreaElement).value)
-      .filter(Boolean);
-    expect(all.length).toBeGreaterThan(5);
-    expect(new Set(all).size).toBe(all.length);
-  });
-
-  it("沒有情境時要先給「想問的方向」才能往下", () => {
-    renderPanel();
-    chooseMode("none");
-    chooseSource("ai");
-
-    expect(screen.getByText(K.next).closest("button")).toBeDisabled();
-    type(K.directionPlaceholder, "問學生週末通常做什麼");
-    fireEvent.click(screen.getByText(K.next));
-
-    // 確認句帶出老師原話（t 被 mock 成回傳 key，所以驗的是用了帶方向的那一句）
+    type(K.scenarioPlaceholder, "It is Monday.");
     expect(
-      screen.getByText("scenarioDialogue.setup.q.settingsWithDirection"),
+      screen.getByText(K.useScenario).closest("button"),
+    ).not.toBeDisabled();
+  });
+
+  it("按「用這篇情境」：對話只留「已確認情境」，情境改固定顯示在右欄", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "你和同學在星期一早上聊天。");
+    fireEvent.click(screen.getByText(K.useScenario));
+
+    // 情境卡不在對話裡了，只剩一句摘要
+    expect(screen.queryByTestId("scenario-card")).toBeNull();
+    expect(
+      within(chatColumn()).getByText("scenarioDialogue.setup.answers.scenario"),
+    ).toBeInTheDocument();
+    // 右欄情境區顯示文章
+    const section = screen.getByTestId("scenario-context-section");
+    expect(
+      within(section).getByTestId("reference-scenario-text"),
+    ).toHaveTextContent("你和同學在星期一早上聊天。");
+    // 下一步：題目怎麼來？
+    expect(
+      screen.getByRole("button", { name: K.source("ai") }),
     ).toBeInTheDocument();
   });
 
-  it("無情境＋AI 出題：送出方向、情境留空", async () => {
+  it("貼上情境 → 請 AI 出題 → 出題設定卡 → 開始產生 → 題目出現在右欄，設定卡變成摘要", async () => {
+    renderPanel();
+    fillRequiredForGenerate();
+
+    // 「開始產生」在設定卡下方（卡片自帶確認鈕），是主按鈕
+    const start = screen.getByRole("button", { name: K.generate });
+    expect(start).toHaveClass("bg-blue-600");
+    expect(screen.getByTestId("question-settings-card")).toBeInTheDocument();
+    await runGenerate(K.generate);
+
+    expect(
+      within(sideColumn()).getAllByPlaceholderText(K.questionPlaceholder)
+        .length,
+    ).toBe(5);
+    // 舊的設定卡唯讀：卡片不在了，留一句摘要
+    expect(screen.queryByTestId("question-settings-card")).toBeNull();
+    expect(
+      screen.getByText("scenarioDialogue.setup.generatedNote"),
+    ).toBeInTheDocument();
+    // 題目產生後：對話框灰字換成「可以直接打新題目…」（compose 第 5 段才接上，先停用）
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "scenarioDialogue.setup.placeholders.done",
+    );
+    // 清單上方不再有「再產一批」
+    expect(
+      screen.queryByText("scenarioDialogue.buttons.generateAnother"),
+    ).toBeNull();
+  });
+
+  it("無情境＋AI 出題：方向在對話框送出，確認句帶出老師原話，產題送出方向", async () => {
     renderPanel();
     chooseMode("none");
     chooseSource("ai");
-    type(K.directionPlaceholder, "問學生週末通常做什麼");
-    fireEvent.click(screen.getByText(K.next));
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      K.directionPlaceholder,
+    );
+    await say("問學生週末通常做什麼");
+
+    expect(
+      screen.getByText("scenarioDialogue.setup.q.settingsWithDirection"),
+    ).toBeInTheDocument();
     await runGenerate(K.generate);
 
     const sent = generateScenarioQuestions.mock.calls[0][0];
     expect(sent.direction).toBe("問學生週末通常做什麼");
     expect(sent.scenario_content).toBe("");
     expect(sent.scenario_images).toEqual([]);
-    expect(onQuestionList()).toBe(true);
   });
 
   it("出題方向答非所問 → 回到方向那一步顯示重問句，不產題", async () => {
@@ -498,33 +526,35 @@ describe("ScenarioDialoguePanel 引導式對話（#1146）", () => {
       questions: [],
     });
     renderPanel();
-    chooseMode("none");
-    chooseSource("ai");
-    type(K.directionPlaceholder, "你好");
-    fireEvent.click(screen.getByText(K.next));
+    await fillDirectionForGenerate("你好");
     await runGenerate(K.generate);
 
     expect(
       screen.getByText("想問哪方面呢？例如：週末活動。"),
     ).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(K.directionPlaceholder)).toHaveValue(
-      "你好",
+    // 回到方向那一步：設定卡收起來、對話框可以重新打方向
+    expect(screen.queryByTestId("question-settings-card")).toBeNull();
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      K.directionPlaceholder,
     );
-    expect(onQuestionList()).toBe(false);
+    expect(screen.getByTestId("scenario-questions-empty")).toBeInTheDocument();
   });
 
   it("AI 出題建議的標題只在標題空白時填入", async () => {
     renderPanel();
     fillRequiredForGenerate();
     await runGenerate(K.generate);
-
     expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
       "AI 建議的標題",
     );
+  });
 
-    // 老師改過之後，再產一批不會覆蓋
+  it("老師已經打了標題，AI 的建議不覆蓋", async () => {
+    renderPanel();
     type(K.titlePlaceholder, "老師自己的標題");
-    await runGenerate(K.generateAnother);
+    fillRequiredForGenerate();
+    await runGenerate(K.generate);
     expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
       "老師自己的標題",
     );
@@ -559,20 +589,31 @@ describe("ScenarioDialoguePanel 引導式對話（#1146）", () => {
     expect(generateScenarioQuestions.mock.calls[0][0].count).toBe(8);
   });
 
-  it("題目清單對照欄帶入情境內容與作答指引，沒填則顯示空狀態", () => {
+  it("老師先在右欄打的題目一併送出（避開重複），AI 回了一樣的題目也不會重複貼上", async () => {
     renderPanel();
-    goToListManually();
-    expect(screen.getByText(K.noContextYet)).toBeInTheDocument();
-    expect(screen.getByText(K.noRubricYet)).toBeInTheDocument();
+    await fillDirectionForGenerate();
+    addTypedQuestion("Generated question 1?");
+    await runGenerate(K.generate);
+
+    const sent = generateScenarioQuestions.mock.calls[0][0];
+    expect(sent.existing_questions).toEqual(["Generated question 1?"]);
+    const all = screen
+      .getAllByPlaceholderText(K.questionPlaceholder)
+      .map((el) => (el as HTMLTextAreaElement).value)
+      .filter(Boolean);
+    expect(new Set(all).size).toBe(all.length);
   });
 });
 
 describe("ScenarioDialoguePanel 情境來源", () => {
-  it("請 AI 幫我寫：送出訓練目標與文章難度，寫好的情境進情境框", async () => {
+  it("請 AI 幫我寫：在對話框送出訓練目標，帶文章難度，寫好的情境進情境卡", async () => {
     renderPanel({ programLevel: "B1" });
     chooseMode("ai");
-    type(K.goalPlaceholder, "這週上課學到的：交通工具與問路");
-    await runGenerate(K.writeArticle);
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      "scenarioDialogue.setup.placeholders.goal",
+    );
+    await say("這週上課學到的：交通工具與問路");
 
     expect(generateScenarioArticle).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -583,15 +624,16 @@ describe("ScenarioDialoguePanel 情境來源", () => {
     expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
       "It is Monday morning at school.",
     );
+    // 對話框送出後清空
+    expect(composerBox()).toHaveValue("");
   });
 
-  it("沒填訓練目標，「請 AI 寫情境」按不下去（省下一次白花的呼叫）", () => {
+  it("沒打訓練目標，送出鈕按不下去（省下一次白花的呼叫）", () => {
     renderPanel();
     chooseMode("ai");
 
-    const button = screen.getByText(K.writeArticle).closest("button")!;
-    expect(button).toBeDisabled();
-    fireEvent.click(button);
+    expect(sendButton()).toBeDisabled();
+    fireEvent.click(sendButton());
     expect(generateScenarioArticle).not.toHaveBeenCalled();
   });
 
@@ -604,14 +646,13 @@ describe("ScenarioDialoguePanel 情境來源", () => {
     });
     renderPanel();
     chooseMode("ai");
-    type(K.goalPlaceholder, "哈囉");
-    await runGenerate(K.writeArticle);
+    await say("哈囉");
 
     expect(screen.getByText("想訓練什麼呢？例如：問路。")).toBeInTheDocument();
-    // 還停在訓練目標這一步，沒有出現情境框
+    // 老師的話留在紀錄裡，還停在訓練目標這一步，沒有出現情境卡
+    expect(within(chatColumn()).getByText("哈囉")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(K.scenarioPlaceholder)).toBeNull();
   });
-
   it("上傳檔案走擷取端點，多個檔案依序擷取再接起來", async () => {
     const { container } = render(<ScenarioDialoguePanel />, { wrapper });
     chooseMode("existing");
@@ -761,66 +802,79 @@ describe("ScenarioDialoguePanel 情境來源", () => {
       "zh-TW",
     );
 
-    fireEvent.click(screen.getByText(K.next));
+    fireEvent.click(screen.getByText(K.useScenario));
     chooseSource("manual");
     expect(screen.getByPlaceholderText(K.titlePlaceholder)).toHaveValue(
       "講義標題",
     );
   });
-
-  it("情境框已有文字時改選別的情境來源 → 先確認，取消就保留（review 2）", () => {
+  it("情境框已有文字時從「情境」標籤改方式 → 先確認，取消就保留（review 2）", () => {
     renderPanel();
     chooseMode("existing");
     type(K.scenarioPlaceholder, "老師貼好的情境。");
 
-    // 「回上一步」不必確認（後面沒有已答步驟）……
-    fireEvent.click(screen.getByText(K.stepBack));
-    expect(screen.queryByText(K.reopenConfirm)).toBeNull();
-
-    // ……但改選別的來源會清掉情境框，要先確認
-    chooseMode("none");
+    const popover = openChip("mode");
+    fireEvent.click(
+      within(popover).getByRole("button", { name: K.mode("none") }),
+    );
     expect(
-      screen.getByText("scenarioDialogue.setup.modeChangeConfirmDescription"),
+      screen.getByText(
+        "scenarioDialogue.setup.modeChangeKeepQuestionsDescription",
+      ),
     ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
     );
 
-    // 取消：還停在「需要情境嗎？」，選回原本的來源，文字還在
-    chooseMode("existing");
+    // 取消：情境卡和文字都還在
     expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
       "老師貼好的情境。",
     );
+    expect(changedNotes()).toBe(0);
   });
 
-  it("情境框已有文字時改選別的情境來源 → 確認後才清空", () => {
+  it("情境框已有文字時改方式 → 確認後才清空，紀錄加一句「已把○○改成」", () => {
     renderPanel();
     chooseMode("existing");
     type(K.scenarioPlaceholder, "老師貼好的情境。");
-    fireEvent.click(screen.getByText(K.stepBack));
 
-    chooseMode("ai");
+    fireEvent.click(
+      within(openChip("mode")).getByRole("button", { name: K.mode("ai") }),
+    );
     fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
 
-    expect(screen.getByPlaceholderText(K.goalPlaceholder)).toBeInTheDocument();
+    // 換到「AI 寫」：問訓練目標，情境卡不見了
+    expect(
+      screen.getByText("scenarioDialogue.setup.q.goal"),
+    ).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(K.scenarioPlaceholder)).toBeNull();
+    expect(changedNotes()).toBe(1);
+    // 前面的紀錄不動：當初選的「既有教材」泡泡還在
+    expect(
+      within(chatColumn()).getByText(K.mode("existing")),
+    ).toBeInTheDocument();
   });
 
-  it("情境框是空的就直接改選，不跳確認", () => {
+  it("情境框是空的就直接改方式，不跳確認", () => {
     renderPanel();
     chooseMode("existing");
-    fireEvent.click(screen.getByText(K.stepBack));
 
-    chooseMode("ai");
+    fireEvent.click(
+      within(openChip("mode")).getByRole("button", { name: K.mode("ai") }),
+    );
     expect(
-      screen.queryByText("scenarioDialogue.setup.modeChangeConfirmDescription"),
+      screen.queryByText(
+        "scenarioDialogue.setup.modeChangeKeepQuestionsDescription",
+      ),
     ).toBeNull();
-    expect(screen.getByPlaceholderText(K.goalPlaceholder)).toBeInTheDocument();
+    expect(
+      screen.getByText("scenarioDialogue.setup.q.goal"),
+    ).toBeInTheDocument();
   });
 
   it("情境內容生成中算 busy，儲存鍵才擋得住", async () => {
     const ref = renderPanel();
     chooseMode("ai");
-    type(K.goalPlaceholder, "這週上課學到的：交通工具與問路");
 
     let finish!: (value: { content: string }) => void;
     generateScenarioArticle.mockReturnValue(
@@ -829,11 +883,10 @@ describe("ScenarioDialoguePanel 情境來源", () => {
       }),
     );
 
-    fireEvent.click(screen.getByText(K.writeArticle));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await say("這週上課學到的：交通工具與問路");
     expect(ref.current?.isBusy).toBe(true);
+    // 產生中：對話框停用
+    expect(composerBox()).toBeDisabled();
 
     await act(async () => {
       finish({ content: "It is Monday morning." });
@@ -863,7 +916,6 @@ describe("ScenarioDialoguePanel busy 狀態", () => {
 
     expect(busy()).toBe("false");
     chooseMode("ai");
-    type(K.goalPlaceholder, "這週上課學到的：交通工具與問路");
 
     let finish!: (value: { content: string }) => void;
     generateScenarioArticle.mockReturnValue(
@@ -872,10 +924,7 @@ describe("ScenarioDialoguePanel busy 狀態", () => {
       }),
     );
 
-    fireEvent.click(screen.getByText(K.writeArticle));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await say("這週上課學到的：交通工具與問路");
     expect(busy()).toBe("true");
 
     await act(async () => {
@@ -953,7 +1002,7 @@ describe("ScenarioDialoguePanel 單題重新生成", () => {
 });
 
 describe("ScenarioDialoguePanel 儲存擋關", () => {
-  it("沒填標題就儲存 → 擋下、留在題目清單並把游標帶到標題欄", async () => {
+  it("沒填標題就儲存 → 擋下並把游標帶到右欄的標題欄", async () => {
     vi.useFakeTimers();
     try {
       const onSave = vi.fn();
@@ -968,7 +1017,6 @@ describe("ScenarioDialoguePanel 儲存擋關", () => {
 
       expect(onSave).not.toHaveBeenCalled();
       expect(mockToastError).toHaveBeenCalledWith(K.enterTitle);
-      expect(onQuestionList()).toBe(true);
       expect(document.activeElement).toBe(
         screen.getByPlaceholderText(K.titlePlaceholder),
       );
@@ -977,7 +1025,7 @@ describe("ScenarioDialoguePanel 儲存擋關", () => {
     }
   });
 
-  it("題數不足就儲存 → 擋下並把老師帶到題目清單", async () => {
+  it("題數不足就儲存 → 擋下並提示", async () => {
     const onSave = vi.fn();
     const ref = renderPanel({ onSave });
     goToListManually();
@@ -989,7 +1037,6 @@ describe("ScenarioDialoguePanel 儲存擋關", () => {
 
     expect(onSave).not.toHaveBeenCalled();
     expect(mockToastError).toHaveBeenCalledWith(K.atLeastN);
-    expect(onQuestionList()).toBe(true);
   });
 
   it("情境內容是空的照樣能存 —— 它擋的是產題，不是儲存", async () => {
@@ -1249,10 +1296,9 @@ describe("ScenarioDialoguePanel 編輯模式（#1013 / #1146）", () => {
     ],
   };
 
-  it("帶 initialData 時直接落在題目清單，並顯示既有題目與標題", () => {
+  it("帶 initialData 時顯示既有題目與標題，情境圖在右欄情境區", () => {
     renderPanel({ initialData });
 
-    expect(onQuestionList()).toBe(true);
     expect(screen.getByDisplayValue("週末活動")).toBeInTheDocument();
     expect(
       screen.getByDisplayValue("What did you do last weekend?"),
@@ -1263,16 +1309,25 @@ describe("ScenarioDialoguePanel 編輯模式（#1013 / #1146）", () => {
     ).toBeInTheDocument();
   });
 
-  it("舊資料按「上一步」回對話：由已存的情境推斷已答步驟", () => {
+  it("舊資料：由已存的情境推斷答案，對話是摘要紀錄，情境區在右欄", () => {
     renderPanel({ initialData });
 
-    fireEvent.click(screen.getByText(K.editSettings));
-
-    expect(screen.getByText(K.mode("existing"))).toBeInTheDocument();
-    expect(screen.getByText(K.source("manual"))).toBeInTheDocument();
+    const chat = chatColumn();
+    expect(within(chat).getByText(K.mode("existing"))).toBeInTheDocument();
+    expect(within(chat).getByText(K.source("manual"))).toBeInTheDocument();
+    expect(
+      within(chat).getByText("scenarioDialogue.setup.answers.scenario"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("reference-scenario-text")).toHaveTextContent(
+      "你和同學在星期一早上聊天。",
+    );
+    // 已經有題目：來源標籤藏起來（不能改來源），情境、設定標籤在
+    expect(chip("mode")).not.toBeNull();
+    expect(chip("source")).toBeNull();
+    expect(chip("settings")).not.toBeNull();
   });
 
-  it("新資料按「上一步」回對話：照存下來的回答還原，AI 出題時停在設定卡", () => {
+  it("新資料：照存下來的回答還原，AI 出題已產生過題目 → 不再停在設定卡", () => {
     renderPanel({
       initialData: {
         ...initialData,
@@ -1284,25 +1339,55 @@ describe("ScenarioDialoguePanel 編輯模式（#1013 / #1146）", () => {
       },
     });
 
-    fireEvent.click(screen.getByText(K.back));
-
-    expect(screen.getByText(K.mode("none"))).toBeInTheDocument();
-    expect(screen.getByText(K.source("ai"))).toBeInTheDocument();
-    expect(screen.getByText("「問學生週末做什麼」")).toBeInTheDocument();
-    expect(screen.getByTestId("question-settings-card")).toBeInTheDocument();
+    const chat = chatColumn();
+    expect(within(chat).getByText(K.mode("none"))).toBeInTheDocument();
+    expect(within(chat).getByText(K.source("ai"))).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("scenario-setup-chat")).getByText(
+        "問學生週末做什麼",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("question-settings-card")).toBeNull();
+    // 方向標籤帶出存下來的方向
+    expect(chip("direction")).toHaveTextContent("問學生週末做什麼");
+    // 沒有情境：右欄沒有情境區
+    expect(screen.queryByTestId("scenario-context-section")).toBeNull();
   });
 
-  it("改選情境模式後再選回同一個，已填的情境還在", () => {
+  it("改情境方式後再選回同一個：選回原本的方式不算改，已填的情境還在", () => {
     renderPanel({ initialData });
-    fireEvent.click(screen.getByText(K.editSettings));
 
-    fireEvent.click(screen.getAllByText(K.change)[0]);
-    fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
-    chooseMode("existing");
+    fireEvent.click(
+      within(openChip("mode")).getByRole("button", {
+        name: /scenarioDialogue\.setup\.modes\.existing/,
+      }),
+    );
 
-    expect(screen.getByPlaceholderText(K.scenarioPlaceholder)).toHaveValue(
+    expect(screen.queryByText(K.reopenConfirm)).toBeNull();
+    expect(changedNotes()).toBe(0);
+    expect(screen.getByTestId("reference-scenario-text")).toHaveTextContent(
       "你和同學在星期一早上聊天。",
     );
+  });
+
+  it("題目產生後改情境方式：確認框寫「情境會清空，題目和設定保留」，題目真的留著", () => {
+    renderPanel({ initialData });
+
+    fireEvent.click(
+      within(openChip("mode")).getByRole("button", { name: K.mode("none") }),
+    );
+    expect(
+      screen.getByText(
+        "scenarioDialogue.setup.modeChangeKeepQuestionsDescription",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
+
+    expect(screen.queryByTestId("scenario-context-section")).toBeNull();
+    expect(
+      screen.getByDisplayValue("What did you do last weekend?"),
+    ).toBeInTheDocument();
+    expect(changedNotes()).toBe(1);
   });
 
   it("存檔交出的資料保留 DB id、override 的 null／空值差別與情境圖", async () => {
@@ -1366,30 +1451,32 @@ describe("ScenarioDialoguePanel AI 串接（#1021）", () => {
     expect(sent.direction).toBe("");
   });
 
-  it("再產一批會帶上既有題目，讓後端避開重複", async () => {
+  it("產題會帶上右欄既有的題目，讓後端避開重複", async () => {
     renderPanel();
-    fillRequiredForGenerate();
+    await fillDirectionForGenerate();
+    addTypedQuestion("What do you usually do on weekends?");
     await runGenerate(K.generate);
-    await runGenerate(K.generateAnother);
 
-    const second = generateScenarioQuestions.mock.calls[1][0];
-    expect(second.existing_questions.length).toBeGreaterThan(0);
-    expect(second.existing_questions[0]).toContain("Generated question");
+    const sent = generateScenarioQuestions.mock.calls[0][0];
+    expect(sent.existing_questions).toEqual([
+      "What do you usually do on weekends?",
+    ]);
   });
 
   it("產題失敗會提示，且不會把既有題目清掉", async () => {
     renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
-    const before = screen.getAllByPlaceholderText(K.questionPlaceholder).length;
+    await fillDirectionForGenerate();
+    addTypedQuestion("What do you usually do on weekends?");
 
     generateScenarioQuestions.mockRejectedValueOnce(new Error("boom"));
-    await runGenerate(K.generateAnother);
+    await runGenerate(K.generate);
 
     expect(mockToastError).toHaveBeenCalled();
-    expect(screen.getAllByPlaceholderText(K.questionPlaceholder).length).toBe(
-      before,
-    );
+    expect(
+      screen.getByDisplayValue("What do you usually do on weekends?"),
+    ).toBeInTheDocument();
+    // 失敗不算產生過：設定卡還在，可以再按一次
+    expect(screen.getByTestId("question-settings-card")).toBeInTheDocument();
   });
 });
 
@@ -1515,11 +1602,6 @@ describe("ScenarioDialoguePanel 題目語音與題目本文的一致性", () => 
   });
 });
 
-/**
- * PR #1023 review round 3：AI 呼叫要等好幾秒，那段期間老師還是可以繼續編輯
- * （題目文字、刪題、加題、拖曳都沒有被擋）。回應落地時若用發送前的快照覆蓋整個
- * 陣列，他等待期間做的事會無聲消失。
- */
 describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () => {
   const pendingGeneration = () => {
     let finish!: (value: { questions: unknown[] }) => void;
@@ -1535,13 +1617,19 @@ describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () 
       });
   };
 
-  it("等待期間改過的題目文字，回應落地後仍然在", async () => {
+  /** 方向給好、右欄先打兩題，停在出題設定卡 */
+  const prepare = async () => {
     renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
+    await fillDirectionForGenerate();
+    addTypedQuestion("First question?");
+    addTypedQuestion("Second question?");
+  };
+
+  it("等待期間改過的題目文字，回應落地後仍然在", async () => {
+    await prepare();
 
     const settle = pendingGeneration();
-    fireEvent.click(screen.getByText(K.generateAnother));
+    fireEvent.click(screen.getByText(K.generate));
     await act(async () => {
       await Promise.resolve();
     });
@@ -1559,13 +1647,11 @@ describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () 
   });
 
   it("等待期間刪掉的題目不會被回應救回來", async () => {
-    renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
+    await prepare();
     const before = screen.getAllByPlaceholderText(K.questionPlaceholder).length;
 
     const settle = pendingGeneration();
-    fireEvent.click(screen.getByText(K.generateAnother));
+    fireEvent.click(screen.getByText(K.generate));
     await act(async () => {
       await Promise.resolve();
     });
@@ -1577,6 +1663,7 @@ describe("ScenarioDialoguePanel 產題等待期間的編輯不可被吃掉", () 
     expect(screen.getAllByPlaceholderText(K.questionPlaceholder).length).toBe(
       before,
     );
+    expect(screen.queryByDisplayValue("First question?")).toBeNull();
   });
 });
 
@@ -1937,8 +2024,7 @@ describe("ScenarioDialoguePanel 文字 AI 額度用完（#1025）", () => {
     generateScenarioArticle.mockRejectedValue(QUOTA_ERROR);
     renderPanel();
     chooseMode("ai");
-    type(K.goalPlaceholder, "交通工具與問路");
-    await runGenerate(K.writeArticle);
+    await say("交通工具與問路");
 
     expect(mockToastError).toHaveBeenCalledWith(
       "scenarioDialogue.messages.textQuotaExceeded",
@@ -2009,73 +2095,6 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
     ).toBeNull();
   });
 
-  it("從題目清單回到設定卡：「查看題目清單」是主按鈕，「再產一批」是次要", async () => {
-    renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
-
-    fireEvent.click(screen.getByText(K.back));
-
-    const view = screen.getByRole("button", { name: K.viewQuestions });
-    const again = screen.getByRole("button", { name: K.generateAnother });
-    // 主按鈕＝預設變體（藍底）；次要＝outline 變體（灰框、不帶藍底）。
-    // 不能用 shadcn 原本的 border-input 判斷：本專案 outline 變體是 border-gray-300。
-    expect(view).toHaveClass("bg-blue-600");
-    expect(again).toHaveClass("border-gray-300");
-    expect(again).not.toHaveClass("bg-blue-600");
-  });
-
-  it("從題目清單回到設定卡：主按鈕在最右，「再產一批」排在它左邊", async () => {
-    renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
-
-    fireEvent.click(screen.getByText(K.back));
-
-    const view = screen.getByRole("button", { name: K.viewQuestions });
-    const again = screen.getByRole("button", { name: K.generateAnother });
-    // 同一排裡 DOM 順序就是左到右
-    expect(
-      again.compareDocumentPosition(view) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(view.parentElement?.lastElementChild).toBe(view);
-  });
-
-  it("從題目清單回到對話時，捲到最新一步（設定卡）的開頭", async () => {
-    const original = Element.prototype.scrollIntoView;
-    const targets: Element[] = [];
-    const scrollIntoView = vi.fn(function (this: Element) {
-      targets.push(this);
-    });
-    Element.prototype.scrollIntoView = scrollIntoView;
-    try {
-      renderPanel();
-      fillRequiredForGenerate();
-      await runGenerate(K.generate);
-      scrollIntoView.mockClear();
-      targets.length = 0;
-
-      fireEvent.click(screen.getByText(K.back));
-
-      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
-      expect(targets[targets.length - 1]).toHaveAttribute(
-        "data-step",
-        "settings",
-      );
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-  });
-
-  it("還沒有題目時：設定卡的「開始產生」是主按鈕，沒有「查看題目清單」", () => {
-    renderPanel();
-    fillRequiredForGenerate();
-
-    const start = screen.getByRole("button", { name: K.generate });
-    expect(start).toHaveClass("bg-blue-600");
-    expect(screen.queryByRole("button", { name: K.viewQuestions })).toBeNull();
-  });
-
   it("滿 10 題時題目卡的複製鍵停用，並說明已達上限", () => {
     renderPanel();
     goToListManually();
@@ -2089,38 +2108,6 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
     expect(screen.queryByTitle("contentEditor.tooltips.duplicate")).toBeNull();
   });
 
-  it("滿 10 題回到設定卡：產生鈕停用，手機也看得到原因小字（第 4b 輪）", async () => {
-    generateScenarioQuestions.mockImplementationOnce(async () => ({
-      usable: true,
-      reask: "",
-      suggested_title: "AI 建議的標題",
-      questions: Array.from({ length: 10 }, (_, i) => fakeQuestion(100 + i)),
-    }));
-    renderPanel();
-    fillRequiredForGenerate();
-    await runGenerate(K.generate);
-
-    fireEvent.click(screen.getByText(K.back));
-
-    expect(
-      screen.getByRole("button", { name: K.generateAnother }),
-    ).toBeDisabled();
-    // 操作列那行只在 sm 以上顯示；手機改在捲動區設定卡下方顯示 sm:hidden 小字
-    const mobile = screen.getByTestId("generate-blocked-reason-mobile");
-    expect(mobile).toHaveTextContent("scenarioDialogue.hints.maxReached");
-    expect(mobile).toHaveClass("sm:hidden");
-    expect(screen.getByTestId("scenario-scroll-area").contains(mobile)).toBe(
-      true,
-    );
-  });
-
-  it("未滿 10 題時不顯示手機版的不能產生原因", () => {
-    renderPanel();
-    fillRequiredForGenerate();
-
-    expect(screen.queryByTestId("generate-blocked-reason-mobile")).toBeNull();
-  });
-
   it("題目卡的複製鍵有正確的提示文字", () => {
     renderPanel();
     goToListManually();
@@ -2131,13 +2118,10 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
     expect(screen.queryByTitle("contentEditor.tooltips.copy")).toBeNull();
   });
 
-  it("停用的刪除與生成語音會說明原因", () => {
+  it("停用的生成語音會說明原因；有空狀態後最後一題也能刪", () => {
     renderPanel();
     goToListManually();
 
-    // 只有 1 題：刪除停用，提示說明至少要留 1 題
-    const del = screen.getByTitle("scenarioDialogue.tooltips.deleteDisabled");
-    expect(del).toBeDisabled();
     // 還沒打題目：生成語音停用，提示說明要先輸入題目
     const audio = screen.getByTitle(
       "scenarioDialogue.tooltips.generateAudioDisabled",
@@ -2149,130 +2133,89 @@ describe("ScenarioDialoguePanel 第 3 輪畫面修正（#1146）", () => {
       screen.getByTitle("scenarioDialogue.tooltips.generateAudio"),
     ).not.toBeDisabled();
 
-    fireEvent.click(screen.getByText(K.addQuestion));
-    expect(
-      screen.getAllByTitle("contentEditor.tooltips.delete")[0],
-    ).not.toBeDisabled();
-  });
-
-  it("題目清單的情境文章：長文在窄寬度先收合，可展開", async () => {
-    renderPanel();
-    chooseMode("existing");
-    type(K.scenarioPlaceholder, "It is Monday morning. ".repeat(20));
-    fireEvent.click(screen.getByText(K.next));
-    chooseSource("manual");
-
-    const text = screen.getByTestId("reference-scenario-text");
-    expect(text).toHaveClass("line-clamp-4");
-    const toggle = screen.getByRole("button", {
-      name: "scenarioDialogue.buttons.expandScenario",
-    });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-    fireEvent.click(toggle);
-    expect(text).not.toHaveClass("line-clamp-4");
-    expect(
-      screen.getByRole("button", {
-        name: "scenarioDialogue.buttons.collapseScenario",
-      }),
-    ).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("短的情境文章不收合、也沒有展開鍵", () => {
-    renderPanel();
-    chooseMode("existing");
-    type(K.scenarioPlaceholder, "It is Monday.");
-    fireEvent.click(screen.getByText(K.next));
-    chooseSource("manual");
-
-    expect(screen.getByTestId("reference-scenario-text")).not.toHaveClass(
-      "line-clamp-4",
-    );
-    expect(
-      screen.queryByRole("button", {
-        name: "scenarioDialogue.buttons.expandScenario",
-      }),
-    ).toBeNull();
+    // 只有 1 題也能刪，刪光回到「題目會出現在這裡」
+    fireEvent.click(screen.getByTitle("contentEditor.tooltips.delete"));
+    expect(screen.getByTestId("scenario-questions-empty")).toBeInTheDocument();
   });
 });
 
-describe("ScenarioDialoguePanel 修正第 4 輪：操作列固定在 sheet 底端（#1146）", () => {
-  const actionBar = () =>
-    screen.getByRole("group", { name: "scenarioDialogue.setup.actionBar" });
+/**
+ * 同頁版面（#1158 C commit 4）：取代 #1146 第 4 輪的「固定操作列」與「回對話捲動」。
+ * 沒有上一步／下一步、查看題目清單、回到對話，也沒有操作列；左欄是已選項目列＋對話捲動區
+ * ＋底部對話框，右欄是題目捲動區。
+ */
+describe("ScenarioDialoguePanel 同頁版面（#1158 C commit 4）", () => {
+  it("左欄：已選項目列在上、對話捲動區在中、底部對話框在下；沒有操作列", () => {
+    renderPanel();
+    chooseMode("none");
 
-  /** 固定列不在捲動區裡面（不會跟著內容捲走），而是捲動區後面的兄弟 */
-  const expectPinnedBelowScrollArea = (bar: HTMLElement) => {
-    const scroll = screen.getByTestId("scenario-scroll-area");
+    const chat = chatColumn();
+    const chips = within(chat).getByTestId("guided-chat-chips");
+    const scroll = within(chat).getByTestId("scenario-scroll-area");
+    const composer = within(chat).getByTestId("guided-chat-composer");
     expect(scroll).toHaveClass("overflow-y-auto", "flex-1", "min-h-0");
-    expect(scroll.contains(bar)).toBe(false);
-    expect(bar.parentElement).toBe(scroll.parentElement);
+    // 標籤列與對話框都不在捲動區裡（不隨對話捲動）
+    expect(scroll.contains(chips)).toBe(false);
+    expect(scroll.contains(composer)).toBe(false);
     expect(
-      scroll.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING,
+      chips.compareDocumentPosition(scroll) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(bar).toHaveClass("shrink-0", "border-t", "bg-white");
-  };
-
-  it("對話：固定列在捲動區外，左＝回上一步、右＝目前這一步的主要動作", () => {
-    renderPanel();
-    chooseMode("existing");
-    type(K.scenarioPlaceholder, "你和同學在星期一早上聊天。");
-
-    const bar = actionBar();
-    expectPinnedBelowScrollArea(bar);
-    const back = within(bar).getByRole("button", { name: K.stepBack });
-    const next = within(bar).getByRole("button", { name: K.next });
     expect(
-      back.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+      scroll.compareDocumentPosition(composer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(next).toHaveClass("bg-blue-600");
-    expect(back).not.toHaveClass("bg-blue-600");
-  });
-
-  it("對話：步驟往下走、內容變長，固定列仍在捲動區外", () => {
-    renderPanel();
-    fillRequiredForGenerate();
-
-    const bar = actionBar();
-    expectPinnedBelowScrollArea(bar);
-    expect(
-      within(bar).getByRole("button", { name: K.generate }),
-    ).toBeInTheDocument();
-    // 設定卡與額度提示在捲動區，不在固定列
-    const scroll = screen.getByTestId("scenario-scroll-area");
-    expect(
-      within(scroll).getByText("scenarioDialogue.hints.rateLimit"),
-    ).toBeInTheDocument();
-    expect(
-      within(bar).queryByText("scenarioDialogue.hints.rateLimit"),
-    ).toBeNull();
-  });
-
-  it("對話第一步沒有任何按鈕時不畫固定列", () => {
-    renderPanel();
     expect(
       screen.queryByRole("group", { name: "scenarioDialogue.setup.actionBar" }),
     ).toBeNull();
   });
 
-  it("題目清單：「上一步：回到對話」在同一條固定列的左側", () => {
-    renderPanel({ onCancel: vi.fn() });
-    goToListManually();
+  it("捲動區自己不再留右側工具列的留白（外框已加，避免留白兩次）", () => {
+    renderPanel();
+    for (const area of [
+      screen.getByTestId("scenario-scroll-area"),
+      screen.getByTestId("scenario-question-list"),
+    ]) {
+      expect(area.className).not.toMatch(/\bpr-8\b|\bsm:pr-16\b/);
+    }
+    expect(sideColumn()).toHaveClass("pr-8", "sm:pr-16");
+  });
 
-    const bar = actionBar();
-    expectPinnedBelowScrollArea(bar);
-    const back = within(bar).getByRole("button", { name: K.back });
-    const cancel = within(bar).getByRole("button", {
-      name: "contentEditor.buttons.cancel",
-    });
+  it("右欄由上到下：標題 → 情境區 → 題目卡 →「＋ 新增題目」→ 題數計數", () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "It is Monday.");
+    fireEvent.click(screen.getByText(K.useScenario));
+    chooseSource("manual");
+    fireEvent.click(screen.getByText(K.addQuestion));
+
+    const side = sideColumn();
+    const order = [
+      within(side).getByPlaceholderText(K.titlePlaceholder),
+      within(side).getByTestId("scenario-context-section"),
+      within(side).getByPlaceholderText(K.questionPlaceholder),
+      within(side).getByText(K.addQuestion),
+      within(side).getByText(/contentEditor\.messages\.items/),
+    ];
+    for (let i = 1; i < order.length; i++) {
+      expect(
+        order[i - 1].compareDocumentPosition(order[i]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    // 情境區不再放作答指引、評分標準和「回對話修改」（移到「設定」標籤）
+    const section = screen.getByTestId("scenario-context-section");
     expect(
-      back.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    // 題目與新增鍵在捲動區
-    const scroll = screen.getByTestId("scenario-scroll-area");
-    expect(within(scroll).getByText(K.addQuestion)).toBeInTheDocument();
+      within(section).queryByText("scenarioDialogue.labels.globalRubric"),
+    ).toBeNull();
+    expect(
+      within(section).queryByText("scenarioDialogue.buttons.editSettings"),
+    ).toBeNull();
+  });
 
-    fireEvent.click(back);
-    expect(onQuestionList()).toBe(false);
+  it("Beta 標籤不在對話裡（移到 sheet 標題列）", () => {
+    renderPanel();
+    expect(screen.queryByTestId("scenario-setup-beta")).toBeNull();
+    expect(screen.queryByText("scenarioDialogue.setup.betaNote")).toBeNull();
   });
 
   it("觸控裝置上輸入欄位 focus 後捲到可見處（避免被鍵盤擋住）", async () => {
@@ -2309,18 +2252,402 @@ describe("ScenarioDialoguePanel 修正第 4 輪：操作列固定在 sheet 底�
   });
 });
 
-/**
- * Beta 標示（#1158）：引導式對話頂端放 Beta 標籤＋灰色小字「測試版本，可能會有錯誤」。
- */
-describe("ScenarioDialoguePanel Beta 標示（#1158）", () => {
-  it("引導式對話頂端有 Beta 標籤與測試版本說明", () => {
+describe("ScenarioDialoguePanel 已選項目列（#1158 C commit 4）", () => {
+  it("標籤的出現與消失：情境 → 來源＋設定（自己輸入）→ 有題目時來源藏起來、刪光再出現", () => {
     renderPanel();
+    expect(chip("mode")).toBeNull();
 
-    const beta = screen.getByTestId("scenario-setup-beta");
-    expect(within(beta).getByText("Beta")).toBeInTheDocument();
+    chooseMode("none");
+    expect(chip("mode")).toHaveTextContent(
+      "scenarioDialogue.setup.chipValues.mode.none",
+    );
+    expect(chip("source")).toBeNull();
+
+    chooseSource("manual");
+    expect(chip("source")).not.toBeNull();
+    // 自己輸入：答完來源就有「設定」；不需要情境＋自己輸入沒有「方向」
+    expect(chip("settings")).not.toBeNull();
+    expect(chip("direction")).toBeNull();
+
+    // 空白題不算題目
+    fireEvent.click(screen.getByText(K.addQuestion));
+    expect(chip("source")).not.toBeNull();
+    type(K.questionPlaceholder, "What did you do?");
+    expect(chip("source")).toBeNull();
+
+    fireEvent.click(screen.getByTitle("contentEditor.tooltips.delete"));
+    expect(chip("source")).not.toBeNull();
+  });
+
+  it("AI 出題：「方向」在不需要情境時就出現（值可空白），「設定」第一次產生題目後才出現", async () => {
+    renderPanel();
+    chooseMode("none");
+    chooseSource("ai");
+    expect(chip("direction")).not.toBeNull();
+    expect(chip("settings")).toBeNull();
+
+    await say("問學生週末通常做什麼");
+    expect(chip("direction")).toHaveTextContent("問學生週末通常做什麼");
+    expect(chip("settings")).toBeNull();
+
+    await runGenerate(K.generate);
+    expect(chip("settings")).not.toBeNull();
+    // 已經有題目：來源標籤藏起來
+    expect(chip("source")).toBeNull();
+  });
+
+  it("有情境時沒有「方向」標籤", () => {
+    renderPanel();
+    fillRequiredForGenerate();
+    expect(chip("direction")).toBeNull();
+  });
+
+  it("改方向：不清除、不重產，紀錄加一句，之後產題用新的方向", async () => {
+    renderPanel();
+    await fillDirectionForGenerate("問週末");
+
+    const popover = openChip("direction");
+    fireEvent.change(
+      within(popover).getByRole("textbox", {
+        name: "scenarioDialogue.setup.q.direction",
+      }),
+      { target: { value: "問暑假計畫" } },
+    );
+    fireEvent.click(within(popover).getByRole("button", { name: K.apply }));
+
+    expect(changedNotes()).toBe(1);
+    expect(chip("direction")).toHaveTextContent("問暑假計畫");
+    // 不重產：沒有呼叫 AI，設定卡還在
+    expect(generateScenarioQuestions).not.toHaveBeenCalled();
+    expect(screen.getByTestId("question-settings-card")).toBeInTheDocument();
+
+    await runGenerate(K.generate);
+    expect(generateScenarioQuestions.mock.calls[0][0].direction).toBe(
+      "問暑假計畫",
+    );
+  });
+
+  it("改來源（後面有東西會清）：先確認，確認後方向清掉、回到自己輸入", async () => {
+    renderPanel();
+    await fillDirectionForGenerate("問週末");
+
+    fireEvent.click(
+      within(openChip("source")).getByRole("button", {
+        name: K.source("manual"),
+      }),
+    );
     expect(
-      within(beta).getByText("scenarioDialogue.setup.betaNote"),
+      screen.getByText("scenarioDialogue.setup.sourceChangeConfirmDescription"),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
+
+    expect(chip("direction")).toBeNull();
+    expect(screen.queryByTestId("question-settings-card")).toBeNull();
+    expect(
+      screen.getByText("scenarioDialogue.setup.q.manualInput"),
+    ).toBeInTheDocument();
+    expect(changedNotes()).toBe(1);
+  });
+
+  it("「設定」小框是精簡設定：不放題數，改作答指引即時生效，按「確定」加一句紀錄", async () => {
+    renderPanel();
+    chooseMode("none");
+    chooseSource("manual");
+
+    const popover = openChip("settings");
+    expect(within(popover).getByTestId("question-settings-card")).toBeTruthy();
+    expect(
+      within(popover).queryByRole("combobox", {
+        name: "scenarioDialogue.labels.generateCount",
+      }),
+    ).toBeNull();
+    fireEvent.change(
+      within(popover).getByPlaceholderText(K.rubricPlaceholder),
+      { target: { value: "請用完整句子回答" } },
+    );
+    fireEvent.click(within(popover).getByRole("button", { name: K.apply }));
+
+    expect(changedNotes()).toBe(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("情境標籤的「編輯情境內容」：情境確認後才有，按了打開右欄情境區的編輯並捲過去", () => {
+    const original = Element.prototype.scrollIntoView;
+    const targets: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      targets.push(this);
+    });
+    vi.useFakeTimers();
+    try {
+      renderPanel();
+      chooseMode("existing");
+      expect(
+        within(openChip("mode")).queryByRole("button", {
+          name: K.editScenario,
+        }),
+      ).toBeNull();
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+      type(K.scenarioPlaceholder, "It is Monday.");
+      fireEvent.click(screen.getByText(K.useScenario));
+      fireEvent.click(
+        within(openChip("mode")).getByRole("button", { name: K.editScenario }),
+      );
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      const section = screen.getByTestId("scenario-context-section");
+      expect(
+        within(section).getByPlaceholderText(K.scenarioPlaceholder),
+      ).toHaveValue("It is Monday.");
+      expect(targets).toContain(section);
+    } finally {
+      vi.useRealTimers();
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});
+
+describe("ScenarioDialoguePanel 右欄情境區原地編輯（#1158 C commit 4）", () => {
+  const confirmExisting = (text = "It is Monday.") => {
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, text);
+    fireEvent.click(screen.getByText(K.useScenario));
+  };
+
+  it("預設展開、可收合", () => {
+    renderPanel();
+    confirmExisting();
+
+    const section = screen.getByTestId("scenario-context-section");
+    const toggle = within(section).getByRole("button", {
+      name: "scenarioDialogue.buttons.collapseScenario",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(section).getByTestId("reference-scenario-text"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(within(section).queryByTestId("reference-scenario-text")).toBeNull();
+    expect(
+      within(section).getByRole("button", {
+        name: "scenarioDialogue.buttons.expandScenario",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("「編輯」原地改文章，按「完成」回到唯讀並顯示新內容；存檔帶新內容", async () => {
+    const onSave = vi.fn();
+    const ref = renderPanel({ onSave });
+    confirmExisting();
+
+    const section = screen.getByTestId("scenario-context-section");
+    fireEvent.click(within(section).getByText(K.contextEdit));
+    fireEvent.change(
+      within(section).getByPlaceholderText(K.scenarioPlaceholder),
+      { target: { value: "It is Friday night." } },
+    );
+    // 情境圖可補傳（編輯時才有新增入口）
+    expect(within(section).getByTestId("scenario-image-strip")).toBeTruthy();
+    fireEvent.click(within(section).getByText(K.contextDone));
+
+    expect(
+      within(section).getByTestId("reference-scenario-text"),
+    ).toHaveTextContent("It is Friday night.");
+
+    type(K.titlePlaceholder, "週末");
+    for (const q of ["Q1?", "Q2?", "Q3?"]) addTypedQuestion(q);
+    await act(async () => {
+      await ref.current?.save();
+    });
+    expect(onSave.mock.calls[0][0].scenarioContent).toBe("It is Friday night.");
+  });
+
+  it("AI 寫的文章：編輯時有訓練目標欄，「重寫」先確認，確認後重寫文章", async () => {
+    renderPanel();
+    chooseMode("ai");
+    await say("問路");
+    fireEvent.click(screen.getByText(K.useScenario));
+
+    generateScenarioArticle.mockResolvedValueOnce({
+      usable: true,
+      reask: "",
+      suggested_title: "",
+      content: "A rewritten passage.",
+    });
+    const section = screen.getByTestId("scenario-context-section");
+    fireEvent.click(within(section).getByText(K.contextEdit));
+    const goalBox = within(section).getByPlaceholderText(K.goalPlaceholder);
+    expect(goalBox).toHaveValue("問路");
+    fireEvent.change(goalBox, { target: { value: "在夜市點餐" } });
+
+    fireEvent.click(within(section).getByText(K.rewrite));
+    expect(
+      screen.getByText("scenarioDialogue.setup.rewriteConfirmDescription"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: K.rewriteConfirm }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(generateScenarioArticle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goal: "在夜市點餐" }),
+    );
+    expect(
+      within(section).getByPlaceholderText(K.scenarioPlaceholder),
+    ).toHaveValue("A rewritten passage.");
+  });
+
+  it("既有教材的情境沒有訓練目標與重寫", () => {
+    renderPanel();
+    confirmExisting();
+    const section = screen.getByTestId("scenario-context-section");
+    fireEvent.click(within(section).getByText(K.contextEdit));
+    expect(within(section).queryByText(K.rewrite)).toBeNull();
+    expect(
+      within(section).queryByPlaceholderText(K.goalPlaceholder),
+    ).toBeNull();
+  });
+});
+
+describe("ScenarioDialoguePanel 題數上限＝剩餘名額（#1158 使用者決定）", () => {
+  const countSelect = () =>
+    screen.getByRole("combobox", {
+      name: "scenarioDialogue.labels.generateCount",
+    }) as HTMLSelectElement;
+
+  it("右欄已有 7 題：題數最多 3（剩餘名額），預設 min(5, 3) = 3，送出 3 題", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    for (let i = 1; i <= 7; i++) addTypedQuestion(`Q${i}?`);
+
+    const options = Array.from(countSelect().options).map((o) => o.value);
+    expect(options).toEqual(["3"]);
+    expect(countSelect().value).toBe("3");
+
+    await runGenerate(K.generate);
+    expect(generateScenarioQuestions.mock.calls[0][0].count).toBe(3);
+  });
+
+  it("剩餘名額 0：「開始產生」停用，旁邊說明「已滿 10 題」", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    for (let i = 1; i <= 10; i++) addTypedQuestion(`Q${i}?`);
+
+    expect(screen.getByRole("button", { name: K.generate })).toBeDisabled();
+    expect(screen.getByTestId("generate-blocked-reason")).toHaveTextContent(
+      K.fullReason,
+    );
+    expect(
+      screen.queryByRole("combobox", {
+        name: "scenarioDialogue.labels.generateCount",
+      }),
+    ).toBeNull();
+  });
+
+  it("未滿 10 題時不顯示不能產生的原因", () => {
+    renderPanel();
+    fillRequiredForGenerate();
+    expect(screen.queryByTestId("generate-blocked-reason")).toBeNull();
+  });
+});
+
+describe("ScenarioDialoguePanel 窄版分頁（#1158 C commit 4）", () => {
+  type RoCallback = (entries: { contentRect: { width: number } }[]) => void;
+  let roCallbacks: RoCallback[] = [];
+  class FakeResizeObserver {
+    private cb: RoCallback;
+    constructor(cb: RoCallback) {
+      this.cb = cb;
+      roCallbacks.push(cb);
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {
+      roCallbacks = roCallbacks.filter((c) => c !== this.cb);
+    }
+  }
+  const resizeTo = (width: number) =>
+    act(() => {
+      roCallbacks.forEach((cb) => cb([{ contentRect: { width } }]));
+    });
+
+  beforeEach(() => {
+    roCallbacks = [];
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("窄版從對話產生題目後，自動切到「題目」分頁", async () => {
+    renderPanel();
+    resizeTo(800);
+    expect(screen.getByTestId("guided-chat-layout")).toHaveAttribute(
+      "data-layout",
+      "narrow",
+    );
+    fillRequiredForGenerate();
+    expect(sideColumn()).toHaveClass("hidden");
+
+    await runGenerate(K.generate);
+
+    expect(sideColumn()).not.toHaveClass("hidden");
+    expect(chatColumn()).toHaveClass("hidden");
+    expect(
+      screen.getByRole("tab", { name: "guidedChat.tabs.side" }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("題目卡依右欄寬度決定窄版排法（不看 viewport）", () => {
+    renderPanel();
+    goToListManually();
+    const row = () =>
+      screen
+        .getAllByPlaceholderText(K.questionPlaceholder)[0]
+        .closest(".flex-1")!.parentElement!;
+
+    resizeTo(1200);
+    expect(row()).toHaveClass("flex-row");
+    // 右欄內容寬不到 600px（卡片不到約 552px）→ 窄版排法
+    resizeTo(520);
+    expect(row()).toHaveClass("flex-col");
+  });
+});
+
+/**
+ * Beta 標示（#1158）：C commit 4 起從對話頂端移到 sheet 標題列，放在「情境對話」徽章旁；
+ * 寬度不夠時灰字隱藏。
+ */
+describe("ScenarioDialogueEditorSheet Beta 標示（#1158）", () => {
+  it("Beta 標籤與測試版本說明在標題列的徽章旁，灰字窄時隱藏", () => {
+    render(
+      <ScenarioDialogueEditorSheet
+        editor={{
+          isOpen: true,
+          isSaving: false,
+          initialData: null,
+          contentId: null,
+          programLevel: undefined,
+          openForCreate: vi.fn(),
+          openForEdit: vi.fn(),
+          close: vi.fn(),
+          save: vi.fn(),
+        }}
+      />,
+      { wrapper },
+    );
+
+    const badge = screen.getByText("scenarioDialogue.badge");
+    const beta = screen.getByTestId("scenario-beta-badge");
+    const note = screen.getByText("scenarioDialogue.setup.betaNote");
+    expect(beta).toHaveTextContent("Beta");
+    expect(beta.parentElement).toBe(badge.parentElement);
+    expect(note).toHaveClass("hidden", "lg:inline");
+    // 對話裡不再有一份
+    expect(screen.queryByTestId("scenario-setup-beta")).toBeNull();
   });
 
   it.each(["zh-TW", "en"] as const)("%s 有測試版本說明文案", async (locale) => {

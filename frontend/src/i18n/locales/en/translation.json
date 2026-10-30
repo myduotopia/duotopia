@@ -4986,7 +4986,8 @@
       "referenceNote": "Check the questions against the scenario and instructions",
       "noRubricYet": "No instructions yet",
       "optional": "Optional",
-      "noContextYet": "No scenario yet"
+      "noContextYet": "No scenario yet",
+      "questionsEmpty": "Questions will appear here"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",
@@ -5185,7 +5186,7 @@
       },
       "answers": {
         "goal": "Goal: \"{{goal}}\" (passage level {{level}})",
-        "scenario": "Passage: {{chars}} characters, {{images}} scenario image(s)"
+        "scenario": "Scenario confirmed ({{chars}} characters, {{images}} images)"
       },
       "placeholders": {
         "goal": "e.g. ordering food at a night market, asking for directions",
@@ -5208,14 +5209,27 @@
         "source": {
           "manual": "Typed by me",
           "ai": "AI-written"
-        }
+        },
+        "settingsUpdated": "Updated"
       },
       "modeChangeKeepQuestionsDescription": "The scenario will be cleared. Questions and settings are kept.",
       "sourceChangeConfirmTitle": "Change where questions come from?",
       "sourceChangeConfirmDescription": "The question direction and settings will be cleared.",
       "rewriteConfirmTitle": "Rewrite the scenario?",
       "rewriteConfirmDescription": "The scenario passage will be rewritten and the current text replaced.",
-      "rewriteConfirm": "Rewrite"
+      "rewriteConfirm": "Rewrite",
+      "useScenario": "Use this scenario",
+      "generatedNote": "Generated {{count}} questions — see the question list",
+      "fullReason": "Already {{max}} questions",
+      "sourceLocked": "There are questions already, so the question source can’t be changed"
+    },
+    "context": {
+      "title": "Scenario",
+      "edit": "Edit",
+      "done": "Done",
+      "rewrite": "Rewrite",
+      "rewriting": "Rewriting…",
+      "rewriteHint": "Change the training goal or article level, then press Rewrite to have AI rewrite the scenario"
     }
   },
   "vocabularySet": {

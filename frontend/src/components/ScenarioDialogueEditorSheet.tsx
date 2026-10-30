@@ -13,9 +13,11 @@
  * 從右側滑出、避開側邊欄的面板；`ProgramTreeView` 用的是置中 modal。硬要統一會動到
  * 其他題型在那些頁面的既有版面，不在這張單的範圍。
  *
- * 面板裡面自己分「捲動區＋固定在底端的操作列」（#1146 修正第 4 輪，見
- * `scenario-dialogue-editor/ScenarioSheetLayout`）。瀏海機 home bar 的 safe-area 內距由
- * 操作列自己留（`ScenarioActionBar`）。
+ * 面板裡面是同頁版面（#1158 C commit 4：左對話、右題目，見 `ScenarioDialoguePanel`），
+ * 沒有底部操作列了；瀏海機 home bar 的 safe-area 內距由左欄底部對話框（`ChatComposer`）自己留。
+ *
+ * Beta 標籤和灰字「測試版本，可能會有錯誤」放在「情境對話」徽章旁（#1158 C commit 4 從對話
+ * 頂端搬過來）；寬度不夠時灰字隱藏（`lg` 以下），Beta 標籤留著。
  */
 import { useTranslation } from "react-i18next";
 import { useRef } from "react";
@@ -67,9 +69,20 @@ export function ScenarioDialogueEditorSheet({
           : "scenarioDialogue.dialogTitle",
       )}
       badges={
-        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
-          {t("scenarioDialogue.badge")}
-        </span>
+        <>
+          <span className="inline-flex shrink-0 items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+            {t("scenarioDialogue.badge")}
+          </span>
+          <span
+            data-testid="scenario-beta-badge"
+            className="shrink-0 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-bold text-purple-600"
+          >
+            Beta
+          </span>
+          <span className="hidden truncate text-xs text-gray-500 lg:inline">
+            {t("scenarioDialogue.setup.betaNote")}
+          </span>
+        </>
       }
       actions={<RefSaveButton panelRef={panelRef} />}
       onClose={handleClose}

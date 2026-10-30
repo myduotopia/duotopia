@@ -2,8 +2,8 @@
  * 情境對話的步驟設定（Issue #1158 C 段 commit 2）—— 接上通用引擎
  * `components/shared/guided-chat/flowEngine.ts`，純資料＋純函式，沒有 UI。
  *
- * 取代 `setupFlow.ts`（#1146 的固定流程）。面板要到 C 段 commit 4 才換成這一份；在那之前
- * 現有面板仍用 `setupFlow.ts`。
+ * 取代 #1146 的固定流程 `setupFlow.ts`（C 段 commit 4 面板換成這一份後已刪除）。
+ * 由 `useScenarioSetup` 套用、`ScenarioSetupChat` 畫出來。
  *
  * ## 步驟（依回答動態展開）
  *

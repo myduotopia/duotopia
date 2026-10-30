@@ -5005,7 +5005,8 @@
       "referenceNote": "對照情境與作答指引，確認題目出得合不合適",
       "noRubricYet": "尚未設定作答指引",
       "optional": "選填",
-      "noContextYet": "尚未設定情境內容"
+      "noContextYet": "尚未設定情境內容",
+      "questionsEmpty": "題目會出現在這裡"
     },
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
@@ -5204,7 +5205,7 @@
       },
       "answers": {
         "goal": "訓練目標：「{{goal}}」（文章難度 {{level}}）",
-        "scenario": "情境文章 {{chars}} 字、情境圖 {{images}} 張"
+        "scenario": "已確認情境（文章 {{chars}} 字、情境圖 {{images}} 張）"
       },
       "placeholders": {
         "goal": "例如：在夜市點餐、問路",
@@ -5227,14 +5228,27 @@
         "source": {
           "manual": "自己輸入",
           "ai": "AI 出題"
-        }
+        },
+        "settingsUpdated": "已更新"
       },
       "modeChangeKeepQuestionsDescription": "情境會清空，題目和設定保留。",
       "sourceChangeConfirmTitle": "要改題目來源嗎？",
       "sourceChangeConfirmDescription": "出題方向和設定會清空。",
       "rewriteConfirmTitle": "要重寫情境嗎？",
       "rewriteConfirmDescription": "會重寫情境文章，目前的文章會被取代。",
-      "rewriteConfirm": "重寫"
+      "rewriteConfirm": "重寫",
+      "useScenario": "用這篇情境",
+      "generatedNote": "已產生 {{count}} 題，題目在題目清單",
+      "fullReason": "已滿 {{max}} 題",
+      "sourceLocked": "已經有題目了，不能改題目來源"
+    },
+    "context": {
+      "title": "情境",
+      "edit": "編輯",
+      "done": "完成",
+      "rewrite": "重寫",
+      "rewriting": "重寫中…",
+      "rewriteHint": "改訓練目標或文章難度後按「重寫」，AI 會重寫情境文章"
     }
   },
   "vocabularySet": {

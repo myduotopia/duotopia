@@ -5,10 +5,12 @@
  * - `SortableRow`：題目、翻譯、參考答案／補充說明、單題評分標準（預設＋覆寫）、題目圖、題目語音。
  * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標，#1158 起開
  *   共用的 `AiImageGenerateDialog`，對話框由面板持有）。
- * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：題目清單左欄也會用到。
+ * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：小工具（#1158 C commit 4 起右欄情境區不再
+ *   顯示評分標準，目前只有這支檔用到）。
  *
- * 窄寬度（< sm，第 3 輪）：題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
- * 輸入佔整列，不會超出卡片；評分準則標頭可換行。sm 以上維持圖左、欄位右。
+ * 窄版（`compact`，第 3 輪；#1158 C commit 4 起由所在欄寬度決定、不看 viewport 的 sm）：
+ * 題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
+ * 輸入佔整列，不會超出卡片；評分準則標頭可換行。非窄版維持圖左、欄位右。
  * 停用的刪除（至少留 1 題）與生成語音（還沒輸入題目）用 `title` 說明原因。
  * 複製鍵在題數已滿時停用，`title` 改成上限說明（`duplicateBlockedReason`，第 3b 輪）。
  */
@@ -217,6 +219,11 @@ interface RowProps {
   onPlayAudio: () => void;
   /** 這一題的語音正在產生中 */
   audioLoading: boolean;
+  /**
+   * 窄版排法（題目圖在上、欄位直排、必用字詞佔整列）。由題目清單「所在欄的寬度」決定
+   * （#1158 C commit 4），不看 viewport 的 `sm` —— 同頁版面的右欄在大螢幕上也可能很窄。
+   */
+  compact?: boolean;
 }
 
 export function SortableRow({
@@ -240,6 +247,7 @@ export function SortableRow({
   onGenerateAudio,
   onPlayAudio,
   audioLoading,
+  compact = false,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: row.id });
@@ -362,7 +370,7 @@ export function SortableRow({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className={`flex gap-3 ${compact ? "flex-col" : "flex-row"}`}>
         <ScenarioImageSlot
           imageUrl={row.imageUrl}
           loading={imageLoading}
@@ -534,7 +542,11 @@ export function SortableRow({
                   onTenseChange={overrideTense}
                   onVoiceChange={overrideVoice}
                 />
-                <label className="flex flex-col gap-1 flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[140px]">
+                <label
+                  className={`flex flex-col gap-1 flex-1 min-w-0 ${
+                    compact ? "basis-full" : "basis-auto min-w-[140px]"
+                  }`}
+                >
                   <span className="text-xs text-gray-500">
                     {t("scenarioDialogue.rubricPresets.keywords")}
                   </span>

@@ -1,18 +1,44 @@
 /**
- * 引導式對話的 state 與動作（Issue #1146 review 6，從 `ScenarioDialoguePanel.tsx` 抽出）。
+ * 引導式對話的 state 與動作（Issue #1146 review 6，從 `ScenarioDialoguePanel.tsx` 抽出；
+ * #1158 C commit 4 改接通用流程引擎）。
  *
- * 管的是「對話裡回答的東西」：已答步驟、情境（文章＋情境圖）、訓練目標／文章難度、
- * 出題方向、答非所問的重問句，以及出題設定卡的每一項。題目清單（rows）、標題、存檔仍由
- * 面板持有 —— 這裡只透過 `onSuggestedTitle` 回報 AI 的標題建議。
+ * 管的是「對話裡回答的東西」：答案（`ScenarioAnswers`，`Record<stepId, value>`）、對話紀錄
+ * （log）、情境（文章＋情境圖）、訓練目標／文章難度、出題方向、答非所問的重問句，以及出題
+ * 設定卡的每一項。題目清單（rows）、標題、存檔仍由面板持有 —— 面板把「右欄有沒有題目」
+ * 「是不是正在產題」傳進來（流程的 context 要用），AI 的標題建議透過 `onSuggestedTitle` 回報。
  *
- * 流程本身是純函式（`setupFlow.ts`）；這個 hook 負責把老師的選擇套到 state 上，並打
- * 「AI 寫情境」與「上傳擷取」兩支 API。
+ * 流程本身（有哪些步驟、什麼時候出現、答了沒、改答案要清掉什麼、要不要先確認）在
+ * `scenarioSteps.ts`（步驟設定）＋`components/shared/guided-chat/flowEngine.ts`（通用引擎）；
+ * 這個 hook 負責把老師的選擇套到 state 上、寫對話紀錄，並打「AI 寫情境」與「上傳擷取」兩支 API。
+ *
+ * ## 對話紀錄（log）
+ * 對話裡已經過去的泡泡另存一份 log，不從答案即時推導：
+ * - 在對話裡第一次回答某一步：往下加「問句＋老師的回答」（`answerInChat` 等）。
+ * - 在已選項目列改答案：前面的紀錄不動，只往下加一句「已把○○改成：…」（`changeFromChip`）。
+ * - 卡片步驟（情境卡、出題設定卡）確認後，卡片本身不留在對話裡，只留一句摘要（舊卡片唯讀）。
+ * - 編輯既有內容：由已存資料還原答案（`scenarioAnswersFromSaved`），再用 `summaryLog` 拼出摘要。
+ * 目前這一步的問句與輸入 UI 不在 log 裡，由 `ScenarioSetupChat` 依 `activeStep` 畫在最後。
  */
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import type { TTSSettingsState } from "@/components/shared/BatchTTSSettings";
+import {
+  activeStep,
+  appendChange,
+  appendLog,
+  applyAnswer,
+  clearAnswers,
+  composerState,
+  confirmForChange,
+  findStep,
+  summaryLog,
+  text,
+  type ChangeCheck,
+  type FlowLogEntry,
+  type TextRef,
+} from "@/components/shared/guided-chat/flowEngine";
 import { apiClient, ApiError } from "@/lib/api";
 import {
   EMPTY_TENSE,
@@ -28,15 +54,14 @@ import {
 } from "./constants";
 import { imagesFromUrls, type ScenarioImage } from "./scenarioImages";
 import {
-  EMPTY_ANSWERS,
-  answersFromSaved,
-  modeChangeClearsScenario,
-  reopenStep,
+  SCENARIO_FLOW,
+  scenarioAnswersFromSaved,
   type QuestionSource,
+  type ScenarioAnswers,
+  type ScenarioFlowContext,
   type ScenarioMode,
-  type SetupAnswers,
-  type SetupStep,
-} from "./setupFlow";
+  type ScenarioStepId,
+} from "./scenarioSteps";
 import { useScenarioImages } from "./useScenarioImages";
 
 /**
@@ -62,6 +87,8 @@ const DEFAULT_TTS: TTSSettingsState = {
   speed: "Normal x1",
 };
 
+const P = "scenarioDialogue.setup";
+
 export interface UseScenarioSetupOptions {
   initialData?: ScenarioDialogueInitialState | null;
   programLevel?: string;
@@ -69,6 +96,10 @@ export interface UseScenarioSetupOptions {
   uiLanguage: string;
   /** AI 回了標題建議（寫情境、擷取）。面板決定要不要填（只在標題空白時填） */
   onSuggestedTitle: (suggested?: string) => void;
+  /** 右欄有任一非空白題（「來源」標籤與能不能改來源看這個） */
+  hasQuestions: boolean;
+  /** 面板正在產題（出題設定卡顯示產生中、對話框停用） */
+  generatingQuestions: boolean;
 }
 
 export function useScenarioSetup({
@@ -76,44 +107,12 @@ export function useScenarioSetup({
   programLevel,
   uiLanguage,
   onSuggestedTitle,
+  hasQuestions,
+  generatingQuestions,
 }: UseScenarioSetupOptions) {
   const { t } = useTranslation();
 
-  // ===== 對話的已答步驟 =====
-  /**
-   * 編輯既有內容時由已存資料還原 —— 老師在題目清單按「上一步」回到對話時，看得到
-   * 當初怎麼答、可以從任一步改選。
-   */
-  const [answers, setAnswers] = useState<SetupAnswers>(() =>
-    initialData?.rows?.length
-      ? answersFromSaved({
-          scenarioMode: initialData.scenarioMode ?? "",
-          questionSource: initialData.questionSource ?? "",
-          hasScenario:
-            !!(initialData.scenarioContent ?? "").trim() ||
-            (initialData.scenarioImages ?? []).length > 0,
-        })
-      : EMPTY_ANSWERS,
-  );
-  /** 上一次選的「需要情境嗎？」：重開後選回同一個，就保留已填的情境 */
-  const lastModeRef = useRef<ScenarioMode | null>(answers.scenarioMode);
-  /** 訓練目標：AI 生成情境文章時的 prompt */
-  const [goal, setGoal] = useState(initialData?.goal ?? "");
-  /** 文章難度：只影響 AI 生成出來的情境文章寫多難 */
-  const [articleLevel, setArticleLevel] = useState(
-    initialData?.articleLevel || programLevel || "A1",
-  );
-  /** 無情境時「想問的方向」—— 取代情境當 AI 出題依據 */
-  const [direction, setDirection] = useState(initialData?.direction ?? "");
-  /** 答非所問時 AI 回的重問句（同一次呼叫判斷，不額外打 AI） */
-  const [goalReask, setGoalReask] = useState("");
-  const [directionReask, setDirectionReask] = useState("");
-  /** 生成情境內容與產題是兩件事，loading 各自獨立 */
-  const [generatingArticle, setGeneratingArticle] = useState(false);
-  /** 上傳圖片／PDF 擷取情境文章中 */
-  const [extracting, setExtracting] = useState(false);
-
-  // ===== 情境（對話中的「情境框」＋情境圖列）=====
+  // ===== 情境（對話中的情境卡、右欄情境區）=====
   /**
    * 情境內容 —— 貼上、上傳擷取、AI 寫三種來源共同的產物。空的時候仍然可以儲存；
    * AI 出題時改用情境圖或出題方向當素材。
@@ -127,8 +126,237 @@ export function useScenarioSetup({
   );
   const imageActions = useScenarioImages(scenarioImages, setScenarioImages);
 
+  /** 訓練目標：AI 生成情境文章時的 prompt（右欄情境區編輯時也改這個） */
+  const [goal, setGoal] = useState(initialData?.goal ?? "");
+  /** 文章難度：只影響 AI 生成出來的情境文章寫多難 */
+  const [articleLevel, setArticleLevel] = useState(
+    initialData?.articleLevel || programLevel || "A1",
+  );
+  /** 無情境時「想問的方向」—— 取代情境當 AI 出題依據 */
+  const [direction, setDirection] = useState(initialData?.direction ?? "");
+  /** 答非所問時 AI 回的重問句（同一次呼叫判斷，不額外打 AI）；顯示在那一步的問句位置 */
+  const [goalReask, setGoalReask] = useState("");
+  const [directionReask, setDirectionReask] = useState("");
+  /** 生成情境內容與產題是兩件事，loading 各自獨立 */
+  const [generatingArticle, setGeneratingArticle] = useState(false);
+  /** 上傳圖片／PDF 擷取情境文章中 */
+  const [extracting, setExtracting] = useState(false);
+
+  const hasScenarioMaterial =
+    !!scenarioContent.trim() || scenarioImages.length > 0;
+
+  // ===== 流程 context（答案以外、會影響流程的外部事實）=====
+  const pending: ScenarioStepId | null = generatingArticle
+    ? "goal"
+    : extracting
+      ? "scenario"
+      : generatingQuestions
+        ? "settings"
+        : null;
+  const ctx: ScenarioFlowContext = {
+    hasQuestions,
+    hasScenarioMaterial,
+    scenarioChars: scenarioContent.trim().length,
+    imageCount: scenarioImages.length,
+    articleLevel,
+    pending,
+    failed: null,
+  };
+
+  // ===== 答案與對話紀錄 =====
+  /**
+   * 編輯既有內容時由已存資料還原；新建時從 `{}` 開始（不要對空白新內容呼叫
+   * `scenarioAnswersFromSaved`，見那支的說明）。
+   */
+  const [answers, setAnswers] = useState<ScenarioAnswers>(() =>
+    initialData?.rows?.length
+      ? scenarioAnswersFromSaved({
+          scenarioMode: initialData.scenarioMode ?? "",
+          questionSource: initialData.questionSource ?? "",
+          goal: initialData.goal ?? "",
+          direction: initialData.direction ?? "",
+          hasScenario:
+            !!(initialData.scenarioContent ?? "").trim() ||
+            (initialData.scenarioImages ?? []).length > 0,
+          hasQuestions: initialData.rows.some((r) => !!r.question.trim()),
+        })
+      : {},
+  );
+  const [log, setLog] = useState<FlowLogEntry[]>(() =>
+    initialData?.rows?.length ? summaryLog(SCENARIO_FLOW, answers, ctx) : [],
+  );
+
+  const current = activeStep(SCENARIO_FLOW, answers, ctx);
+  const composer = composerState(SCENARIO_FLOW, answers, ctx);
+
+  /** 這一步的問句（寫進紀錄用；跟畫面上目前那一步的問句同一句） */
+  const questionOf = (stepId: ScenarioStepId, a = answers): TextRef =>
+    findStep(SCENARIO_FLOW, stepId).question(a, ctx);
+
+  /** 往紀錄加「問句＋老師的回答」 */
+  const logAnswer = (
+    stepId: ScenarioStepId,
+    answer: TextRef | string,
+    a = answers,
+  ) =>
+    setLog((prev) =>
+      appendLog(
+        appendLog(prev, { role: "bot", stepId, text: questionOf(stepId, a) }),
+        { role: "teacher", stepId, text: answer },
+      ),
+    );
+
+  /** 某一步被清掉時，連帶清掉它在面板上的資料（情境文章、情境圖、訓練目標） */
+  const clearStepData = (cleared: readonly ScenarioStepId[]) => {
+    if (cleared.includes("goal")) {
+      setGoal("");
+      setGoalReask("");
+    }
+    if (cleared.includes("scenario")) {
+      setScenarioContent("");
+      setScenarioImages([]);
+    }
+  };
+
+  /** 標籤上顯示的值（改完寫進「已把○○改成：…」用） */
+  const chipValueText = (
+    stepId: ScenarioStepId,
+    value: unknown,
+  ): TextRef | string => {
+    if (stepId === "mode") return text(`${P}.chipValues.mode.${value}`);
+    if (stepId === "source") return text(`${P}.chipValues.source.${value}`);
+    return typeof value === "string" ? value : "";
+  };
+
+  // ----- 在對話裡回答（第一次）-----
+
+  /** 選項步驟（需要情境嗎？、題目怎麼來？）在對話裡第一次選 */
+  const answerChoice = (
+    stepId: "mode" | "source",
+    value: ScenarioMode | QuestionSource,
+  ) => {
+    const r = applyAnswer(SCENARIO_FLOW, answers, ctx, stepId, value);
+    if (r.blocked) return;
+    clearStepData(r.cleared);
+    setAnswers(r.answers);
+    logAnswer(
+      stepId,
+      text(`${P}.${stepId === "mode" ? "modes" : "sources"}.${value}`),
+    );
+  };
+
+  /**
+   * 選項步驟時老師在對話框打字：不呼叫 AI，只回同一句「請點選上面的選項」（規格第 3 點）。
+   */
+  const replyChooseOption = (typed: string) =>
+    setLog((prev) =>
+      appendLog(appendLog(prev, { role: "teacher", text: typed }), {
+        role: "bot",
+        text: SCENARIO_FLOW.choicePlaceholder,
+      }),
+    );
+
+  /** 情境卡按「用這篇情境」：對話只留一句「已確認情境」，情境改固定顯示在右欄 */
+  const confirmScenario = () => {
+    const r = applyAnswer(SCENARIO_FLOW, answers, ctx, "scenario", true);
+    setAnswers(r.answers);
+    logAnswer(
+      "scenario",
+      text(`${P}.answers.scenario`, {
+        chars: ctx.scenarioChars,
+        images: ctx.imageCount,
+      }),
+    );
+  };
+
+  /** 出題方向：在對話框送出 */
+  const submitDirection = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setDirection(trimmed);
+    setDirectionReask("");
+    const r = applyAnswer(SCENARIO_FLOW, answers, ctx, "direction", trimmed);
+    setAnswers(r.answers);
+    logAnswer("direction", trimmed);
+  };
+
+  /**
+   * 出題方向答非所問（產題時同一次 AI 呼叫判斷）：清掉方向這一步的答案，回到那一步，
+   * 重問句放在問句的位置。
+   */
+  const reaskDirection = (reask?: string) => {
+    setDirectionReask(reask || t(`${P}.reaskFallback`));
+    setAnswers((prev) => clearAnswers(prev, ["direction"]));
+  };
+  const clearDirectionReask = () => setDirectionReask("");
+
+  /** 第一次產題成功：出題設定卡變成一句摘要，「設定」標籤出現 */
+  const markGenerated = (count: number) => {
+    if (answers.settings === true) return;
+    const r = applyAnswer(SCENARIO_FLOW, answers, ctx, "settings", true);
+    setAnswers(r.answers);
+    setLog((prev) =>
+      appendLog(
+        appendLog(prev, {
+          role: "bot",
+          stepId: "settings",
+          text: questionOf("settings"),
+        }),
+        {
+          role: "note",
+          stepId: "settings",
+          text: text(`${P}.generatedNote`, { count }),
+        },
+      ),
+    );
+  };
+
+  // ----- 在已選項目列改答案 -----
+
+  /** 改之前要不要先確認（或現在不能改） */
+  const checkChange = (stepId: ScenarioStepId, value: unknown): ChangeCheck =>
+    confirmForChange(SCENARIO_FLOW, answers, ctx, stepId, value);
+
+  /**
+   * 套用標籤小框裡的修改（確認框由呼叫端先問過）。前面的紀錄不動，只往下加一句
+   * 「已把○○改成：…」。回傳 false ＝這一步現在不能改（`editable` 為否）。
+   */
+  const changeFromChip = (stepId: ScenarioStepId, value: unknown): boolean => {
+    const r = applyAnswer(SCENARIO_FLOW, answers, ctx, stepId, value);
+    if (r.blocked) return false;
+    if (!r.changed) return true;
+    clearStepData(r.cleared);
+    if (stepId === "direction" && typeof value === "string") {
+      setDirection(value);
+      setDirectionReask("");
+    }
+    setAnswers(r.answers);
+    const chip = findStep(SCENARIO_FLOW, stepId).chip;
+    if (chip) {
+      setLog((prev) =>
+        appendChange(prev, stepId, chip.label, chipValueText(stepId, value)),
+      );
+    }
+    return true;
+  };
+
+  /** 「設定」小框按「確定」：設定是即時生效的欄位，這裡只在紀錄加一句 */
+  const logSettingsChanged = () => {
+    const chip = findStep(SCENARIO_FLOW, "settings").chip;
+    if (chip) {
+      setLog((prev) =>
+        appendChange(
+          prev,
+          "settings",
+          chip.label,
+          text(`${P}.chipValues.settingsUpdated`),
+        ),
+      );
+    }
+  };
+
   // ===== 出題設定卡（所有題目共用）=====
-  /** 一次要 AI 產幾題（設定卡預設 5，範圍 3~10） */
+  /** 一次要 AI 產幾題（預設 5；實際上限＝剩餘名額，由設定卡與面板夾住） */
   const [generateCount, setGenerateCount] = useState(DEFAULT_GENERATE_COUNT);
   /** 題目難度：出題出多難，與「文章難度」各自獨立 —— 簡單文章也可以出難題目 */
   const [questionLevel, setQuestionLevel] = useState(
@@ -177,9 +405,7 @@ export function useScenarioSetup({
   // ===== 衍生值 =====
   /** 沒有情境（不需要情境）時才帶出題方向；有情境就以情境為準 */
   const currentDirection = () =>
-    answers.scenarioMode === "none" ? direction.trim() : "";
-  const hasScenarioMaterial =
-    !!scenarioContent.trim() || scenarioImages.length > 0;
+    answers.mode === "none" ? direction.trim() : "";
   const hasMaterial = () => hasScenarioMaterial || !!currentDirection();
 
   /**
@@ -203,7 +429,7 @@ export function useScenarioSetup({
 
   /** 存檔用的對話紀錄與設定：只存與當初選擇相符的那幾項，換了選項留下的舊值不帶走 */
   const saveFields = () => {
-    const mode = answers.scenarioMode;
+    const mode = answers.mode;
     return {
       scenarioContent,
       scenarioImages: scenarioImages.map((img) => img.url),
@@ -215,7 +441,7 @@ export function useScenarioSetup({
       translateLanguage: toStoredTranslateLanguage(translateLang, customLang),
       ttsSettings,
       scenarioMode: mode ?? "",
-      questionSource: answers.questionSource ?? "",
+      questionSource: answers.source ?? "",
       goal: mode === "ai" ? goal : "",
       articleLevel:
         mode === "ai" &&
@@ -226,91 +452,69 @@ export function useScenarioSetup({
     };
   };
 
-  // ===== 對話的回答 =====
-
-  /** 選這個「需要情境嗎？」會不會清掉已填的情境（＝要不要先跳確認，review 2） */
-  const wouldClearScenario = (mode: ScenarioMode) =>
-    modeChangeClearsScenario(lastModeRef.current, mode, hasScenarioMaterial);
-
-  const chooseMode = (mode: ScenarioMode) => {
-    const sameMode = lastModeRef.current === mode;
-    if (lastModeRef.current !== null && !sameMode) {
-      // 換了情境來源：舊的情境文章、情境圖、訓練目標都不再適用
-      setScenarioContent("");
-      setScenarioImages([]);
-      setGoal("");
-      setGoalReask("");
-    }
-    lastModeRef.current = mode;
-    setAnswers({
-      ...EMPTY_ANSWERS,
-      scenarioMode: mode,
-      // 選回同一個「AI 寫」且情境還在 → 不必重寫，直接看情境框（要重寫可以改選訓練目標）
-      goalDone: mode === "ai" && sameMode && !!scenarioContent.trim(),
-    });
-  };
-
-  const reopen = (step: SetupStep) => {
-    if (step === "goal") setGoalReask("");
-    setAnswers((prev) => reopenStep(step, prev));
-  };
-
-  const chooseSource = (source: QuestionSource) =>
-    setAnswers((prev) => ({
-      ...prev,
-      questionSource: source,
-      directionDone: false,
-    }));
-
-  const markScenarioDone = () =>
-    setAnswers((prev) => ({ ...prev, scenarioDone: true }));
-
-  const markDirectionDone = () => {
-    setDirectionReask("");
-    setAnswers((prev) => ({ ...prev, directionDone: true }));
-  };
-
-  /** 出題方向答非所問：回到「想問的方向」那一步顯示重問句 */
-  const reaskDirection = (reask?: string) => {
-    setDirectionReask(reask || t("scenarioDialogue.setup.reaskFallback"));
-    setAnswers((prev) => reopenStep("direction", prev));
-  };
-  const clearDirectionReask = () => setDirectionReask("");
+  // ===== AI 寫情境 =====
 
   /**
-   * AI 寫情境（對話「請 AI 幫我寫」→ 訓練目標＋文章難度）。
-   * 答非所問（訓練目標不可用）時後端不產內容、回重問句，留在這一步顯示。
+   * AI 寫情境。兩個入口：
+   * - `chat`：對話裡「訓練目標」那一步，老師在對話框送出訓練目標。答非所問時後端不產內容、
+   *   回重問句，紀錄留下老師的話，重問句顯示在那一步的問句位置。
+   * - `rewrite`：右欄情境區按「重寫」（確認過「會重寫情境文章」）。答非所問時用 toast 告訴他。
+   *
+   * 回傳 true ＝這段話已經處理掉（成功或答非所問），對話框可以清空；false ＝失敗，留著讓他重送。
    */
-  const generateArticle = async () => {
-    if (!goal.trim()) {
+  const generateArticle = async (
+    goalText: string,
+    via: "chat" | "rewrite",
+  ): Promise<boolean> => {
+    const trimmed = goalText.trim();
+    if (!trimmed) {
       toast.error(t("scenarioDialogue.messages.goalRequired"));
-      return;
+      return false;
     }
     setGeneratingArticle(true);
-    setGoalReask("");
+    if (via === "chat") setGoalReask("");
     try {
       const result = await apiClient.generateScenarioArticle({
-        goal,
+        goal: trimmed,
         level: articleLevel,
         ui_language: uiLanguage,
       });
       if (result.usable === false) {
-        setGoalReask(result.reask || t("scenarioDialogue.setup.reaskFallback"));
-        return;
+        const reask = result.reask || t(`${P}.reaskFallback`);
+        if (via === "chat") {
+          logAnswer("goal", trimmed);
+          setGoalReask(reask);
+        } else {
+          toast.error(reask);
+        }
+        return true;
       }
       setScenarioContent(result.content);
+      setGoal(trimmed);
       onSuggestedTitle(result.suggested_title);
-      setAnswers((prev) => ({ ...prev, goalDone: true }));
+      if (via === "chat") {
+        setGoalReask("");
+        const r = applyAnswer(SCENARIO_FLOW, answers, ctx, "goal", trimmed);
+        setAnswers(r.answers);
+        logAnswer(
+          "goal",
+          text(`${P}.answers.goal`, { goal: trimmed, level: articleLevel }),
+        );
+      } else {
+        setAnswers((prev) => ({ ...prev, goal: trimmed }));
+      }
+      return true;
     } catch (error) {
       console.error("Failed to generate scenario content:", error);
       toast.error(t(textAiErrorKey(error)));
+      return false;
     } finally {
       setGeneratingArticle(false);
     }
   };
 
   /**
-   * 上傳圖片／PDF 擷取（對話「我有現成的」）。依序擷取：文字接到情境框後面（老師可能
+   * 上傳圖片／PDF 擷取（對話「有既有的教材」）。依序擷取：文字接到情境框後面（老師可能
    * 先貼了一段），檔內有意義的圖自動裁成情境圖（最多 5 張），標題建議只在標題空白時填。
    *
    * **每個檔各自成敗**（review 1）：中間一個檔失敗，其他檔擷取到的文字照樣寫進情境框，
@@ -339,14 +543,14 @@ export function useScenarioSetup({
             file,
             uiLanguage,
           );
-          const text = (result.content ?? "").trim();
+          const extractedText = (result.content ?? "").trim();
           const figures = result.figures ?? [];
-          if (!text && figures.length === 0) {
+          if (!extractedText && figures.length === 0) {
             failedNames.push(file.name);
             continue;
           }
           succeeded += 1;
-          if (text) parts.push(text);
+          if (extractedText) parts.push(extractedText);
           if (result.truncated) truncated = true;
           onSuggestedTitle(result.suggested_title);
           if (figures.length) await imageActions.addExtracted(file, figures);
@@ -387,27 +591,33 @@ export function useScenarioSetup({
   };
 
   return {
-    // 對話
+    // 流程
     answers,
+    ctx,
+    current,
+    composer,
+    log,
+    answerChoice,
+    replyChooseOption,
+    confirmScenario,
+    submitDirection,
+    reaskDirection,
+    clearDirectionReask,
+    markGenerated,
+    checkChange,
+    changeFromChip,
+    logSettingsChanged,
+    // 對話的欄位
     goal,
     setGoal,
     articleLevel,
     setArticleLevel,
     direction,
-    setDirection,
     goalReask,
     directionReask,
     generatingArticle,
     extracting,
     busy,
-    chooseMode,
-    wouldClearScenario,
-    reopen,
-    chooseSource,
-    markScenarioDone,
-    markDirectionDone,
-    reaskDirection,
-    clearDirectionReask,
     generateArticle,
     extractFiles,
     // 情境
@@ -415,6 +625,7 @@ export function useScenarioSetup({
     setScenarioContent,
     scenarioImages,
     imageActions,
+    hasScenarioMaterial,
     hasMaterial,
     // 出題設定卡
     generateCount,
