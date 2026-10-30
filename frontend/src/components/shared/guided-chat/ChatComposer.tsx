@@ -5,7 +5,8 @@
  * - 灰字（`placeholder`）依步驟換，由引擎的 `composerState(...).placeholder` 決定：
  *   選項步驟「請點選上面的選項」、打字步驟的範例句、題目產生後的提示……
  * - 停用（`disabled`）：卡片還沒完成、產生中。停用時灰字就是原因（例如「請先完成上面的
- *   卡片」「產生中，請稍候…」），同一句也掛在 `title` 上，滑鼠移上去看得到。
+ *   卡片」「產生中，請稍候…」），同一句也掛在 `title` 上，滑鼠移上去看得到。框裡還有字
+ *   （灰字被蓋住）時，框下面多一行灰色小字寫同一句原因。
  *   產生中（`busy`）時送出鈕顯示轉圈。
  * - 送出鈕：沒有字或停用時不能按（屬於表單驗證／處理中的暫時停用，不另外說明）。
  * - 不做範例按鈕、不做快捷按鈕（規格第 3 點）。
@@ -112,6 +113,15 @@ export function ChatComposer({
           )}
         </Button>
       </div>
+      {/* 停用時框裡還有字，灰字（原因）被蓋住了：在框下面再寫一次 */}
+      {disabled && value.trim() && (
+        <p
+          data-testid="guided-chat-composer-reason"
+          className="mx-auto mt-1 w-full max-w-3xl text-xs text-gray-500"
+        >
+          {placeholder}
+        </p>
+      )}
     </div>
   );
 }

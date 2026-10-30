@@ -292,6 +292,32 @@ describe("ChatComposer：灰字與停用", () => {
     expect(
       screen.getByRole("button", { name: "guidedChat.composer.send" }),
     ).toBeDisabled();
+    // 框裡有字、灰字被蓋住：框下面多一行原因
+    expect(screen.getByTestId("guided-chat-composer-reason")).toHaveTextContent(
+      "請先完成上面的卡片",
+    );
+  });
+
+  it("停用但框裡沒字：灰字看得到，不另外加原因行；可用時也不加", () => {
+    const { rerender } = render(
+      <ChatComposer
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        placeholder="請先完成上面的卡片"
+        disabled
+      />,
+    );
+    expect(screen.queryByTestId("guided-chat-composer-reason")).toBeNull();
+    rerender(
+      <ChatComposer
+        value="有字"
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        placeholder="請在這裡輸入…"
+      />,
+    );
+    expect(screen.queryByTestId("guided-chat-composer-reason")).toBeNull();
   });
 
   it("產生中：送出鈕停用", () => {

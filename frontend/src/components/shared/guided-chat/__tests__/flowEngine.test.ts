@@ -12,6 +12,7 @@ import {
   applyAnswer,
   chipsFor,
   composerState,
+  CHANGE_BLOCKED,
   confirmForChange,
   isFlowDone,
   resolveText,
@@ -185,6 +186,18 @@ describe("改答案：清除、確認、不能改", () => {
       confirmForChange(flow, { kind: "a", topic: "x" }, idle, "kind", "b"),
     ).toBe(CONFIRM);
     expect(confirmForChange(flow, { kind: "a" }, idle, "kind", "b")).toBeNull();
+  });
+
+  it("已答、值不同但不能改：不跳確認框，回 blocked（呼叫端顯示原因）", () => {
+    const locked = { ...idle, locked: true };
+    expect(
+      confirmForChange(flow, { kind: "a", topic: "x" }, locked, "kind", "b"),
+    ).toBe(CHANGE_BLOCKED);
+    // 選回同一個、第一次回答都不算被擋
+    expect(
+      confirmForChange(flow, { kind: "a", topic: "x" }, locked, "kind", "a"),
+    ).toBeNull();
+    expect(confirmForChange(flow, {}, locked, "kind", "a")).toBeNull();
   });
 });
 

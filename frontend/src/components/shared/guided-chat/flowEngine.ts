@@ -22,7 +22,7 @@
  * | `when` | 出現條件（預設一定出現） |
  * | `isAnswered` | 已答判斷（預設：值不是 undefined／null） |
  * | `terminal` | 永遠是最後一步、不會「已答」（例如舊版的出題設定卡） |
- * | `editable` | 已答過的這一步現在能不能改答案（例如「來源」只在還沒有題目時能改）。第一次回答不檢查 |
+ * | `editable` | 已答過的這一步現在能不能改答案（例如「來源」只在還沒有題目時能改）。第一次回答不檢查；不能改時 `confirmForChange` 回 `CHANGE_BLOCKED`、不跳確認框 |
  * | `clears` | 改成不同答案時要一併清掉的步驟 |
  * | `confirm` | 改答案前要先跳的確認框（回 null ＝不必確認） |
  * | `asyncState` | 非同步狀態：`idle`／`pending`（產生中）／`failed` |
@@ -219,8 +219,14 @@ export function isStepEditable<A extends FlowAnswers, C>(
 /** 只用 `===` 比；物件型的答案由步驟設定自己決定 clears／confirm 怎麼看 */
 const sameValue = (x: unknown, y: unknown) => x === y;
 
+/** `confirmForChange` 的「這一步現在不能改」訊號（不跳確認框，呼叫端顯示原因） */
+export const CHANGE_BLOCKED = "blocked" as const;
+export type ChangeCheck = ConfirmSpec | null | typeof CHANGE_BLOCKED;
+
 /**
- * 改答案前要不要先確認。第一次回答、選回同一個答案都不必；其餘交給步驟的 `confirm`。
+ * 改答案前要不要先確認。第一次回答、選回同一個答案都不必（回 null）。
+ * 已答、值不同、而且這一步現在不能改（`editable` 為否）時回 `CHANGE_BLOCKED`：
+ * 不跳確認框（確認了也改不了），由呼叫端顯示不能改的原因。其餘交給步驟的 `confirm`。
  */
 export function confirmForChange<A extends FlowAnswers, C>(
   flow: FlowDef<A, C>,
@@ -228,11 +234,12 @@ export function confirmForChange<A extends FlowAnswers, C>(
   ctx: NoInfer<C>,
   stepId: keyof A & string,
   nextValue: unknown,
-): ConfirmSpec | null {
+): ChangeCheck {
   const step = findStep(flow, stepId);
   if (!isStepAnswered(step, a, ctx) || sameValue(a[stepId], nextValue)) {
     return null;
   }
+  if (!isStepEditable(step, a, ctx)) return CHANGE_BLOCKED;
   return step.confirm ? step.confirm(a, nextValue, ctx) : null;
 }
 
