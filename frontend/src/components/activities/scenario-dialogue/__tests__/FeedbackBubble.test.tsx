@@ -110,6 +110,71 @@ describe("FeedbackBubble — A 方案", () => {
     ).toBeNull();
   });
 
+  it("phrase（問某個字怎麼說）：不顯示很棒／可以更好，片語加粗可點＋🔊＋引導，中性底色", () => {
+    const props = renderBubble({
+      actions: "none",
+      feedback: {
+        kind: "phrase",
+        verdict: "improve",
+        comment: "試著用它回答看看",
+        suggestion: "a lot of",
+      },
+    });
+    const bubble = screen.getByTestId("scenario-feedback");
+    expect(bubble.className).toContain("bg-blue-50");
+    expect(bubble.className).not.toContain("bg-amber-50");
+    expect(bubble.textContent).not.toContain(
+      "scenarioDialogue.chat.verdictImprove",
+    );
+    expect(bubble.textContent).not.toContain(
+      "scenarioDialogue.chat.verdictGreat",
+    );
+    expect(screen.getByText("試著用它回答看看")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-suggestion").className).toContain(
+      "font-bold",
+    );
+    // 單字可點
+    expect(
+      screen.getByRole("button", {
+        name: "groupedQuestionsTemplate.labels.clickToPronounciate: lot",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "scenarioDialogue.chat.listenPhrase",
+      }),
+    );
+    expect(props.onSpeak).toHaveBeenCalledWith("a lot of");
+  });
+
+  it("model_answer（不會答）：標題「可以這樣說」＋整句加粗＋照著念一次，不顯示 verdict", () => {
+    renderBubble({
+      actions: "none",
+      feedback: {
+        kind: "model_answer",
+        verdict: "great",
+        comment: "照著念一次看看",
+        suggestion: "I went to the park.",
+      },
+    });
+    const bubble = screen.getByTestId("scenario-feedback");
+    expect(bubble.className).toContain("bg-blue-50");
+    expect(bubble.className).not.toContain("bg-green-50");
+    expect(
+      screen.getByText("scenarioDialogue.chat.modelAnswerTitle"),
+    ).toBeInTheDocument();
+    expect(bubble.textContent).not.toContain("scenarioDialogue.chat.verdict");
+    expect(screen.getByTestId("scenario-suggestion").textContent).toContain(
+      "I went to the park.",
+    );
+    expect(screen.getByText("照著念一次看看")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "scenarioDialogue.chat.listenSuggestion",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("重答中這一題的舊建議變淡", () => {
     renderBubble({ faded: true, actions: "none" });
     expect(screen.getByTestId("scenario-feedback").className).toContain(

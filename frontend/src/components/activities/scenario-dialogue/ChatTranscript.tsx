@@ -18,7 +18,11 @@ import { AnswerBubble } from "./AnswerBubble";
 import { FeedbackBubble, type FeedbackActions } from "./FeedbackBubble";
 import { QuestionBubble } from "./QuestionBubble";
 import { AiRow, TypingIndicator } from "./TypingIndicator";
-import type { ScenarioChatState } from "./useScenarioChat";
+import {
+  isHelpFeedback,
+  usedAttempts,
+  type ScenarioChatState,
+} from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
   ScenarioChatItem,
@@ -54,7 +58,8 @@ export function ChatTranscript({
   const isPreview = settings.isPreviewMode;
 
   const actionsFor = (i: number): FeedbackActions => {
-    const used = attempts[i].length;
+    // 求助（#1158）不算次數
+    const used = usedAttempts(attempts[i]);
     const isCurrentDone = i === current && phase === "feedbackShown";
     if (used >= maxAttempts) return isCurrentDone ? "autoNext" : "reached";
     if (isCurrentDone && !chat.retry) return "current";
@@ -101,8 +106,11 @@ export function ChatTranscript({
               <div key={j} className="space-y-3">
                 <AnswerBubble
                   answer={a.answer}
-                  attemptNo={j + 1}
-                  showAttemptNo={list.length > 1}
+                  // 次數編號只數正式回答；求助的那一則不標（#1158）
+                  attemptNo={usedAttempts(list.slice(0, j + 1))}
+                  showAttemptNo={
+                    usedAttempts(list) > 1 && !isHelpFeedback(a.feedback)
+                  }
                   faded={j < last || fadeAll}
                   score={isPreview ? a.feedback?.score : undefined}
                 />

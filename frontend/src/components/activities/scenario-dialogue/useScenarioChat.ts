@@ -11,6 +11,8 @@
  * - 題目自動播放：新題出現、下一題、老師跳題時播一次；正在回頭重答時不播（免得錄進去），
  *   老師跳題先停掉正在唸的內容。
  * - 每題最多 maxAttempts 次；目前這題用完停 AUTO_NEXT_MS 自動進下一題。
+ * - 求助（AI 回 kind=phrase／model_answer，#1158）不算次數（usedAttempts），回來後直接回到
+ *   作答（主流程 awaitingAnswer、重答維持 answering），不出現「再試一次／下一題」。
  * - 重答（retry）：作答中或結束後，任何已出現、還沒答滿的題目都能按「再試一次」回頭答，
  *   不影響主流程（主流程的計時器照跑）。新回答與建議接在該題原有紀錄下方；
  *   建議回來（或按 ✕ 取消）後 `retryReturn` 會變，由畫面捲回原本進行中的題目。
@@ -30,6 +32,7 @@ import type {
   ScenarioAttempt,
   ScenarioChatAdapters,
   ScenarioChatItem,
+  ScenarioFeedback,
   TextRevealState,
 } from "./types";
 
@@ -64,6 +67,17 @@ interface Options {
 const revokeAnswer = (a: ScenarioAttempt) => {
   if (a.answer.audioUrl) URL.revokeObjectURL(a.answer.audioUrl);
 };
+
+/** 求助（問某個字怎麼說／不會答，#1158）：不評、不算作答次數 */
+export const isHelpFeedback = (f?: ScenarioFeedback): boolean =>
+  f?.kind === "phrase" || f?.kind === "model_answer";
+
+/**
+ * 這題用掉的作答次數：求助不算；還在等建議的先算（回來是求助就不算了）。
+ * maxAttempts 一律跟這個比（後端同樣把求助的額度退回，兩邊一致）。
+ */
+export const usedAttempts = (list: ScenarioAttempt[] | undefined): number =>
+  (list ?? []).filter((a) => !isHelpFeedback(a.feedback)).length;
 
 export function useScenarioChat({
   items,
@@ -176,7 +190,7 @@ export function useScenarioChat({
   }, [later]);
 
   const isExhausted = useCallback(
-    (i: number) => (attemptsRef.current[i]?.length ?? 0) >= maxAttempts,
+    (i: number) => usedAttempts(attemptsRef.current[i]) >= maxAttempts,
     [maxAttempts],
   );
 
@@ -208,7 +222,9 @@ export function useScenarioChat({
       const r = retryRef.current;
       const isRetry = r !== null && r.status === "answering";
       const q = isRetry ? r.index : current;
-      const attemptIndex = attemptsRef.current[q].length;
+      // slot＝這筆在紀錄裡的位置（含求助）；attemptIndex＝第幾次正式作答（不含求助）
+      const slot = attemptsRef.current[q].length;
+      const attemptIndex = usedAttempts(attemptsRef.current[q]);
       if (attemptIndex >= maxAttempts) return;
       setAttempts((prev) =>
         prev.map((list, i) => (i === q ? [...list, { answer }] : list)),
@@ -223,13 +239,15 @@ export function useScenarioChat({
           setAttempts((prev) =>
             prev.map((list, i) =>
               i === q
-                ? list.map((a, j) =>
-                    j === attemptIndex ? { ...a, feedback } : a,
-                  )
+                ? list.map((a, j) => (j === slot ? { ...a, feedback } : a))
                 : list,
             ),
           );
-          if (isRetry) {
+          if (isHelpFeedback(feedback)) {
+            // 求助：學生直接用底部錄音回答（不需要「再試一次」），重答中就留在重答
+            if (isRetry) setRetry({ index: q, status: "answering" });
+            else setPhase("awaitingAnswer");
+          } else if (isRetry) {
             setRetry(null);
             setRetryReturn((s) => ({ tick: s.tick + 1, delayed: true }));
           } else {
@@ -241,7 +259,7 @@ export function useScenarioChat({
           // 建議取得失敗：這次作答不佔次數，還原狀態讓使用者重新作答
           setAttempts((prev) =>
             prev.map((list, i) =>
-              i === q ? list.filter((_, j) => j !== attemptIndex) : list,
+              i === q ? list.filter((_, j) => j !== slot) : list,
             ),
           );
           revokeAnswer({ answer });
@@ -256,7 +274,7 @@ export function useScenarioChat({
   goNextRef.current = goNext;
 
   // 目前這題用完次數 → 停一下自動進下一題
-  const exhausted = (attempts[current]?.length ?? 0) >= maxAttempts;
+  const exhausted = usedAttempts(attempts[current]) >= maxAttempts;
   useEffect(() => {
     if (phase === "feedbackShown" && exhausted) {
       later(() => goNextRef.current(), AUTO_NEXT_MS);
@@ -274,7 +292,7 @@ export function useScenarioChat({
     (i: number) => {
       if (phase === "intro" || i >= revealedCount) return false;
       const list = attempts[i];
-      if (list.length === 0 || list.length >= maxAttempts) return false;
+      if (list.length === 0 || usedAttempts(list) >= maxAttempts) return false;
       if (!list[list.length - 1].feedback) return false;
       if (
         i === current &&
@@ -368,6 +386,7 @@ export function useScenarioChat({
   const averageFor = useCallback(
     (i: number): number | null => {
       const scores = attempts[i]
+        .filter((a) => !isHelpFeedback(a.feedback))
         .map((a) => a.feedback?.score)
         .filter((s): s is number => typeof s === "number");
       if (scores.length === 0) return null;

@@ -202,14 +202,23 @@ export async function uploadAnswerRecording(params: {
  * 不顯示分數，型別上 `score` 是選填，一旦哪天多帶一個就會自己長出來。
  */
 export function toScenarioFeedback(response: {
-  verdict?: string;
+  kind?: string;
+  verdict?: string | null;
   comment?: string;
   suggestion?: string | null;
 }): ScenarioFeedback {
+  // 求助類別（#1158）要有 suggestion 才成立；其他（含舊回應沒有 kind）一律 feedback
+  const suggestion = response.suggestion || undefined;
+  const kind =
+    (response.kind === "phrase" || response.kind === "model_answer") &&
+    suggestion
+      ? response.kind
+      : "feedback";
   return {
+    kind,
     verdict: response.verdict === "great" ? "great" : "improve",
     comment: response.comment ?? "",
-    suggestion: response.suggestion || undefined,
+    suggestion,
   };
 }
 

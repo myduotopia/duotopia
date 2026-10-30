@@ -65,7 +65,7 @@ import {
   type InfoPanel,
 } from "./ScenarioContextCard";
 import { translationMatchesUi } from "./translationLanguage";
-import { useScenarioChat } from "./useScenarioChat";
+import { usedAttempts, useScenarioChat } from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
   ScenarioChatContext,
@@ -165,10 +165,11 @@ export function ScenarioChatActivity({
   });
   const { phase, current, retry } = chat;
 
-  // 答過＝這一題至少送出過一次答案（略過的題目 attempts 會是空的）
-  const answeredKey = chat.attempts.map((list) => list.length > 0).join(",");
+  // 答過＝這一題至少送出過一次正式回答（略過的題目 attempts 會是空的；求助不算，#1158）
+  const answered = chat.attempts.map((list) => usedAttempts(list) > 0);
+  const answeredKey = answered.join(",");
   useEffect(() => {
-    onProgressChange?.(chat.attempts.map((list) => list.length > 0));
+    onProgressChange?.(answered);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- answeredKey 代表內容變化
   }, [answeredKey, onProgressChange]);
   const isPreview = settings.isPreviewMode;

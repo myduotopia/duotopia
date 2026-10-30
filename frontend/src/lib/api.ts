@@ -1598,7 +1598,9 @@ class ApiClient {
     item_progress_id: number;
     ui_language?: string;
   }): Promise<{
-    verdict: "improve" | "great";
+    /** #1158：phrase／model_answer 是求助（不算次數、verdict 為 null）；舊回應沒有＝feedback */
+    kind?: "feedback" | "phrase" | "model_answer";
+    verdict: "improve" | "great" | null;
     comment: string;
     suggestion?: string | null;
     ai_analysis_count: number;

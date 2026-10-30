@@ -61,7 +61,17 @@ export interface ScenarioAnswer {
   text?: string;
 }
 
+/**
+ * AI 回應種類（#1158）：feedback＝正式回答的建議；phrase＝學生問某個字／片語怎麼說或字義；
+ * model_answer＝學生說不會答，給一句完整範例。後兩者是求助：不顯示很棒／可以更好、
+ * **不算作答次數**（見 useScenarioChat 的 usedAttempts；後端同樣把額度退回）。
+ */
+export type ScenarioFeedbackKind = "feedback" | "phrase" | "model_answer";
+
 export interface ScenarioFeedback {
+  /** 沒有＝feedback（舊回應、mock） */
+  kind?: ScenarioFeedbackKind;
+  /** 求助（phrase／model_answer）時不顯示 */
   verdict: "improve" | "great";
   comment: string;
   /** 建議說法（文字＋可朗讀） */

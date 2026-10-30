@@ -96,7 +96,37 @@ describe("toScenarioFeedback", () => {
         comment: "很棒！",
         suggestion: null,
       }),
-    ).toEqual({ verdict: "great", comment: "很棒！", suggestion: undefined });
+    ).toEqual({
+      kind: "feedback",
+      verdict: "great",
+      comment: "很棒！",
+      suggestion: undefined,
+    });
+  });
+
+  it("帶過求助類別 phrase／model_answer（#1158）；沒有 kind 或沒有建議說法當 feedback", () => {
+    expect(
+      toScenarioFeedback({
+        kind: "phrase",
+        verdict: null,
+        comment: "試著用它回答看看",
+        suggestion: "park",
+      }).kind,
+    ).toBe("phrase");
+    expect(
+      toScenarioFeedback({
+        kind: "model_answer",
+        verdict: null,
+        comment: "照著念一次",
+        suggestion: "I went to the park.",
+      }).kind,
+    ).toBe("model_answer");
+    expect(toScenarioFeedback({ verdict: "improve", comment: "x" }).kind).toBe(
+      "feedback",
+    );
+    expect(
+      toScenarioFeedback({ kind: "phrase", verdict: null, comment: "x" }).kind,
+    ).toBe("feedback");
   });
 
   it("認不得的 verdict 當「可以更好」（與後端同一條規則）", () => {
@@ -160,6 +190,7 @@ describe("getFeedback", () => {
       ui_language: "zh-TW",
     });
     expect(fb).toEqual({
+      kind: "feedback",
       verdict: "improve",
       comment: "再完整一點",
       suggestion: "I went to the park.",
