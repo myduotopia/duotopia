@@ -171,6 +171,25 @@ const isBlankRow = (r: ScenarioDialogueRow) =>
   r.keywords.length === 0 &&
   !r.imageUrl;
 
+/**
+ * 把 AI 產的題目併進清單（「開始產生」用）：拿掉空白列，保留既有題目，接上沒重複的新題，
+ * 不超過剩餘名額。回傳新清單與實際加入的那幾題。
+ *
+ * 後端已經避開送出去的既有題目，但老師等待期間新打的那些它不知道，所以這裡再去重一次。
+ */
+const mergeGenerated = (
+  prev: ScenarioDialogueRow[],
+  created: ScenarioDialogueRow[],
+) => {
+  const kept = prev.filter((r) => !isBlankRow(r));
+  const room = Math.max(0, MAX_ITEMS - kept.length);
+  const used = new Set(kept.map((r) => r.question.trim()).filter(Boolean));
+  const added = created
+    .filter((r) => !used.has(r.question.trim()))
+    .slice(0, room);
+  return { rows: [...kept, ...added], added };
+};
+
 const ScenarioDialoguePanel = forwardRef<
   ScenarioDialoguePanelHandle,
   ScenarioDialoguePanelProps
@@ -446,23 +465,15 @@ const ScenarioDialoguePanel = forwardRef<
         }),
       );
 
-      // 一定要用 functional form 重新取一次最新的 rows：AI 呼叫要等好幾秒，這段期間
-      // 老師還是可以改題目、刪題、加題、拖曳排序。用 await 之前算好的 kept 直接覆蓋，
-      // 會把他等待期間做的事整個吃掉（PR #1023 review）。
-      setRows((prev) => {
-        const latestKept = prev.filter((r) => !isBlankRow(r));
-        // 空間也要用最新的算 —— 等待期間可能又加了題目
-        const latestRoom = Math.max(0, MAX_ITEMS - latestKept.length);
-        const used = new Set(
-          latestKept.map((r) => r.question.trim()).filter(Boolean),
-        );
-        // 後端已經避開送出去的既有題目，但老師等待期間新打的那些它不知道
-        const fresh = created.filter((r) => !used.has(r.question.trim()));
-        return [...latestKept, ...fresh.slice(0, latestRoom)];
-      });
-      setup.markGenerated(created.length);
+      // 一定要用最新的 rows 重算：AI 呼叫要等好幾秒，這段期間老師還是可以改題目、刪題、
+      // 加題、拖曳排序。用 await 之前算好的 kept 直接覆蓋，會把他等待期間做的事整個吃掉
+      // （PR #1023 review）。實際加入哪幾題也由同一份計算決定（修正 C4）：摘要的題數、
+      // 自動語音都只算真的放進清單的那幾題。
+      const { added } = mergeGenerated(rowsRef.current, created);
+      setRows((prev) => mergeGenerated(prev, created).rows);
+      setup.markGenerated(added.length);
       setTab("side");
-      if (setup.autoTTS) void autoGenerateAudio(created);
+      if (setup.autoTTS) void autoGenerateAudio(added);
     } catch (error) {
       console.error("Failed to generate scenario questions:", error);
       toast.error(t(textAiErrorKey(error)));
@@ -753,6 +764,12 @@ const ScenarioDialoguePanel = forwardRef<
     setup.answers.scenario === true
       ? setup.answers.mode
       : null;
+
+  // 情境區消失（改成「不需要情境」或情境被清掉）時，編輯狀態一併收掉 —— 不然之後情境
+  // 再出現時會直接開在編輯模式（修正 C4）
+  useEffect(() => {
+    if (contextMode === null) setEditingScenario(false);
+  }, [contextMode]);
 
   const maxReached = t("scenarioDialogue.hints.maxReached", { max: MAX_ITEMS });
 

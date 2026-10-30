@@ -19,7 +19,7 @@
  * - 編輯既有內容：由已存資料還原答案（`scenarioAnswersFromSaved`），再用 `summaryLog` 拼出摘要。
  * 目前這一步的問句與輸入 UI 不在 log 裡，由 `ScenarioSetupChat` 依 `activeStep` 畫在最後。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -185,6 +185,11 @@ export function useScenarioSetup({
   const [log, setLog] = useState<FlowLogEntry[]>(() =>
     initialData?.rows?.length ? summaryLog(SCENARIO_FLOW, answers, ctx) : [],
   );
+  /** 最新一次 render 的答案，給 await 之後的非同步流程判斷用（擷取回來時再看情境方式） */
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
   const current = activeStep(SCENARIO_FLOW, answers, ctx);
   const composer = composerState(SCENARIO_FLOW, answers, ctx);
@@ -206,8 +211,12 @@ export function useScenarioSetup({
       ),
     );
 
-  /** 某一步被清掉時，連帶清掉它在面板上的資料（情境文章、情境圖、訓練目標） */
+  /** 某一步被清掉時，連帶清掉它在面板上的資料（情境文章、情境圖、訓練目標、出題方向） */
   const clearStepData = (cleared: readonly ScenarioStepId[]) => {
+    if (cleared.includes("direction")) {
+      setDirection("");
+      setDirectionReask("");
+    }
     if (cleared.includes("goal")) {
       setGoal("");
       setGoalReask("");
@@ -340,20 +349,18 @@ export function useScenarioSetup({
     return true;
   };
 
-  /** 「設定」小框按「確定」：設定是即時生效的欄位，這裡只在紀錄加一句 */
-  const logSettingsChanged = () => {
-    const chip = findStep(SCENARIO_FLOW, "settings").chip;
-    if (chip) {
-      setLog((prev) =>
-        appendChange(
-          prev,
-          "settings",
-          chip.label,
-          text(`${P}.chipValues.settingsUpdated`),
-        ),
-      );
-    }
-  };
+  /**
+   * 「設定」小框按「確定」：設定是即時生效的欄位，這裡只在紀錄加一句「已更新出題設定」
+   * （不用「已把設定改成：…」—— 設定沒有單一的值可以寫）。
+   */
+  const logSettingsChanged = () =>
+    setLog((prev) =>
+      appendLog(prev, {
+        role: "note",
+        stepId: "settings",
+        text: text(`${P}.settingsUpdatedNote`),
+      }),
+    );
 
   // ===== 出題設定卡（所有題目共用）=====
   /** 一次要 AI 產幾題（預設 5；實際上限＝剩餘名額，由設定卡與面板夾住） */
@@ -526,6 +533,11 @@ export function useScenarioSetup({
    * 放進情境框」在這時不成立。
    */
   const extractFiles = async (files: File[]) => {
+    /**
+     * 保險（修正 C4）：擷取中已選項目列整列停用，照理改不了情境方式；萬一擷取回來時已經
+     * 不是「既有教材」，結果（文字、情境圖、標題建議）一律丟掉，不寫進已換掉的情境。
+     */
+    const stillExisting = () => answersRef.current.mode === "existing";
     setExtracting(true);
     const parts: string[] = [];
     const failedNames: string[] = [];
@@ -543,6 +555,7 @@ export function useScenarioSetup({
             file,
             uiLanguage,
           );
+          if (!stillExisting()) return;
           const extractedText = (result.content ?? "").trim();
           const figures = result.figures ?? [];
           if (!extractedText && figures.length === 0) {
@@ -565,7 +578,7 @@ export function useScenarioSetup({
           }
         }
       }
-      if (parts.length) {
+      if (parts.length && stillExisting()) {
         const extracted = parts.join("\n\n");
         setScenarioContent((prev) =>
           prev.trim() ? `${prev.trim()}\n\n${extracted}` : extracted,

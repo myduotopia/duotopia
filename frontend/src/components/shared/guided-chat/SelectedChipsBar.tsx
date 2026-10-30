@@ -6,6 +6,10 @@
  * 內容由各功能提供（`renderContent`，拿到 `close()` 改完自己關）。改完後對話紀錄只往下
  * 加一句「已把○○改成：…」——那是呼叫端用引擎的 `appendChange` 做的，這裡只管畫。
  *
+ * **停用**（`disabled`，#1158 修正 C4）：AI 工作進行中（寫情境、擷取、產題、compose）時整列停用，
+ * 每個標籤的 `title` 與列尾小字寫原因（`disabledReason`，例如「產生中，請稍候…」），已開的
+ * Popover 也一併關掉 —— 和「產生中對話框停用」一致，避免產生中改了答案、結果落地時對不上。
+ *
  * 標籤放不下就換行。窄版（`GuidedChatLayout` 的分頁版）多一個「收合／展開」鈕，收合時
  * 只留一行（超出的藏起來）；寬版一律展開。
  *
@@ -52,6 +56,10 @@ export interface SelectedChipsBarProps {
   popoverClassName?: (chipId: string) => string | undefined;
   /** 是否提供收合（預設：窄版才提供） */
   collapsible?: boolean;
+  /** 整列停用（AI 工作進行中）；停用時已開的 Popover 也關掉 */
+  disabled?: boolean;
+  /** 停用原因：掛在每個標籤的 `title`，並在列尾以小字顯示 */
+  disabledReason?: string;
   className?: string;
 }
 
@@ -60,6 +68,8 @@ export function SelectedChipsBar({
   renderContent,
   popoverClassName,
   collapsible,
+  disabled = false,
+  disabledReason,
   className,
 }: SelectedChipsBarProps) {
   const { t } = useTranslation();
@@ -90,7 +100,7 @@ export function SelectedChipsBar({
         {chips.map((chip) => (
           <Popover
             key={chip.id}
-            open={openId === chip.id}
+            open={!disabled && openId === chip.id}
             onOpenChange={(open) => setOpenId(open ? chip.id : null)}
           >
             <PopoverTrigger asChild>
@@ -98,6 +108,8 @@ export function SelectedChipsBar({
                 variant="outline"
                 size="sm"
                 data-chip={chip.id}
+                disabled={disabled}
+                title={disabled ? disabledReason : undefined}
                 className="h-7 max-w-full shrink-0 rounded-full px-3 text-xs font-normal"
               >
                 <span className="font-semibold text-gray-700">
@@ -118,6 +130,14 @@ export function SelectedChipsBar({
             </PopoverContent>
           </Popover>
         ))}
+        {disabled && disabledReason && (
+          <span
+            data-testid="guided-chat-chips-reason"
+            className="self-center text-xs text-gray-500"
+          >
+            {disabledReason}
+          </span>
+        )}
       </div>
       {canCollapse && (
         <Button

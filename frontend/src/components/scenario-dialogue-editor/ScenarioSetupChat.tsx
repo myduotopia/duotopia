@@ -13,6 +13,9 @@
  *    改情境方式（情境有內容時）、改來源（後面有東西會清時）先跳 `ConfirmDialog`，文字由
  *    步驟設定給（「情境會清空，題目和設定保留」等）。改完對話紀錄只往下加一句
  *    「已把○○改成：…」。改方向、改設定不清除、不重產。
+ *    **AI 工作進行中**（寫情境、擷取、情境圖、產題、compose：`ctx.pending` 非 null、
+ *    `setup.busy`、`generating`）整列停用，標籤的 `title` 與列尾小字寫「產生中，請稍候…」
+ *    （#1158 修正 C4，和產生中對話框停用一致）。
  *
  * 2. **對話捲動區**：連續的對話紀錄（`setup.log`，舊的泡泡、卡片摘要都唯讀，沒有「改選」），
  *    最後是目前這一步：問句（答非所問時換成重問句）＋這一步的輸入：
@@ -151,6 +154,8 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
   }, [setup.log.length, current?.id]);
 
   const busy = setup.busy || props.generating;
+  /** AI 工作進行中：已選項目列整列停用（修正 C4） */
+  const chipsLocked = ctx.pending !== null || busy;
   const scenarioReady = setup.hasScenarioMaterial;
 
   // ===== 已選項目列 =====
@@ -480,6 +485,8 @@ export function ScenarioSetupChat(props: ScenarioSetupChatProps) {
     <>
       <SelectedChipsBar
         chips={chips}
+        disabled={chipsLocked}
+        disabledReason={t("guidedChat.placeholders.pending")}
         renderContent={renderChipContent}
         popoverClassName={(id) =>
           id === "settings"

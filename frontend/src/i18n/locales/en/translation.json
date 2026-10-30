@@ -5209,9 +5209,9 @@
         "source": {
           "manual": "Typed by me",
           "ai": "AI-written"
-        },
-        "settingsUpdated": "Updated"
+        }
       },
+      "settingsUpdatedNote": "Question settings updated",
       "modeChangeKeepQuestionsDescription": "The scenario will be cleared. Questions and settings are kept.",
       "sourceChangeConfirmTitle": "Change where questions come from?",
       "sourceChangeConfirmDescription": "The question direction and settings will be cleared.",

@@ -5228,9 +5228,9 @@
         "source": {
           "manual": "自己輸入",
           "ai": "AI 出題"
-        },
-        "settingsUpdated": "已更新"
+        }
       },
+      "settingsUpdatedNote": "已更新出題設定",
       "modeChangeKeepQuestionsDescription": "情境會清空，題目和設定保留。",
       "sourceChangeConfirmTitle": "要改題目來源嗎？",
       "sourceChangeConfirmDescription": "出題方向和設定會清空。",

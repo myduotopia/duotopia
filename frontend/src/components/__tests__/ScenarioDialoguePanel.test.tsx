@@ -2349,7 +2349,7 @@ describe("ScenarioDialoguePanel 已選項目列（#1158 C commit 4）", () => {
     expect(changedNotes()).toBe(1);
   });
 
-  it("「設定」小框是精簡設定：不放題數，改作答指引即時生效，按「確定」加一句紀錄", async () => {
+  it("「設定」小框是精簡設定：不放題數，改作答指引即時生效，按「確定」加一句「已更新出題設定」", async () => {
     renderPanel();
     chooseMode("none");
     chooseSource("manual");
@@ -2367,7 +2367,13 @@ describe("ScenarioDialoguePanel 已選項目列（#1158 C commit 4）", () => {
     );
     fireEvent.click(within(popover).getByRole("button", { name: K.apply }));
 
-    expect(changedNotes()).toBe(1);
+    // 設定沒有單一的值：不寫「已把設定改成：…」，改寫「已更新出題設定」（修正 C4）
+    expect(changedNotes()).toBe(0);
+    expect(
+      within(chatColumn()).getByText(
+        "scenarioDialogue.setup.settingsUpdatedNote",
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -2657,5 +2663,158 @@ describe("ScenarioDialogueEditorSheet Beta 標示（#1158）", () => {
         ? "Beta: this feature may have bugs"
         : "測試版本，可能會有錯誤",
     );
+  });
+});
+
+describe("ScenarioDialoguePanel 修正 C4（#1158）", () => {
+  /** 出題設定卡的「AI 生成語音」勾選框 */
+  const ttsCheckbox = () =>
+    screen
+      .getByText("contentEditor.labels.aiGenerateTTS")
+      .parentElement!.querySelector<HTMLInputElement>("input[type=checkbox]")!;
+
+  it("產生中：已選項目列整列停用並寫原因，改不了方向；產完恢復", async () => {
+    let resolve: (v: unknown) => void = () => {};
+    generateScenarioQuestions.mockImplementationOnce(
+      () => new Promise((r) => (resolve = r)),
+    );
+    renderPanel();
+    await fillDirectionForGenerate("問週末");
+    expect(chip("direction")).not.toBeDisabled();
+
+    fireEvent.click(screen.getByText(K.generate));
+
+    expect(chip("direction")).toBeDisabled();
+    expect(chip("mode")).toBeDisabled();
+    expect(chip("direction")).toHaveAttribute(
+      "title",
+      "guidedChat.placeholders.pending",
+    );
+    expect(screen.getByTestId("guided-chat-chips-reason")).toHaveTextContent(
+      "guidedChat.placeholders.pending",
+    );
+    // 點了也打不開 Popover
+    fireEvent.click(chip("direction")!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await act(async () => {
+      resolve({ usable: true, reask: "", questions: [fakeQuestion(1)] });
+      await Promise.resolve();
+    });
+    expect(chip("direction")).not.toBeDisabled();
+    expect(screen.queryByTestId("guided-chat-chips-reason")).toBeNull();
+  });
+
+  it("AI 寫情境中：已選項目列停用", async () => {
+    generateScenarioArticle.mockImplementationOnce(() => new Promise(() => {}));
+    renderPanel();
+    chooseMode("ai");
+    await say("在夜市點餐");
+    expect(chip("mode")).toBeDisabled();
+  });
+
+  it("產題只替實際加入清單的題目產生語音（AI 多給、重複的不算）", async () => {
+    renderPanel();
+    await fillDirectionForGenerate();
+    for (let i = 1; i <= 9; i++) addTypedQuestion(`Q${i}?`);
+    fireEvent.click(ttsCheckbox());
+    // 剩 1 個名額，AI 卻回 3 題（其中一題和清單重複）
+    generateScenarioQuestions.mockResolvedValueOnce({
+      usable: true,
+      reask: "",
+      questions: [
+        { ...fakeQuestion(1), question: "Q1?" },
+        fakeQuestion(2),
+        fakeQuestion(3),
+      ],
+    });
+
+    await runGenerate(K.generate);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getAllByPlaceholderText(K.questionPlaceholder)).toHaveLength(
+      10,
+    );
+    expect(generateTTS).toHaveBeenCalledTimes(1);
+    expect(generateTTS.mock.calls[0][0]).toBe("Generated question 2?");
+  });
+
+  it("改來源清掉方向後，舊的方向不會留在小框或下一次產題裡", async () => {
+    renderPanel();
+    await fillDirectionForGenerate("問週末");
+
+    fireEvent.click(
+      within(openChip("source")).getByRole("button", {
+        name: K.source("manual"),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
+    // 改回 AI 出題：方向那一步重新問，標籤值與小框都是空的
+    fireEvent.click(
+      within(openChip("source")).getByRole("button", { name: K.source("ai") }),
+    );
+    // 紀錄裡有一份舊的問句，目前這一步又問一次
+    expect(
+      screen.getAllByText("scenarioDialogue.setup.q.direction"),
+    ).toHaveLength(2);
+    expect(composerBox()).toHaveAttribute(
+      "placeholder",
+      K.directionPlaceholder,
+    );
+    expect(chip("direction")).not.toHaveTextContent("問週末");
+    expect(
+      within(openChip("direction")).getByRole("textbox", {
+        name: "scenarioDialogue.setup.q.direction",
+      }),
+    ).toHaveValue("");
+  });
+
+  it("情境區消失時收掉編輯狀態：情境再出現時不會直接開在編輯模式", () => {
+    vi.useFakeTimers();
+    try {
+      renderPanel();
+      chooseMode("existing");
+      type(K.scenarioPlaceholder, "It is Monday.");
+      fireEvent.click(screen.getByText(K.useScenario));
+      fireEvent.click(
+        within(openChip("mode")).getByRole("button", { name: K.editScenario }),
+      );
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(
+        within(screen.getByTestId("scenario-context-section")).getByRole(
+          "button",
+          { name: K.contextDone },
+        ),
+      ).toBeInTheDocument();
+
+      // 改成「不需要情境」（確認清空）→ 情境區消失
+      fireEvent.click(
+        within(openChip("mode")).getByRole("button", { name: K.mode("none") }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: K.reopenConfirm }));
+      expect(screen.queryByTestId("scenario-context-section")).toBeNull();
+
+      // 再改回既有教材、重新確認情境 → 情境區是唯讀
+      fireEvent.click(
+        within(openChip("mode")).getByRole("button", {
+          name: new RegExp(K.mode("existing")),
+        }),
+      );
+      type(K.scenarioPlaceholder, "It is Tuesday.");
+      fireEvent.click(screen.getByText(K.useScenario));
+      const section = screen.getByTestId("scenario-context-section");
+      expect(
+        within(section).queryByRole("button", { name: K.contextDone }),
+      ).toBeNull();
+      expect(
+        within(section).getByRole("button", { name: K.contextEdit }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
