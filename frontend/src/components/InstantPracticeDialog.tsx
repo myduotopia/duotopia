@@ -3,6 +3,15 @@
  *
  * 簡化版練習設定，讓老師快速選擇練習模式後開始練習。
  * 建立暫時 assignment 後導向 preview 頁面。
+ *
+ * 可選的模式（#1158 E-4）：
+ * - 這裡列的是「開始時的捷徑」清單（PRACTICE_MODES，依內容類型）；開始後可在練習畫面的
+ *   「進階設定」切換到該內容類型的其他模式。
+ * - 一律再用 `instantPracticeModesForContentType` 過濾：模式要屬於這個內容類型、且已開放派發
+ *   （自動吃功能開關，例如情境對話）。後端 create／reconfigure 也用同一條規則擋（422）。
+ * - 情境對話內容只有「情境對話」一種模式，不能切成其他作業類型。
+ * - 沒有可用模式時「開始練習」停用，並在下方寫明原因（REVIEW.md 按鈕層級 3）。
+ * 班級頁、機構教材頁共用這個對話框。
  */
 
 import { useState } from "react";
@@ -26,6 +35,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { instantPracticeModesForContentType } from "@/lib/practiceMode";
 import { toast } from "sonner";
 
 interface InstantPracticeDialogProps {
@@ -82,7 +92,33 @@ const PRACTICE_MODES: PracticeModeOption[] = [
     icon: Swords,
     contentTypes: ["VOCABULARY_SET", "vocabulary_set"],
   },
+  {
+    // #1158 E-4：情境對話內容只有這一種模式（受情境對話派發開關控制）
+    value: "scenario_dialogue",
+    labelKey: "practiceMode.scenario_dialogue.label",
+    descriptionKey: "practiceMode.scenario_dialogue.desc",
+    icon: Mic,
+    contentTypes: ["SCENARIO_DIALOGUE", "scenario_dialogue"],
+  },
 ];
+
+/**
+ * 對話框列出的模式：依內容類型的捷徑清單，再交給 `instantPracticeModesForContentType`
+ * 確認屬於這個內容類型且已開放。沒傳內容類型（舊呼叫端）沿用原本的五種、不含情境對話。
+ */
+export function instantPracticeDialogModes(
+  contentType?: string,
+): PracticeModeOption[] {
+  if (!contentType) {
+    return PRACTICE_MODES.filter((m) => m.value !== "scenario_dialogue");
+  }
+  const allowed = new Set<string>(
+    instantPracticeModesForContentType(contentType),
+  );
+  return PRACTICE_MODES.filter(
+    (m) => m.contentTypes.includes(contentType) && allowed.has(m.value),
+  );
+}
 
 export function InstantPracticeDialog({
   open,
@@ -97,18 +133,17 @@ export function InstantPracticeDialog({
   const [selectedMode, setSelectedMode] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
 
-  // Filter modes by content type
-  const availableModes = contentType
-    ? PRACTICE_MODES.filter((mode) => mode.contentTypes.includes(contentType))
-    : PRACTICE_MODES;
+  const availableModes = instantPracticeDialogModes(contentType);
+  const noModes = availableModes.length === 0;
 
   // Auto-select first available mode
   const effectiveMode =
-    selectedMode ||
-    (availableModes.length > 0 ? availableModes[0].value : "reading");
+    selectedMode && availableModes.some((m) => m.value === selectedMode)
+      ? selectedMode
+      : (availableModes[0]?.value ?? "");
 
   const handleStart = async () => {
-    if (isCreating) return;
+    if (isCreating || noModes) return;
     setIsCreating(true);
 
     try {
@@ -158,7 +193,9 @@ export function InstantPracticeDialog({
                 const isSelected = effectiveMode === mode.value;
                 return (
                   <button
+                    type="button"
                     key={mode.value}
+                    aria-pressed={isSelected}
                     onClick={() => setSelectedMode(mode.value)}
                     className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors text-left ${
                       isSelected
@@ -199,6 +236,11 @@ export function InstantPracticeDialog({
                 );
               })}
             </div>
+            {noModes && (
+              <p className="text-sm text-gray-500" role="note">
+                {t("instantPractice.noModes")}
+              </p>
+            )}
           </div>
         </div>
 
@@ -208,7 +250,8 @@ export function InstantPracticeDialog({
           </Button>
           <Button
             onClick={handleStart}
-            disabled={isCreating || availableModes.length === 0}
+            disabled={isCreating || noModes}
+            title={noModes ? t("instantPractice.noModes") : undefined}
             className="bg-amber-500 hover:bg-amber-600 text-white"
           >
             {isCreating ? (

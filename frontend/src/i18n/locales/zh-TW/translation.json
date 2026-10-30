@@ -5975,6 +5975,7 @@
     "modeLabel": "練習模式",
     "creating": "建立中...",
     "start": "開始練習",
+    "noModes": "這份教材目前沒有可用的練習模式",
     "error": "建立即刻練習失敗",
     "advancedSettings": "進階設定",
     "applyAndRestart": "套用並重新開始",

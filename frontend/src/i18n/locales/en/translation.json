@@ -5939,6 +5939,7 @@
     "modeLabel": "Practice Mode",
     "creating": "Creating...",
     "start": "Start Practice",
+    "noModes": "No practice mode is available for this material yet",
     "error": "Failed to create instant practice",
     "advancedSettings": "Advanced Settings",
     "applyAndRestart": "Apply & Restart",
