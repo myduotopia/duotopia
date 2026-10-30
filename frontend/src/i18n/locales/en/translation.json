@@ -5689,7 +5689,8 @@
       "contents": "Contents",
       "copyToMy": "Copy to My Materials",
       "copyToOrg": "Copy to Org Materials",
-      "copiedToday": "Copied Today"
+      "copiedToday": "Copied Today",
+      "noCopyPermissionOrg": "Only organization admins can copy to organization materials. Please contact your admin."
     },
     "detail": {
       "backToList": "Back to List",
@@ -5732,7 +5733,8 @@
       "copyFailed": "Copy failed. Please try again later.",
       "autoCopySuccess": "\"{{name}}\" is now in My Materials — ready to practise!",
       "autoCopySuccessOrg": "\"{{name}}\" is now in Organization Materials — ready to practise!",
-      "autoCopyFailed": "Could not copy the material automatically. Please copy it from Resource Materials."
+      "autoCopyFailed": "Could not copy the material automatically. Please copy it from Resource Materials.",
+      "loadFailed": "Failed to load resource materials. Please refresh the page."
     }
   },
   "contentCopy": {
