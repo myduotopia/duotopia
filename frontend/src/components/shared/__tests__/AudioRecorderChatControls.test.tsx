@@ -138,5 +138,7 @@ describe("AudioRecorderChatControls — 浮在對話區上（#1158 E2）", () =>
     expect(err.className).toContain("max-w-[40%]");
     expect(err).toHaveAttribute("title", long);
     expect(screen.getByText(long).className).toContain("truncate");
+    // 外層錄音區 pointer-events-none；錯誤訊息要能滑過看 title（#1158 E2b）
+    expect(err.className).toContain("pointer-events-auto");
   });
 });

@@ -39,7 +39,11 @@ import {
   isRetryableUploadError,
   retryAudioUpload,
 } from "@/utils/retryHelper";
-import { primeSpeechSynthesis, speakEnglish } from "@/utils/speakEnglish";
+import {
+  primeSpeechSynthesis,
+  speakEnglish,
+  stopSpeaking,
+} from "@/utils/speakEnglish";
 
 import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
 
@@ -246,11 +250,8 @@ const speechAdapters = {
   // 在「開始對話」的點擊裡先唸一段空字串並觸發載入語音清單，之後計時器裡的
   // 自動朗讀才不會被瀏覽器的手勢限制擋掉（#1158 E-2 先聽後看實測沒聲音）
   primeSpeech: primeSpeechSynthesis,
-  stopSpeech: () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-  },
+  // 同時取消「沒開始唸」的逾時保底，停掉不算朗讀失敗（#1158 E2b）
+  stopSpeech: stopSpeaking,
 };
 
 /**

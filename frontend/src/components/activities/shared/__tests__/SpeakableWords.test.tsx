@@ -29,6 +29,13 @@ describe("wordToSpeak", () => {
 });
 
 describe("SpeakableWords", () => {
+  it("外層以整句當名稱（螢幕報讀先聽到完整句子），單字按鈕不變（#1158 E2b）", () => {
+    render(<SpeakableWords text="I went to the park." />);
+    const group = screen.getByRole("group", { name: "I went to the park." });
+    expect(group).toBeInTheDocument();
+    expect(group.querySelectorAll("button")).toHaveLength(5);
+  });
+
   it("每個字一顆按鈕，畫面照原樣（含標點），點了只唸那個字", () => {
     render(<SpeakableWords text="I'm eating rice — don't stop." />);
     const buttons = screen.getAllByRole("button");

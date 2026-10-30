@@ -3,10 +3,19 @@
  * - 不佔 maxAttempts（usedAttempts 排除），送去 AI 的 attemptIndex 也不含求助；
  * - 回來後直接回到作答（不停在「看建議」），重答中就留在重答；
  * - 「答過」只算正式回答。
+ * - 每題求助最多 3 次；第 4 次起回求助也當正式作答（#1158 E2b，與後端一致）。
+ * - 重答中求助回來，最後一筆求助（回答＋片語）不變淡（#1158 E2b）。
  */
 import { describe, it, expect, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
-import { usedAttempts, useScenarioChat, TYPING_MS } from "../useScenarioChat";
+import { act, render, renderHook, screen } from "@testing-library/react";
+import {
+  capHelpFeedback,
+  helpCount,
+  MAX_HELP_PER_ITEM,
+  usedAttempts,
+  useScenarioChat,
+  TYPING_MS,
+} from "../useScenarioChat";
 import type {
   ScenarioAttempt,
   ScenarioChatAdapters,
@@ -18,6 +27,13 @@ const ITEMS = [
   { id: 1, text: "Q1?", keywords: [], images: [] },
   { id: 2, text: "Q2?", keywords: [], images: [] },
 ];
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { language: "zh-TW" },
+  }),
+}));
 
 const HELP: ScenarioFeedback = {
   kind: "phrase",
@@ -127,5 +143,120 @@ describe("useScenarioChat — 求助不算次數", () => {
     expect(result.current.retry).toEqual({ index: 0, status: "answering" });
     expect(result.current.retryReturn.tick).toBe(tick);
     vi.useRealTimers();
+  });
+});
+
+describe("求助上限（#1158 E2b）", () => {
+  it("MAX_HELP_PER_ITEM＝3；用完後求助當正式作答，verdict 補 improve", () => {
+    expect(MAX_HELP_PER_ITEM).toBe(3);
+    const help = { ...HELP, verdict: undefined } as unknown as ScenarioFeedback;
+    expect(capHelpFeedback(help, 2)).toBe(help);
+    expect(capHelpFeedback(help, 3)).toEqual({
+      ...help,
+      kind: "feedback",
+      verdict: "improve",
+    });
+    expect(capHelpFeedback(ANSWER, 5)).toBe(ANSWER);
+    expect(
+      helpCount([
+        { answer: VOICE, feedback: HELP },
+        { answer: VOICE, feedback: ANSWER },
+        { answer: VOICE },
+      ]),
+    ).toBe(1);
+  });
+
+  it("第 4 次求助算一次正式作答、停在看建議", async () => {
+    vi.useFakeTimers();
+    URL.revokeObjectURL = vi.fn();
+    const getFeedback = vi.fn(() => Promise.resolve(HELP));
+    const adapters: ScenarioChatAdapters = { getFeedback, speak: vi.fn() };
+    const { result } = renderHook(() =>
+      useScenarioChat({
+        items: ITEMS,
+        adapters,
+        maxAttempts: 3,
+        textDefaultHidden: false,
+        translatable: [false, false],
+      }),
+    );
+    act(() => result.current.start());
+    act(() => {
+      vi.advanceTimersByTime(TYPING_MS);
+    });
+    for (let k = 0; k < 3; k++) {
+      await act(async () => {
+        result.current.submitAnswer(VOICE);
+      });
+    }
+    expect(usedAttempts(result.current.attempts[0])).toBe(0);
+
+    await act(async () => {
+      result.current.submitAnswer(VOICE);
+    });
+    const list = result.current.attempts[0];
+    expect(list[3].feedback?.kind).toBe("feedback");
+    expect(usedAttempts(list)).toBe(1);
+    expect(helpCount(list)).toBe(3);
+    expect(result.current.phase).toBe("feedbackShown");
+    vi.useRealTimers();
+  });
+});
+
+describe("重答中求助回來：最後一筆求助不變淡（#1158 E2b）", () => {
+  it("舊的回答／建議變淡，求助那一筆（回答＋片語）不淡", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { ChatTranscript } = await import("../ChatTranscript");
+    const old = {
+      answer: { kind: "text" as const, text: "She eat food." },
+      feedback: ANSWER,
+    };
+    const help = {
+      answer: { kind: "text" as const, text: "公園英文怎麼說" },
+      feedback: HELP,
+    };
+    const chat = {
+      phase: "awaitingAnswer",
+      current: 1,
+      attempts: [[old, help], []],
+      revealedCount: 2,
+      visible: [
+        { en: true, zh: false },
+        { en: true, zh: false },
+      ],
+      skipped: [false, false],
+      retry: { index: 0, status: "answering" },
+      retryBusy: false,
+      closingShown: false,
+      canRetry: () => false,
+      averageFor: () => null,
+      toggleText: () => {},
+      goNext: () => {},
+    };
+    render(
+      <ChatTranscript
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        chat={chat as any}
+        items={ITEMS}
+        settings={{
+          replyMode: "text",
+          textDefaultHidden: false,
+          showTranslation: false,
+          isPreviewMode: false,
+          maxAttempts: 3,
+        }}
+        adapters={{ getFeedback: vi.fn(), speak: vi.fn() }}
+        translatable={[false, false]}
+        registerBlock={() => {}}
+        onRetry={() => {}}
+      />,
+    );
+    const bubbles = screen.getAllByTestId("scenario-feedback");
+    expect(bubbles[0].className).toContain("opacity-60");
+    expect(bubbles[1].className).not.toContain("opacity-60");
+    const fadeOf = (text: string) =>
+      screen.getByText(text).closest(".transition-opacity")!.className;
+    expect(fadeOf("She eat food.")).toContain("opacity-50");
+    expect(fadeOf("公園英文怎麼說")).not.toContain("opacity-50");
   });
 });

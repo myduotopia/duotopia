@@ -14,7 +14,8 @@
  *   標準 AudioPlayer minimal＋tone="soft"）＋時長。沒傳 onSend 就不顯示送出鈕。
  * - D 停用（`disabled`，例如等 AI 建議）：灰色麥克風，aria-label／title 帶停用原因
  *   （`disabledReason`）；原因文字由外層顯示在底色條右側。
- * 錄音失敗時左下角顯示紅字（淡白底、一行截斷，完整訊息在 title）。
+ * 錄音失敗時左下角顯示紅字（淡白底、一行截斷，完整訊息在 title；pointer-events-auto，
+ * 滑過才看得到 title，#1158 E2b）。
  * 按鈕與試聽鈕 pointer-events-auto，配合外層 pointer-events-none 的錄音區（#1158 E2）。
  */
 
@@ -211,7 +212,7 @@ export default function AudioRecorderChatControls({
       {showError && !isRecording && (
         // 淡白底：錯誤字可能疊到對話區；限寬一行截斷，完整訊息放 title
         <span
-          className="absolute bottom-1 left-3 flex max-w-[40%] items-center gap-1 rounded bg-white/90 px-1 text-xs leading-tight text-red-600"
+          className="pointer-events-auto absolute bottom-1 left-3 flex max-w-[40%] items-center gap-1 rounded bg-white/90 px-1 text-xs leading-tight text-red-600"
           title={errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
           data-testid="chat-recorder-error"
         >

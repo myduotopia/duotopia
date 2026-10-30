@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { primeSpeechSynthesis, speakEnglish } from "../speakEnglish";
+import {
+  START_TIMEOUT_MS,
+  primeSpeechSynthesis,
+  speakEnglish,
+  stopSpeaking,
+} from "../speakEnglish";
 
 // jsdom does not implement the Web Speech API — provide minimal mocks
 class MockSpeechSynthesisUtterance {
@@ -260,6 +265,94 @@ describe("speakEnglish", () => {
       value: synthMock,
       writable: true,
       configurable: true,
+    });
+  });
+  describe("逾時保底（#1158 E2b）：遲遲沒開始唸就當作出錯", () => {
+    type U = {
+      onstart?: () => void;
+      onend?: () => void;
+      onerror?: (e: { error: string }) => void;
+    };
+    const useEnglishVoice = () => {
+      synthMock = makeSynthMock([{ lang: "en-US", name: "US English" }]);
+      Object.defineProperty(window, "speechSynthesis", {
+        value: synthMock,
+        writable: true,
+        configurable: true,
+      });
+    };
+    const utteranceAt = (i: number) => synthMock.speak.mock.calls[i][0] as U;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      useEnglishVoice();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("calls onError when onstart never comes", () => {
+      const onError = vi.fn();
+      speakEnglish("hello", { onError });
+      vi.advanceTimersByTime(START_TIMEOUT_MS - 1);
+      expect(onError).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onError).toHaveBeenCalledOnce();
+    });
+
+    it("does not fire once speech has started", () => {
+      const onError = vi.fn();
+      speakEnglish("hello", { onError });
+      utteranceAt(0).onstart?.();
+      vi.advanceTimersByTime(START_TIMEOUT_MS * 2);
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it("also covers voices that never load", () => {
+      synthMock = makeSynthMock([]);
+      Object.defineProperty(window, "speechSynthesis", {
+        value: synthMock,
+        writable: true,
+        configurable: true,
+      });
+      const onError = vi.fn();
+      speakEnglish("hello", { onError });
+      vi.advanceTimersByTime(START_TIMEOUT_MS);
+      expect(onError).toHaveBeenCalledOnce();
+    });
+
+    it("a newer call cancels the older call's timeout", () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      speakEnglish("a", { onError: first });
+      speakEnglish("b", { onError: second });
+      // 舊句子被打斷的事件晚到，不能把新句子的保底取消掉
+      utteranceAt(0).onerror?.({ error: "interrupted" });
+      vi.advanceTimersByTime(START_TIMEOUT_MS);
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledOnce();
+    });
+
+    it("onError fires at most once (error event then timeout)", () => {
+      const onError = vi.fn();
+      speakEnglish("hello", { onError });
+      utteranceAt(0).onerror?.({ error: "synthesis-failed" });
+      vi.advanceTimersByTime(START_TIMEOUT_MS);
+      expect(onError).toHaveBeenCalledOnce();
+    });
+
+    it("stopSpeaking cancels speech and the pending timeout", () => {
+      const onError = vi.fn();
+      speakEnglish("hello", { onError });
+      stopSpeaking();
+      vi.advanceTimersByTime(START_TIMEOUT_MS);
+      expect(onError).not.toHaveBeenCalled();
+      expect(synthMock.cancel).toHaveBeenCalledTimes(2);
+    });
+
+    it("no timer at all without onError", () => {
+      speakEnglish("hello");
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 });

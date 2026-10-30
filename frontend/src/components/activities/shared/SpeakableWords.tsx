@@ -8,6 +8,8 @@
  * - 以空白切字，畫面照原樣顯示（含標點）；唸的時候去掉字首字尾的標點（`wordToSpeak`），
  *   字中間的撇號保留（I'm、don't），大小寫不動。只有標點的片段（例如「—」）不能點。
  * - 每個字是 `<button>`（可用鍵盤），aria-label／title：「點擊發音: word」。
+ * - 外層 `role="group"`＋`aria-label`＝整句：螢幕報讀先聽到完整句子，不必一個字一個字拼
+ *   （#1158 E2b）。
  * - 字與字之間放空白字元：一般文字流裡就是正常的字距；外層傳 flex 版面（例如
  *   `flex flex-wrap gap-1`）時空白字元不佔位，以 gap 為準。
  */
@@ -56,7 +58,7 @@ export function SpeakableWords({ text, className, wordClassName }: Props) {
   };
 
   return (
-    <span className={className}>
+    <span role="group" aria-label={text} className={className}>
       {tokens.map((token, i) => {
         const word = wordToSpeak(token);
         const sep = i > 0 ? " " : null;

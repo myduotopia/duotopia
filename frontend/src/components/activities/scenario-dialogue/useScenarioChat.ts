@@ -13,6 +13,8 @@
  * - 每題最多 maxAttempts 次；目前這題用完停 AUTO_NEXT_MS 自動進下一題。
  * - 求助（AI 回 kind=phrase／model_answer，#1158）不算次數（usedAttempts），回來後直接回到
  *   作答（主流程 awaitingAnswer、重答維持 answering），不出現「再試一次／下一題」。
+ *   每題求助最多 MAX_HELP_PER_ITEM 次；之後再回求助就當正式作答（計次、顯示一般建議），
+ *   與後端一致（後端第 4 次起不退額度、回 kind=feedback；這裡再擋一層，mock／舊回應也一樣）。
  * - 重答（retry）：作答中或結束後，任何已出現、還沒答滿的題目都能按「再試一次」回頭答，
  *   不影響主流程（主流程的計時器照跑）。新回答與建議接在該題原有紀錄下方；
  *   建議回來（或按 ✕ 取消）後 `retryReturn` 會變，由畫面捲回原本進行中的題目。
@@ -71,6 +73,25 @@ const revokeAnswer = (a: ScenarioAttempt) => {
 /** 求助（問某個字怎麼說／不會答，#1158）：不評、不算作答次數 */
 export const isHelpFeedback = (f?: ScenarioFeedback): boolean =>
   f?.kind === "phrase" || f?.kind === "model_answer";
+
+/** 每題最多幾次求助（與後端 MAX_HELP_PER_ITEM 一致，#1158 E2b） */
+export const MAX_HELP_PER_ITEM = 3;
+
+/** 這題用掉幾次求助 */
+export const helpCount = (list: ScenarioAttempt[] | undefined): number =>
+  (list ?? []).filter((a) => isHelpFeedback(a.feedback)).length;
+
+/**
+ * 求助次數用完後還回求助 → 當正式作答（verdict 沒有就補 improve）。後端已經這樣做，
+ * 這裡保證前端計次與顯示一定一致。
+ */
+export const capHelpFeedback = (
+  feedback: ScenarioFeedback,
+  helpUsedBefore: number,
+): ScenarioFeedback =>
+  isHelpFeedback(feedback) && helpUsedBefore >= MAX_HELP_PER_ITEM
+    ? { ...feedback, kind: "feedback", verdict: feedback.verdict ?? "improve" }
+    : feedback;
 
 /**
  * 這題用掉的作答次數：求助不算；還在等建議的先算（回來是求助就不算了）。
@@ -234,8 +255,12 @@ export function useScenarioChat({
       const session = sessionRef.current;
       adaptersRef.current
         .getFeedback(items[q], answer, attemptIndex)
-        .then((feedback) => {
+        .then((raw) => {
           if (session !== sessionRef.current) return;
+          const feedback = capHelpFeedback(
+            raw,
+            helpCount(attemptsRef.current[q].slice(0, slot)),
+          );
           setAttempts((prev) =>
             prev.map((list, i) =>
               i === q

@@ -47,6 +47,7 @@ vi.mock("@/utils/retryHelper", () => ({
 vi.mock("@/utils/speakEnglish", () => ({
   speakEnglish: vi.fn(),
   primeSpeechSynthesis: vi.fn(),
+  stopSpeaking: vi.fn(),
 }));
 vi.mock("i18next", () => ({
   default: { language: "zh-TW", t: (k: string) => k },
