@@ -125,3 +125,50 @@ describe("OverallFeedbackPanel score input (#1045 V7)", () => {
     expect(input().value).toBe("42");
   });
 });
+
+// #1158：returnDisabledReason → 「要求訂正」停用並說明原因；沒傳時行為不變
+describe("OverallFeedbackPanel return button (#1158)", () => {
+  const submission = {
+    student_id: 1,
+    student_name: "Amy",
+    status: "SUBMITTED",
+  } as unknown as Props["submission"];
+
+  it("停用並在按鈕與外層 title 寫原因，點了不呼叫 onRequestRevision", () => {
+    const onRequestRevision = vi.fn();
+    render(
+      <OverallFeedbackPanel
+        {...baseProps({
+          submission,
+          onRequestRevision,
+          returnDisabledReason: "情境對話作業目前不能退回訂正",
+        })}
+      />,
+    );
+    const btn = screen
+      .getAllByTitle("情境對話作業目前不能退回訂正")
+      .find((el) => el.tagName === "BUTTON")!;
+    expect(btn).toBeDisabled();
+    expect(btn.parentElement).toHaveAttribute(
+      "title",
+      "情境對話作業目前不能退回訂正",
+    );
+    fireEvent.click(btn);
+    expect(onRequestRevision).not.toHaveBeenCalled();
+  });
+
+  it("沒有原因時照舊可按（迴歸）", () => {
+    const onRequestRevision = vi.fn();
+    render(
+      <OverallFeedbackPanel
+        {...baseProps({ submission, onRequestRevision })}
+      />,
+    );
+    const btn = screen
+      .getAllByTitle("gradingHub.returnShort")
+      .find((el) => el.tagName === "BUTTON")!;
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
+    expect(onRequestRevision).toHaveBeenCalledTimes(1);
+  });
+});

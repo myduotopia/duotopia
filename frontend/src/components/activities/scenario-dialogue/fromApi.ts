@@ -183,6 +183,8 @@ export interface ScenarioStudentActivity {
     ai_analysis_count?: number | null;
     /** 這題已用掉的求助次數（伺服器計數，#1158 E-4） */
     help_count?: number | null;
+    /** 老師已把這題標成通過（#1158 修正 E4：重新進入後不能再試） */
+    teacher_passed?: boolean | null;
     scenario_dialogue?: {
       keywords?: string[];
       rubric_note?: string;
@@ -236,6 +238,8 @@ export function scenarioChatFromStudentActivity(
         ...(count(item.help_count)
           ? { priorHelp: count(item.help_count) }
           : {}),
+        // 老師已通過（#1158 修正 E4）：只認 true，null／false 都不算
+        ...(item.teacher_passed === true ? { teacherPassed: true } : {}),
       };
     },
   );

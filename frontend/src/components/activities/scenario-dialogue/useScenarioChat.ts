@@ -27,7 +27,9 @@
  * - AI 建議以 adapters.getFeedback 注入；過期的回應（卸載／跳題後才回來）以 sessionRef 丟棄。
  * - 暫停（paused，#1158 修正 E3 手機橫放）：「輸入中…」時間到但正在暫停 → 題目先不出、不朗讀
  *   （維持「輸入中…」），轉回直立才出題並朗讀；暫停中要自動朗讀的（例如自動進下一題）也等轉回才唸。
- * - 接著上次進度（#1158 E-4）：題目有 `submittedAudioUrl`（伺服器存的錄音）＝上次答過（restored）。
+ * - 接著上次進度（#1158 E-4）：`priorAttempts > 0`（至少一次正式作答，#1158 修正 E4）＝上次答過
+ *   （restored）；只求助或取建議失敗的題目不算，重新進入後仍會被問。
+ *   老師已通過（`teacherPassed`）的題目視同答滿：不再問、不能再試（畫面標「老師已通過」）。
  *   按「開始對話」後，從第一題「沒答過、也沒答滿」的題目開始問（會朗讀）；它前面的題目一起出現，
  *   以紀錄呈現（題目＋上次的錄音，沒有 AI 建議，見 ChatTranscript）。之後主流程往下走時，
  *   上次答過的題目同樣直接以紀錄出現、不再問。全部都答過 → 直接到「提交作業」（finished）。
@@ -114,9 +116,16 @@ export const capHelpFeedback = (
 export const usedAttempts = (list: ScenarioAttempt[] | undefined): number =>
   (list ?? []).filter((a) => !isHelpFeedback(a.feedback)).length;
 
-/** 上次已答過（伺服器有錄音，#1158 E-4） */
-const isRestored = (item: ScenarioChatItem | undefined): boolean =>
-  Boolean(item?.submittedAudioUrl);
+/**
+ * 上次已答過：至少一次正式作答（伺服器 ai_analysis_count > 0，#1158 修正 E4）。
+ * 只求助、或取建議失敗（不佔次數）的題目不算，重新進入後仍會被問。
+ */
+export const isRestored = (item: ScenarioChatItem | undefined): boolean =>
+  (item?.priorAttempts ?? 0) > 0;
+
+/** 老師已通過：不再問、不能再試（#1158 修正 E4） */
+const isTeacherPassed = (item: ScenarioChatItem | undefined): boolean =>
+  item?.teacherPassed === true;
 
 export function useScenarioChat({
   items,
@@ -263,12 +272,13 @@ export function useScenarioChat({
     [items],
   );
 
+  /** 不能再作答：答滿了，或老師已通過（#1158 修正 E4） */
   const isExhausted = useCallback(
-    (i: number) => usedFor(i) >= maxAttempts,
-    [usedFor, maxAttempts],
+    (i: number) => usedFor(i) >= maxAttempts || isTeacherPassed(items[i]),
+    [usedFor, maxAttempts, items],
   );
 
-  /** 主流程不必再問的題目：答滿了，或上次已答過（以紀錄呈現，#1158 E-4） */
+  /** 主流程不必再問的題目：不能再作答，或上次已答過（以紀錄呈現，#1158 E-4） */
   const isSettled = useCallback(
     (i: number) => isRestored(items[i]) || isExhausted(i),
     [items, isExhausted],
@@ -349,7 +359,7 @@ export function useScenarioChat({
       const slot = attemptsRef.current[q].length;
       // 含上次（伺服器計數）用掉的次數（#1158 E-4）
       const attemptIndex = usedFor(q);
-      if (attemptIndex >= maxAttempts) return;
+      if (attemptIndex >= maxAttempts || isTeacherPassed(items[q])) return;
       setAttempts((prev) =>
         prev.map((list, i) => (i === q ? [...list, { answer }] : list)),
       );
@@ -428,6 +438,7 @@ export function useScenarioChat({
       if (phase === "intro" || i >= revealedCount) return false;
       const list = attempts[i];
       if (usedFor(i, attempts) >= maxAttempts) return false;
+      if (isTeacherPassed(items[i])) return false;
       if (list.length === 0) {
         if (!isRestored(items[i])) return false;
       } else if (!list[list.length - 1].feedback) return false;
@@ -558,11 +569,13 @@ export function useScenarioChat({
   /** 目前這題之後已經沒有要問的題目（最後一步）：答滿時的提示改「即將結束對話」 */
   const atLastStep = nextAskable(current, revealedCount) >= n;
 
-  /** 每題答過沒：本次至少一次正式作答，或上次已答過（伺服器有錄音，#1158 E-4） */
+  /** 每題上次答過沒（至少一次正式作答，#1158 修正 E4）；ChatTranscript 據此放「上次的回答」 */
+  const restored = useMemo(() => items.map((it) => isRestored(it)), [items]);
+
+  /** 每題答過沒：本次至少一次正式作答，或上次已答過（#1158 E-4） */
   const answered = useMemo(
-    () =>
-      attempts.map((list, i) => usedAttempts(list) > 0 || isRestored(items[i])),
-    [attempts, items],
+    () => attempts.map((list, i) => usedAttempts(list) > 0 || restored[i]),
+    [attempts, restored],
   );
 
   return {
@@ -579,6 +592,7 @@ export function useScenarioChat({
     retryReturn,
     exhausted,
     atLastStep,
+    restored,
     answered,
     usedFor,
     flowKey,

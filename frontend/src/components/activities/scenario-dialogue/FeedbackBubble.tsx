@@ -21,6 +21,7 @@
  * - `autoNext`：目前這題已答滿 → 小字「已達 N 次，即將進入下一題」，由狀態機自動進下一題
  * - `autoFinish`：同上，但已是最後一步 → 「已達 N 次，即將結束對話」（#1158 E-4 提交按鈕）
  * - `reached`：已答滿的題目 → 小字「已達 N 次」（按鈕位置改顯示這行，不是直接消失）
+ * - `teacherPassed`：老師已通過的題目 → 小字「老師已通過」（green-700），不能再試（#1158 修正 E4）
  * - `none`：這題正在作答／等建議中，不放操作
  * 另一題重答正在等 AI 建議時，「再試一次」暫時停用（retryDisabled，處理中不另說明）。
  * 回頭重答這一題時，舊的建議變淡（faded，#1158 E-2 重答流程）。
@@ -43,6 +44,7 @@ export type FeedbackActions =
   | "autoNext"
   | "autoFinish"
   | "reached"
+  | "teacherPassed"
   | "none";
 
 interface Props {
@@ -126,6 +128,13 @@ export function FeedbackActionRow({
     return (
       <p className="text-xs text-gray-500">
         {t("scenarioDialogue.chat.attemptsReached", { max: maxAttempts })}
+      </p>
+    );
+  }
+  if (actions === "teacherPassed") {
+    return (
+      <p className="text-xs font-medium text-green-700">
+        {t("scenarioDialogue.chat.teacherPassed")}
       </p>
     );
   }

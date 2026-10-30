@@ -47,6 +47,11 @@ export interface ScenarioChatItem {
   priorAttempts?: number;
   /** 上次離開前這題已用掉的求助次數（payload 的 help_count，#1158 E-4） */
   priorHelp?: number;
+  /**
+   * 老師已在批改頁把這題標成通過（payload 的 teacher_passed === true，#1158 修正 E4）：
+   * 重新進入後以紀錄呈現、標「老師已通過」，不再問、不能再試。
+   */
+  teacherPassed?: boolean;
 }
 
 /** 情境（題組文章＋圖）；content 與 images 皆空時不顯示情境卡 */

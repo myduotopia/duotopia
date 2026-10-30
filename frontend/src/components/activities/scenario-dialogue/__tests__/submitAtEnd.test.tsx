@@ -157,7 +157,14 @@ describe("畫面", () => {
     const { container } = render(
       <ScenarioChatActivity
         context={{ title: "t", images: [] }}
-        items={[{ ...item(1), submittedAudioUrl: "https://e.com/a.webm" }]}
+        // 「答過」＝至少一次正式作答（#1158 修正 E4）
+        items={[
+          {
+            ...item(1),
+            submittedAudioUrl: "https://e.com/a.webm",
+            priorAttempts: 1,
+          },
+        ]}
         settings={SETTINGS}
         adapters={adapters}
         onSubmit={onSubmit}

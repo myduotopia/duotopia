@@ -16,10 +16,13 @@
  * 只留「再試一次」（#1158 E-4 提交按鈕）；
  * 其他可重答的題目＝再試一次（回頭重答）。學生畫面不顯示分數；老師預覽顯示 mock 分數與本題平均。
  *
- * 接著上次進度（#1158 E-4）：上次答過的題目（item.submittedAudioUrl）在題目下方放一則學生回答氣泡，
+ * 接著上次進度（#1158 E-4）：上次答過的題目（至少一次正式作答 isRestored(item)，且有伺服器錄音
+ * item.submittedAudioUrl）在題目下方放一則學生回答氣泡，
  * 小字「上次的回答」、可播放伺服器存的錄音；沒有 AI 建議（當時的建議沒有存）。下方用同一份操作列
  * （FeedbackActionRow）：還有次數＝「↺ 再試一次」，用完＝「已達 N 次」。本次再答之後，新的回答與建議
  * 接在它下面、它變淡。次數（含「第 N 次」編號）都把上次用掉的算進去（chat.usedFor）。
+ * 老師已通過的題目（item.teacherPassed）操作列一律是「老師已通過」，不能再試（#1158 修正 E4）。
+ * 結尾語：學生＝請點綠色按鈕提交；老師預覽＝「全部答完了！（預覽不會送出）」。
  */
 
 import type { ReactNode } from "react";
@@ -34,6 +37,7 @@ import { QuestionBubble } from "./QuestionBubble";
 import { AiRow, TypingIndicator, aiBubbleClass } from "./TypingIndicator";
 import {
   isHelpFeedback,
+  isRestored,
   usedAttempts,
   type ScenarioChatState,
 } from "./useScenarioChat";
@@ -74,6 +78,8 @@ export function ChatTranscript({
   const isPreview = settings.isPreviewMode;
 
   const actionsFor = (i: number): FeedbackActions => {
+    // 老師已通過的題目不能再答（#1158 修正 E4）
+    if (items[i]?.teacherPassed) return "teacherPassed";
     // 求助（#1158）不算次數；上次（伺服器）用掉的也算（#1158 E-4）
     const used = chat.usedFor(i);
     const isCurrentDone = i === current && phase === "feedbackShown";
@@ -90,6 +96,7 @@ export function ChatTranscript({
 
   /** 上次答過的紀錄下方的操作（本次還沒再答時才有） */
   const restoredActionsFor = (i: number): FeedbackActions => {
+    if (items[i]?.teacherPassed) return "teacherPassed";
     if (chat.usedFor(i) >= maxAttempts) return "reached";
     return chat.canRetry(i) ? "retry" : "none";
   };
@@ -136,7 +143,7 @@ export function ChatTranscript({
               onPlay={() => adapters.speak(item.text)}
               onToggle={(w) => chat.toggleText(i, w)}
             />
-            {item.submittedAudioUrl && (
+            {item.submittedAudioUrl && isRestored(item) && (
               <div className="space-y-2" data-testid="scenario-previous-answer">
                 <AnswerBubble
                   answer={{ kind: "voice", audioUrl: item.submittedAudioUrl }}
@@ -193,7 +200,10 @@ export function ChatTranscript({
       {chat.closingShown && (
         <AiRow>
           <div className={`${bubble} text-gray-800`}>
-            {t("scenarioDialogue.chat.closing")}
+            {/* 老師預覽沒有綠色提交鈕可點，結尾語不叫人去點（#1158 修正 E4） */}
+            {isPreview
+              ? t("scenarioDialogue.chat.closingPreview")
+              : t("scenarioDialogue.chat.closing")}
           </div>
         </AiRow>
       )}

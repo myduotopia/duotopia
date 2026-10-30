@@ -1038,3 +1038,17 @@ export function isAutoScoredMode(mode?: string | null): boolean {
 export function isGradableMode(mode?: string | null): boolean {
   return getModeConfig(mode)?.gradable ?? false;
 }
+
+/**
+ * #1158：不能「退回訂正」的作業類型（後端 grading.py
+ * RETURN_NOT_ALLOWED_PRACTICE_MODES 同值；後端單筆退回回 409、批次略過）。
+ * 情境對話的狀態只有待完成、已提交、已批改。
+ */
+const RETURN_NOT_ALLOWED_MODES: ReadonlySet<string> = new Set([
+  "scenario_dialogue",
+]);
+
+/** 這種作業能不能退回訂正；不能時退回按鈕停用並說明原因。未知／空值 → 可以（行為不變）。 */
+export function canReturnForRevision(mode?: string | null): boolean {
+  return !mode || !RETURN_NOT_ALLOWED_MODES.has(mode);
+}
