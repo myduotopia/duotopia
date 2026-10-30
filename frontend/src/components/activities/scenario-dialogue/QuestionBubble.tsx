@@ -2,6 +2,7 @@
  * QuestionBubble — 情境對話聊天流中的「AI 提問」氣泡（#1133）。
  *
  * 單層氣泡（#1158 E-2 A 方案）：沒有外框線，只有淡灰底；翻譯直接灰字排在英文下面，不加框。
+ * 回頭重答這一題時（retrying，#1158 E-2）：氣泡改淡藍底＋藍色光圈，題號改「第 N / M 題・重答中」。
  * 先聽後看：`[🔊] [Aa 英] [中]` 小膠囊（RevealCapsules），英／翻譯可切換顯示、收起；
  * 翻譯鈕只在 showTranslation（老師開翻譯＋翻譯語言＝學生介面語言，由外層算好）且英文已打開時
  * 出現，否則不渲染。老師設定「文字預設顯示」時英文一開始就打開（由 visible 帶入）。
@@ -33,6 +34,8 @@ interface Props {
   isPreviewMode: boolean;
   skipped: boolean;
   averageScore: number | null;
+  /** 正在回頭重答這一題 */
+  retrying?: boolean;
   onPlay: () => void;
   onToggle: (which: "en" | "zh") => void;
 }
@@ -46,6 +49,7 @@ export function QuestionBubble({
   isPreviewMode,
   skipped,
   averageScore,
+  retrying = false,
   onPlay,
   onToggle,
 }: Props) {
@@ -56,7 +60,11 @@ export function QuestionBubble({
   return (
     <AiRow>
       <div
-        className="max-w-[min(100%,36rem)] overflow-hidden rounded-2xl rounded-tl-sm bg-gray-100"
+        className={cn(
+          "max-w-[min(100%,36rem)] overflow-hidden rounded-2xl rounded-tl-sm",
+          retrying ? "bg-blue-100 ring-2 ring-blue-300" : "bg-gray-100",
+        )}
+        data-retrying={retrying || undefined}
         data-testid="scenario-question"
       >
         {item.images.length > 0 && (
@@ -76,11 +84,20 @@ export function QuestionBubble({
 
         <div className="space-y-2 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-gray-500">
-              {t("scenarioDialogue.chat.questionNo", {
-                no: index + 1,
-                total,
-              })}
+            <span
+              className={cn(
+                "text-xs",
+                retrying
+                  ? "font-bold text-blue-700"
+                  : "font-medium text-gray-500",
+              )}
+            >
+              {t(
+                retrying
+                  ? "scenarioDialogue.chat.questionNoRetrying"
+                  : "scenarioDialogue.chat.questionNo",
+                { no: index + 1, total },
+              )}
             </span>
             {skipped && (
               <Badge variant="outline" className="text-gray-500">

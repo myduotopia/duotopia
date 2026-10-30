@@ -5065,6 +5065,7 @@
       "feedbackFailed": "AI 建議暫時拿不到，請再試一次。",
       "questionImages": "題目圖片",
       "questionNo": "第 {{no}} / {{total}} 題",
+      "questionNoRetrying": "第 {{no}} / {{total}} 題・重答中",
       "skipped": "略過",
       "averageScore": "本題平均 {{score}}",
       "playQuestion": "播放題目",

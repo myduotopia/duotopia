@@ -343,8 +343,11 @@ export function ScenarioChatActivity({
     [navigateRef],
   );
 
+  // 回頭重答時，題號方格的「目前」標在重答的那一題（#1158 E-2 重答流程）
   const navCurrent =
-    started && !readOnly ? Math.min(current, items.length - 1) : null;
+    started && !readOnly
+      ? (retry?.index ?? Math.min(current, items.length - 1))
+      : null;
   // 已提交：每題都「已出現」，沒有目前題
   const navStarted = started || readOnly;
   const navRevealed = readOnly ? items.length : chat.revealedCount;

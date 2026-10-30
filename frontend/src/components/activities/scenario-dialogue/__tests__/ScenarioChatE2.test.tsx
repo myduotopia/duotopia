@@ -268,3 +268,76 @@ describe("AI 頭像（#1158 E-2）", () => {
     expect(screen.queryByTestId("bear-avatar")).toBeNull();
   });
 });
+
+describe("回頭重答（#1158 E-2）", () => {
+  it("題目氣泡標「重答中」、淡藍底＋藍色光圈", async () => {
+    const { QuestionBubble } = await import("../QuestionBubble");
+    render(
+      <QuestionBubble
+        index={0}
+        total={2}
+        item={ITEMS[0]}
+        visible={{ en: true, zh: false }}
+        showTranslation={false}
+        isPreviewMode={false}
+        skipped={false}
+        averageScore={null}
+        retrying
+        onPlay={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    const bubble = screen.getByTestId("scenario-question");
+    expect(bubble.className).toContain("bg-blue-100");
+    expect(bubble.className).toContain("ring-blue-300");
+    expect(
+      screen.getByText("scenarioDialogue.chat.questionNoRetrying"),
+    ).toBeInTheDocument();
+  });
+
+  it("重答中、還沒送出新回答：該題舊的回答與建議全部變淡", async () => {
+    const { ChatTranscript } = await import("../ChatTranscript");
+    const attempt = {
+      answer: { kind: "text" as const, text: "She eat food." },
+      feedback: { verdict: "improve" as const, comment: "用過去式" },
+    };
+    const chat = {
+      phase: "awaitingAnswer",
+      current: 1,
+      attempts: [[attempt], []],
+      revealedCount: 2,
+      visible: [
+        { en: true, zh: false },
+        { en: true, zh: false },
+      ],
+      skipped: [false, false],
+      retry: { index: 0, status: "answering" },
+      retryBusy: false,
+      closingShown: false,
+      canRetry: () => false,
+      averageFor: () => null,
+      toggleText: () => {},
+      goNext: () => {},
+    };
+    render(
+      <ChatTranscript
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        chat={chat as any}
+        items={ITEMS}
+        settings={SETTINGS}
+        adapters={ADAPTERS}
+        translatable={[false, false]}
+        registerBlock={() => {}}
+        onRetry={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("scenario-feedback").className).toContain(
+      "opacity-60",
+    );
+    expect(
+      screen.getByText("She eat food.").closest(".transition-opacity")!
+        .className,
+    ).toContain("opacity-50");
+    expect(document.querySelector('[data-retrying="true"]')).not.toBeNull();
+  });
+});

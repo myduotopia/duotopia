@@ -14,7 +14,8 @@
  * 再加 safe-area 底部留白同色；按鈕列垂直置中在底色條上緣，上半浮在對話區上（外框 -mt-9、
  * 不擋點擊的地方 pointer-events-none）。對話捲動區要在底部多留按鈕上半的高度（
  * ScenarioChatActivity 依 isFloatingDock 加 padding），最新訊息才不會被擋住。
- * 「正在重答第 N 題 ✕」浮在按鈕列上方。intro／finished 維持文字主按鈕（白底區塊，不浮）。
+ * 「正在重答第 N 題 ✕」是深藍小膠囊，浮在按鈕列上方；✕＝放棄重答回到目前題，錄音中隱藏 ✕
+ * 免得誤按（#1158 E-2 重答流程）。intro／finished 維持文字主按鈕（白底區塊，不浮）。
  * - finished：「提交作業」主按鈕；傳了 submitDisabledReason（老師預覽，#1158 E2）就停用，
  *   下方小字改成停用原因（「預覽不會送出」），title 也寫同一句
  * 回頭重答（retryNo）時上方多一條「正在重答第 N 題 ✕」；✕ 取消重答、回到進行中的題目
@@ -29,6 +30,7 @@ import { useTranslation } from "react-i18next";
 import AudioRecorder from "@/components/shared/AudioRecorder";
 import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import type { ReplyMode, ScenarioAnswer } from "./types";
 
@@ -71,11 +73,14 @@ export function ReplyComposer({
   const [pending, setPending] = useState<PendingVoice | null>(null);
   // 送出後換一個 key 讓錄音元件回到初始狀態
   const [recorderKey, setRecorderKey] = useState(0);
+  // 錄音中：重答提示的 ✕ 先藏起來
+  const [recording, setRecording] = useState(false);
   const pendingRef = useRef<PendingVoice | null>(null);
   pendingRef.current = pending;
 
   // 離開答題狀態時丟掉未送出的錄音
   useEffect(() => {
+    if (state !== "answer") setRecording(false);
     if (state !== "answer" && pendingRef.current) {
       URL.revokeObjectURL(pendingRef.current.url);
       setPending(null);
@@ -150,20 +155,26 @@ export function ReplyComposer({
         data-testid="scenario-reply-dock"
       >
         {retryNo !== null && (
-          <div className="pointer-events-auto absolute inset-x-3 bottom-full mb-2 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 text-sm text-blue-800 shadow-sm">
-            <span>{t("scenarioDialogue.chat.retrying", { no: retryNo })}</span>
-            {canCancelRetry && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-11 w-11 p-0 text-blue-800"
-                onClick={onCancelRetry}
-                aria-label={t("scenarioDialogue.chat.cancelRetry")}
-                title={t("scenarioDialogue.chat.cancelRetry")}
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            )}
+          <div className="absolute inset-x-0 bottom-full mb-2 flex justify-center px-3">
+            <div
+              className="pointer-events-auto flex min-h-9 items-center gap-2 rounded-full bg-blue-900 py-1 pl-4 pr-1 text-sm text-white shadow-md"
+              data-testid="scenario-retry-banner"
+            >
+              <span className={cn(!(canCancelRetry && !recording) && "pr-3")}>
+                {t("scenarioDialogue.chat.retrying", { no: retryNo })}
+              </span>
+              {canCancelRetry && !recording && (
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/30"
+                  onClick={onCancelRetry}
+                  aria-label={t("scenarioDialogue.chat.cancelRetry")}
+                  title={t("scenarioDialogue.chat.cancelRetry")}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              )}
+            </div>
           </div>
         )}
         <div className="relative">
@@ -188,6 +199,8 @@ export function ReplyComposer({
               disabled={waiting}
               disabledReason={waiting ? waitingHint : undefined}
               onSend={sendVoice}
+              onRecordingStart={() => setRecording(true)}
+              onRecordingStop={() => setRecording(false)}
               // 上限要擋在前端：超過的話上傳端會回 400，而學生只會看到一句看不懂的
               // 錯誤（夥伴 staging 回報）。到時間自動停，並在計時器上顯示上限。
               autoStop={SCENARIO_MAX_RECORDING_SECONDS}

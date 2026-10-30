@@ -4,6 +4,8 @@
  * 由上而下：開始前的開場招呼 → 每題（題目氣泡＋該題所有回答與建議，重答接在該題原有
  * 紀錄下方）→「輸入中…」→ 結尾語。按「開始對話」後直接問第 1 題（沒有 AI 開場複述）。
  * 每題翻譯鈕是否出現由外層算好的 translatable[i] 決定。
+ * 回頭重答某題（chat.retry）時：該題題目氣泡標「重答中」；還沒送出新回答前，該題舊的回答與建議
+ * 全部變淡（#1158 E-2 重答流程）。
  * 每題外層 div 交給外層登記（registerBlock），供點點捲動與重答後捲回。
  *
  * 每題「最後一則」建議氣泡的操作（FeedbackBubble actions）：
@@ -73,6 +75,9 @@ export function ChatTranscript({
       {items.slice(0, chat.revealedCount).map((item, i) => {
         const list = attempts[i];
         const last = list.length - 1;
+        const retrying = chat.retry?.index === i;
+        // 重答中、還沒送出新回答：這題舊的回答與建議全部變淡
+        const fadeAll = retrying && chat.retry?.status === "answering";
         return (
           <div
             key={item.id}
@@ -88,6 +93,7 @@ export function ChatTranscript({
               isPreviewMode={isPreview}
               skipped={chat.skipped[i] && list.length === 0}
               averageScore={isPreview ? chat.averageFor(i) : null}
+              retrying={retrying}
               onPlay={() => adapters.speak(item.text)}
               onToggle={(w) => chat.toggleText(i, w)}
             />
@@ -97,7 +103,7 @@ export function ChatTranscript({
                   answer={a.answer}
                   attemptNo={j + 1}
                   showAttemptNo={list.length > 1}
-                  faded={j < last}
+                  faded={j < last || fadeAll}
                   score={isPreview ? a.feedback?.score : undefined}
                 />
                 {a.feedback ? (
@@ -107,6 +113,7 @@ export function ChatTranscript({
                     actions={j === last ? actionsFor(i) : "none"}
                     maxAttempts={maxAttempts}
                     retryDisabled={chat.retryBusy}
+                    faded={fadeAll}
                     onRetry={() => onRetry(i)}
                     onNext={chat.goNext}
                   />
