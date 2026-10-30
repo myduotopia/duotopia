@@ -157,6 +157,46 @@ describe("StudentActivityPageContent — 情境對話外框（#1158 E1）", () =
     expect(navButton(1)).not.toHaveAttribute("aria-current");
   });
 
+  test("重新進入：已答（綠）但對話還沒走到的題目點了不跳，提示「已作答，對話到這題後可查看」", async () => {
+    const user = userEvent.setup();
+    const acts = [
+      {
+        ...scenarioActivities[0],
+        items: [
+          scenarioActivities[0].items[0],
+          {
+            ...scenarioActivities[0].items[1],
+            recording_url: "https://example.com/a.webm",
+          },
+          scenarioActivities[0].items[2],
+        ],
+      },
+    ];
+    render(
+      <StudentActivityPageContent
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        activities={acts as any}
+        assignmentTitle="情境作業"
+        assignmentId={1}
+        practiceMode="scenario_dialogue"
+        onSubmit={vi.fn()}
+      />,
+    );
+    const btn = navButton(2);
+    expect(btn).toHaveAttribute("aria-disabled", "true");
+    expect(btn.className).toMatch(/bg-green-100/);
+    expect(btn).toHaveAttribute(
+      "aria-label",
+      "scenarioDialogue.chat.dotAnsweredLocked",
+    );
+    await user.click(btn);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("scenarioDialogue.chat.answeredNotReached"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("scenarioDialogue.chat.notYet")).toBeNull();
+  });
+
   test("預覽：對話裡沒有上一題／下一題按鈕", () => {
     renderScenario(true);
     expect(

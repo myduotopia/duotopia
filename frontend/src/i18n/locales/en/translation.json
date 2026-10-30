@@ -5084,6 +5084,8 @@
       "goToNo": "Scroll to question {{no}}",
       "dotLocked": "Question {{no}}: not reached yet",
       "notYet": "Not there yet",
+      "answeredNotReached": "Answered. You can view it once the conversation gets there",
+      "dotAnsweredLocked": "Question {{no}}: answered. You can view it once the conversation gets there",
       "currentQuestion": "Question {{no}}: current",
       "previewNoSubmit": "Previews are not submitted",
       "attemptsReached": "{{max}} attempts used",

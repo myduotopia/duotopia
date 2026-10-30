@@ -133,6 +133,46 @@ describe("ScenarioDialoguePreview", () => {
     );
   });
 
+  it("預覽欄有題號方格：開始前全部鎖住，開始後可跳題、目前題標示（#1158 E-1 修正）", async () => {
+    const user = userEvent.setup();
+    getContentDetail.mockResolvedValue({
+      ...DETAIL,
+      items: [
+        DETAIL.items[0],
+        { ...DETAIL.items[0], id: 9002, text: "Who did you go with?" },
+      ],
+    });
+    render(<ScenarioDialoguePreview contentId={501} showTranslation />);
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    expect(screen.getByTestId("scenario-question-nav")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-nav-1")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByTestId("scenario-nav-2")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+
+    await user.click(startButton()!);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-nav-1")).toHaveAttribute(
+        "aria-current",
+        "step",
+      ),
+    );
+    expect(screen.getByTestId("scenario-nav-2")).not.toHaveAttribute(
+      "aria-disabled",
+    );
+    await user.click(screen.getByTestId("scenario-nav-2"));
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-nav-2")).toHaveAttribute(
+        "aria-current",
+        "step",
+      ),
+    );
+  });
+
   it("沒有 contentId 時說明原因，不去抓任何教材", () => {
     render(<ScenarioDialoguePreview />);
     expect(getContentDetail).not.toHaveBeenCalled();

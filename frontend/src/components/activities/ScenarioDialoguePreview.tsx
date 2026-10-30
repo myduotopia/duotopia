@@ -38,6 +38,8 @@
  *   之外的層，預覽欄自己的 z-index 拉不過它，所以用留白讓開，而不是拉高整個 sheet 的層級
  *   （那會連其他作業類型的派發畫面都一起蓋掉工具列）。
  * * 「提交作業」由 ScenarioChatActivity 依 isPreviewMode 停用，寫明「預覽不會送出」。
+ * * 題號方格（#1158 E-1 修正）：對話上方放一列 `ScenarioQuestionNav`，和學生頁同一套規則
+ *   與外觀 —— 按「開始對話」前全部不能點；開始後老師可點任一題跳過去；目前題藍框。
  */
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -51,6 +53,10 @@ import {
   scenarioChatSettings,
 } from "./scenario-dialogue/fromApi";
 import { createPreviewScenarioAdapters } from "./scenario-dialogue/studentAdapters";
+import {
+  ScenarioQuestionNav,
+  useScenarioNavBridge,
+} from "./scenario-dialogue/ScenarioQuestionNav";
 
 const PM = "dialogs.assignmentDialog.practiceMode";
 
@@ -69,6 +75,7 @@ export default function ScenarioDialoguePreview({
   const [detail, setDetail] = useState<ScenarioContentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navBridge = useScenarioNavBridge();
 
   useEffect(() => {
     if (contentId == null) {
@@ -141,25 +148,38 @@ export default function ScenarioDialoguePreview({
 
   return (
     <div
-      className={cn("min-h-0 flex-1", TOOLBAR_GUTTER_CLASS)}
+      className={cn("flex min-h-0 flex-1 flex-col", TOOLBAR_GUTTER_CLASS)}
       data-testid="scenario-preview-frame"
     >
-      <ScenarioChatActivity
-        // 換教材要重新開始。**今天真正讓它歸零的是 loading 分支**：contentId 一變就
-        // 先 render PreviewNote，對話元件被 unmount，狀態跟著消失。
-        //
-        // 那為什麼還要 key？因為 `useScenarioChat` 的狀態是用 items 做 useState 的初值、
-        // **沒有任何 effect 在 items 變動時重置**。哪天有人為了少一次閃爍，改成「重新抓
-        // 資料時先留著舊畫面」，舊教材的對話就會立刻接到新題目上 —— 而那是個不會有人
-        // 察覺的錯。key 讓那個改動不會變成 bug（PR #1142 review 第 3 點）。
-        key={contentId}
-        context={chat.context}
-        items={chat.items}
-        settings={settings}
-        adapters={adapters}
-        onSubmit={() => {}}
-        layout="compact"
+      <ScenarioQuestionNav
+        key={`nav-${contentId}`}
+        count={chat.items.length}
+        nav={navBridge.nav}
+        answered={navBridge.answered}
+        navigateRef={navBridge.navigateRef}
+        className="shrink-0 border-b border-gray-200 bg-white px-3 py-2"
       />
+      <div className="min-h-0 flex-1">
+        <ScenarioChatActivity
+          // 換教材要重新開始。**今天真正讓它歸零的是 loading 分支**：contentId 一變就
+          // 先 render PreviewNote，對話元件被 unmount，狀態跟著消失。
+          //
+          // 那為什麼還要 key？因為 `useScenarioChat` 的狀態是用 items 做 useState 的初值、
+          // **沒有任何 effect 在 items 變動時重置**。哪天有人為了少一次閃爍，改成「重新抓
+          // 資料時先留著舊畫面」，舊教材的對話就會立刻接到新題目上 —— 而那是個不會有人
+          // 察覺的錯。key 讓那個改動不會變成 bug（PR #1142 review 第 3 點）。
+          key={contentId}
+          context={chat.context}
+          items={chat.items}
+          settings={settings}
+          adapters={adapters}
+          onSubmit={() => {}}
+          layout="compact"
+          onNavChange={navBridge.setNav}
+          onProgressChange={navBridge.setAnswered}
+          navigateRef={navBridge.navigateRef}
+        />
+      </div>
     </div>
   );
 }

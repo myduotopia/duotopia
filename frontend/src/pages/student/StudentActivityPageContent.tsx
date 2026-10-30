@@ -12,6 +12,8 @@
  *   還沒到的題目看得到但不能點（aria-disabled），點了提示「還沒到這題」；目前這題用現有的
  *   藍色粗框標示並跟著對話進度更新（ScenarioChatActivity 經 onNavChange 回報）。
  *   顏色沿用方格既有規則（答過＝綠），答過與否用對話回報的 scenarioAnswered 判斷。
+ *   答過（綠）但對話還沒走到的題目也不能點，提示改成「已作答，對話到這題後可查看」。
+ *   每格的規則與外觀在共用的 ScenarioQuestionNav（派發預覽欄、sample 頁也用同一份）。
  * - 整頁改成固定高度的直式排版（h-[100dvh] max-h-full），對話只佔外框剩下的高度、
  *   自己捲動，不會和頁面各有一層捲動，頂部列也不會蓋住對話標題列。
  */
@@ -54,6 +56,11 @@ import {
   createPreviewScenarioAdapters,
   createStudentScenarioAdapters,
 } from "@/components/activities/scenario-dialogue/studentAdapters";
+import {
+  ScenarioNavButton,
+  ScenarioNavHintText,
+  useScenarioNavHint,
+} from "@/components/activities/scenario-dialogue/ScenarioQuestionNav";
 import { unansweredQuestionNumbers } from "@/components/activities/scenario-dialogue/submitGuard";
 import SentenceMakingActivity from "@/components/activities/SentenceMakingActivity";
 import RearrangementActivity, {
@@ -441,12 +448,9 @@ export default function StudentActivityPageContent({
   const isScenarioDialogue = practiceMode === "scenario_dialogue";
   const [scenarioNav, setScenarioNav] = useState<ScenarioChatNav | null>(null);
   const scenarioNavigateRef = useRef<((index: number) => void) | null>(null);
-  const [scenarioLockedHint, setScenarioLockedHint] = useState(false);
-  useEffect(() => {
-    if (!scenarioLockedHint) return;
-    const id = setTimeout(() => setScenarioLockedHint(false), 2000);
-    return () => clearTimeout(id);
-  }, [scenarioLockedHint]);
+  // 點了鎖住的方格：提示 2 秒，連點時重新計時（ScenarioQuestionNav 共用）
+  const { hint: scenarioNavHint, show: showScenarioNavHint } =
+    useScenarioNavHint();
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #835: Live quiz — 進入 guard + 收卷輪詢
@@ -2979,68 +2983,22 @@ export default function StudentActivityPageContent({
 
                               // #1158 E1：情境對話的方格接到對話（只接目前這個 activity）
                               if (isScenarioDialogue && isActiveActivity) {
-                                const nav = scenarioNav;
-                                const reached =
-                                  !!nav &&
-                                  nav.started &&
-                                  itemIndex < nav.revealedCount;
-                                const locked = !reached && !nav?.canJump;
-                                const isCurrentQ = nav?.current === itemIndex;
                                 // 顏色沿用既有規則（答過＝綠）；答過與否看對話回報，
                                 // 再加上伺服器已存的錄音（重開作業時）
-                                const done =
-                                  Boolean(isCompleted) ||
-                                  Boolean(scenarioAnswered[itemIndex]);
-                                const no = itemIndex + 1;
-                                const navLabel = locked
-                                  ? t("scenarioDialogue.chat.dotLocked", { no })
-                                  : isCurrentQ
-                                    ? t(
-                                        "scenarioDialogue.chat.currentQuestion",
-                                        {
-                                          no,
-                                        },
-                                      )
-                                    : nav?.canJump
-                                      ? t("scenarioDialogue.chat.jumpToNo", {
-                                          no,
-                                        })
-                                      : t("scenarioDialogue.chat.goToNo", {
-                                          no,
-                                        });
                                 return (
-                                  <button
+                                  <ScenarioNavButton
                                     key={itemIndex}
-                                    type="button"
-                                    data-testid={`scenario-nav-${itemIndex + 1}`}
-                                    onClick={() => {
-                                      if (locked) {
-                                        setScenarioLockedHint(true);
-                                        return;
-                                      }
-                                      scenarioNavigateRef.current?.(itemIndex);
-                                    }}
-                                    aria-disabled={locked || undefined}
-                                    aria-current={
-                                      isCurrentQ ? "step" : undefined
+                                    index={itemIndex}
+                                    nav={scenarioNav}
+                                    done={
+                                      Boolean(isCompleted) ||
+                                      Boolean(scenarioAnswered[itemIndex])
                                     }
-                                    className={cn(
-                                      "relative w-8 h-8 sm:w-8 sm:h-8 rounded border transition-all",
-                                      "flex items-center justify-center text-sm sm:text-xs font-medium",
-                                      "min-w-[32px]",
-                                      done
-                                        ? "bg-green-100 text-green-800 border-green-400"
-                                        : "bg-white text-gray-600 border-gray-300",
-                                      locked
-                                        ? "cursor-not-allowed"
-                                        : !done && "hover:border-blue-400",
-                                      isCurrentQ && "border-2 border-blue-600",
-                                    )}
-                                    title={navLabel}
-                                    aria-label={navLabel}
-                                  >
-                                    {itemIndex + 1}
-                                  </button>
+                                    onNavigate={(i) =>
+                                      scenarioNavigateRef.current?.(i)
+                                    }
+                                    onLocked={showScenarioNavHint}
+                                  />
                                 );
                               }
 
@@ -3115,16 +3073,9 @@ export default function StudentActivityPageContent({
                           </div>
 
                           {/* #1158 E1：情境對話點了還沒到的題目 */}
-                          {isScenarioDialogue &&
-                            isActiveActivity &&
-                            scenarioLockedHint && (
-                              <p
-                                className="text-xs text-gray-500 whitespace-nowrap"
-                                role="status"
-                              >
-                                {t("scenarioDialogue.chat.notYet")}
-                              </p>
-                            )}
+                          {isScenarioDialogue && isActiveActivity && (
+                            <ScenarioNavHintText reason={scenarioNavHint} />
+                          )}
 
                           {activityIndex < activities.length - 1 && (
                             <div className="w-px h-8 bg-gray-300 ml-2" />

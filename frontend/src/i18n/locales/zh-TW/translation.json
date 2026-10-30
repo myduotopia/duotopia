@@ -5103,6 +5103,8 @@
       "goToNo": "捲到第 {{no}} 題",
       "dotLocked": "第 {{no}} 題：還沒到這題",
       "notYet": "還沒到這題",
+      "answeredNotReached": "已作答，對話到這題後可查看",
+      "dotAnsweredLocked": "第 {{no}} 題：已作答，對話到這題後可查看",
       "currentQuestion": "第 {{no}} 題：目前這題",
       "previewNoSubmit": "預覽不會送出",
       "attemptsReached": "已達 {{max}} 次",
