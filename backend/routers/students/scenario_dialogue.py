@@ -45,6 +45,8 @@ from services.analysis_quota import (
     reserve_analysis_slot,
 )
 from services.scenario_student_feedback_ai import (
+    DEFAULT_KIND,
+    HELP_KINDS,
     ScenarioStudentFeedbackInputError,
     get_scenario_student_feedback_service,
 )
@@ -189,9 +191,22 @@ async def scenario_dialogue_feedback(
             except Exception:
                 logger.exception("refund failed | progress=%s", progress_id)
 
+    # 求助（問某個字怎麼說、說不會答，#1158）不算作答次數：把剛領的額度退回。
+    # 前端 useScenarioChat 也同樣只把 kind=feedback 算進 maxAttempts，兩邊一致。
+    # 額度仍先領再打 AI（並行上限照舊）；已用滿 3 次時求助一樣會 429。
+    kind = result.get("kind") or DEFAULT_KIND
+    if kind in HELP_KINDS:
+        try:
+            count = refund_analysis_slot(progress, db)
+            db.commit()
+        except Exception:
+            # 退不回去只是學生少一次機會，不該讓已經拿到的幫助變成 503
+            logger.exception("help refund failed | progress=%s", progress_id)
+
     # **白名單輸出**：service 回的東西還帶著 usage／成本，模型有時也會自己多塞分數或
-    # 把參考答案抄回來。學生那一側只拿這三個欄位加配額資訊。
+    # 把參考答案抄回來。學生那一側只拿這幾個欄位加配額資訊。
     return {
+        "kind": kind,
         "verdict": result["verdict"],
         "comment": result["comment"],
         "suggestion": result.get("suggestion"),

@@ -189,6 +189,50 @@ class TestHappyPath:
         db_session.refresh(world["progress"])
         assert world["progress"].ai_analysis_count == 1
 
+    def test_old_style_result_is_a_feedback_kind(self, test_client: TestClient, world):
+        """service 沒給 kind（舊格式）→ 回 kind=feedback、照常算一次（#1158）。"""
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            body = _post(test_client, world).json()
+        assert body["kind"] == "feedback"
+        assert body["ai_analysis_count"] == 1
+
+    @pytest.mark.parametrize("kind", ["phrase", "model_answer"])
+    def test_help_requests_do_not_consume_an_attempt(
+        self, test_client: TestClient, db_session: Session, world, kind
+    ):
+        """問某個字怎麼說、說不會答都是求助，不算作答次數（#1158）。"""
+        help_result = {
+            **AI_RESULT,
+            "kind": kind,
+            "verdict": None,
+            "suggestion": "park",
+        }
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=help_result)):
+            resp = _post(test_client, world)
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["kind"] == kind
+        assert body["verdict"] is None
+        assert body["suggestion"] == "park"
+        assert body["ai_analysis_count"] == 0
+        assert body["ai_analysis_remaining"] == 3
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 0
+
+    def test_help_then_three_answers_still_allowed(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        """求助過後，三次正式作答一次都沒少；第四次才 429。"""
+        help_result = {**AI_RESULT, "kind": "phrase", "verdict": None}
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=help_result)):
+            assert _post(test_client, world).status_code == 200
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            for expected in (1, 2, 3):
+                assert _post(test_client, world).json()["ai_analysis_count"] == expected
+            assert _post(test_client, world).status_code == 429
+
     def test_never_leaks_scores_or_the_reference_answer(
         self, test_client: TestClient, world
     ):

@@ -22,6 +22,14 @@
 ## 兩條不能破的線
 
 1. **參考答案不外洩**。它只進 prompt 當語言特徵對照；回給學生等於把答案送他抄。
+   例外是學生自己說「不會答」（kind=model_answer，#1158 使用者核准）：模型寫一句範例
+   請他照著念，可以參考它，但 normalize_result 仍不帶出 reference_answer 欄位。
+
+## 三種回應（#1158）
+
+`kind`：`feedback`（正式回答，verdict＋評語＋建議說法）／`phrase`（問某個字怎麼說或
+字義 → 只給那個字或片語）／`model_answer`（說不會答 → 一句完整範例）。後兩者是求助，
+verdict 為 None、router 把額度退回，**不算作答次數**（前端 useScenarioChat 同步排除）。
 2. **不逐字比對**。開放式口說同一題每個人講的都不同，拿範例逐字比會把「不一樣但
    正確」的回答全判成要改進。prompt 明文禁止，與 #1035 同一條規則。
 """
@@ -48,6 +56,12 @@ MAX_OUTPUT_TOKENS = 2048
 VERDICTS = ("improve", "great")
 #: 認不得的 verdict 落在這裡。誤誇比誤糾難補救：學生以為講對了就不會再練。
 DEFAULT_VERDICT = "improve"
+
+#: 回應種類（#1158）：feedback＝正式回答的建議；phrase＝學生問某個字／片語怎麼說或字義；
+#: model_answer＝學生說不會答，給一句完整範例請他照著念。後兩者是「求助」，不算作答次數。
+KINDS = ("feedback", "phrase", "model_answer")
+HELP_KINDS = ("phrase", "model_answer")
+DEFAULT_KIND = "feedback"
 
 #: 評語要用學生看得懂的語言寫。值是給模型看的語言名稱。
 _COMMENT_LANGUAGE = {
@@ -165,10 +179,42 @@ class ScenarioStudentFeedbackService:
             "",
             "Reply with JSON only, in this shape:",
             "{",
+            '  "kind": "feedback" | "phrase" | "model_answer",',
             '  "verdict": "great" | "improve",',
             '  "comment": "...",',
             '  "suggestion": "..."',
             "}",
+            "",
+            # #1158：學生的錄音不一定是在回答。求助（問某個字怎麼說／字義、說不會答）
+            # 要分出來 —— 那不是一次作答，不評、不算次數（router 會把額度退回）。
+            "First decide which kind of recording this is:",
+            '- "phrase": the student is asking how to say a word or phrase in '
+            "English, or what an English word means — for example "
+            "「公園英文怎麼說？」, 「spot 是什麼意思？」, "
+            '"How do I say 公園 in English?", "What does spot mean?".',
+            '- "model_answer": the student says they do not know how to answer — '
+            "for example 「我不知道怎麼回答」, 「我不會」, 「這題要怎麼講？」, "
+            '"I don\'t know", "I don\'t know how to answer this.".',
+            '- "feedback": anything else — the student is trying to answer the '
+            'question. This is the normal case; when in doubt, use "feedback".',
+            "",
+            'For "phrase": put ONLY that English word or short phrase in '
+            "`suggestion` (not a full sentence). In `comment`, one short sentence: "
+            "if they asked what a word means, say what it means; otherwise invite "
+            "them to use it in their answer (for example "
+            "「試著用它回答看看」). Do not judge anything and leave `verdict` out.",
+            "",
+            'For "model_answer": put one complete model answer to this question '
+            "in `suggestion`, in English, at the student's level, using the "
+            "asked-for words and tense where they apply (the example of a good "
+            "answer above may guide it). In `comment`, one short sentence asking "
+            "them to say it once themselves (for example 「照著念一次看看」). "
+            "Leave `verdict` out.",
+            "",
+            f"Whatever the kind, write `comment` in {language} and "
+            "`suggestion` in English.",
+            "",
+            'Everything below is about "feedback".',
             "",
             'Use "great" only when the answer does what the question asked '
             "AND has no language error a teacher would correct. If the meaning "
@@ -239,9 +285,8 @@ class ScenarioStudentFeedbackService:
             "",
             "Sometimes the student is not answering at all — they are asking what a "
             "word means, or asking for help. When that happens, do not judge their "
-            'answer: use verdict "improve", tell them what the word means in one '
-            "short sentence, and invite them to try answering. Leave `suggestion` "
-            "out in that case.",
+            'answer: use kind "phrase" or "model_answer" as described above, never '
+            '"feedback".',
         ]
         return "\n".join(lines)
 
@@ -271,12 +316,30 @@ class ScenarioStudentFeedbackService:
             # 評語是對話裡唯一要顯示的東西 —— 空的就是一顆空泡泡，不如讓呼叫端重試
             raise ScenarioStudentFeedbackError("AI 沒有給評語")
 
+        # 舊格式（沒有 kind）與認不得的值一律當正式回答 —— 誤當求助會讓一次作答
+        # 不算次數、也拿不到評語，比誤當作答更糟。
+        kind = cls._text(raw.get("kind")).lower()
+        if kind not in KINDS:
+            kind = DEFAULT_KIND
+
+        suggestion = cls._text(raw.get("suggestion")) or None
+        if kind in HELP_KINDS and not suggestion:
+            # 求助的重點就是那個字／那句範例；沒有就是空的幫助，不如當一般建議顯示
+            kind = DEFAULT_KIND
+
         verdict = cls._text(raw.get("verdict")).lower()
         if verdict not in VERDICTS:
             verdict = DEFAULT_VERDICT
+        if kind in HELP_KINDS:
+            # 求助不評：verdict 對求助沒有意義，固定成 None 免得前端誤顯示「很棒／可以更好」
+            verdict = None
 
-        suggestion = cls._text(raw.get("suggestion")) or None
-        return {"verdict": verdict, "comment": comment, "suggestion": suggestion}
+        return {
+            "kind": kind,
+            "verdict": verdict,
+            "comment": comment,
+            "suggestion": suggestion,
+        }
 
     async def generate(
         self,
