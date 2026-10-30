@@ -11,7 +11,9 @@
  * 每題外層 div 交給外層登記（registerBlock），供點點捲動與重答後捲回。
  *
  * 每題「最後一則」建議氣泡的操作（FeedbackBubble actions）：
- * 目前這題剛看完建議＝再試一次＋下一題；已答滿＝「已達 N 次」（目前這題附「即將進入下一題」）；
+ * 目前這題剛看完建議＝再試一次＋下一題；已答滿＝「已達 N 次」（目前這題附「即將進入下一題」，
+ * 最後一步改「即將結束對話」）；最後一步拿到建議就直接收尾，所以最後一題不會出現「下一題」，
+ * 只留「再試一次」（#1158 E-4 提交按鈕）；
  * 其他可重答的題目＝再試一次（回頭重答）。學生畫面不顯示分數；老師預覽顯示 mock 分數與本題平均。
  *
  * 接著上次進度（#1158 E-4）：上次答過的題目（item.submittedAudioUrl）在題目下方放一則學生回答氣泡，
@@ -75,7 +77,12 @@ export function ChatTranscript({
     // 求助（#1158）不算次數；上次（伺服器）用掉的也算（#1158 E-4）
     const used = chat.usedFor(i);
     const isCurrentDone = i === current && phase === "feedbackShown";
-    if (used >= maxAttempts) return isCurrentDone ? "autoNext" : "reached";
+    if (used >= maxAttempts)
+      return isCurrentDone
+        ? chat.atLastStep
+          ? "autoFinish"
+          : "autoNext"
+        : "reached";
     if (isCurrentDone && !chat.retry) return "current";
     if (chat.canRetry(i)) return "retry";
     return "none";

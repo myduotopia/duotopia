@@ -18,7 +18,12 @@
  * 「正在重答第 N 題 ✕」是深藍小膠囊，浮在按鈕列上方；✕＝放棄重答回到目前題，錄音中隱藏 ✕
  * 免得誤按（#1158 E-2 重答流程）。intro／finished 維持文字主按鈕（白底區塊，不浮）。
  * - finished：「提交作業」主按鈕；傳了 submitDisabledReason（老師預覽，#1158 E2）就停用，
- *   下方小字改成停用原因（「預覽不會送出」），title 也寫同一句
+ *   下方小字改成停用原因（「預覽不會送出」），title 也寫同一句。
+ *   語音作答（#1158 E-4，使用者改定）：和麥克風同一個位置、同樣半高底色條，綠色（green-600）72px
+ *   圓鈕＋上傳圖示（沒有文字；不用紙飛機，免得和「送出錄音」混淆），白色外圈＋淡陰影，
+ *   aria-label／title「提交作業」；熊熊結尾語會說「請點下面的綠色按鈕」。底色條不放小字，
+ *   只有停用（老師預覽）時按鈕變灰、右側寫原因，aria-label／title 也帶原因。
+ *   打字作答維持原本的整列按鈕＋小字。
  * 回頭重答（retryNo）時上方多一條「正在重答第 N 題 ✕」；✕ 取消重答、回到進行中的題目
  * （等 AI 建議時不能取消，不顯示 ✕）。外層以 key 區分重答／主流程，切換時元件重掛、
  * 未送出的錄音丟掉；卸載時 revoke 未送出的錄音 URL。
@@ -30,7 +35,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Send, X } from "lucide-react";
+import { Send, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import AudioRecorder from "@/components/shared/AudioRecorder";
 import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
@@ -142,6 +147,48 @@ export function ReplyComposer({
       <Button type="button" className="h-12 w-full" onClick={onStart}>
         {t("scenarioDialogue.chat.start")}
       </Button>
+    );
+  } else if (state === "finished" && replyMode === "voice") {
+    const submitLabel = submitDisabledReason
+      ? `${t("scenarioDialogue.chat.submitAssignment")}（${submitDisabledReason}）`
+      : t("scenarioDialogue.chat.submitAssignment");
+    return (
+      <div
+        className="pointer-events-none relative z-10 -mt-9 shrink-0"
+        data-testid="scenario-submit-dock"
+      >
+        <div className="relative">
+          <div
+            className="absolute inset-x-0 bottom-0 h-9 border-t border-blue-100 bg-blue-50"
+            aria-hidden
+          />
+          {submitDisabledReason && (
+            <p
+              className="absolute bottom-0 right-3 flex h-9 max-w-[calc(50%-3rem)] items-center text-right text-xs leading-tight text-gray-500"
+              role="status"
+            >
+              {submitDisabledReason}
+            </p>
+          )}
+          <div className="relative flex h-[72px] items-center justify-center">
+            <button
+              type="button"
+              className="pointer-events-auto flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 border-white bg-green-600 text-white shadow-md transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+              onClick={onSubmitAssignment}
+              disabled={Boolean(submitDisabledReason)}
+              aria-label={submitLabel}
+              title={submitDisabledReason || submitLabel}
+              data-testid="scenario-submit-button"
+            >
+              <Upload className="h-7 w-7" aria-hidden />
+            </button>
+          </div>
+        </div>
+        <div
+          className="bg-blue-50"
+          style={{ height: "env(safe-area-inset-bottom)" }}
+        />
+      </div>
     );
   } else if (state === "finished") {
     body = (

@@ -19,6 +19,7 @@
  * - `current`：目前這題剛看完建議 →「下一題 →」（次要，左）＋「↺ 再試一次」（主色，最右）
  * - `retry`：其他已出現的題目（或全部結束後）→ 只有「↺ 再試一次」（次要），回頭重答
  * - `autoNext`：目前這題已答滿 → 小字「已達 N 次，即將進入下一題」，由狀態機自動進下一題
+ * - `autoFinish`：同上，但已是最後一步 → 「已達 N 次，即將結束對話」（#1158 E-4 提交按鈕）
  * - `reached`：已答滿的題目 → 小字「已達 N 次」（按鈕位置改顯示這行，不是直接消失）
  * - `none`：這題正在作答／等建議中，不放操作
  * 另一題重答正在等 AI 建議時，「再試一次」暫時停用（retryDisabled，處理中不另說明）。
@@ -40,6 +41,7 @@ export type FeedbackActions =
   | "current"
   | "retry"
   | "autoNext"
+  | "autoFinish"
   | "reached"
   | "none";
 
@@ -110,6 +112,13 @@ export function FeedbackActionRow({
     return (
       <p className="text-xs text-gray-500">
         {t("scenarioDialogue.chat.attemptsUsedUp", { max: maxAttempts })}
+      </p>
+    );
+  }
+  if (actions === "autoFinish") {
+    return (
+      <p className="text-xs text-gray-500">
+        {t("scenarioDialogue.chat.attemptsUsedUpFinish", { max: maxAttempts })}
       </p>
     );
   }

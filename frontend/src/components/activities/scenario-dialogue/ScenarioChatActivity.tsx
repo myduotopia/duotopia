@@ -46,6 +46,10 @@
  *   因為已出現而可點、捲到該題；還有次數的可「再試一次」（次數以伺服器 ai_analysis_count 為準）。
  *   全部都答過就直接到「提交作業」。規則在 useScenarioChat，紀錄外觀在 ChatTranscript。
  *
+ * - 提交（#1158 E-4）：最後一題拿到建議就直接收尾，熊熊「全部答完了！確認後就可以提交囉 👇」，
+ *   語音作答時底部錄音區位置換成綠色圓鈕＋上傳圖示（「提交作業」，同樣浮在半高底色條上）。
+ *   老師預覽停用（灰色）並在底色條寫「預覽不會送出」。提交前的未答題檢查在呼叫端（onSubmit）。
+ *
  * - 已提交唯讀（readOnly，#1158 E6）：不顯示「開始對話」與錄音區，改列出每題題目＋學生
  *   自己的錄音（SubmittedTranscript）；作答要求／情境卡照樣顯示。題號方格每題都能點、捲到該題。
  *
@@ -440,7 +444,9 @@ export function ScenarioChatActivity({
         : phase === "awaitingFeedback"
           ? t("scenarioDialogue.chat.waitFeedback")
           : chat.exhausted
-            ? t("scenarioDialogue.chat.waitAutoNext")
+            ? chat.atLastStep
+              ? t("scenarioDialogue.chat.waitAutoFinish")
+              : t("scenarioDialogue.chat.waitAutoNext")
             : // 錄音區底色條右側的短句（#1158 E3）；完整說法在建議氣泡的按鈕上
               t("scenarioDialogue.chat.waitChooseShort");
   }
@@ -449,7 +455,9 @@ export function ScenarioChatActivity({
   const isFloatingDock =
     !readOnly &&
     settings.replyMode === "voice" &&
-    (composerState === "answer" || composerState === "waiting");
+    (composerState === "answer" ||
+      composerState === "waiting" ||
+      composerState === "finished");
 
   // 寬螢幕兩欄只在 layout="auto" 時啟用；compact（派發預覽欄）一律單欄
   const wide = layout !== "compact";

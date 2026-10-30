@@ -36,8 +36,9 @@ describe("ReplyComposer — 提交作業", () => {
         submitDisabledReason="預覽不會送出"
       />,
     );
+    // 語音作答：綠色圓鈕沒有文字，名稱（aria-label）帶停用原因（#1158 E-4）
     const btn = screen.getByRole("button", {
-      name: "scenarioDialogue.chat.submitAssignment",
+      name: "scenarioDialogue.chat.submitAssignment（預覽不會送出）",
     });
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute("title", "預覽不會送出");
@@ -46,10 +47,16 @@ describe("ReplyComposer — 提交作業", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("沒有停用原因（學生）：可以按，下方照舊是完成提示", async () => {
+  it("沒有停用原因（學生，打字作答）：可以按，下方照舊是完成提示", async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();
-    render(<ReplyComposer {...baseProps} onSubmitAssignment={onSubmit} />);
+    render(
+      <ReplyComposer
+        {...baseProps}
+        replyMode="text"
+        onSubmitAssignment={onSubmit}
+      />,
+    );
     const btn = screen.getByRole("button", {
       name: "scenarioDialogue.chat.submitAssignment",
     });

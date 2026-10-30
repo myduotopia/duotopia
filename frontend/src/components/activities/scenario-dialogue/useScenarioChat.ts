@@ -33,6 +33,10 @@
  *   上次答過的題目同樣直接以紀錄出現、不再問。全部都答過 → 直接到「提交作業」（finished）。
  *   次數以伺服器為準：`priorAttempts`（ai_analysis_count）＋本次正式作答＝已用次數；
  *   求助上限同理加 `priorHelp`。上次答過、還有次數的題目可以「再試一次」（回頭重答）。
+ * - 最後一步（#1158 E-4 提交按鈕）：目前這題之後已經沒有要問的題目（atLastStep）時，正式回答的
+ *   建議回來就直接收尾（「輸入中…」→ 熊熊「全部答完了…」→ finished，底部出現綠色提交鈕），
+ *   不再停在「看建議」等學生按「下一題」。這題若已答滿，照舊顯示「已達 N 次，即將結束對話」
+ *   後自動收尾。收尾後仍可在建議氣泡按「再試一次」回頭重答，答完回到可提交。
  * - 卸載時：停止朗讀、清計時器、revoke 所有錄音 blob URL。
  */
 
@@ -287,18 +291,37 @@ export function useScenarioChat({
     typeThenReveal(first);
   }, [n, isSettled, typeThenReveal]);
 
+  /**
+   * 第 from 題之後下一題要問的題號（沒有＝n）：已出現的題目（老師往回跳過）答滿的跳過；
+   * 還沒出現的、上次已答過的也跳過，直接以紀錄出現（#1158 E-4）。
+   */
+  const nextAskable = useCallback(
+    (from: number, revealed: number) => {
+      let nextIdx = from + 1;
+      while (
+        nextIdx < n &&
+        (nextIdx < revealed ? isExhausted(nextIdx) : isSettled(nextIdx))
+      )
+        nextIdx += 1;
+      return nextIdx;
+    },
+    [n, isExhausted, isSettled],
+  );
+  const nextAskableRef = useRef(nextAskable);
+  nextAskableRef.current = nextAskable;
+  const revealedRef = useRef(revealedCount);
+  revealedRef.current = revealedCount;
+
+  /** 收尾：剩下的（上次答過的）題目以紀錄出現 →「輸入中…」→ 結尾語 → 可提交 */
+  const finishFlow = useCallback(() => {
+    setRevealedCount(n);
+    finishAll();
+  }, [n, finishAll]);
+
   const goNext = useCallback(() => {
-    // 已出現的題目（老師往回跳過）答滿的跳過；還沒出現的、上次已答過的也跳過，
-    // 直接以紀錄出現（#1158 E-4）
-    let nextIdx = current + 1;
-    while (
-      nextIdx < n &&
-      (nextIdx < revealedCount ? isExhausted(nextIdx) : isSettled(nextIdx))
-    )
-      nextIdx += 1;
+    const nextIdx = nextAskable(current, revealedCount);
     if (nextIdx >= n) {
-      setRevealedCount(n);
-      finishAll();
+      finishFlow();
     } else if (nextIdx < revealedCount) {
       setCurrent(nextIdx);
       setPhase("awaitingAnswer");
@@ -312,9 +335,8 @@ export function useScenarioChat({
     n,
     revealedCount,
     speakItem,
-    isExhausted,
-    isSettled,
-    finishAll,
+    nextAskable,
+    finishFlow,
     typeThenReveal,
   ]);
 
@@ -357,6 +379,12 @@ export function useScenarioChat({
           } else if (isRetry) {
             setRetry(null);
             setRetryReturn((s) => ({ tick: s.tick + 1, delayed: true }));
+          } else if (
+            nextAskableRef.current(q, revealedRef.current) >= n &&
+            attemptIndex + 1 < maxAttempts
+          ) {
+            // 最後一步：直接收尾到可提交（答滿的照舊先顯示「即將結束對話」再自動收尾）
+            finishFlow();
           } else {
             setPhase("feedbackShown");
           }
@@ -374,7 +402,7 @@ export function useScenarioChat({
           else setPhase("awaitingAnswer");
         });
     },
-    [current, items, maxAttempts, usedFor],
+    [current, items, maxAttempts, usedFor, n, finishFlow],
   );
 
   const goNextRef = useRef(goNext);
@@ -527,6 +555,9 @@ export function useScenarioChat({
     return `${revealedCount}-${total}-${fb}-${phase}-${closingShown}`;
   }, [attempts, revealedCount, phase, closingShown]);
 
+  /** 目前這題之後已經沒有要問的題目（最後一步）：答滿時的提示改「即將結束對話」 */
+  const atLastStep = nextAskable(current, revealedCount) >= n;
+
   /** 每題答過沒：本次至少一次正式作答，或上次已答過（伺服器有錄音，#1158 E-4） */
   const answered = useMemo(
     () =>
@@ -547,6 +578,7 @@ export function useScenarioChat({
     retryBusy,
     retryReturn,
     exhausted,
+    atLastStep,
     answered,
     usedFor,
     flowKey,
