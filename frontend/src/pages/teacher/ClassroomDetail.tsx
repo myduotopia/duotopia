@@ -6,6 +6,7 @@ import {
   practiceModeFilterOptions,
   isAutoScoredMode,
   isQuizMode,
+  supportsAiBatchGrading,
 } from "@/lib/practiceMode";
 import LiveQuizMonitorModal from "@/components/LiveQuizMonitorModal";
 import { Button } from "@/components/ui/button";
@@ -2563,6 +2564,9 @@ export default function ClassroomDetail({
                                     !isAutoScoredMode(
                                       assignment.practice_mode,
                                     ) &&
+                                    supportsAiBatchGrading(
+                                      assignment.practice_mode,
+                                    ) &&
                                     canUseAiGrading && (
                                       <div className="flex flex-col items-end flex-shrink-0">
                                         <Button
@@ -2897,6 +2901,9 @@ export default function ClassroomDetail({
                                             不顯示 AI 批改按鈕。#830：列表入口暫時隱藏，改由 hub 內觸發 */}
                                         {SHOW_LIST_AI_GRADE &&
                                           !isAutoScoredMode(
+                                            assignment.practice_mode,
+                                          ) &&
+                                          supportsAiBatchGrading(
                                             assignment.practice_mode,
                                           ) &&
                                           canUseAiGrading && (

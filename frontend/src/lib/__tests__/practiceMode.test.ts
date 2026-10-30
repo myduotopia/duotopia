@@ -26,6 +26,7 @@ import {
   isAutoScoredMode,
   isGradableMode,
   canReturnForRevision,
+  supportsAiBatchGrading,
   type PracticeMode,
   type PracticeDataset,
 } from "../practiceMode";
@@ -483,5 +484,24 @@ describe("canReturnForRevision（#1158 情境對話不能退回訂正）", () =>
       undefined,
       "",
     ].forEach((m) => expect(canReturnForRevision(m)).toBe(true));
+  });
+});
+
+describe("supportsAiBatchGrading（#1158 情境對話不顯示 AI 批改）", () => {
+  it("情境對話不顯示", () => {
+    expect(supportsAiBatchGrading("scenario_dialogue")).toBe(false);
+  });
+  it("其他作業類型、未知與空值都照舊（迴歸）", () => {
+    [
+      "reading",
+      "word_reading",
+      "rearrangement",
+      "word_selection",
+      "word_selection_quiz",
+      "future_mode",
+      null,
+      undefined,
+      "",
+    ].forEach((m) => expect(supportsAiBatchGrading(m)).toBe(true));
   });
 });

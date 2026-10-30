@@ -1052,3 +1052,20 @@ const RETURN_NOT_ALLOWED_MODES: ReadonlySet<string> = new Set([
 export function canReturnForRevision(mode?: string | null): boolean {
   return !mode || !RETURN_NOT_ALLOWED_MODES.has(mode);
 }
+
+/**
+ * #1158：不顯示紫色「AI 批改」（BatchGradingModal，Azure 發音評分）的作業類型
+ * （後端 grading.py AI_BATCH_GRADE_NOT_ALLOWED_PRACTICE_MODES 同值；batch-grade 回 400）。
+ * 情境對話是開放式回答，批改維持老師手動評分。
+ */
+const AI_BATCH_GRADING_EXCLUDED_MODES: ReadonlySet<string> = new Set([
+  "scenario_dialogue",
+]);
+
+/**
+ * 這種作業能不能顯示紫色「AI 批改」入口；不能時入口直接不顯示（不是停用）。
+ * 未知／空值 → 可以（行為不變）。各入口原有的條件（額度、自動計分模式）照舊另外判斷。
+ */
+export function supportsAiBatchGrading(mode?: string | null): boolean {
+  return !mode || !AI_BATCH_GRADING_EXCLUDED_MODES.has(mode);
+}
