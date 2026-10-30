@@ -4615,6 +4615,9 @@
       "suggestedDuration": "建議錄音時長",
       "tapToRecord": "點一下開始錄音",
       "tapToStop": "再點一下停止",
+      "send": "送出",
+      "playRecording": "試聽 {{duration}}",
+      "startRecordingDisabled": "開始錄音（{{reason}}）",
       "stopRecording": "停止錄音",
       "processing": "處理中…",
       "reRecord": "重錄"
@@ -5090,6 +5093,7 @@
       "waitFeedback": "AI 正在看你的回答…",
       "waitAutoNext": "即將進入下一題…",
       "waitChoose": "請在上方選擇「再試一次」或「下一題」",
+      "waitChooseShort": "請在上方選擇",
       "previewMode": "預覽模式",
       "jumpToNo": "跳到第 {{no}} 題",
       "intro": "嗨！我會問你 {{count}} 個問題，請聽完後用英文回答。準備好就按「開始對話」。",

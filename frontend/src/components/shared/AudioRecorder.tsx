@@ -46,10 +46,14 @@ interface AudioRecorderProps {
   // UI customization
   /**
    * `chat`（#1133 情境對話）：大圓麥克風，點一下開始（秒數＋聲波）、再點停止 →
-   * 可試聽／重錄；不包 Card、不跳「錄音完成」toast（由外層決定何時送出）。
+   * 重錄／送出／試聽（只用圖示按鈕，#1158 E3）；不包 Card、不跳「錄音完成」toast。
    * 畫面在 AudioRecorderChatControls.tsx。
    */
   variant?: "default" | "compact" | "minimal" | "chat";
+  /** chat 專用：錄完後中間的「送出」大鈕（由外層決定送出後做什麼） */
+  onSend?: () => void;
+  /** chat 專用：停用（disabled）時的原因，放進麥克風的 aria-label／title */
+  disabledReason?: string;
   className?: string;
   showProgress?: boolean;
   showTimer?: boolean;
@@ -75,6 +79,8 @@ export default function AudioRecorder({
   showProgress = true,
   showTimer = true,
   autoStop,
+  onSend,
+  disabledReason,
 }: AudioRecorderProps) {
   const { t } = useTranslation();
   const isChat = variant === "chat";
@@ -454,15 +460,17 @@ export default function AudioRecorder({
               ? `${formatTime(recordingTime)} / ${formatTime(autoStop)}`
               : formatTime(recordingTime)
           }
+          recordedTimeLabel={formatTime(recordingTime)}
           audioUrl={localAudioUrl}
           showError={status === "error"}
           errorMessage={errorMessage}
-          description={description}
           readOnly={readOnly}
           disabled={disabled}
+          disabledReason={disabledReason}
           onStart={startRecording}
           onStop={stopRecording}
           onReRecord={handleReRecord}
+          onSend={onSend}
           onError={onError}
         />
       );

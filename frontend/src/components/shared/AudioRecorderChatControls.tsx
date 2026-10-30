@@ -2,135 +2,212 @@
  * AudioRecorderChatControls — AudioRecorder `variant="chat"` 的畫面（#1133 情境對話）。
  *
  * 從 AudioRecorder 抽出來，錄音邏輯（MediaRecorder、驗證、清理）仍在 AudioRecorder，
- * 這裡只負責畫面：大圓麥克風，點一下開始（秒數＋聲波）、再點停止（處理中轉圈）→
- * 試聽（AudioPlayer compact）／重錄；錄音失敗顯示紅字。
- * 只給 AudioRecorder 內部使用，其他地方請用 `<AudioRecorder variant="chat" />`。
+ * 這裡只負責畫面。只給 AudioRecorder 內部使用，其他地方請用 `<AudioRecorder variant="chat" />`；
+ * 目前只有情境對話的 ReplyComposer 用（例句朗讀等其他錄音不走這個 variant）。
+ *
+ * #1158 E3 改版（像通訊軟體的語音訊息）：只用圖示按鈕、不放說明文字（每顆都有 aria-label），
+ * 一列置中，主按鈕 72px。外層（ReplyComposer）負責把這一列放在畫面最下方、下半疊在淺藍底色條
+ * （高度＝主按鈕一半）上；兩側的秒數／音量條／時長放在底色條那一半的高度（`self-end h-9`）。
+ * - A 待錄：藍色大麥克風。
+ * - B 錄音中：紅色停止鈕（處理中轉圈）＋左側秒數（有上限時「0:12 / 2:00」）＋右側音量條。
+ * - C 錄完：重錄（左，小圓灰）／送出（中，大圓藍紙飛機，`onSend`）／試聽（右，小圓淺藍 ▶，
+ *   標準 AudioPlayer minimal＋tone="soft"）＋時長。沒傳 onSend 就不顯示送出鈕。
+ * - D 停用（`disabled`，例如等 AI 建議）：灰色麥克風，aria-label／title 帶停用原因
+ *   （`disabledReason`）；原因文字由外層顯示在底色條右側。
+ * 錄音失敗時左下角顯示紅字。
  */
 
-import { AlertCircle, Loader2, Mic, RotateCcw, Square } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+  Mic,
+  RotateCcw,
+  Send,
+  Square,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { AudioErrorData } from "@/utils/audioErrorLogger";
 import AudioPlayer from "./AudioPlayer";
 
 interface Props {
   isRecording: boolean;
   isStopping: boolean;
+  /** 錄音中顯示的秒數（有上限時含上限） */
   recordingTimeLabel: string;
+  /** 錄完後的時長（試聽鈕旁） */
+  recordedTimeLabel: string;
   audioUrl: string | null;
   showError: boolean;
   errorMessage?: string;
-  description?: string;
   readOnly: boolean;
   disabled: boolean;
+  /** 停用原因（D 狀態），放進麥克風的 aria-label／title */
+  disabledReason?: string;
   onStart: () => void;
   onStop: () => void;
   onReRecord: () => void;
+  /** 錄完後的「送出」（C 狀態中間的大鈕） */
+  onSend?: () => void;
   onError?: (error: AudioErrorData) => void;
 }
+
+/** 主按鈕：72px 圓、白色外圈＋淡陰影 */
+const BIG =
+  "flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full border-4 border-white shadow-md transition-colors";
+/** 兩側小按鈕：48px 圓 */
+const SMALL =
+  "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-white shadow transition-colors";
+/** 兩側附屬資訊：放在底色條那一半的高度 */
+const SIDE = "flex h-9 w-14 items-center self-end";
 
 export default function AudioRecorderChatControls({
   isRecording,
   isStopping,
   recordingTimeLabel,
+  recordedTimeLabel,
   audioUrl,
   showError,
   errorMessage,
-  description,
   readOnly,
   disabled,
+  disabledReason,
   onStart,
   onStop,
   onReRecord,
+  onSend,
   onError,
 }: Props) {
   const { t } = useTranslation();
+  const locked = readOnly || disabled;
+  const startLabel = t("audioRecorder.ui.startRecording");
+  const lockedLabel = disabledReason
+    ? t("audioRecorder.ui.startRecordingDisabled", { reason: disabledReason })
+    : startLabel;
+
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div
+      className="relative flex w-full items-center justify-center gap-5"
+      data-testid="chat-recorder-controls"
+    >
+      {/* A 待錄／D 停用 */}
       {!isRecording && !audioUrl && (
-        <>
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={readOnly || disabled}
-            className="h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-md flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50"
-            aria-label={t("audioRecorder.ui.startRecording")}
-          >
-            <Mic className="h-7 w-7" />
-          </button>
-          <span className="text-xs text-gray-500">
-            {description || t("audioRecorder.ui.tapToRecord")}
-          </span>
-        </>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={locked}
+          className={cn(
+            BIG,
+            locked
+              ? "cursor-not-allowed bg-gray-200 text-gray-400"
+              : "bg-blue-600 text-white hover:bg-blue-700",
+          )}
+          aria-label={locked ? lockedLabel : startLabel}
+          title={locked ? lockedLabel : startLabel}
+          data-state={locked ? "disabled" : "idle"}
+        >
+          <Mic className="h-8 w-8" aria-hidden />
+        </button>
       )}
 
+      {/* B 錄音中 */}
       {isRecording && (
         <>
-          <div className="flex items-center gap-4">
-            <span className="w-12 text-right text-base font-medium tabular-nums text-red-600">
-              {recordingTimeLabel}
-            </span>
-            <button
-              type="button"
-              onClick={onStop}
-              disabled={isStopping}
-              className="h-16 w-16 rounded-full bg-red-600 text-white shadow-md flex items-center justify-center hover:bg-red-700 transition-colors"
-              aria-label={t("audioRecorder.ui.stopRecording")}
-            >
-              {isStopping ? (
-                <Loader2 className="h-7 w-7 animate-spin" />
-              ) : (
-                <Square className="h-6 w-6 fill-current" />
-              )}
-            </button>
-            <div className="flex h-8 w-12 items-center gap-1" aria-hidden>
-              {[45, 85, 60, 100, 50].map((h, i) => (
-                <span
-                  key={i}
-                  className="w-1.5 rounded-full bg-red-500 animate-pulse"
-                  style={{
-                    height: `${isStopping ? 20 : h}%`,
-                    animationDelay: `${i * 150}ms`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-          <span className="text-xs text-gray-500">
-            {isStopping
-              ? t("audioRecorder.ui.processing")
-              : t("audioRecorder.ui.tapToStop")}
+          <span
+            className={cn(
+              SIDE,
+              "w-24 justify-end whitespace-nowrap text-sm font-medium tabular-nums text-red-600",
+            )}
+          >
+            {recordingTimeLabel}
+          </span>
+          <button
+            type="button"
+            onClick={onStop}
+            disabled={isStopping}
+            className={cn(BIG, "bg-red-600 text-white hover:bg-red-700")}
+            aria-label={
+              isStopping
+                ? t("audioRecorder.ui.processing")
+                : t("audioRecorder.ui.stopRecording")
+            }
+            data-state="recording"
+          >
+            {isStopping ? (
+              <Loader2 className="h-7 w-7 animate-spin" aria-hidden />
+            ) : (
+              <Square className="h-6 w-6 fill-current" aria-hidden />
+            )}
+          </button>
+          <span className={cn(SIDE, "w-24 gap-1")} aria-hidden>
+            {[45, 85, 60, 100, 50].map((h, i) => (
+              <span
+                key={i}
+                className="w-1 rounded-full bg-red-400 animate-pulse"
+                style={{
+                  height: `${isStopping ? 30 : h * 0.7}%`,
+                  animationDelay: `${i * 150}ms`,
+                }}
+              />
+            ))}
           </span>
         </>
       )}
 
+      {/* C 錄完：重錄／送出／試聽 */}
       {audioUrl && !isRecording && (
-        <div className="flex items-center gap-2">
-          <AudioPlayer
-            audioUrl={audioUrl}
-            variant="compact"
-            showTitle={false}
-            onError={onError}
-          />
+        <>
           {!readOnly && (
-            <Button
-              variant="outline"
+            <button
+              type="button"
               onClick={onReRecord}
               disabled={disabled}
-              className="h-11"
+              className={cn(
+                SMALL,
+                "bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50",
+              )}
+              aria-label={t("audioRecorder.ui.reRecord")}
+              title={t("audioRecorder.ui.reRecord")}
             >
-              <RotateCcw className="w-4 h-4 mr-1" />
-              {t("audioRecorder.ui.reRecord")}
-            </Button>
+              <RotateCcw className="h-5 w-5" aria-hidden />
+            </button>
           )}
-        </div>
+          {onSend && (
+            <button
+              type="button"
+              onClick={onSend}
+              disabled={disabled}
+              className={cn(BIG, "bg-blue-600 text-white hover:bg-blue-700")}
+              aria-label={t("audioRecorder.ui.send")}
+              title={t("audioRecorder.ui.send")}
+              data-state="recorded"
+            >
+              <Send className="h-7 w-7" aria-hidden />
+            </button>
+          )}
+          <span className="relative">
+            <AudioPlayer
+              audioUrl={audioUrl}
+              variant="minimal"
+              tone="soft"
+              showTitle={false}
+              onError={onError}
+              ariaLabel={t("audioRecorder.ui.playRecording", {
+                duration: recordedTimeLabel,
+              })}
+            />
+            <span className="absolute left-full top-1/2 ml-1 mt-1 whitespace-nowrap text-xs tabular-nums text-gray-600">
+              {recordedTimeLabel}
+            </span>
+          </span>
+        </>
       )}
 
       {showError && !isRecording && (
-        <div className="flex items-center gap-1 text-red-600 text-xs">
-          <AlertCircle className="w-4 h-4" />
+        <span className="absolute bottom-1 left-3 flex max-w-[40%] items-center gap-1 text-xs leading-tight text-red-600">
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
           {errorMessage || t("audioRecorder.ui.recordingFailedCheckMic")}
-        </div>
+        </span>
       )}
     </div>
   );

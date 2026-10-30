@@ -4603,6 +4603,9 @@
       "suggestedDuration": "Suggested Recording Duration",
       "tapToRecord": "Tap to start recording",
       "tapToStop": "Tap again to stop",
+      "send": "Send",
+      "playRecording": "Play recording {{duration}}",
+      "startRecordingDisabled": "Start recording ({{reason}})",
       "stopRecording": "Stop recording",
       "processing": "Processing…",
       "reRecord": "Re-record"
@@ -5068,6 +5071,7 @@
       "waitFeedback": "AI is reviewing your answer…",
       "waitAutoNext": "Moving to the next question…",
       "waitChoose": "Choose \"Try again\" or \"Next question\" above",
+      "waitChooseShort": "Choose above",
       "previewMode": "Preview mode",
       "jumpToNo": "Jump to question {{no}}",
       "intro": "Hi! I'll ask you {{count}} questions. Listen, then answer in English. Tap \"Start conversation\" when you're ready.",

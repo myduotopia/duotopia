@@ -24,6 +24,9 @@
  * - 高度＝外層給的高度（h-full），不自己用 100dvh：嵌在作答頁外框裡時只佔外框剩下的
  *   高度，不會和頁面各有一層捲動，也不會被頁面頂部列蓋住（#1158 E1）。呼叫端要給有高度的容器。
  *   底部輸入區留 safe-area。
+ * - 語音錄音區（#1158 E3）固定在最下方、按鈕上半浮在對話區上（見 ReplyComposer）；作答中／等待中
+ *   （isFloatingDock）捲動區底部多留空間、「↓ 新訊息」跟著上移，最新訊息不被擋住。等選「再試一次／
+ *   下一題」時錄音區小字用短句（waitChooseShort）。
  *
  * - 標題列（#1158 E1／E4）：作業標題只留一處 —— 外框（作答頁頂部列／派發預覽欄標題）有標題，
  *   這裡不再重複情境標題，只寫「對話」＋難度／預覽模式徽章。灰色系（紫色只留在情境卡標頭，
@@ -378,8 +381,15 @@ export function ScenarioChatActivity({
           ? t("scenarioDialogue.chat.waitFeedback")
           : chat.exhausted
             ? t("scenarioDialogue.chat.waitAutoNext")
-            : t("scenarioDialogue.chat.waitChoose");
+            : // 錄音區底色條右側的短句（#1158 E3）；完整說法在建議氣泡的按鈕上
+              t("scenarioDialogue.chat.waitChooseShort");
   }
+  // 語音錄音區浮在對話區底部（ReplyComposer -mt-9）：捲動區底部多留按鈕上半的高度，
+  // 重答橫條也浮在上面時再多留一些（#1158 E3）
+  const isFloatingDock =
+    !readOnly &&
+    settings.replyMode === "voice" &&
+    (composerState === "answer" || composerState === "waiting");
 
   // 寬螢幕兩欄只在 layout="auto" 時啟用；compact（派發預覽欄）一律單欄
   const wide = layout !== "compact";
@@ -449,7 +459,10 @@ export function ScenarioChatActivity({
               <div
                 ref={scrollRef}
                 onScroll={onScroll}
-                className="h-full overflow-y-auto overflow-x-hidden px-3 py-4"
+                className={cn(
+                  "h-full overflow-y-auto overflow-x-hidden px-3 py-4",
+                  isFloatingDock && (retry ? "pb-28" : "pb-14"),
+                )}
                 aria-live="polite"
               >
                 <div ref={contentRef} className="space-y-3">
@@ -483,7 +496,14 @@ export function ScenarioChatActivity({
                 <button
                   type="button"
                   onClick={scrollToBottom}
-                  className="absolute bottom-3 left-1/2 flex min-h-11 -translate-x-1/2 items-center gap-1 rounded-full bg-gray-900/80 px-4 text-sm text-white shadow-md"
+                  className={cn(
+                    "absolute left-1/2 flex min-h-11 -translate-x-1/2 items-center gap-1 rounded-full bg-gray-900/80 px-4 text-sm text-white shadow-md",
+                    isFloatingDock
+                      ? retry
+                        ? "bottom-28"
+                        : "bottom-14"
+                      : "bottom-3",
+                  )}
                 >
                   <ArrowDown className="h-4 w-4" />
                   {t("scenarioDialogue.chat.newMessages")}

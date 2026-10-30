@@ -4,9 +4,17 @@
  * 依流程狀態切換：
  * - intro：「開始對話」主按鈕（也讓第一次自動朗讀發生在使用者點擊之後，避開瀏覽器自動播放限制）
  * - answer：老師派發時設定的回覆方式
- *   - 語音：標準 AudioRecorder（chat variant）錄音 → 試聽／重錄 →「送出」才成為對話中的語音訊息
+ *   - 語音：標準 AudioRecorder（chat variant）錄音 → 重錄／送出／試聽 →「送出」才成為對話中的語音訊息
  *   - 打字：聊天輸入框＋送出鈕（Enter 送出）
- * - waiting：AI 輸入中或等待使用者在建議氣泡上選「再試一次／下一題」時的提示
+ * - waiting：AI 輸入中或等待使用者在建議氣泡上選「再試一次／下一題」。語音模式顯示灰色停用的
+ *   麥克風，原因（waitingHint）寫在底色條右側小字，也放進麥克風的 aria-label。
+ *
+ * 語音錄音區（answer／waiting，#1158 E3）固定在作答畫面最下方，像通訊軟體的語音訊息：
+ * 只有圖示按鈕；淺藍底色條（blue-50＋上緣 blue-100 細線）高度＝主按鈕一半（36px，h-9），
+ * 再加 safe-area 底部留白同色；按鈕列垂直置中在底色條上緣，上半浮在對話區上（外框 -mt-9、
+ * 不擋點擊的地方 pointer-events-none）。對話捲動區要在底部多留按鈕上半的高度（
+ * ScenarioChatActivity 依 isFloatingDock 加 padding），最新訊息才不會被擋住。
+ * 「正在重答第 N 題 ✕」浮在按鈕列上方。intro／finished 維持文字主按鈕（白底區塊，不浮）。
  * - finished：「提交作業」主按鈕；傳了 submitDisabledReason（老師預覽，#1158 E2）就停用，
  *   下方小字改成停用原因（「預覽不會送出」），title 也寫同一句
  * 回頭重答（retryNo）時上方多一條「正在重答第 N 題 ✕」；✕ 取消重答、回到進行中的題目
@@ -128,39 +136,81 @@ export function ReplyComposer({
         </p>
       </div>
     );
-  } else if (state === "waiting") {
+  } else if (state === "waiting" && replyMode !== "voice") {
     body = (
       <p className="flex min-h-12 items-center justify-center text-center text-sm text-gray-500">
         {waitingHint}
       </p>
     );
   } else if (replyMode === "voice") {
-    body = (
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <AudioRecorder
-          key={recorderKey}
-          variant="chat"
-          // 上限要擋在前端：超過的話上傳端會回 400，而學生只會看到一句看不懂的
-          // 錯誤（夥伴 staging 回報）。到時間自動停，並在計時器上顯示上限。
-          autoStop={SCENARIO_MAX_RECORDING_SECONDS}
-          onRecordingComplete={(blob, _url, durationSeconds) => {
-            // 自己建一份 URL：AudioRecorder 卸載時會 revoke 它自己的那份
-            setPending({
-              url: URL.createObjectURL(blob),
-              durationSec: durationSeconds,
-            });
-          }}
-          onReRecord={() => {
-            if (pendingRef.current) URL.revokeObjectURL(pendingRef.current.url);
-            setPending(null);
-          }}
-        />
-        {pending && (
-          <Button type="button" className="h-11" onClick={sendVoice}>
-            <Send className="mr-1 h-4 w-4" />
-            {t("scenarioDialogue.chat.send")}
-          </Button>
+    const waiting = state === "waiting";
+    return (
+      <div
+        className="pointer-events-none relative z-10 -mt-9 shrink-0"
+        data-testid="scenario-reply-dock"
+      >
+        {retryNo !== null && (
+          <div className="pointer-events-auto absolute inset-x-3 bottom-full mb-2 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 text-sm text-blue-800 shadow-sm">
+            <span>{t("scenarioDialogue.chat.retrying", { no: retryNo })}</span>
+            {canCancelRetry && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-11 w-11 p-0 text-blue-800"
+                onClick={onCancelRetry}
+                aria-label={t("scenarioDialogue.chat.cancelRetry")}
+                title={t("scenarioDialogue.chat.cancelRetry")}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
         )}
+        <div className="relative">
+          {/* 底色條：主按鈕高度的一半 */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-9 border-t border-blue-100 bg-blue-50"
+            data-testid="scenario-reply-strip"
+            aria-hidden
+          />
+          {waiting && (
+            <p
+              className="absolute bottom-0 right-3 flex h-9 max-w-[calc(50%-3rem)] items-center text-right text-xs leading-tight text-gray-500"
+              role="status"
+            >
+              {waitingHint}
+            </p>
+          )}
+          <div className="pointer-events-auto relative">
+            <AudioRecorder
+              key={recorderKey}
+              variant="chat"
+              disabled={waiting}
+              disabledReason={waiting ? waitingHint : undefined}
+              onSend={sendVoice}
+              // 上限要擋在前端：超過的話上傳端會回 400，而學生只會看到一句看不懂的
+              // 錯誤（夥伴 staging 回報）。到時間自動停，並在計時器上顯示上限。
+              autoStop={SCENARIO_MAX_RECORDING_SECONDS}
+              onRecordingComplete={(blob, _url, durationSeconds) => {
+                // 自己建一份 URL：AudioRecorder 卸載時會 revoke 它自己的那份
+                setPending({
+                  url: URL.createObjectURL(blob),
+                  durationSec: durationSeconds,
+                });
+              }}
+              onReRecord={() => {
+                if (pendingRef.current)
+                  URL.revokeObjectURL(pendingRef.current.url);
+                setPending(null);
+              }}
+            />
+          </div>
+        </div>
+        {/* safe-area（瀏海機 home bar）同底色 */}
+        <div
+          className="bg-blue-50"
+          style={{ height: "env(safe-area-inset-bottom)" }}
+        />
       </div>
     );
   } else {
