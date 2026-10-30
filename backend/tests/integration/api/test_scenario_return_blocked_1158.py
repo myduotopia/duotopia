@@ -6,7 +6,9 @@
 - 批次退回（batch-return-for-revision）→ 200，學生全部列入 skipped 與 not_allowed。
 - 批次批改完成（finalize-batch-grade）→ RETURNED 決定略過（狀態不變），
   return_not_allowed_count 回報人數；GRADED 決定照常。
-其他作業類型（例：例句朗讀 reading）退回流程完全不變（迴歸）。
+- AI 批改（batch-grade，批次與單人模式）→ 400 + AI_BATCH_GRADE_NOT_ALLOWED_FOR_PRACTICE_MODE，
+  批改維持老師手動評分。
+其他作業類型（例：例句朗讀 reading）退回與 AI 批改流程完全不變（迴歸）。
 """
 
 from datetime import date, datetime, timezone
@@ -368,3 +370,76 @@ class TestFinalizeBatchGrade:
         assert body["return_not_allowed_count"] == 0
         assert _sa(shared_test_session, sa_ret.id).status == AssignmentStatus.RETURNED
         assert _counts(shared_test_session, sa_ret.id) == [0, 0]
+
+
+# ---------- AI 批改（batch-grade）----------
+
+AI_BLOCK_CODE = "AI_BATCH_GRADE_NOT_ALLOWED_FOR_PRACTICE_MODE"
+
+
+class TestAiBatchGrade:
+    """紫色「AI 批改」（Azure 發音評分）不適用情境對話：批改維持老師手動評分。"""
+
+    @pytest.mark.parametrize("single", [False, True])
+    def test_scenario_dialogue_rejected_with_code(
+        self,
+        test_client: TestClient,
+        shared_test_session,
+        scenario_setup,
+        teacher_headers,
+        single,
+    ):
+        a = scenario_setup["assignment"]
+        payload = {"classroom_id": scenario_setup["classroom"].id}
+        if single:
+            payload["student_ids"] = [scenario_setup["students"][0].id]
+        resp = test_client.post(
+            f"/api/teachers/assignments/{a.id}/batch-grade",
+            json=payload,
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 400, resp.text
+        detail = resp.json()["detail"]
+        assert detail["code"] == AI_BLOCK_CODE
+        assert detail["practice_mode"] == "scenario_dialogue"
+        for sa in scenario_setup["student_assignments"]:
+            row = _sa(shared_test_session, sa.id)
+            assert row.status == AssignmentStatus.SUBMITTED
+            assert row.score is None
+
+    def test_other_teacher_gets_404_not_400(
+        self, test_client: TestClient, shared_test_session, scenario_setup
+    ):
+        """驗權在前：別的老師不會從 400 得知作業類型。"""
+        other = Teacher(
+            email="rb-ai-other-1158@test.com",
+            name="Other",
+            password_hash=get_password_hash("password123"),
+            is_active=True,
+            email_verified=True,
+        )
+        shared_test_session.add(other)
+        shared_test_session.commit()
+        token = create_access_token(data={"sub": str(other.id), "type": "teacher"})
+        resp = test_client.post(
+            f"/api/teachers/assignments/{scenario_setup['assignment'].id}"
+            "/batch-grade",
+            json={"classroom_id": scenario_setup["classroom"].id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+
+    def test_reading_still_ai_graded_regression(
+        self,
+        test_client: TestClient,
+        reading_setup,
+        teacher_headers,
+    ):
+        a = reading_setup["assignment"]
+        resp = test_client.post(
+            f"/api/teachers/assignments/{a.id}/batch-grade",
+            json={"classroom_id": reading_setup["classroom"].id},
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["total_students"] == 2

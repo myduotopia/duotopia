@@ -6,6 +6,8 @@ deduction_detail，quiz_settings 加打字類小考評分設定。
 
 Issue #1158：情境對話作業不能退回訂正 —— 單筆退回 409
 （RETURN_NOT_ALLOWED_FOR_PRACTICE_MODE），批次退回／批次批改完成略過並回報。
+紫色「AI 批改」（batch-grade，Azure 發音評分）不適用情境對話 —— 回 400
+（AI_BATCH_GRADE_NOT_ALLOWED_FOR_PRACTICE_MODE），批改維持老師手動評分。
 """
 
 import json
@@ -112,6 +114,13 @@ def _check_not_archived(
 # 其他作業類型的退回流程完全不變。
 RETURN_NOT_ALLOWED_PRACTICE_MODES = frozenset({"scenario_dialogue"})
 RETURN_NOT_ALLOWED_CODE = "RETURN_NOT_ALLOWED_FOR_PRACTICE_MODE"
+
+
+# #1158：紫色「AI 批改」（batch-grade）用 Azure 發音評分算分，只適合有標準答案的
+# 朗讀類作業。情境對話是開放式回答，批改維持老師手動評分 —— batch-grade 回 400。
+# 前端 lib/practiceMode.ts 的 supportsAiBatchGrading 同值（入口直接不顯示）。
+AI_BATCH_GRADE_NOT_ALLOWED_PRACTICE_MODES = frozenset({"scenario_dialogue"})
+AI_BATCH_GRADE_NOT_ALLOWED_CODE = "AI_BATCH_GRADE_NOT_ALLOWED_FOR_PRACTICE_MODE"
 
 
 def _return_not_allowed(parent: Optional[Assignment]) -> bool:
@@ -1845,6 +1854,17 @@ async def batch_grade_assignment(
             raise HTTPException(
                 status_code=403,
                 detail="Cannot modify grades: assignment is archived",
+            )
+
+        # #1158：情境對話不能用 AI 批改（驗權之後才擋，避免洩漏作業類型）
+        if assignment.practice_mode in AI_BATCH_GRADE_NOT_ALLOWED_PRACTICE_MODES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": AI_BATCH_GRADE_NOT_ALLOWED_CODE,
+                    "message": "情境對話作業不能使用 AI 批改，請由老師評分。",
+                    "practice_mode": assignment.practice_mode,
+                },
             )
         perf.checkpoint("Permission Check")
 
