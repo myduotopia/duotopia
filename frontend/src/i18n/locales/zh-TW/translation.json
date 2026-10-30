@@ -5246,6 +5246,7 @@
       "reviseConfirm": "改寫",
       "revisedQuestions": "已改寫 {{count}} 題",
       "revisedScenario": "已改寫情境文章",
+      "revisedScenarioHint": "題目和情境圖沒有跟著改，需要的話可以說「把題目改成配合新情境」",
       "reviseQuestionsCancelled": "沒有修改題目",
       "reviseScenarioCancelled": "沒有修改情境文章",
       "noQuestionsToRevise": "目前還沒有題目可以修改",

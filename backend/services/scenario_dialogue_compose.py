@@ -14,7 +14,7 @@
   回 ``refusal="revise_out_of_range"``。
 * ``revise_scenario``（修正 C6）：老師要改情境文章（「情境改成在學校」「把情境改寫成
   過去式」）→ 回 ``scenario_content``（改寫後的整篇文章）。輸出被截斷時不交出半篇
-  文章（502、退次數）。
+  文章（502、退次數）；超過長度上限也一樣，不截斷。
 
 沒辦法照做的情況一律回 ``usable=False``（不計次）＋``refusal`` 代碼與一句說明，前端
 依代碼顯示自己的文字：``full``（已滿 10 題卻要加題／出題）、``no_questions``（沒有
@@ -378,7 +378,7 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
             '{"usable": true, "intent": "add_questions", "generate", '
             '"revise_questions" or "revise_scenario", "title": "<title>", '
             '"requested_count": 0, "skipped_count": 0, "scenario_content": "", '
-            '"questions": [{"index": 0, "question": "...", "translation": "...", '
+            '"questions": [{"index": 1, "question": "...", "translation": "...", '
             '"keywords": ["..."], "reference_answer": "...", "image_prompt": "..."}]}',
             "(index is only needed for revise_questions; scenario_content only for "
             "revise_scenario.)",
@@ -535,24 +535,37 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
         """修改既有題目（修正 C6）→ ``revisions``。
 
         ``index`` 是題號（1 起算，＝前端送來的 ``existing_questions[].number``）；
-        不在既有題目裡的題號忽略，同一題號只收第一筆。模型沒給 image_prompt 時沿用
+        不在既有題目裡的題號忽略，同一題號只收第一筆；所有題號都不合法但筆數等於
+        既有題數時，依順序對到既有題號（修正 C6b）。模型沒給 image_prompt 時沿用
         原本的（題目圖不動，描述也不該無故消失）。輸出被截斷時交出救回的那幾題，
         ``output_truncated`` 讓前端提示「部分題目沒改到」。
         """
         if not existing:
             return cls._refusal(REFUSAL_NO_QUESTIONS, ui_language)
         by_number = {item["number"]: item for item in existing}
-        revisions: List[Dict[str, Any]] = []
-        used = set()
-        had_candidates = False
+        candidates: List[Tuple[int, Dict[str, Any]]] = []
         for item in items:
             if not isinstance(item, dict):
                 continue
             cleaned = cls._clean_question(item, keep_translation=True)
             if not cleaned["question"]:
                 continue
-            had_candidates = True
-            index = cls._count(item.get("index"), 10**6)
+            candidates.append((cls._count(item.get("index"), 10**6), cleaned))
+        # 保險（修正 C6b）：模型沒給題號或全給 0（照抄範例），但筆數剛好等於既有題數
+        # →「全部改寫」，依順序對到既有題號；筆數不同時對不準，照常當成題號不存在
+        if (
+            candidates
+            and len(candidates) == len(existing)
+            and not any(index in by_number for index, _ in candidates)
+        ):
+            candidates = [
+                (item["number"], cleaned)
+                for item, (_index, cleaned) in zip(existing, candidates)
+            ]
+
+        revisions: List[Dict[str, Any]] = []
+        used = set()
+        for index, cleaned in candidates:
             if index not in by_number or index in used:
                 continue
             used.add(index)
@@ -563,7 +576,7 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
             revisions.append({"index": index, **cleaned})
 
         if not revisions:
-            if had_candidates:
+            if candidates:
                 # 老師指定的題號都不存在（例如只有 5 題卻說「第 8 題」）
                 return cls._refusal(
                     REFUSAL_OUT_OF_RANGE, ui_language, count=len(existing)
@@ -591,15 +604,19 @@ class ScenarioDialogueComposeService(ScenarioDialogueAIService):
         """修改情境文章（修正 C6）→ ``scenario_content``。
 
         沒有情境文章時回 ``no_scenario``（不計次）。輸出被截斷時文章可能只剩半篇，
-        不能拿來取代老師原本的文章 —— 丟 output error（502、退次數）讓老師重送。
+        不能拿來取代老師原本的文章 —— 丟 output error（502、退次數）讓老師重送；
+        超過 ``MAX_SCENARIO_OUTPUT_CHARS`` 字同樣處理，不截斷（修正 C6b）。
         """
         if not (scenario_content or "").strip():
             return cls._refusal(REFUSAL_NO_SCENARIO, ui_language)
         if output_truncated:
             raise ScenarioDialogueAIOutputError("AI 改寫的情境文章不完整")
-        content = cls._text(raw.get("scenario_content"))[:MAX_SCENARIO_OUTPUT_CHARS]
+        content = cls._text(raw.get("scenario_content"))
         if not content:
             return cls._unusable(_DEFAULT_REASK[_ui_key(ui_language)])
+        if len(content) > MAX_SCENARIO_OUTPUT_CHARS:
+            # 截斷會交出半篇文章去取代原文；視同輸出錯誤（502、退次數）
+            raise ScenarioDialogueAIOutputError("AI 改寫的情境文章超過長度上限")
         return {
             **cls._empty_result(),
             "usable": True,

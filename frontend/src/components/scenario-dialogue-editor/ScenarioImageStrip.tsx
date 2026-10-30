@@ -2,18 +2,15 @@
  * 情境圖列（Issue #1146）：縮圖、刪除、補傳、調整裁切。
  *
  * 一份情境最多 5 張。修正 C6 起縮圖用標準元件 `ZoomableImage`：點縮圖放大看（唯讀、編輯都
- * 可以）；縮圖下方的裁切鈕開重裁對話框（`ScenarioImageCropDialog`），刪除／裁切鈕和縮圖是
- * 兄弟節點，點按鈕不會觸發放大。存檔後重開的
- * 圖沒有原圖可裁，「調整裁切」停用並說明原因（REVIEW.md 按鈕層級第 3 條）。
+ * 可以）。裁切改由縮圖下方的裁切鈕開重裁對話框（`ScenarioImageCropDialog`）；刪除／裁切鈕
+ * 和縮圖是兄弟節點，點按鈕不會觸發放大。存檔後重開的圖沒有原圖可裁，「調整裁切」停用並說明
+ * 原因（REVIEW.md 按鈕層級第 3 條）。
  *
  * `readOnly` 給題目清單左欄的對照區用：只看不改（修改要回對話）。
  *
  * #1158：新增鈕旁加「AI 生圖」（`FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION`），開共用的
  * `AiImageGenerateDialog`，打開時依情境文章請 AI 擬描述。AI 生的圖沒有原圖，不顯示
  * 「調整裁切」。已滿 5 張時停用並說明原因。
- *
- * 修正 C6：縮圖改用標準元件 （點圖放大，唯讀與編輯都可以）。裁切改由
- * 縮圖下方的裁切鈕開（點縮圖本身是放大）。
  */
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

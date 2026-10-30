@@ -3,6 +3,7 @@
  *
  * - 有圖時點圖開放大檢視（標準元件 ZoomableImage）
  * - 點「替換」「移除」不觸發放大
+ * - 觸控裝置（hover:none）替換／移除常駐顯示（修正 C6b）
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -41,5 +42,16 @@ describe("ScenarioImageSlot 點圖放大（修正 C6）", () => {
     expect(props.onRemove).toHaveBeenCalled();
     fireEvent.click(screen.getByText("scenarioDialogue.buttons.replaceImage"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("觸控裝置（hover:none）替換／移除常駐顯示、不蓋暗色遮罩", () => {
+    renderSlot();
+    const actions = screen.getByTestId("scenario-question-image-actions");
+    // 平常隱藏、滑過才出現；hover:none 時常駐在底部
+    expect(actions).toHaveClass("hidden", "group-hover:flex");
+    expect(actions).toHaveClass(
+      "[@media(hover:none)]:flex",
+      "[@media(hover:none)]:bg-transparent",
+    );
   });
 });

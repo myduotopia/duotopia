@@ -5232,6 +5232,7 @@
       "revisedQuestions_one": "Rewrote {{count}} question",
       "revisedQuestions_other": "Rewrote {{count}} questions",
       "revisedScenario": "Rewrote the scenario text",
+      "revisedScenarioHint": "The questions and scenario pictures were not changed. If needed, say \"update the questions to match the new scenario\".",
       "reviseQuestionsCancelled": "No questions were changed",
       "reviseScenarioCancelled": "The scenario text was not changed",
       "noQuestionsToRevise": "There are no questions to revise yet.",

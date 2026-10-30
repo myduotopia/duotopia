@@ -297,7 +297,8 @@ const composeExisting = (rows: ScenarioDialogueRow[]) =>
 /**
  * 套用一筆 AI 改寫（修正 C6）：題目、翻譯、必用字詞、參考答案、圖片描述換成新的；題目圖、
  * 單題評分標準、補充說明、題號位置不動。題目文字變了，舊語音就對不上（清掉，由呼叫端重產）。
- * 翻譯：開關開著用 AI 的翻譯；關著時題目沒變就留原本的，變了就清空（舊翻譯已對不上）。
+ * 翻譯：開關開著用 AI 的翻譯（AI 回空的且題目沒變時留原本的，修正 C6b）；關著時題目沒變
+ * 就留原本的，變了就清空（舊翻譯已對不上）。
  */
 const reviseRow = (
   row: ScenarioDialogueRow,
@@ -308,7 +309,12 @@ const reviseRow = (
   return {
     ...row,
     question: r.question,
-    translation: autoTranslate ? r.translation : changed ? "" : row.translation,
+    translation:
+      autoTranslate && r.translation.trim()
+        ? r.translation
+        : changed
+          ? ""
+          : row.translation,
     keywords: r.keywords,
     referenceAnswer: r.reference_answer,
     imagePrompt: r.image_prompt || row.imagePrompt,
@@ -326,6 +332,8 @@ interface PendingRevise {
   revisions: Map<string, ScenarioComposeRevision>;
   /** kind=scenario：改寫後的情境文章 */
   scenarioContent: string;
+  /** AI 的標題建議：確認後才套用，取消不套用（修正 C6b） */
+  suggestedTitle?: string;
 }
 
 const ScenarioDialoguePanel = forwardRef<
@@ -728,9 +736,8 @@ const ScenarioDialoguePanel = forwardRef<
         setTab("chat");
         return true;
       }
-      applySuggestedTitle(result.suggested_title);
-
-      // 修改既有題目／情境（修正 C6）：先跳確認框，確認才改；取消時原文放回對話框
+      // 修改既有題目／情境（修正 C6）：先跳確認框，確認才改；取消時原文放回對話框。
+      // 標題建議也等確認才套用（修正 C6b），所以 applySuggestedTitle 放在這段之後
       if (
         result.intent === "revise_questions" ||
         result.intent === "revise_scenario"
@@ -764,6 +771,7 @@ const ScenarioDialoguePanel = forwardRef<
           replies,
           revisions,
           scenarioContent: result.scenario_content ?? "",
+          suggestedTitle: result.suggested_title,
         };
         if (
           (pending.kind === "questions" && revisions.size === 0) ||
@@ -789,6 +797,7 @@ const ScenarioDialoguePanel = forwardRef<
         });
       }
 
+      applySuggestedTitle(result.suggested_title);
       const isAdd = result.intent === "add_questions";
       const replies: ComposedBatch["replies"] = [];
       const requested = result.requested_count ?? 0;
@@ -898,7 +907,8 @@ const ScenarioDialoguePanel = forwardRef<
    * 改寫題目：用最新的 rows（functional setRows）依列 id 原地替換，題號位置、題目圖不動；
    * 等待確認期間被刪掉的題目就跳過。題目文字變了的題，原本有語音或「AI 生成語音」開著時
    * 重新產生語音（只對這幾題）；翻譯依翻譯開關（見 `reviseRow`）。
-   * 改寫情境：只換情境文章，右欄情境區即時更新；情境圖不動。
+   * 改寫情境：只換情境文章，右欄情境區即時更新；情境圖不動。紀錄多一句提示題目和情境圖
+   * 沒有跟著改（修正 C6b）。AI 的標題建議在確認時才套用，取消不套用。
    */
   const takePendingRevise = () => {
     const pending = pendingReviseRef.current;
@@ -915,6 +925,8 @@ const ScenarioDialoguePanel = forwardRef<
       return;
     }
     let note: string;
+    const after: PendingRevise["replies"] = [];
+    applySuggestedTitle(pending.suggestedTitle);
     if (pending.kind === "questions") {
       const autoTranslate = setup.autoTranslate;
       const before = rowsRef.current;
@@ -949,12 +961,16 @@ const ScenarioDialoguePanel = forwardRef<
     } else {
       setup.setScenarioContent(pending.scenarioContent);
       note = t("scenarioDialogue.compose.revisedScenario");
+      after.push({
+        role: "bot",
+        text: t("scenarioDialogue.compose.revisedScenarioHint"),
+      });
       setTab("side");
     }
     setup.recordCompose({
       typed: pending.typed,
       atManual: pending.atManual,
-      replies: [...pending.replies, { role: "note", text: note }],
+      replies: [...pending.replies, { role: "note", text: note }, ...after],
       added: false,
     });
     resolve?.(true);

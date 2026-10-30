@@ -958,3 +958,75 @@ def test_unusable_has_empty_revise_fields(test_client, auth_headers_teacher, fak
     assert data["refusal"] == ""
     assert data["revisions"] == []
     assert data["scenario_content"] == ""
+
+
+# ---------------------------------------------------------------- 修正 C6b
+
+
+@pytest.mark.parametrize("index", [0, None])
+def test_revise_questions_without_valid_index_maps_by_order(
+    test_client, auth_headers_teacher, fake_ai, index
+):
+    """模型照抄範例全給 0、或沒給題號，但筆數等於既有題數 → 依順序對到既有題號。"""
+    existing = _existing(3)
+    existing[2]["number"] = 5  # 題號不連續也照順序對
+    questions = [_rev(index, f"Changed {i}") for i in range(3)]
+    if index is None:
+        for q in questions:
+            q.pop("index")
+    fake_ai["output"] = {
+        "usable": True,
+        "intent": "revise_questions",
+        "questions": questions,
+    }
+    data = _post(
+        test_client,
+        auth_headers_teacher,
+        text="把問題改為過去式",
+        existing_questions=existing,
+    ).json()
+
+    assert data["usable"] is True
+    assert [(r["index"], r["question"]) for r in data["revisions"]] == [
+        (1, "Changed 0"),
+        (2, "Changed 1"),
+        (5, "Changed 2"),
+    ]
+    assert '"index": 1' in fake_ai["prompt"]
+    assert '"index": 0' not in fake_ai["prompt"]
+
+
+def test_revise_questions_invalid_index_count_mismatch_refuses(
+    test_client, auth_headers_teacher, fake_ai
+):
+    """題號都不合法且筆數不等於既有題數：對不準，照常回題號不存在。"""
+    fake_ai["output"] = {
+        "usable": True,
+        "intent": "revise_questions",
+        "questions": [_rev(0, "Changed")],
+    }
+    data = _post(
+        test_client,
+        auth_headers_teacher,
+        text="改一下",
+        existing_questions=_existing(3),
+    ).json()
+
+    assert data["usable"] is False
+    assert data["refusal"] == "revise_out_of_range"
+
+
+def test_revise_scenario_over_limit_is_502_and_refunds(
+    test_client, auth_headers_teacher, fake_ai
+):
+    """改寫後超過上限不截斷取代原文：502、退次數。"""
+    fake_ai["output"] = {
+        "usable": True,
+        "intent": "revise_scenario",
+        "scenario_content": "a" * (compose_mod.MAX_SCENARIO_OUTPUT_CHARS + 1),
+        "questions": [],
+    }
+    resp = _post(test_client, auth_headers_teacher, text="情境寫長一點")
+
+    assert resp.status_code == 502
+    assert _used(test_client, auth_headers_teacher) == 0

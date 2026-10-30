@@ -5,7 +5,8 @@
  * - `SortableRow`：題目、翻譯、參考答案／補充說明、單題評分標準（預設＋覆寫）、題目圖、題目語音。
  * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標，#1158 起開
  *   共用的 `AiImageGenerateDialog`，對話框由面板持有）。修正 C6 起圖用標準元件 `ZoomableImage`，
- *   點圖放大；滑過時的替換／移除遮罩不接點擊（只有按鈕接），點按鈕不會觸發放大。
+ *   點圖放大；滑過時的替換／移除遮罩不接點擊（只有按鈕接），點按鈕不會觸發放大。觸控裝置
+ *   （hover:none）沒有滑過，替換／移除常駐在圖的底部（修正 C6b）。
  * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：小工具（#1158 C commit 4 起右欄情境區不再
  *   顯示評分標準，目前只有這支檔用到）。
  *
@@ -145,8 +146,12 @@ export function ScenarioImageSlot({
             testId="scenario-question-image"
           />
           {/* 有圖時才出現的替換／移除，平常不擋住圖。遮罩本身不接點擊（pointer-events-none），
-              點按鈕以外的地方會穿到下面的圖、照樣放大；按鈕自己接點擊，不會觸發放大 */}
-          <div className="pointer-events-none absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50 [&>button]:pointer-events-auto">
+              點按鈕以外的地方會穿到下面的圖、照樣放大；按鈕自己接點擊，不會觸發放大。
+              觸控裝置（hover:none）沒有滑過，按鈕常駐在圖的底部、不蓋暗色遮罩（修正 C6b） */}
+          <div
+            data-testid="scenario-question-image-actions"
+            className="pointer-events-none absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50 [&>button]:pointer-events-auto [@media(hover:none)]:flex [@media(hover:none)]:items-end [@media(hover:none)]:bg-transparent [@media(hover:none)]:pb-1"
+          >
             <button
               type="button"
               onClick={pick}

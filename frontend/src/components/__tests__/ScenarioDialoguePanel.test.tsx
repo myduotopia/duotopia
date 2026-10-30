@@ -3613,4 +3613,138 @@ describe("ScenarioDialoguePanel 對話框加題／出題（compose，#1158 C 段
       expect((zh.compose as Record<string, string>)[key]).toBeTruthy();
     }
   });
+
+  // ---------------------------------------------------------------- 修正 C6b
+
+  it("修改題目：AI 的標題建議等確認才套用，取消不套用", async () => {
+    renderPanel();
+    toManualInput();
+    addTypedQuestion("What do you do?");
+    const title = () => screen.getByPlaceholderText(K.titlePlaceholder);
+    composeScenarioQuestions
+      .mockResolvedValueOnce(
+        revised([{ index: 1, question: "What did you do?" }], {
+          suggested_title: "過去式練習",
+        }),
+      )
+      .mockResolvedValueOnce(
+        revised([{ index: 1, question: "What did you do?" }], {
+          suggested_title: "過去式練習",
+        }),
+      );
+
+    await say("改為過去式");
+    await flush();
+    // 確認框開著時還沒套用
+    expect(title()).toHaveValue("");
+    fireEvent.click(
+      screen.getByRole("button", { name: "contentEditor.buttons.cancel" }),
+    );
+    await flush();
+    expect(title()).toHaveValue("");
+
+    await say("改為過去式");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+    expect(title()).toHaveValue("過去式練習");
+  });
+
+  it("修改題目：翻譯開著但 AI 回空翻譯 → 題目沒變就留原翻譯，變了才清空", async () => {
+    const row = (
+      id: string,
+      n: number,
+      question: string,
+      translation: string,
+    ) => ({
+      id,
+      contentItemId: n,
+      question,
+      translation,
+      tenseOverride: null,
+      voiceOverride: null,
+      keywords: [],
+      referenceAnswer: "",
+      rubricNote: "",
+      imagePrompt: "",
+      imageUrl: null,
+      audioUrl: null,
+      revision: 0,
+    });
+    renderPanel({
+      initialData: {
+        title: "週末",
+        scenarioContent: "",
+        scenarioImages: [],
+        scenarioMode: "",
+        questionSource: "",
+        goal: "",
+        articleLevel: "",
+        direction: "",
+        questionLevel: "",
+        globalRubric: "",
+        globalTense: { time: "", aspect: "" },
+        globalVoice: "",
+        translateLanguage: "chinese",
+        ttsSettings: null,
+        rows: [
+          row("r1", 11, "What did you do?", "原翻譯一"),
+          row("r2", 12, "Where did you go?", "原翻譯二"),
+          row("r3", 13, "Who did you see?", "原翻譯三"),
+        ],
+      } as unknown as Parameters<
+        typeof ScenarioDialoguePanel
+      >[0]["initialData"],
+    });
+    const result = revised([
+      { index: 1, question: "What did you do?" },
+      { index: 2, question: "Where did you travel?" },
+    ]);
+    for (const r of result.revisions) r.translation = "";
+    composeScenarioQuestions.mockResolvedValueOnce(result);
+
+    await say("參考答案寫長一點");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+
+    expect(questionValues()).toEqual([
+      "What did you do?",
+      "Where did you travel?",
+      "Who did you see?",
+    ]);
+    // 題目沒變：留原翻譯；題目變了：舊翻譯對不上，清空；沒改的題不動
+    expect(screen.getByDisplayValue("原翻譯一")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("原翻譯二")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("原翻譯三")).toBeInTheDocument();
+  });
+
+  it("修改情境：確認後多一句提示「題目和情境圖沒有跟著改」（中英都有）", async () => {
+    renderPanel();
+    chooseMode("existing");
+    type(K.scenarioPlaceholder, "Tom goes to school.");
+    fireEvent.click(screen.getByText(K.useScenario));
+    chooseSource("manual");
+    composeScenarioQuestions.mockResolvedValueOnce({
+      ...composed("add_questions", []),
+      intent: "revise_scenario",
+      scenario_content: "Tom went to school.",
+    });
+
+    await say("情境改成過去式");
+    await flush();
+    expect(chatText()).not.toContain(C("revisedScenarioHint"));
+    fireEvent.click(screen.getByRole("button", { name: C("reviseConfirm") }));
+    await flush();
+
+    expect(chatText()).toContain(C("revisedScenario"));
+    expect(chatText()).toContain(C("revisedScenarioHint"));
+
+    const en = (await import("@/i18n/locales/en/translation.json")).default
+      .scenarioDialogue.compose as Record<string, string>;
+    const zh = (await import("@/i18n/locales/zh-TW/translation.json")).default
+      .scenarioDialogue.compose as Record<string, string>;
+    expect(zh.revisedScenarioHint).toContain("把題目改成配合新情境");
+    expect(en.revisedScenarioHint).toContain("match the new scenario");
+  });
 });
