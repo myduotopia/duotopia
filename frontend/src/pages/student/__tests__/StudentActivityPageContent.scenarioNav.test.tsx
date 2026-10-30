@@ -6,11 +6,14 @@
  *   已出現的題目點了捲到那一題；目前這題標示（aria-current）跟著對話進度更新；
  *   老師預覽開始對話前全部不能點，開始後可以跳題；
  * - 其他作答模式的方格行為不變（迴歸）。
+ * - #1158 E-3：情境對話要求學生版面窄螢幕隱藏標題列（其他模式不要求）；題號列只留方格
+ *   （不顯示內容標題與「N 題」）。
  */
 import { describe, test, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StudentActivityPageContent from "../StudentActivityPageContent";
+import { StudentLayoutChromeContext } from "@/contexts/StudentLayoutChromeContext";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -62,11 +65,25 @@ const scenarioActivities = [
   },
 ];
 
-function renderScenario(isPreviewMode = false) {
+/** 沒有作答要求：按「開始對話」直接出第 1 題（有作答要求時先倒數，見 rubricCountdown.test） */
+const noRubricActivities = [
+  {
+    ...scenarioActivities[0],
+    scenario_settings: {
+      scenario_content:
+        scenarioActivities[0].scenario_settings.scenario_content,
+      global_rubric: "",
+    },
+  },
+];
+
+function renderScenario(isPreviewMode = false, withRubric = true) {
   return render(
     <StudentActivityPageContent
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      activities={scenarioActivities as any}
+      activities={
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (withRubric ? scenarioActivities : noRubricActivities) as any
+      }
       assignmentTitle="情境作業"
       assignmentId={1}
       practiceMode="scenario_dialogue"
@@ -113,7 +130,7 @@ describe("StudentActivityPageContent — 情境對話外框（#1158 E1）", () =
 
   test("學生開始對話後：第 1 題標示目前、可點並捲到該題；未到的題目仍鎖住", async () => {
     const user = userEvent.setup();
-    renderScenario();
+    renderScenario(false, false);
     await user.click(startButton());
 
     await waitFor(() =>
@@ -141,7 +158,7 @@ describe("StudentActivityPageContent — 情境對話外框（#1158 E1）", () =
 
   test("老師預覽：開始前鎖住；開始後可跳題，目前題標示跟著更新", async () => {
     const user = userEvent.setup();
-    renderScenario(true);
+    renderScenario(true, false);
     expect(navButton(3)).toHaveAttribute("aria-disabled", "true");
 
     await user.click(startButton());
@@ -223,6 +240,39 @@ describe("StudentActivityPageContent — 情境對話外框（#1158 E1）", () =
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
+  test("題號列只留方格：不顯示內容標題與「N 題」（#1158 E-3）", () => {
+    renderScenario();
+    // 內容標題只出現在情境卡裡（情境卡標題＝活動標題），題號列沒有
+    for (const el of screen.queryAllByText("週末計畫")) {
+      expect(
+        el.closest('section[aria-label="scenarioDialogue.chat.scenario"]'),
+      ).not.toBeNull();
+    }
+    expect(
+      screen.queryByText("studentActivityPage.labels.itemCount"),
+    ).toBeNull();
+    expect(navButton(1)).toBeInTheDocument();
+  });
+
+  test("要求學生版面窄螢幕隱藏標題列，卸載時恢復（#1158 E-3）", () => {
+    const setHideHeaderOnMobile = vi.fn();
+    const { unmount } = render(
+      <StudentLayoutChromeContext.Provider value={{ setHideHeaderOnMobile }}>
+        <StudentActivityPageContent
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          activities={scenarioActivities as any}
+          assignmentTitle="情境作業"
+          assignmentId={1}
+          practiceMode="scenario_dialogue"
+          onSubmit={vi.fn()}
+        />
+      </StudentLayoutChromeContext.Provider>,
+    );
+    expect(setHideHeaderOnMobile).toHaveBeenLastCalledWith(true);
+    unmount();
+    expect(setHideHeaderOnMobile).toHaveBeenLastCalledWith(false);
+  });
+
   test("預覽：對話裡沒有上一題／下一題按鈕", () => {
     renderScenario(true);
     expect(
@@ -255,14 +305,23 @@ describe("StudentActivityPageContent — 其他模式的方格不變（迴歸）
         ],
       },
     ];
+    const setHideHeaderOnMobile = vi.fn();
     render(
-      <StudentActivityPageContent
-        activities={activities}
-        assignmentTitle="Test"
-        assignmentId={1}
-        onSubmit={vi.fn()}
-      />,
+      <StudentLayoutChromeContext.Provider value={{ setHideHeaderOnMobile }}>
+        <StudentActivityPageContent
+          activities={activities}
+          assignmentTitle="Test"
+          assignmentId={1}
+          onSubmit={vi.fn()}
+        />
+      </StudentLayoutChromeContext.Provider>,
     );
+    // #1158 E-3：其他模式不隱藏學生版面標題列，題號列照舊有內容標題與「N 題」
+    expect(setHideHeaderOnMobile).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Test Activity").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("studentActivityPage.labels.itemCount"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("scenario-nav-1")).toBeNull();
     const item2 = screen.getByRole("button", { name: "2" });
     expect(item2).not.toHaveAttribute("aria-disabled");

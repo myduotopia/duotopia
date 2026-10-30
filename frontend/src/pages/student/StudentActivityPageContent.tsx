@@ -17,7 +17,10 @@
  * - 已提交重開（isReadOnly）：對話改成唯讀作答紀錄（題目＋自己的錄音），沒有「開始對話」與
  *   錄音區；題號方格每題都能點、捲到該題（#1158 E6）。
  * - 整頁改成固定高度的直式排版（h-[100dvh] max-h-full），對話只佔外框剩下的高度、
- *   自己捲動，不會和頁面各有一層捲動，頂部列也不會蓋住對話標題列。
+ *   自己捲動，不會和頁面各有一層捲動。
+ * - 手機版（< lg，#1158 E-3）：學生版面（StudentLayout）的「學生專區」標題列不顯示
+ *   （useHideStudentHeaderOnMobile），整頁從畫面頂端開始、高度＝100dvh，錄音區不會被瀏覽器
+ *   工具列擠出畫面；題號列只留方格（不顯示內容標題與「N 題」，和作業標題重複又被截斷）。
  */
 
 import {
@@ -113,6 +116,7 @@ import { azureSpeechService } from "@/services/azureSpeechService";
 import { useAutoAnalysis } from "@/hooks/useAutoAnalysis"; // Issue #141: 例句朗讀自動分析
 import { DemoLimitModal } from "@/components/demo/DemoLimitModal";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
+import { useHideStudentHeaderOnMobile } from "@/contexts/StudentLayoutChromeContext";
 
 // Activity type from API
 export interface Activity {
@@ -453,6 +457,8 @@ export default function StudentActivityPageContent({
   // 點了鎖住的方格：提示 2 秒，連點時重新計時（ScenarioQuestionNav 共用）
   const { hint: scenarioNavHint, show: showScenarioNavHint } =
     useScenarioNavHint();
+  // #1158 E-3：情境對話作答時，窄螢幕不顯示學生版面的「學生專區」標題列
+  useHideStudentHeaderOnMobile(isScenarioDialogue);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #835: Live quiz — 進入 guard + 收卷輪詢
@@ -2904,19 +2910,22 @@ export default function StudentActivityPageContent({
                           key={activity.id}
                           className="flex items-center gap-1 sm:gap-2 flex-shrink-0"
                         >
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm sm:text-xs font-medium text-gray-600 whitespace-nowrap max-w-[120px] sm:max-w-none truncate sm:overflow-visible sm:whitespace-normal">
-                              {activity.title}
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className="text-sm sm:text-xs px-1.5 sm:px-1 py-0 h-5 sm:h-5 min-w-[35px] sm:min-w-[30px] text-center"
-                            >
-                              {t("studentActivityPage.labels.itemCount", {
-                                count: activity.items.length,
-                              })}
-                            </Badge>
-                          </div>
+                          {/* #1158 E-3：情境對話只留題號方格（標題與作業標題重複） */}
+                          {!isScenarioDialogue && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm sm:text-xs font-medium text-gray-600 whitespace-nowrap max-w-[120px] sm:max-w-none truncate sm:overflow-visible sm:whitespace-normal">
+                                {activity.title}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-sm sm:text-xs px-1.5 sm:px-1 py-0 h-5 sm:h-5 min-w-[35px] sm:min-w-[30px] text-center"
+                              >
+                                {t("studentActivityPage.labels.itemCount", {
+                                  count: activity.items.length,
+                                })}
+                              </Badge>
+                            </div>
+                          )}
 
                           <div className="flex gap-0.5 sm:gap-1">
                             {activity.items.map((item, itemIndex) => {
@@ -3129,7 +3138,7 @@ export default function StudentActivityPageContent({
             )}
           >
             {/* CardHeader - 單字選擇模式不顯示（WordSelectionActivity 自帶 header）；
-                情境對話也不顯示（對話自己有標題列，#1158 E1） */}
+                情境對話也不顯示（作業標題已在頂部列，#1158 E1／E-3） */}
             {!isVocabularySetType(currentActivity?.type || "") &&
               !isScenarioDialogue && (
                 <CardHeader className="py-2 sm:py-3">

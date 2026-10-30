@@ -51,6 +51,15 @@ const DETAIL = {
   ],
 };
 
+/**
+ * 沒有作答要求：按「開始對話」直接出第 1 題。有作答要求時會先倒數 5 秒（#1158 E-3，
+ * 見 scenario-dialogue/__tests__/e3Mobile.test.tsx），這裡測流程時不等倒數。
+ */
+const DETAIL_NO_RUBRIC = {
+  ...DETAIL,
+  scenario_settings: { ...DETAIL.scenario_settings, global_rubric: "" },
+};
+
 beforeEach(() => {
   getContentDetail.mockReset();
   getContentDetail.mockResolvedValue(DETAIL);
@@ -79,6 +88,7 @@ describe("ScenarioDialoguePreview", () => {
 
   it("按下「開始對話」才問第一題（與設計稿的流程一致）", async () => {
     const user = userEvent.setup();
+    getContentDetail.mockResolvedValue(DETAIL_NO_RUBRIC);
     render(<ScenarioDialoguePreview contentId={501} showTranslation />);
     await waitFor(() => expect(startButton()).toBeTruthy());
 
@@ -95,6 +105,7 @@ describe("ScenarioDialoguePreview", () => {
 
   it("換教材會重新開始，不帶著舊教材的對話", async () => {
     const user = userEvent.setup();
+    getContentDetail.mockResolvedValue(DETAIL_NO_RUBRIC);
     const { rerender } = render(
       <ScenarioDialoguePreview contentId={501} showTranslation />,
     );
@@ -136,7 +147,7 @@ describe("ScenarioDialoguePreview", () => {
   it("預覽欄有題號方格：開始前全部鎖住，開始後可跳題、目前題標示（#1158 E-1 修正）", async () => {
     const user = userEvent.setup();
     getContentDetail.mockResolvedValue({
-      ...DETAIL,
+      ...DETAIL_NO_RUBRIC,
       items: [
         DETAIL.items[0],
         { ...DETAIL.items[0], id: 9002, text: "Who did you go with?" },

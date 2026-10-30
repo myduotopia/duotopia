@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import StudentLayout from "../StudentLayout";
+import { useHideStudentHeaderOnMobile } from "@/contexts/StudentLayoutChromeContext";
 
 // Mock the stores
 vi.mock("@/stores/studentAuthStore", () => ({
@@ -47,5 +48,34 @@ describe("StudentLayout", () => {
 
     // Students should have sidebar navigation
     expect(screen.getByRole("complementary")).toBeInTheDocument();
+  });
+
+  // #1158 E-3：作答頁（情境對話）要求窄螢幕隱藏「學生專區」標題列
+  function Page({ hide }: { hide: boolean }) {
+    useHideStudentHeaderOnMobile(hide);
+    return <div>page</div>;
+  }
+  const renderWithPage = (hide: boolean) =>
+    render(
+      <MemoryRouter initialEntries={["/student/x"]}>
+        <Routes>
+          <Route path="/student" element={<StudentLayout />}>
+            <Route path="x" element={<Page hide={hide} />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  it("頁面要求時，標題列在窄螢幕隱藏（lg 以上照常）", () => {
+    renderWithPage(true);
+    const header = screen.getByTestId("student-layout-header");
+    expect(header.className).toContain("hidden");
+    expect(header.className).toContain("lg:block");
+  });
+
+  it("頁面沒要求時，標題列照常顯示", () => {
+    renderWithPage(false);
+    const header = screen.getByTestId("student-layout-header");
+    expect(header.className).not.toContain("hidden");
   });
 });

@@ -1,6 +1,6 @@
 /**
  * #1158 E-2：情境對話畫面修正
- * - E1：對話標題列不重複情境標題，改寫「對話」、灰色系
+ * - E1／E-3：沒有對話標題列（E-3 拿掉「對話」那一列，作業標題在外框）
  * - E4：🔊／英／中、作答要求／情境切換鈕開啟時淺藍底藍字、關閉白底，都沒有外框，不用藍底主按鈕
  * - E5：情境卡顯示情境圖（ImageCarousel）
  * - E6：已提交唯讀：列出題目＋自己的錄音，不顯示「開始對話」與錄音區
@@ -127,8 +127,8 @@ describe("E5 情境卡顯示情境圖", () => {
   });
 });
 
-describe("E1／E4 對話標題列", () => {
-  it("不重複情境標題，寫「對話」、灰色系", () => {
+describe("E-3 沒有對話標題列", () => {
+  it("不顯示「對話」那一列，也不重複情境標題", () => {
     render(
       <ScenarioChatActivity
         context={{ ...CONTEXT, images: [] }}
@@ -139,11 +139,10 @@ describe("E1／E4 對話標題列", () => {
         layout="compact"
       />,
     );
-    const header = document.querySelector("header")!;
-    expect(header.textContent).toContain("scenarioDialogue.chat.conversation");
-    expect(header.textContent).not.toContain("週末去夜市");
-    expect(header.className).toContain("bg-gray-50");
-    expect(header.className).not.toContain("purple");
+    expect(document.querySelector("header")).toBeNull();
+    expect(screen.queryByText("scenarioDialogue.chat.conversation")).toBeNull();
+    // 開始前作答要求卡在對話區；情境標題只在情境卡裡
+    expect(screen.getAllByText("週末去夜市")).toHaveLength(1);
   });
 });
 

@@ -5,7 +5,7 @@
  * - 開始前：作答要求卡（藍）→ 情境卡（紫，情境 C 沒有）→ 底部「開始對話」；
  *   按下後直接問第 1 題（沒有 AI 開場複述）。
  *   手機／平板直式顯示在對話區；平板橫式／電腦（≥ lg）放左欄、常駐展開（獨立捲動）。
- * - 開始後（< lg）：兩張卡收合成上方一條 `[📋 作答要求] [📖 情境]` 小膠囊，點哪個展開哪個。
+ * - 開始後（< lg，含作答要求倒數中）：兩張卡收合成上方一條 `[📋 作答要求] [📖 情境]` 小膠囊，點哪個展開哪個。
  * - layout="compact"（派發預覽欄，#1158 E2）：不管螢幕多寬都用單欄（上面那兩條的 < lg 版面），
  *   因為預覽欄本身很窄，用螢幕寬度判斷會在寬螢幕排出兩欄、擠成一團。
  * - 題號：#1158 E 段拿掉對話內的小點點（QuestionDots）和標題列的「N / M」，改由外層作答頁
@@ -28,9 +28,15 @@
  *   （isFloatingDock）捲動區底部多留空間、「↓ 新訊息」跟著上移，最新訊息不被擋住。等選「再試一次／
  *   下一題」時錄音區小字用短句（waitChooseShort）。
  *
- * - 標題列（#1158 E1／E4）：作業標題只留一處 —— 外框（作答頁頂部列／派發預覽欄標題）有標題，
- *   這裡不再重複情境標題，只寫「對話」＋難度／預覽模式徽章。灰色系（紫色只留在情境卡標頭，
- *   減少色塊疊加）；圖示用對話框，不用麥克風（像錄音鍵，會被誤按）。
+ * - 沒有自己的標題列（#1158 E-3 拿掉「對話」那一列，手機上省高度）：作業標題在外框
+ *   （作答頁頂部列／派發預覽欄標題）。
+ * - 作答要求倒數（#1158 E-3）：有作答要求時，按「開始對話」先在對話最上方顯示熊熊「先看一下
+ *   作答要求 👇」＋作答要求卡＋進度條「N 秒後開始」（RubricCountdown：5 秒，字多拉長，最多 12 秒），
+ *   不能跳過；倒數中錄音區麥克風停用、小字「看完作答要求就開始」；倒數完才問第 1 題（自動朗讀）。
+ *   朗讀解鎖（primeSpeech）仍在按下「開始對話」當下做；倒數後朗讀若仍被擋，走既有的逾時保底
+ *   （自動打開英文）。沒有作答要求就直接問第 1 題。老師預覽一樣倒數。
+ * - 手機橫放（#1158 E-3，usePhoneLandscape）：作答中整頁蓋提示（PhoneLandscapeOverlay），
+ *   停止朗讀、丟掉正在錄的錄音（ReplyComposer interrupted）、倒數暫停；轉回直立提示消失、狀態保留。
  *
  * - 已提交唯讀（readOnly，#1158 E6）：不顯示「開始對話」與錄音區，改列出每題題目＋學生
  *   自己的錄音（SubmittedTranscript）；作答要求／情境卡照樣顯示。題號方格每題都能點、捲到該題。
@@ -50,9 +56,8 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import { ArrowDown, MessagesSquare } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChatTranscript } from "./ChatTranscript";
 import { SubmittedTranscript } from "./SubmittedTranscript";
@@ -65,6 +70,11 @@ import {
   type InfoPanel,
 } from "./ScenarioContextCard";
 import { translationMatchesUi } from "./translationLanguage";
+import {
+  PhoneLandscapeOverlay,
+  usePhoneLandscape,
+} from "./PhoneLandscapeOverlay";
+import { RubricIntro, useRubricCountdown } from "./RubricCountdown";
 import { usedAttempts, useScenarioChat } from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
@@ -173,7 +183,27 @@ export function ScenarioChatActivity({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- answeredKey 代表內容變化
   }, [answeredKey, onProgressChange]);
   const isPreview = settings.isPreviewMode;
-  const started = phase !== "intro";
+  const chatStarted = phase !== "intro";
+
+  // ── 手機橫放：蓋提示、停朗讀、丟錄音、倒數暫停（#1158 E-3） ──
+  const phoneLandscape = usePhoneLandscape();
+  const blocked = phoneLandscape && !readOnly;
+  const adaptersRef = useRef(adapters);
+  adaptersRef.current = adapters;
+  useEffect(() => {
+    if (blocked) adaptersRef.current.stopSpeech?.();
+  }, [blocked]);
+
+  // ── 作答要求倒數（#1158 E-3） ──
+  const rubric = context.rubric?.trim() ? context.rubric : "";
+  const [rubricIntroShown, setRubricIntroShown] = useState(false);
+  const { countdown, begin: beginCountdown } = useRubricCountdown({
+    paused: blocked,
+    onDone: chat.start,
+  });
+  const counting = countdown !== null;
+  // 版面上的「開始了」：倒數中也算（收合成膠囊列、不顯示開始前的大卡片）
+  const started = chatStarted || counting;
 
   const showScenario = hasContextCard(context);
   const hasLeft = showScenario || Boolean(context.rubric);
@@ -311,7 +341,7 @@ export function ScenarioChatActivity({
     chat.retryItem(i);
   };
 
-  const canJump = isPreview && started;
+  const canJump = isPreview && chatStarted;
   const handleNavigate = (i: number) => {
     if (i < 0 || i >= items.length) return;
     // 已提交：每題都列出來了，直接捲過去
@@ -348,11 +378,11 @@ export function ScenarioChatActivity({
 
   // 回頭重答時，題號方格的「目前」標在重答的那一題（#1158 E-2 重答流程）
   const navCurrent =
-    started && !readOnly
+    chatStarted && !readOnly
       ? (retry?.index ?? Math.min(current, items.length - 1))
       : null;
   // 已提交：每題都「已出現」，沒有目前題
-  const navStarted = started || readOnly;
+  const navStarted = chatStarted || readOnly;
   const navRevealed = readOnly ? items.length : chat.revealedCount;
   useEffect(() => {
     onNavChange?.({
@@ -368,6 +398,12 @@ export function ScenarioChatActivity({
     adapters.primeSpeech?.();
     setInfoOpen(null);
     stickRef.current = true;
+    // 有作答要求：先倒數讓學生看完（不能跳過），倒數完才問第 1 題
+    if (rubric) {
+      setRubricIntroShown(true);
+      beginCountdown(rubric);
+      return;
+    }
     chat.start();
   };
 
@@ -377,6 +413,9 @@ export function ScenarioChatActivity({
   if (retry) {
     composerState = retry.status === "answering" ? "answer" : "waiting";
     waitingHint = t("scenarioDialogue.chat.waitFeedback");
+  } else if (counting) {
+    composerState = "waiting";
+    waitingHint = t("scenarioDialogue.chat.waitRubric");
   } else if (phase === "intro") composerState = "intro";
   else if (phase === "finished") composerState = "finished";
   else if (phase === "awaitingAnswer") composerState = "answer";
@@ -411,28 +450,6 @@ export function ScenarioChatActivity({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-50">
-      {/* 標題列（灰色系、不重複作業標題）；題號改由外層作答頁的方格負責（#1158 E 段） */}
-      <header className="shrink-0 border-b border-gray-200 bg-gray-50">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 text-gray-600">
-            <MessagesSquare className="h-4 w-4" aria-hidden />
-          </span>
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-gray-700">
-            {t("scenarioDialogue.chat.conversation")}
-          </h2>
-          {context.level && (
-            <Badge variant="outline" className="shrink-0">
-              {context.level}
-            </Badge>
-          )}
-          {isPreview && (
-            <Badge className="shrink-0 bg-amber-100 text-amber-800 hover:bg-amber-100">
-              {t("scenarioDialogue.chat.previewMode")}
-            </Badge>
-          )}
-        </div>
-      </header>
-
       <div
         className={cn(
           "mx-auto flex min-h-0 w-full flex-1 flex-col",
@@ -452,7 +469,12 @@ export function ScenarioChatActivity({
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {started && !readOnly && hasLeft && (
-            <div className={cn("shrink-0 px-3 pt-3", wide && "lg:hidden")}>
+            <div
+              className={cn(
+                "shrink-0 border-b border-gray-200 px-3 py-3",
+                wide && "lg:hidden",
+              )}
+            >
               <InfoStrip
                 context={context}
                 showScenario={showScenario}
@@ -495,6 +517,11 @@ export function ScenarioChatActivity({
                       translatable={translatable}
                       registerBlock={registerBlock}
                       onRetry={handleRetry}
+                      rubricIntro={
+                        rubricIntroShown && rubric ? (
+                          <RubricIntro rubric={rubric} countdown={countdown} />
+                        ) : undefined
+                      }
                     />
                   )}
                 </div>
@@ -532,6 +559,7 @@ export function ScenarioChatActivity({
               onSubmitAnswer={chat.submitAnswer}
               onCancelRetry={chat.cancelRetry}
               onSubmitAssignment={onSubmit}
+              interrupted={blocked}
               submitDisabledReason={
                 isPreview
                   ? t("scenarioDialogue.chat.previewNoSubmit")
@@ -541,6 +569,8 @@ export function ScenarioChatActivity({
           )}
         </main>
       </div>
+
+      {blocked && <PhoneLandscapeOverlay />}
     </div>
   );
 }

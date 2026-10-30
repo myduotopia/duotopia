@@ -1,7 +1,8 @@
 /**
  * ChatTranscript — 情境對話的訊息流（#1133），從 ScenarioChatActivity 拆出來。
  *
- * 由上而下：開始前的開場招呼 → 每題（題目氣泡＋該題所有回答與建議，重答接在該題原有
+ * 由上而下：開始前的開場招呼（按「開始對話」後若有作答要求，換成 rubricIntro：熊熊請學生先看
+ * 作答要求＋作答要求卡與倒數，倒數完留著當紀錄，#1158 E-3）→ 每題（題目氣泡＋該題所有回答與建議，重答接在該題原有
  * 紀錄下方）→「輸入中…」→ 結尾語。按「開始對話」後直接問第 1 題（沒有 AI 開場複述）。
  * 每題翻譯鈕是否出現由外層算好的 translatable[i] 決定。
  * 回頭重答某題（chat.retry）時：該題題目氣泡標「重答中」；還沒送出新回答前，該題舊的回答與建議
@@ -14,6 +15,7 @@
  * 其他可重答的題目＝再試一次（回頭重答）。學生畫面不顯示分數；老師預覽顯示 mock 分數與本題平均。
  */
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AnswerBubble } from "./AnswerBubble";
 import { FeedbackBubble, type FeedbackActions } from "./FeedbackBubble";
@@ -39,6 +41,8 @@ interface Props {
   translatable: boolean[];
   registerBlock: (index: number, el: HTMLDivElement | null) => void;
   onRetry: (index: number) => void;
+  /** 按「開始對話」後的作答要求（倒數）；有傳就取代開場招呼（#1158 E-3） */
+  rubricIntro?: ReactNode;
 }
 
 const bubble =
@@ -52,6 +56,7 @@ export function ChatTranscript({
   translatable,
   registerBlock,
   onRetry,
+  rubricIntro,
 }: Props) {
   const { t } = useTranslation();
   const { phase, current, attempts } = chat;
@@ -70,7 +75,8 @@ export function ChatTranscript({
 
   return (
     <>
-      {phase === "intro" && (
+      {rubricIntro}
+      {!rubricIntro && phase === "intro" && (
         <AiRow>
           <div className={`${bubble} text-sm text-gray-700`}>
             {t("scenarioDialogue.chat.intro", { count: items.length })}

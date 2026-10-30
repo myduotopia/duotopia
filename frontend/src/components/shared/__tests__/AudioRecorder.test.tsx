@@ -175,3 +175,54 @@ describe("AudioRecorder — requestData before stop", () => {
     );
   });
 });
+
+describe("AudioRecorder — discardSignal（#1158 E-3 手機橫放）", () => {
+  it("錄音中訊號一變：停止並丟掉，不呼叫任何 callback，回到待錄", async () => {
+    const onRecordingComplete = vi.fn();
+    const onRecordingStop = vi.fn();
+    const onError = vi.fn();
+    const props = {
+      variant: "chat" as const,
+      onRecordingComplete,
+      onRecordingStop,
+      onError,
+    };
+    const { rerender } = render(<AudioRecorder {...props} discardSignal={0} />);
+    await act(async () => {
+      await userEvent.click(
+        screen.getByRole("button", { name: "audioRecorder.ui.startRecording" }),
+      );
+    });
+    await waitFor(() => expect(capturedInstance).not.toBeNull());
+    const rec = capturedInstance!;
+    rec.ondataavailable?.({ data: new Blob(["x".repeat(500)]) });
+    expect(
+      screen.getByRole("button", { name: "audioRecorder.ui.stopRecording" }),
+    ).toBeInTheDocument();
+
+    rerender(<AudioRecorder {...props} discardSignal={1} />);
+    expect(rec.stop).toHaveBeenCalled();
+    // 瀏覽器停止後照樣會觸發 onstop：丟棄後不能產生音檔
+    await act(async () => {
+      rec.onstop?.();
+      await new Promise((r) => setTimeout(r, 900));
+    });
+    expect(onRecordingComplete).not.toHaveBeenCalled();
+    expect(onRecordingStop).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "audioRecorder.ui.startRecording" }),
+    ).toBeInTheDocument();
+  });
+
+  it("沒在錄音時訊號改變不做事", async () => {
+    const { rerender } = render(
+      <AudioRecorder variant="chat" discardSignal={0} />,
+    );
+    rerender(<AudioRecorder variant="chat" discardSignal={1} />);
+    expect(capturedInstance).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "audioRecorder.ui.startRecording" }),
+    ).toBeInTheDocument();
+  });
+});

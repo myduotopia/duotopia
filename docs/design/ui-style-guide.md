@@ -219,7 +219,7 @@
 |---|---|---|
 | AIScoreDisplay | `frontend/src/components/shared/AIScoreDisplay.tsx` | 顯示 AI 發音評分 |
 | AudioPlayer | `frontend/src/components/shared/AudioPlayer.tsx` | 播放音檔（含時間顯示）。`tone="onPrimary"`（#1133，只影響 `compact`）：放在主色藍底上用的淺色樣式（無綠底、半透明白按鈕、白色進度條），例如情境對話的學生回答氣泡；預設為原本綠色外觀。`fallbackDuration`（#1133，行為擴充、非外觀）：讀不到音檔時長時改顯示傳入的秒數（例如錄音秒數），不傳時照舊顯示 `--:--` |
-| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音。`variant="chat"`（#1133 情境對話）：大圓麥克風、點一下開始／再點停止（秒數＋聲波）→ 試聽／重錄，不包 Card、不跳完成 toast（畫面在同資料夾 `AudioRecorderChatControls.tsx`，只給 AudioRecorder 內部用） |
+| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音。`variant="chat"`（#1133 情境對話）：大圓麥克風、點一下開始／再點停止（秒數＋聲波）→ 試聽／重錄，不包 Card、不跳完成 toast（畫面在同資料夾 `AudioRecorderChatControls.tsx`，只給 AudioRecorder 內部用）。`discardSignal`：數字一變就丟掉正在錄的錄音、回到待錄，不呼叫任何 callback（#1158 手機橫放用） |
 | BatchPasteArea | `frontend/src/components/shared/BatchPasteArea.tsx` | 帶行號的批次貼上文字區 |
 | BatchTranslateSettings | `frontend/src/components/shared/BatchTranslateSettings.tsx` | 批次翻譯語言設定。card 變體在手機（< sm）語言下拉自成一列、撐滿寬度；sm 以上不變（#1146） |
 | BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速）。card 變體在手機（< sm）改兩欄（口音整列、性別／語速並排）；sm 以上三欄一行（#1146） |

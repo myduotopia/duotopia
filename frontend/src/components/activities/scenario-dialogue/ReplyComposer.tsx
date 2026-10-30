@@ -23,6 +23,9 @@
  * （等 AI 建議時不能取消，不顯示 ✕）。外層以 key 區分重答／主流程，切換時元件重掛、
  * 未送出的錄音丟掉；卸載時 revoke 未送出的錄音 URL。
  * 底部留 safe-area（瀏海機 home bar）。
+ * - 中斷（interrupted，#1158 E-3 手機橫放）：變成 true 時若正在錄音，錄音立刻停止並丟掉
+ *   （AudioRecorder discardSignal），回到待錄；已錄完未送出的保留。
+ * - waiting 也用在按「開始對話」後看作答要求的倒數（#1158 E-3）：麥克風停用，小字寫原因。
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -50,6 +53,8 @@ interface Props {
   onSubmitAssignment: () => void;
   /** 有值＝「提交作業」停用，並把這句當作停用原因顯示（老師預覽） */
   submitDisabledReason?: string;
+  /** 手機橫放等中斷：變成 true 時丟掉正在錄的錄音（#1158 E-3） */
+  interrupted?: boolean;
 }
 
 interface PendingVoice {
@@ -68,6 +73,7 @@ export function ReplyComposer({
   onCancelRetry,
   onSubmitAssignment,
   submitDisabledReason,
+  interrupted = false,
 }: Props) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
@@ -78,6 +84,15 @@ export function ReplyComposer({
   const [recording, setRecording] = useState(false);
   const pendingRef = useRef<PendingVoice | null>(null);
   pendingRef.current = pending;
+  // 中斷時丟掉正在錄的錄音（AudioRecorder discardSignal）
+  const [discardSignal, setDiscardSignal] = useState(0);
+  const recordingRef = useRef(recording);
+  recordingRef.current = recording;
+  useEffect(() => {
+    if (!interrupted || !recordingRef.current) return;
+    setDiscardSignal((n) => n + 1);
+    setRecording(false);
+  }, [interrupted]);
 
   // 離開答題狀態時丟掉未送出的錄音
   useEffect(() => {
@@ -200,6 +215,7 @@ export function ReplyComposer({
               variant="chat"
               disabled={waiting}
               disabledReason={waiting ? waitingHint : undefined}
+              discardSignal={discardSignal}
               onSend={sendVoice}
               onRecordingStart={() => setRecording(true)}
               onRecordingStop={() => setRecording(false)}
