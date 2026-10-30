@@ -1,8 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import StudentLayout from "../StudentLayout";
-import { useHideStudentHeaderOnMobile } from "@/contexts/StudentLayoutChromeContext";
+import {
+  StudentLayoutChromeContext,
+  useHideStudentHeaderOnMobile,
+} from "@/contexts/StudentLayoutChromeContext";
 
 // Mock the stores
 vi.mock("@/stores/studentAuthStore", () => ({
@@ -77,5 +81,27 @@ describe("StudentLayout", () => {
     renderWithPage(false);
     const header = screen.getByTestId("student-layout-header");
     expect(header.className).not.toContain("hidden");
+  });
+
+  // 修正 E3：在畫第一格前就隱藏（useLayoutEffect），標題列不會先閃一下
+  it("隱藏要求在 layout 階段就送出（排在後面的 layout effect 已看得到）", () => {
+    const setHide = vi.fn();
+    let callsSeenInLayout = -1;
+    function Probe() {
+      useLayoutEffect(() => {
+        callsSeenInLayout = setHide.mock.calls.length;
+      }, []);
+      return null;
+    }
+    render(
+      <StudentLayoutChromeContext.Provider
+        value={{ setHideHeaderOnMobile: setHide }}
+      >
+        <Page hide />
+        <Probe />
+      </StudentLayoutChromeContext.Provider>,
+    );
+    expect(callsSeenInLayout).toBe(1);
+    expect(setHide).toHaveBeenCalledWith(true);
   });
 });

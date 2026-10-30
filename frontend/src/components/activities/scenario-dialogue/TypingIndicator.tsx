@@ -2,12 +2,17 @@
  * TypingIndicator / AiRow — 情境對話聊天流的 AI 端共用小元件（#1133）。
  *
  * - `AiRow`：左側 AI 頭像（線描熊熊 BearAvatar，#1158 E-2）＋內容（題目、建議、結尾語氣泡都用它排版）。
+ * - `aiBubbleClass`：AI 端一般文字氣泡的外框樣式（ChatTranscript、RubricIntro 共用，#1158 E-3）。
  * - `TypingIndicator`：「輸入中…」三點跳動動畫，出現在下一則 AI 訊息之前。
  */
 
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { BearAvatar } from "./BearAvatar";
+
+/** AI 端訊息氣泡外框（開場招呼、結尾語、作答要求提示共用） */
+export const aiBubbleClass =
+  "inline-block rounded-2xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2";
 
 export function AiRow({ children }: { children: ReactNode }) {
   return (

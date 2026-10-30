@@ -24,7 +24,8 @@
  * 未送出的錄音丟掉；卸載時 revoke 未送出的錄音 URL。
  * 底部留 safe-area（瀏海機 home bar）。
  * - 中斷（interrupted，#1158 E-3 手機橫放）：變成 true 時若正在錄音，錄音立刻停止並丟掉
- *   （AudioRecorder discardSignal），回到待錄；已錄完未送出的保留。
+ *   （AudioRecorder discardSignal），回到待錄；已錄完未送出的保留。等麥克風授權時轉橫、授權後
+ *   才開始錄的，一開始錄就丟掉（修正 E3），不會在蓋板底下錄。
  * - waiting 也用在按「開始對話」後看作答要求的倒數（#1158 E-3）：麥克風停用，小字寫原因。
  */
 
@@ -88,6 +89,8 @@ export function ReplyComposer({
   const [discardSignal, setDiscardSignal] = useState(0);
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
+  const interruptedRef = useRef(interrupted);
+  interruptedRef.current = interrupted;
   useEffect(() => {
     if (!interrupted || !recordingRef.current) return;
     setDiscardSignal((n) => n + 1);
@@ -217,7 +220,14 @@ export function ReplyComposer({
               disabledReason={waiting ? waitingHint : undefined}
               discardSignal={discardSignal}
               onSend={sendVoice}
-              onRecordingStart={() => setRecording(true)}
+              onRecordingStart={() => {
+                // 已中斷（等麥克風授權時轉橫）：一開始錄就丟掉
+                if (interruptedRef.current) {
+                  setDiscardSignal((n) => n + 1);
+                  return;
+                }
+                setRecording(true);
+              }}
               onRecordingStop={() => setRecording(false)}
               // 錄音失敗（太短、驗證失敗、例外）不會呼叫 onRecordingStop，
               // 這裡也要收起「錄音中」，重答的 ✕ 才會再出現

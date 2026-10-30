@@ -4,6 +4,9 @@
  *   小字寫原因；倒數完才出第 1 題並自動朗讀。沒有作答要求就直接出題。秒數依字數 5～12 秒。
  * - 手機橫放：蓋提示、停止朗讀、倒數暫停；轉回直立提示消失、狀態保留。
  * - 錄音中橫放：ReplyComposer 叫 AudioRecorder 丟掉錄音（discardSignal）；沒在錄音不丟。
+ * - 修正 E3：橫放以螢幕方向＋螢幕短邊判斷（鍵盤壓矮視窗不算）、輸入框有焦點不判橫放；
+ *   等麥克風授權時轉橫、之後才開始錄的也丟掉；出題中轉橫先不出題、轉回才出題並朗讀；
+ *   「錄音會作廢」小字只在語音作答且作答中顯示；倒數進度不讓整個畫面重繪。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -14,7 +17,7 @@ import {
   RUBRIC_MIN_SECONDS,
   rubricCountdownSeconds,
 } from "../RubricCountdown";
-import { PHONE_LANDSCAPE_QUERY } from "../PhoneLandscapeOverlay";
+import { detectPhoneLandscape } from "../PhoneLandscapeOverlay";
 import { TYPING_MS } from "../useScenarioChat";
 import type { ScenarioChatContext, ScenarioChatItem } from "../types";
 
@@ -52,35 +55,63 @@ vi.mock("@/components/shared/AudioRecorder", () => ({
   },
 }));
 
-// ── matchMedia：可切換的「手機橫放」 ──
-let landscape = false;
-const listeners = new Set<() => void>();
+// ── 螢幕：可切換方向（screen.orientation）與螢幕大小 ──
+let orientationType = "portrait-primary";
+const orientationListeners = new Set<() => void>();
+function setScreen(width: number, height: number) {
+  Object.defineProperty(window.screen, "width", {
+    configurable: true,
+    get: () => width,
+  });
+  Object.defineProperty(window.screen, "height", {
+    configurable: true,
+    get: () => height,
+  });
+}
+/** 手機（短邊 390）轉橫／轉直 */
 function setLandscape(v: boolean) {
-  landscape = v;
-  act(() => listeners.forEach((l) => l()));
+  orientationType = v ? "landscape-primary" : "portrait-primary";
+  if (v) setScreen(844, 390);
+  else setScreen(390, 844);
+  act(() => orientationListeners.forEach((l) => l()));
 }
 
 beforeEach(() => {
-  landscape = false;
-  listeners.clear();
+  orientationType = "portrait-primary";
+  orientationListeners.clear();
+  setScreen(390, 844);
+  Object.defineProperty(window.screen, "orientation", {
+    configurable: true,
+    value: {
+      get type() {
+        return orientationType;
+      },
+      addEventListener: (_: string, l: () => void) =>
+        orientationListeners.add(l),
+      removeEventListener: (_: string, l: () => void) =>
+        orientationListeners.delete(l),
+    },
+  });
   recorderProps.length = 0;
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.scrollTo =
     vi.fn() as unknown as typeof Element.prototype.scrollTo;
+  // 視窗方向（matchMedia）故意一律回「橫的」：判斷要看螢幕，不看視窗
   window.matchMedia = vi.fn((query: string) => ({
-    get matches() {
-      return query === PHONE_LANDSCAPE_QUERY && landscape;
-    },
+    matches: true,
     media: query,
-    addEventListener: (_: string, l: () => void) => listeners.add(l),
-    removeEventListener: (_: string, l: () => void) => listeners.delete(l),
-    addListener: (l: () => void) => listeners.add(l),
-    removeListener: (l: () => void) => listeners.delete(l),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
   })) as unknown as typeof window.matchMedia;
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  delete (window.screen as { orientation?: unknown }).orientation;
+  delete (window.screen as { width?: unknown }).width;
+  delete (window.screen as { height?: unknown }).height;
 });
 
 const CONTEXT: ScenarioChatContext = {
@@ -274,5 +305,143 @@ describe("錄音中橫放：丟掉錄音（#1158 E-3）", () => {
     const { rerender } = render(<ReplyComposer {...composerProps} />);
     rerender(<ReplyComposer {...composerProps} interrupted />);
     expect(screen.getByTestId("discard-signal").textContent).toBe("0");
+  });
+});
+
+describe("修正 E3：橫放判斷（螢幕方向＋螢幕短邊）", () => {
+  it("直立＋鍵盤（視窗被壓矮、視窗方向變橫）不算橫放", () => {
+    // 螢幕直立：就算 matchMedia（視窗）回橫的也不擋
+    setScreen(390, 844);
+    expect(detectPhoneLandscape()).toBe(false);
+  });
+
+  it("手機轉橫才算；平板／電腦螢幕（短邊 > 500）轉橫不算", () => {
+    setLandscape(true);
+    expect(detectPhoneLandscape()).toBe(true);
+    setScreen(1366, 1024);
+    expect(detectPhoneLandscape()).toBe(false);
+  });
+
+  it("輸入框有焦點時不判橫放", () => {
+    setLandscape(true);
+    const input = document.createElement("textarea");
+    document.body.appendChild(input);
+    input.focus();
+    expect(detectPhoneLandscape()).toBe(false);
+    input.blur();
+    expect(detectPhoneLandscape()).toBe(true);
+    input.remove();
+  });
+
+  it("沒有 screen.orientation 時退回 window.orientation", () => {
+    delete (window.screen as { orientation?: unknown }).orientation;
+    setScreen(844, 390);
+    const w = window as unknown as { orientation?: number };
+    const had = "orientation" in window;
+    const prev = w.orientation;
+    Object.defineProperty(window, "orientation", {
+      configurable: true,
+      value: 0,
+    });
+    expect(detectPhoneLandscape()).toBe(false);
+    Object.defineProperty(window, "orientation", {
+      configurable: true,
+      value: 90,
+    });
+    expect(detectPhoneLandscape()).toBe(true);
+    if (had)
+      Object.defineProperty(window, "orientation", {
+        configurable: true,
+        value: prev,
+      });
+    else delete w.orientation;
+  });
+});
+
+describe("修正 E3：出題中轉橫", () => {
+  it("「輸入中…」時轉橫：題目先不出、不朗讀；轉回直立才出題並朗讀", () => {
+    vi.useFakeTimers();
+    const adapters = renderChat({ ...CONTEXT, rubric: "" });
+    start();
+    setLandscape(true);
+    advance(TYPING_MS * 3);
+    expect(firstQuestion()).toHaveLength(0);
+    expect(adapters.speak).not.toHaveBeenCalled();
+
+    setLandscape(false);
+    expect(firstQuestion().length).toBeGreaterThan(0);
+    expect(adapters.speak).toHaveBeenCalledWith(
+      "What did Amy eat?",
+      expect.anything(),
+    );
+  });
+});
+
+describe("修正 E3：蓋板小字", () => {
+  it("作答要求倒數中（不能錄音）轉橫：只顯示標題，沒有錄音作廢小字", () => {
+    vi.useFakeTimers();
+    renderChat();
+    start();
+    setLandscape(true);
+    const overlay = screen.getByTestId("scenario-landscape-overlay");
+    expect(overlay.textContent).toContain(
+      "scenarioDialogue.chat.landscapeTitle",
+    );
+    expect(overlay.textContent).not.toContain(
+      "scenarioDialogue.chat.landscapeHint",
+    );
+  });
+
+  it("老師預覽一樣擋", () => {
+    vi.useFakeTimers();
+    render(
+      <ScenarioChatActivity
+        context={CONTEXT}
+        items={ITEMS}
+        settings={{ ...SETTINGS, isPreviewMode: true }}
+        adapters={makeAdapters()}
+        onSubmit={() => {}}
+        layout="compact"
+      />,
+    );
+    setLandscape(true);
+    expect(
+      screen.getByTestId("scenario-landscape-overlay"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("修正 E3：倒數進度不讓整個畫面重繪", () => {
+  it("倒數中只有作答要求卡在跑，錄音區不會每 100ms 重繪", () => {
+    vi.useFakeTimers();
+    renderChat();
+    start();
+    const before = recorderProps.length;
+    advance(2000);
+    expect(recorderProps.length).toBe(before);
+    expect(
+      screen.getByText("scenarioDialogue.chat.rubricCountdown:3"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("修正 E3：等麥克風授權時轉橫", () => {
+  const composerProps = {
+    state: "answer" as const,
+    replyMode: "voice" as const,
+    waitingHint: "",
+    retryNo: null,
+    canCancelRetry: false,
+    onStart: vi.fn(),
+    onSubmitAnswer: vi.fn(),
+    onCancelRetry: vi.fn(),
+    onSubmitAssignment: vi.fn(),
+  };
+
+  it("已中斷時才開始錄（授權完成）：立刻丟掉", () => {
+    render(<ReplyComposer {...composerProps} interrupted />);
+    expect(screen.getByTestId("discard-signal").textContent).toBe("0");
+    fireEvent.click(screen.getByText("stub-start"));
+    expect(screen.getByTestId("discard-signal").textContent).toBe("1");
   });
 });

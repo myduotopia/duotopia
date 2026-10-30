@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -221,6 +222,39 @@ describe("AudioRecorder — discardSignal（#1158 E-3 手機橫放）", () => {
     );
     rerender(<AudioRecorder variant="chat" discardSignal={1} />);
     expect(capturedInstance).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "audioRecorder.ui.startRecording" }),
+    ).toBeInTheDocument();
+  });
+
+  // 修正 E3：等麥克風授權時轉橫，授權後一開始錄（onRecordingStart 裡）就送丟棄訊號
+  it("在 onRecordingStart 裡送訊號：剛開始的錄音也會被停止並丟掉", async () => {
+    const onRecordingComplete = vi.fn();
+    function Host() {
+      const [signal, setSignal] = useState(0);
+      return (
+        <AudioRecorder
+          variant="chat"
+          discardSignal={signal}
+          onRecordingStart={() => setSignal((n) => n + 1)}
+          onRecordingComplete={onRecordingComplete}
+        />
+      );
+    }
+    render(<Host />);
+    await act(async () => {
+      await userEvent.click(
+        screen.getByRole("button", { name: "audioRecorder.ui.startRecording" }),
+      );
+    });
+    await waitFor(() => expect(capturedInstance).not.toBeNull());
+    const rec = capturedInstance!;
+    await waitFor(() => expect(rec.stop).toHaveBeenCalled());
+    await act(async () => {
+      rec.onstop?.();
+      await new Promise((r) => setTimeout(r, 900));
+    });
+    expect(onRecordingComplete).not.toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: "audioRecorder.ui.startRecording" }),
     ).toBeInTheDocument();

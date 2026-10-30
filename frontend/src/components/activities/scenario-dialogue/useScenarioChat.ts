@@ -25,6 +25,8 @@
  * - 英／翻譯文字顯示（visible）可切換；`seen` 記錄是否點開過（收回不取消），回報給外層。
  *   翻譯（zh 欄位）只有 `translatable[i]` 為真的題目能開（老師開翻譯＋翻譯語言＝學生介面語言）。
  * - AI 建議以 adapters.getFeedback 注入；過期的回應（卸載／跳題後才回來）以 sessionRef 丟棄。
+ * - 暫停（paused，#1158 修正 E3 手機橫放）：「輸入中…」時間到但正在暫停 → 題目先不出、不朗讀
+ *   （維持「輸入中…」），轉回直立才出題並朗讀；暫停中要自動朗讀的（例如自動進下一題）也等轉回才唸。
  * - 卸載時：停止朗讀、清計時器、revoke 所有錄音 blob URL。
  */
 
@@ -64,6 +66,8 @@ interface Options {
   translatable: boolean[];
   /** 回報「是否點開過文字」紀錄 */
   onRevealChange?: (seen: TextRevealState[]) => void;
+  /** 暫停出題與自動朗讀（手機橫放，#1158 修正 E3）；轉回 false 時補出題／補唸 */
+  paused?: boolean;
 }
 
 const revokeAnswer = (a: ScenarioAttempt) => {
@@ -107,6 +111,7 @@ export function useScenarioChat({
   textDefaultHidden,
   translatable,
   onRevealChange,
+  paused = false,
 }: Options) {
   const n = items.length;
   const [phase, setPhase] = useState<ScenarioChatPhase>("intro");
@@ -135,6 +140,11 @@ export function useScenarioChat({
   attemptsRef.current = attempts;
   const retryRef = useRef(retry);
   retryRef.current = retry;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  /** 暫停中延後的出題／朗讀（題號） */
+  const pendingRevealRef = useRef<number | null>(null);
+  const pendingSpeakRef = useRef<number | null>(null);
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
@@ -170,6 +180,10 @@ export function useScenarioChat({
    */
   const speakItem = useCallback(
     (i: number) => {
+      if (pausedRef.current) {
+        pendingSpeakRef.current = i;
+        return;
+      }
       const session = sessionRef.current;
       adaptersRef.current.speak(items[i].text, {
         onError: () => {
@@ -183,19 +197,42 @@ export function useScenarioChat({
     [items],
   );
 
-  /** 「輸入中…」後揭露第 i 題並自動播一次（正在回頭重答時不播，免得錄進去） */
+  /** 揭露第 i 題並自動播一次（正在回頭重答時不播，免得錄進去） */
+  const revealItem = useCallback(
+    (i: number) => {
+      setRevealedCount((c) => Math.max(c, i + 1));
+      setCurrent(i);
+      setPhase("awaitingAnswer");
+      if (!retryRef.current) speakItem(i);
+    },
+    [speakItem],
+  );
+
+  /** 「輸入中…」後揭露第 i 題；暫停中（手機橫放）先不出，等轉回直立 */
   const typeThenReveal = useCallback(
     (i: number) => {
       setPhase("aiTyping");
       later(() => {
-        setRevealedCount((c) => Math.max(c, i + 1));
-        setCurrent(i);
-        setPhase("awaitingAnswer");
-        if (!retryRef.current) speakItem(i);
+        if (pausedRef.current) {
+          pendingRevealRef.current = i;
+          return;
+        }
+        revealItem(i);
       }, TYPING_MS);
     },
-    [speakItem, later],
+    [revealItem, later],
   );
+
+  // 暫停結束：補出暫停中該出的題目（會一併朗讀），或補唸該唸的題目
+  useEffect(() => {
+    if (paused) return;
+    const reveal = pendingRevealRef.current;
+    const speak = pendingSpeakRef.current;
+    pendingRevealRef.current = null;
+    pendingSpeakRef.current = null;
+    if (reveal !== null) revealItem(reveal);
+    else if (speak !== null) speakItem(speak);
+  }, [paused, revealItem, speakItem]);
 
   const start = useCallback(() => {
     if (n === 0) return;
@@ -362,6 +399,8 @@ export function useScenarioChat({
       if (i < revealedCount && isExhausted(i)) return false;
       sessionRef.current += 1;
       clearTimers();
+      pendingRevealRef.current = null;
+      pendingSpeakRef.current = null;
       setRetry(null);
       setClosingShown(false);
       // 還在等 AI 建議的回答作廢（不佔次數）

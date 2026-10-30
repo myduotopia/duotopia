@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import { AnswerBubble } from "./AnswerBubble";
 import { FeedbackBubble, type FeedbackActions } from "./FeedbackBubble";
 import { QuestionBubble } from "./QuestionBubble";
-import { AiRow, TypingIndicator } from "./TypingIndicator";
+import { AiRow, TypingIndicator, aiBubbleClass } from "./TypingIndicator";
 import {
   isHelpFeedback,
   usedAttempts,
@@ -45,8 +45,7 @@ interface Props {
   rubricIntro?: ReactNode;
 }
 
-const bubble =
-  "inline-block rounded-2xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2";
+const bubble = aiBubbleClass;
 
 export function ChatTranscript({
   chat,

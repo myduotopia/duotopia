@@ -35,8 +35,11 @@
  *   不能跳過；倒數中錄音區麥克風停用、小字「看完作答要求就開始」；倒數完才問第 1 題（自動朗讀）。
  *   朗讀解鎖（primeSpeech）仍在按下「開始對話」當下做；倒數後朗讀若仍被擋，走既有的逾時保底
  *   （自動打開英文）。沒有作答要求就直接問第 1 題。老師預覽一樣倒數。
- * - 手機橫放（#1158 E-3，usePhoneLandscape）：作答中整頁蓋提示（PhoneLandscapeOverlay），
- *   停止朗讀、丟掉正在錄的錄音（ReplyComposer interrupted）、倒數暫停；轉回直立提示消失、狀態保留。
+ * - 手機橫放（#1158 E-3，usePhoneLandscape，以螢幕方向＋螢幕短邊判斷）：作答中整頁蓋提示
+ *   （PhoneLandscapeOverlay；「錄音會作廢」小字只在語音作答且正在作答時顯示），停止朗讀、
+ *   丟掉正在錄的錄音（ReplyComposer interrupted）、倒數暫停、暫停出題（useScenarioChat paused：
+ *   「輸入中…」到了也先不出題，轉回直立才出題並朗讀）；轉回直立提示消失、狀態保留。老師預覽一樣擋。
+ *   倒數的進度只在 RubricIntro 裡（這裡只記倒數中／倒數完），不讓整個畫面每 100ms 重繪。
  *
  * - 已提交唯讀（readOnly，#1158 E6）：不顯示「開始對話」與錄音區，改列出每題題目＋學生
  *   自己的錄音（SubmittedTranscript）；作答要求／情境卡照樣顯示。題號方格每題都能點、捲到該題。
@@ -74,7 +77,7 @@ import {
   PhoneLandscapeOverlay,
   usePhoneLandscape,
 } from "./PhoneLandscapeOverlay";
-import { RubricIntro, useRubricCountdown } from "./RubricCountdown";
+import { RubricIntro } from "./RubricCountdown";
 import { usedAttempts, useScenarioChat } from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
@@ -165,6 +168,9 @@ export function ScenarioChatActivity({
       ),
     [items, settings.showTranslation, lang],
   );
+  // ── 手機橫放：蓋提示、停朗讀、丟錄音、倒數暫停、暫停出題（#1158 E-3） ──
+  const phoneLandscape = usePhoneLandscape();
+  const blocked = phoneLandscape && !readOnly;
   const chat = useScenarioChat({
     items,
     adapters,
@@ -172,6 +178,7 @@ export function ScenarioChatActivity({
     textDefaultHidden: settings.textDefaultHidden,
     translatable,
     onRevealChange,
+    paused: blocked,
   });
   const { phase, current, retry } = chat;
 
@@ -185,9 +192,6 @@ export function ScenarioChatActivity({
   const isPreview = settings.isPreviewMode;
   const chatStarted = phase !== "intro";
 
-  // ── 手機橫放：蓋提示、停朗讀、丟錄音、倒數暫停（#1158 E-3） ──
-  const phoneLandscape = usePhoneLandscape();
-  const blocked = phoneLandscape && !readOnly;
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
   useEffect(() => {
@@ -196,12 +200,16 @@ export function ScenarioChatActivity({
 
   // ── 作答要求倒數（#1158 E-3） ──
   const rubric = context.rubric?.trim() ? context.rubric : "";
-  const [rubricIntroShown, setRubricIntroShown] = useState(false);
-  const { countdown, begin: beginCountdown } = useRubricCountdown({
-    paused: blocked,
-    onDone: chat.start,
-  });
-  const counting = countdown !== null;
+  // off＝沒顯示；counting＝倒數中；done＝倒數完（卡片留在對話裡）
+  const [rubricPhase, setRubricPhase] = useState<"off" | "counting" | "done">(
+    "off",
+  );
+  const counting = rubricPhase === "counting";
+  const chatStart = chat.start;
+  const handleRubricDone = useCallback(() => {
+    setRubricPhase("done");
+    chatStart();
+  }, [chatStart]);
   // 版面上的「開始了」：倒數中也算（收合成膠囊列、不顯示開始前的大卡片）
   const started = chatStarted || counting;
 
@@ -400,8 +408,7 @@ export function ScenarioChatActivity({
     stickRef.current = true;
     // 有作答要求：先倒數讓學生看完（不能跳過），倒數完才問第 1 題
     if (rubric) {
-      setRubricIntroShown(true);
-      beginCountdown(rubric);
+      setRubricPhase("counting");
       return;
     }
     chat.start();
@@ -518,8 +525,13 @@ export function ScenarioChatActivity({
                       registerBlock={registerBlock}
                       onRetry={handleRetry}
                       rubricIntro={
-                        rubricIntroShown && rubric ? (
-                          <RubricIntro rubric={rubric} countdown={countdown} />
+                        rubricPhase !== "off" && rubric ? (
+                          <RubricIntro
+                            rubric={rubric}
+                            counting={counting}
+                            paused={blocked}
+                            onDone={handleRubricDone}
+                          />
                         ) : undefined
                       }
                     />
@@ -570,7 +582,13 @@ export function ScenarioChatActivity({
         </main>
       </div>
 
-      {blocked && <PhoneLandscapeOverlay />}
+      {blocked && (
+        <PhoneLandscapeOverlay
+          showRecordingHint={
+            settings.replyMode === "voice" && composerState === "answer"
+          }
+        />
+      )}
     </div>
   );
 }

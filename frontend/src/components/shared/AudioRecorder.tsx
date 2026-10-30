@@ -437,7 +437,8 @@ export default function AudioRecorder({
   useEffect(() => {
     if (discardSignal === lastDiscardRef.current) return;
     lastDiscardRef.current = discardSignal;
-    if (!isActiveRef.current) return;
+    // 剛開始錄（onRecordingStart 裡就送訊號）時 state 可能還沒進 render，另看 recorder 在不在
+    if (!isActiveRef.current && !mediaRecorderRef.current) return;
     sessionRef.current += 1;
     if (mediaRecorderRef.current)
       mediaRecorderRef.current.ondataavailable = null;

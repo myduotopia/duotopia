@@ -5,10 +5,11 @@
  * 「學生專區」標題列，把高度留給作答畫面。只有情境對話作答頁用（其他作業類型統一處理在 #1166）。
  *
  * 頁面呼叫 `useHideStudentHeaderOnMobile(active)`：active 為真時隱藏，卸載或 active 變假時恢復。
+ * 用 useLayoutEffect（修正 E3）：在瀏覽器畫出第一格前就隱藏，標題列不會先閃一下才消失。
  * 不在 StudentLayout 底下（例如老師預覽頁）時 context 是 null，hook 什麼都不做。
  */
 
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useLayoutEffect } from "react";
 
 export interface StudentLayoutChrome {
   /** 窄螢幕（< lg）隱藏頂部標題列 */
@@ -21,7 +22,7 @@ export const StudentLayoutChromeContext =
 /** active 為真時，窄螢幕隱藏 StudentLayout 標題列；卸載時恢復 */
 export function useHideStudentHeaderOnMobile(active: boolean) {
   const chrome = useContext(StudentLayoutChromeContext);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!chrome || !active) return;
     chrome.setHideHeaderOnMobile(true);
     return () => chrome.setHideHeaderOnMobile(false);
