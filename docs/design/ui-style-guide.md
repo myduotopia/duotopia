@@ -245,6 +245,21 @@
 | TTSSettingsDialog | `frontend/src/components/shared/TTSSettingsDialog.tsx` | 單題產生語音前的設定視窗 |
 | VisibilitySelect | `frontend/src/components/shared/VisibilitySelect.tsx` | 公開設定下拉 |
 
+#### 引導式對話（`frontend/src/components/shared/guided-chat/`，#1158）
+
+「新增內容」改成一問一答時用這一套（目前情境對話在用）。做法與步驟見 skill `/guided-chat`（`.claude/skills/guided-chat/SKILL.md`）。
+
+| 元件 | 路徑 | 什麼情況用 |
+|---|---|---|
+| GuidedChatSheet | `frontend/src/components/shared/guided-chat/GuidedChatSheet.tsx` | 外層側滑面板外框（標題列＋徽章＋動作＋✕）；`sheet` 左緣貼齊側邊欄，`modal` 置中 |
+| GuidedChatLayout | `frontend/src/components/shared/guided-chat/GuidedChatLayout.tsx` | 同頁外框：左對話、右 slot。依外框實際寬度（ResizeObserver）切換：≥ 925px 並列，以下頂端 Tabs「對話／題目（N）」，切換時兩邊狀態保留；右欄自帶浮動工具列留白。`useGuidedChatLayout()` 給 slot 判斷寬窄 |
+| SelectedChipsBar（含 ChipOptionList、ChipTextEditor） | `frontend/src/components/shared/guided-chat/SelectedChipsBar.tsx` | 左欄頂端的已選項目列：點標籤跳 Popover 原地修改（選項／文字／功能自畫）；AI 工作中整列停用並寫原因；窄版可收合 |
+| ChatComposer | `frontend/src/components/shared/guided-chat/ChatComposer.tsx` | 左欄底部固定的對話框：灰字依步驟換，停用時灰字＝原因；Enter 預設換行 |
+| ChatBubbles（BotBubble、TeacherBubble） | `frontend/src/components/shared/guided-chat/ChatBubbles.tsx` | 機器人泡泡（灰底＋圖示）、老師泡泡（藍底白字，可帶「改選」） |
+| ChoiceCards | `frontend/src/components/shared/guided-chat/ChoiceCards.tsx` | 選項型步驟的直排選項卡（主句＋灰色說明） |
+| CefrChips | `frontend/src/components/shared/guided-chat/CefrChips.tsx` | CEFR 程度 A1～C2 單選小方塊 |
+| flowEngine | `frontend/src/components/shared/guided-chat/flowEngine.ts` | 通用流程引擎（純 TS，沒有 UI）：各功能寫步驟設定（`FlowDef`／`StepDef`），引擎推導目前步驟、已選項目列、對話框狀態、清除規則、確認框、還原與對話紀錄。範例：`scenario-dialogue-editor/scenarioSteps.ts` |
+
 ### 6.3 作答共用元件（`frontend/src/components/activities/shared/`）
 
 | 元件 | 路徑 | 什麼情況用 |
