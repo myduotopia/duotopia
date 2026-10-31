@@ -152,7 +152,7 @@ Claude 每次在 Issue 留言後，都會在最後提供「建議回覆選項」
 1. 查看 Per-Issue Test Environment URLs
 2. 測試功能是否修復
 3. 通知案主測試
-4. 案主留言「測試通過」或「✅」
+4. 案主留言只寫「測試通過」四個字（不加其他字）
 
 **自動化**：
 - `automation-auto-approve.yml`：偵測到批准留言 → 自動加 `✅ tested-in-staging` label，並接著呼叫共用 release-pr workflow
@@ -297,7 +297,7 @@ Claude **不會**做以下事情：
 
 ### 自訂 Claude Prompt
 
-編輯 `.github/workflows/claude-code-automation.yml`:
+編輯 `.github/workflows/automation-claude-pdca.yml`:
 
 ```yaml
 prompt: |

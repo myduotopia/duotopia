@@ -1,6 +1,9 @@
 name: Auto Approve Detection
 
-# Trigger: authorized user posts an approval comment (e.g. "測試通過") on an Issue.
+# Trigger: authorized user posts a comment on an Issue whose whole body is exactly
+# "測試通過" (#1168). Surrounding whitespace/newlines are ignored and at most one
+# trailing "。" or "！" is allowed. Anything else (extra words, simplified Chinese,
+# ✅ / 👍, markdown bold, other keywords) is NOT an approval.
 # Adds the '✅ tested-in-staging' label and chains directly into the release-pr flow
 # (chaining bypasses GITHUB_TOKEN's restriction that bot-added labels don't fire workflows).
 
@@ -22,7 +25,7 @@ jobs:
     outputs:
       approved: ${{ steps.check.outputs.approved }}
     steps:
-      - name: Check for approval keywords
+      - name: Check for approval comment
         id: check
         uses: actions/github-script@v7
         with:
@@ -43,23 +46,16 @@ jobs:
               return;
             }
 
-            // Check for approval keywords (Chinese + English)
-            const approvalKeywords = [
-              '測試通過', '测试通过',
-              'approved', 'LGTM', 'looks good',
-              '沒問題', '没问题',
-              '可以了', '可以',
-              '看起來不錯', '看起来不错'
-            ];
+            // Approval rule (#1168): the whole comment must be exactly "測試通過".
+            // trim() strips surrounding whitespace/newlines (incl. full-width space);
+            // one trailing "。" or "！" is tolerated. Nothing else counts.
+            let normalized = (comment || '').trim();
+            if (normalized.endsWith('。') || normalized.endsWith('！')) {
+              normalized = normalized.slice(0, -1);
+            }
+            const isApproval = normalized === '測試通過';
 
-            const hasApproval = approvalKeywords.some(keyword =>
-              comment.toLowerCase().includes(keyword.toLowerCase())
-            );
-
-            // Check for checkmark emoji
-            const hasCheckmark = comment.includes('✅') || comment.includes('👍');
-
-            if (hasApproval || hasCheckmark) {
+            if (isApproval) {
               console.log(`✅ Approval detected from ${author}`);
               core.setOutput('approved', 'true');
 
@@ -81,7 +77,7 @@ jobs:
 
               console.log('Label added and confirmation posted');
             } else {
-              console.log('No approval keywords found');
+              console.log('Comment is not exactly "測試通過" - not an approval');
             }
 
   release-pr:

@@ -159,13 +159,13 @@ gcloud run services list --region=asia-east1 | grep "preview-issue"  # Should be
    - Case owner has all information needed to test
 5. **Dual Approval Required (BOTH 必須完成，順序不限)**:
    - ✅ System: PR CI/CD all green
-   - ✅ Business: Case owner approves in Issue (留言「測試通過」等關鍵字)
+   - ✅ Business: Case owner approves in Issue (留言只寫「測試通過」四個字，不加其他字)
    - ⚠️ **兩者都通過才能 merge**
 6. **Wait for dual approval** (automated detection):
    - ✅ System: PR CI/CD all green (check with `gh pr checks <PR>`)
    - ✅ Business: Case owner approves in Issue
    - 🤖 Auto-Approval Detection workflow monitors Issue comments
-   - When approval keyword detected → auto-adds label `✅ tested-in-staging`
+   - When a comment that is exactly「測試通過」is detected → auto-adds label `✅ tested-in-staging`
    - No manual command needed!
 6b. **Automated Release PR** (triggered by `✅ tested-in-staging` label):
    - 🤖 `automation-release-pr.yml` automatically creates PR to staging
@@ -444,7 +444,7 @@ Templates are available as reference but NOT required:
 **IMPORTANT**: Never create `.claude/templates/pdca-*-issue-*.md` files. All PDCA tracking happens in GitHub Issues/PRs only.
 
 ### Automated Workflows
-- Auto-Approval Detection: Monitors Issue comments for approval keywords
+- Auto-Approval Detection: Monitors Issue comments for a comment that is exactly「測試通過」
 - Per-Issue Deploy: Deploys test environment on branch push
 - Cleanup: Deletes resources on Issue close or PR merge
 
@@ -509,7 +509,7 @@ Templates are available as reference but NOT required:
 ✅ [What should work]
 ❌ [What was broken]
 
-如果测试通过，请留言「测试通过」
+如果測試通過，請留言「測試通過」（只寫這四個字，不加其他字）
 ```
 
 ### PR Description (Technical)
@@ -529,12 +529,11 @@ Fixes #<NUM>
 [Test coverage details]
 ```
 
-## Approval Detection Keywords
+## Approval Detection Rule
 
-Detects approval in comments containing:
-- Chinese: 测试通过, 没问题, 可以了, 看起来不错
-- English: approved, LGTM, looks good, works
-- Emoji: ✅, 👍
+Only a comment whose whole body is exactly「測試通過」counts as approval (#1168):
+- Surrounding spaces/newlines are ignored; one trailing「。」or「！」is allowed
+- Anything else does NOT count: extra words (「測試通過，畫面都正常」), simplified Chinese, other keywords (可以、沒問題、LGTM...), emoji (✅, 👍), markdown bold
 
 ## Environment URLs
 

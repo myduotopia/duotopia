@@ -20,7 +20,7 @@ description: >
 - **順序不可顛倒**：develop 驗證 → migration PR → 工程師合併 → staging 合回功能分支 → 才 push 功能分支。
 - **分支名稱不可含 `issue-N`**：`claude/issue-N-xxx` 的 PR merge 會觸發 cleanup，刪掉所有
   issue-N 遠端分支與 per-issue 環境。用 `claude/<描述>-migration`，例如 `claude/scenario-image-usage-widen`。
-- **不在 issue 留核准字詞**（「測試通過」「可以」「✅」等）：會加 `✅ tested-in-staging` 並替整個
+- **不要在 issue 留只寫「測試通過」的留言**：那是核准訊號，會加 `✅ tested-in-staging` 並替整個
   功能分支開 Release PR。通知工程師一律靠 PR 標籤 `🗄️ migration`。
 - **production 不碰**；連線字串只從 `backend/.env` 讀，不印出、不落地。
 - **合併由工程師做**，skill 不自己 merge。

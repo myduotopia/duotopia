@@ -171,7 +171,7 @@ npm run test
 
 #### 3️⃣ 案主測試（在 Issue 中）
 - [ ] 案主在 Per-Issue Test Environment 測試
-- [ ] 案主在 Issue 留言「測試通過」或「✅」
+- [ ] 案主在 Issue 留言只寫「測試通過」四個字（不加其他字）
 - [ ] 執行 `check-approvals` 檢查批准狀態
 - [ ] Issue 自動加上 `✅ tested-in-staging` label
 

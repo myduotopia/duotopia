@@ -844,9 +844,9 @@ export const DATASET_DISPATCH_STATUS: Record<
 > = {
   example_sentences: "released",
   vocabulary_set: "released",
-  // 情境對話改成 per-environment：staging / develop 開著讓團隊驗證
-  // 「派發 → 學生作答 → 批改」整條線，production 關著直到驗完
-  // （同 ENABLE_SCENARIO_DIALOGUE 的做法，值由 deploy-frontend.yml 依分支給）。
+  // 情境對話的派發由旗標決定（值由 deploy-frontend.yml 給，同
+  // ENABLE_SCENARIO_DIALOGUE 的做法）。2026-10-31 起所有環境都開著 ——
+  // 「派發 → 學生作答 → 批改」整條線驗證完成；旗標保留供緊急收掉用。
   // 這張表仍是唯一開關 —— 不要在元件或其他 helper 另外加判斷。
   scenario_dialogue: ENABLE_SCENARIO_DIALOGUE_DISPATCH
     ? "released"
