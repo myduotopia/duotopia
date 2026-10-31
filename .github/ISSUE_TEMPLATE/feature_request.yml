@@ -50,7 +50,7 @@ body:
         #### 3️⃣ Check (驗證)
         - [ ] 在 Issue 提供測試指引（給案主，用業務語言）
         - [ ] 提供 Per-Issue Test Environment URLs
-        - [ ] 案主測試並留言「測試通過」或「✅」
+        - [ ] 案主測試並留言只寫「測試通過」四個字（不加其他字）
         - [ ] 執行 `check-approvals` 檢查批准狀態
 
         #### 4️⃣ Act (改進)
