@@ -298,6 +298,7 @@ jobs:
             --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.STAGING_SUPABASE_ANON_KEY }}" \
             --build-arg VITE_ENABLE_SCENARIO_DIALOGUE=true \
             --build-arg VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH=true \
+            --build-arg VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT=true \
             -t "${IMAGE}" \
             .
 

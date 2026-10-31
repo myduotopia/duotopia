@@ -17,6 +17,7 @@ import {
   type ExamImportController,
 } from "../exam-import/useExamImport";
 import type { PageSource } from "../exam-import/pageSource";
+import { examImportApi } from "../exam-import/examImportApi";
 import type {
   ExamImportDetail,
   ExamImportPage,
@@ -299,5 +300,26 @@ describe("useExamImport：切分頁與卸載", () => {
     // 第 3 頁送完後不再送第 1、2 頁
     await new Promise((r) => setTimeout(r, 20));
     expect(sendPage.mock.calls.map((c) => c[1])).toEqual([3]);
+  });
+});
+
+/**
+ * Issue #1112 的 feature flag（`ENABLE_QUESTION_BANK_EXAM_IMPORT`）關閉時，
+ * 頁面傳 `enabled=false`。這組釘住「關閉就真的不碰後端」——
+ * production 關著的期間，老師開題庫不應該打到 exam-imports 端點。
+ */
+describe("useExamImport：enabled 決定要不要碰後端", () => {
+  it("enabled=false 時不去抓未完成的匯入清單", async () => {
+    renderHook(() => useExamImport(false));
+    // refreshList 在 mount 的 effect 裡跑，await 一輪 microtask 讓它有機會發出去
+    await act(async () => {});
+    expect(vi.mocked(examImportApi.list)).not.toHaveBeenCalled();
+  });
+
+  it("enabled=true 時會抓（確認上面那條不是因為整個 hook 沒跑起來）", async () => {
+    renderHook(() => useExamImport(true));
+    await waitFor(() =>
+      expect(vi.mocked(examImportApi.list)).toHaveBeenCalled(),
+    );
   });
 });
