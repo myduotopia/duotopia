@@ -161,6 +161,8 @@ function ResourceMaterialsInner() {
   const orgId = selectedOrganization?.id;
 
   const [materials, setMaterials] = useState<ResourceMaterial[]>([]);
+  const [canCopy, setCanCopy] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("folder");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -191,7 +193,15 @@ function ResourceMaterialsInner() {
       orgScope ? orgId : undefined,
     );
     setMaterials(result.materials);
+    setCanCopy(result.can_copy);
+    setLoadFailed(!!result.failed);
   }, [listMaterials, orgScope, orgId]);
+
+  // 機構一般老師可瀏覽但不能複製進機構（需 manage_materials，#1162）
+  const copyDisabledReason =
+    !canCopy && orgScope
+      ? t("resourceMaterials.card.noCopyPermissionOrg")
+      : undefined;
 
   useEffect(() => {
     fetchMaterials();
@@ -488,9 +498,11 @@ function ResourceMaterialsInner() {
           </div>
         </div>
 
-        <div className="flex justify-center pt-2">
+        <div className="flex flex-col items-center gap-2 pt-2">
           <Button
             size="lg"
+            disabled={!!copyDisabledReason}
+            title={copyDisabledReason}
             onClick={() => {
               const material = materials.find((m) => m.id === listDetail.id);
               if (material) handleCopyClick(material);
@@ -500,6 +512,9 @@ function ResourceMaterialsInner() {
             <Copy className="w-4 h-4 mr-2" />
             {t("resourceMaterials.card.copyToMy")}
           </Button>
+          {copyDisabledReason && (
+            <p className="text-xs text-gray-500">{copyDisabledReason}</p>
+          )}
         </div>
         {copyDialog}
       </div>
@@ -538,12 +553,20 @@ function ResourceMaterialsInner() {
         {!loading && materials.length === 0 && (
           <div className="text-center py-12">
             <Package className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-400">
-              {t("resourceMaterials.empty.title")}
-            </h3>
-            <p className="text-sm text-gray-400 mt-1">
-              {t("resourceMaterials.empty.subtitle")}
-            </p>
+            {loadFailed ? (
+              <p className="text-sm text-red-600">
+                {t("resourceMaterials.toast.loadFailed")}
+              </p>
+            ) : (
+              <>
+                <h3 className="text-lg font-medium text-gray-400">
+                  {t("resourceMaterials.empty.title")}
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  {t("resourceMaterials.empty.subtitle")}
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -553,6 +576,7 @@ function ResourceMaterialsInner() {
             materials={filteredMaterials}
             onSelect={handleFolderSelect}
             onCopy={handleCopyClick}
+            copyDisabledReason={copyDisabledReason}
             onContentClick={setViewerContent}
             selectedDetail={selectedDetail}
             loadingDetail={loadingDetail}
@@ -606,6 +630,8 @@ function ResourceMaterialsInner() {
                     size="sm"
                     className="w-full"
                     variant={material.copied_today ? "secondary" : "default"}
+                    disabled={!!copyDisabledReason}
+                    title={copyDisabledReason}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleCopyClick(material);

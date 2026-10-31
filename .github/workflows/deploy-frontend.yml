@@ -196,22 +196,47 @@ jobs:
           echo "ENABLE_GROUP_BUY=true" >> $GITHUB_OUTPUT
         fi
 
-        # Issue #1039 — 情境對話（#1013～#1035）。同樣的理由：PR #1038 把整條
-        # 功能線發到 main 並成功部署，但人工驗證還沒做完。prod 先關著，
-        # staging / develop 保持開啟才驗得下去。驗完把下面 main 那行改成 true。
-        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "ENABLE_SCENARIO_DIALOGUE=false" >> $GITHUB_OUTPUT
-        else
-          echo "ENABLE_SCENARIO_DIALOGUE=true" >> $GITHUB_OUTPUT
-        fi
+        # Issue #1039 — 情境對話（#1013～#1035）的「建立教材入口」。
+        #
+        # 這個開關當初是為了「功能已經在 prod 上但人工驗證還沒做完」而加的（PR #1038
+        # 把整條功能線發到 main 並成功部署）。驗證已經完成，所有環境一律開啟，
+        # 所以這裡不再分 main / 其他分支 —— 兩邊同值的 if/else 只會讓人誤以為
+        # prod 還關著。
+        #
+        # 要把 prod 關回去（例如情境對話出狀況要緊急收掉入口），把這一行換成：
+        #   if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+        #     echo "ENABLE_SCENARIO_DIALOGUE=false" >> $GITHUB_OUTPUT
+        #   else
+        #     echo "ENABLE_SCENARIO_DIALOGUE=true" >> $GITHUB_OUTPUT
+        #   fi
+        # 關閉時 ContentTypeDialog 的情境對話卡片反灰、點不動、顯示 Soon 角標；
+        # 既有教材的編輯與批改不受影響（後端沒有擋）。
+        echo "ENABLE_SCENARIO_DIALOGUE=true" >> $GITHUB_OUTPUT
 
         # 情境對話「派發」的開關，與上面的「建立教材入口」分開（#1052 的註解寫明
-        # 兩者各管各的）。staging / develop 開著讓團隊驗證「派發 → 學生作答 →
-        # 批改」整條線；驗完要開 prod 就把下面 main 那行改成 true。
+        # 兩者各管各的）—— 我們曾經處在「建得了、派不了」的狀態，合成一個會失去
+        # 那個自由度，所以即使兩者現在同時開放，仍然保留兩個開關。
+        #
+        # 「派發 → 學生作答 → 批改」整條線已驗證完成，所有環境一律開啟。
+        #
+        # 要把 prod 關回去，把這一行換成：
+        #   if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+        #     echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=false" >> $GITHUB_OUTPUT
+        #   else
+        #     echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=true" >> $GITHUB_OUTPUT
+        #   fi
+        # 關閉時 DATASET_DISPATCH_STATUS.scenario_dialogue 退回 in_development，
+        # 情境對話在出作業時不可選；既有作業的顯示與批改不受影響。
+        echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=true" >> $GITHUB_OUTPUT
+
+        # Issue #1112 — 題庫「上傳題本」。同樣的理由：擷取引擎與上傳畫面已經進
+        # staging，但人工驗證還沒做完，而這一版 staging→main 要帶上其他功能。
+        # prod 先關著，staging / develop 保持開啟才驗得下去。
+        # 驗完把下面 main 那行改成 true。
         if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=false" >> $GITHUB_OUTPUT
+          echo "ENABLE_QUESTION_BANK_EXAM_IMPORT=false" >> $GITHUB_OUTPUT
         else
-          echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=true" >> $GITHUB_OUTPUT
+          echo "ENABLE_QUESTION_BANK_EXAM_IMPORT=true" >> $GITHUB_OUTPUT
         fi
 
     - name: Resolve Supabase Realtime values per environment
@@ -241,6 +266,7 @@ jobs:
         echo "VITE_ENABLE_GROUP_BUY=${{ steps.feature_flags.outputs.ENABLE_GROUP_BUY }}" >> .env
         echo "VITE_ENABLE_SCENARIO_DIALOGUE=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE }}" >> .env
         echo "VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE_DISPATCH }}" >> .env
+        echo "VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT=${{ steps.feature_flags.outputs.ENABLE_QUESTION_BANK_EXAM_IMPORT }}" >> .env
         echo "Created .env with:"
         cat .env
 
@@ -279,6 +305,7 @@ jobs:
           --build-arg VITE_ENABLE_GROUP_BUY=${{ steps.feature_flags.outputs.ENABLE_GROUP_BUY }} \
           --build-arg VITE_ENABLE_SCENARIO_DIALOGUE=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE }} \
           --build-arg VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE_DISPATCH }} \
+          --build-arg VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT=${{ steps.feature_flags.outputs.ENABLE_QUESTION_BANK_EXAM_IMPORT }} \
           --build-arg VITE_TAPPAY_SERVER_TYPE=$TAPPAY_SERVER_TYPE \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_ID=$TAPPAY_PRODUCTION_APP_ID \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY=$TAPPAY_PRODUCTION_APP_KEY \

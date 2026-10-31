@@ -106,8 +106,9 @@ export default function ContentTypeDialog({
         "https://storage.googleapis.com/duotopia-social-media-videos/website/add3-output.png",
       // #1158：開關開著時角標顯示 Beta（測試版本，可能會有錯誤），取代 New
       isBeta: true,
-      // Issue #1039: 功能是完整的，但在人工驗證做完之前先關著 —— PR #1038 把整條
-      // 功能線發到 prod 了。關閉時這張卡片反灰、點不動，右上角顯示 Soon 角標。
+      // Issue #1039: 2026-10-31 起所有環境都開著（驗證完成）。開關保留是為了
+      // 出狀況時能用一行 workflow 改動緊急收掉入口。關閉時這張卡片反灰、點不動，
+      // 右上角顯示 Soon 角標。
       // 五個新增路徑都經過這個對話框，所以這裡是唯一的咽喉點。
       disabled: !ENABLE_SCENARIO_DIALOGUE,
     },

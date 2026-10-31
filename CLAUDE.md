@@ -69,6 +69,7 @@
 | `/announce <#N \| release>` | 整理對外更新公告（LINE + 官網中英文章）。`#N` 寫成 issue 留言；`release` 統整後寫進 staging → main PR 描述（沒有 PR 就開）。issue 須同時有 `📣 announce` 與 `✅ tested-in-staging`。自動觸發：「開 staging → main 的 PR」、「寫更新公告」 |
 | `/fix-workflow <PR-number>` | 自動分析 CI test workflow 錯誤（backend/frontend），解析 GitHub Actions log，修復 Black、Flake8、Prettier、TypeScript、ESLint、build 等錯誤後重推 |
 | `/qb-add-type <題型名稱>` | 題庫新增題型（如聽力題組）：照 `docs/design/question-bank-question-types.md` 檢查清單，列檔案清單確認後逐步實作、每步驗證、更新對照表。自動觸發：「新增題型」、「題庫加題型」 |
+| `/migration-pr` | 功能分支有新 migration 時：develop 驗證 → migration 單獨抽分支發 PR 到 staging（標籤 `🗄️ migration` 自動 LINE 通知工程師審查合併）→ 合併後才 push 功能分支。自動觸發：「migration 先進 staging」、「抽 migration」、push 前發現分支有 staging 沒有的 migration |
 | `/guided-chat <內容類型>` | 把某種內容的「新增」改成引導式對話（或新內容類型直接做成對話式）：清點→轉成問題→套用 `components/shared/guided-chat/` 共用元件與流程引擎→驗收（原有功能一個都不能少）。範例：情境對話。自動觸發：「新增內容改對話式」、「做成引導式對話」、「guided chat」 |
 
 ### Commands (`.claude/commands/`)

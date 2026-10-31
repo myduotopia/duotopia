@@ -189,6 +189,9 @@ jobs:
             - 查看 Per-Issue Test Environment URLs
             - 開始測試功能
 
+            **在測試環境驗完、確認正常時**：
+            - 留言只寫「測試通過」四個字（不加其他字），會自動貼標籤並開 Release PR
+
             **如果需要調整實作**：
             - 「@claude 可以加上 [功能] 嗎？」
             - 「@claude 這段代碼可以重構嗎？」

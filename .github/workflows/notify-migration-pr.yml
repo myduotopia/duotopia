@@ -1,0 +1,48 @@
+name: Notify Migration PR
+
+# 對 staging 開的 PR 一被加上「🗄️ migration」標籤，就用 LINE 通知工程師審查合併。
+# 搭配 .claude/skills/migration-pr（migration 先單獨進 staging 的流程）。
+# 收件人沿用 Release PR 通知的 LINE_USER_ID；不在 issue 留核准字詞，避免觸發 auto-approve。
+
+on:
+  pull_request:
+    types: [labeled]
+    branches: [staging]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    if: github.event.label.name == '🗄️ migration'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+
+      - name: List migration files
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          FILES=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate \
+            --jq '.[] | select(.filename | startswith("backend/alembic/versions/")) | .filename | split("/") | last')
+          {
+            echo "list<<EOF"
+            echo "${FILES:-（PR 內沒有 migration 檔）}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Notify LINE
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_USER_ID }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          FILES: ${{ steps.files.outputs.list }}
+        run: |
+          bash scripts/ci/line_push.sh "$(printf '🗄️ Migration PR 待審查合併\n\nPR #%s：%s\n\nMigration：\n%s\n\n已在 develop 驗證（upgrade／downgrade／再 upgrade），細節見 PR 說明。合併後功能分支才會 push。\n\n%s' "$PR_NUM" "$PR_TITLE" "$FILES" "$PR_URL")"

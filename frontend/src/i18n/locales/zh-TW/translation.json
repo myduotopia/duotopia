@@ -5858,7 +5858,8 @@
       "contents": "內容",
       "copyToMy": "複製到我的教材",
       "copyToOrg": "複製到組織教材",
-      "copiedToday": "今日已複製"
+      "copiedToday": "今日已複製",
+      "noCopyPermissionOrg": "只有機構管理員可以複製到機構教材，如需使用請聯絡機構管理員"
     },
     "detail": {
       "backToList": "返回列表",
@@ -5901,7 +5902,8 @@
       "copyFailed": "複製失敗，請稍後再試",
       "autoCopySuccess": "已把「{{name}}」複製到我的教材，可以開始練習了！",
       "autoCopySuccessOrg": "已把「{{name}}」複製到機構教材，可以開始練習了！",
-      "autoCopyFailed": "自動複製教材失敗，請到「資源教材包」手動複製"
+      "autoCopyFailed": "自動複製教材失敗，請到「資源教材包」手動複製",
+      "loadFailed": "載入資源教材包失敗，請重新整理頁面"
     }
   },
   "contentCopy": {
