@@ -2,11 +2,6 @@
 
 > 通用規則見 `~/.claude/CLAUDE.md`（Agent 路由、Git、Security、TDD）
 
-## 溝通語言
-
-- 對話用繁體中文；技術名詞保留英文（例如 branch、label、workflow、migration、PR、per-issue），不硬翻
-- 檔案路徑、指令、程式碼、標籤名稱、帳號一律原文照寫
-
 ## Stack
 
 | Layer | Technology |
