@@ -51,9 +51,60 @@ jobs:
           echo "🔍 DEBUG: Testing extract output"
           echo "Issue from extract: ${{ needs.extract.outputs.issue_number }}"
 
-  deploy-backend:
+  # #1168: block per-issue deploy when the branch adds migrations that are not on
+  # staging yet. Per-issue backends run Alembic against the shared staging DB, so an
+  # un-merged migration would change staging's schema before review. Migrations must
+  # go through the migration-pr flow first (develop → separate PR into staging).
+  # NOTE: the comment body below must never contain approval wording (see
+  # automation-auto-approve.yml) and must not @-mention anyone.
+  migration-guard:
     runs-on: ubuntu-latest
     needs: extract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for migrations not yet on staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.extract.outputs.issue_number }}
+        run: |
+          git fetch origin staging
+          # --no-renames: a file moved into versions/ still counts as added
+          NEW=$(git diff --name-only --no-renames --diff-filter=A origin/staging...HEAD -- 'backend/alembic/versions/*.py')
+          if [ -z "$NEW" ]; then
+            echo "No new migrations compared to staging - continuing deploy."
+            exit 0
+          fi
+
+          echo "::error::This branch adds migrations that are not on staging yet:"
+          echo "$NEW"
+
+          {
+            echo "🛑 **Per-Issue 部署已暫停：這個分支有 staging 還沒有的 migration**"
+            echo ""
+            echo "分支 \`${GITHUB_REF_NAME}\` 新增了下列 migration 檔："
+            echo ""
+            echo "$NEW" | sed 's/^/- `/; s/$/`/'
+            echo ""
+            echo "Per-Issue 環境共用 staging 資料庫，未審查的 migration 不能直接套上去。請走 \`migration-pr\` 流程："
+            echo ""
+            echo "1. 在 develop 驗證 migration"
+            echo "2. 把 migration 單獨抽成 PR 進 staging"
+            echo "3. 等工程師審查合併"
+            echo "4. 把 staging 合回這個功能分支"
+            echo "5. 再 push 一次，部署會自動繼續"
+          } > guard-comment.md
+
+          if [ -n "$ISSUE" ]; then
+            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file guard-comment.md
+          fi
+          exit 1
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: [extract, migration-guard]
     outputs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
