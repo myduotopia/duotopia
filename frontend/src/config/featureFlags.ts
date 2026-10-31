@@ -97,3 +97,30 @@ export const ENABLE_SCENARIO_DIALOGUE_DISPATCH =
   (
     import.meta.env.VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH as string | undefined
   )?.toLowerCase() === "true";
+
+/**
+ * Issue #1112 —— 題庫「上傳題本」（擷取引擎＋上傳畫面）的前端入口。
+ *
+ * 與 `ENABLE_SCENARIO_DIALOGUE` 同一個機制、同一個理由：功能已經進 staging，但
+ * 人工驗證還沒做完，而這一版 staging→main 的發版要帶上其他東西。用 build-time
+ * 開關把 production 的入口關掉，就不必為了等驗證而擋住整條發版線。
+ *
+ * **未設定時視為關閉**（必須是字串 `true` 才開）—— 漏設、拼錯、新環境忘了帶都落到
+ * 隱藏那一邊。要防的正是「未驗證的功能出現在 production」。
+ *
+ * 關閉時（`TeacherTemplatePrograms` 不把 `examImport` 傳給 `QuestionBankTab`）：
+ * * 「新增題目 ▽ → 上傳題本」反灰，小字說明「即將推出」
+ * * 未完成匯入提示列（`ExamImportBanner`）不顯示
+ * * 上傳／進度 Sheet（`ExamImportSheet`）不掛載
+ * * `useExamImport(false)` 不去打 `GET /api/question-bank/exam-imports`
+ *
+ * **後端不擋**，與 `ENABLE_GROUP_BUY` 同一個判斷：沒有任何 UI 入口，prod 使用者
+ * 到不了；內部要先驗證時還能直接打 URL。另一個理由是萬一 prod 上已經有人跑過
+ * 匯入，資料要讀得到、改得動，不要變成孤兒。
+ *
+ * prod 要打開時改 `deploy-frontend.yml` 的 feature flag 區塊即可，不用再發一次 PR。
+ */
+export const ENABLE_QUESTION_BANK_EXAM_IMPORT =
+  (
+    import.meta.env.VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT as string | undefined
+  )?.toLowerCase() === "true";
