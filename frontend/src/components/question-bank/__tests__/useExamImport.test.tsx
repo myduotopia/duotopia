@@ -309,15 +309,23 @@ describe("useExamImport：切分頁與卸載", () => {
  * production 關著的期間，老師開題庫不應該打到 exam-imports 端點。
  */
 describe("useExamImport：enabled 決定要不要碰後端", () => {
-  it("enabled=false 時不去抓未完成的匯入清單", async () => {
-    renderHook(() => useExamImport(false));
-    // refreshList 在 mount 的 effect 裡跑，await 一輪 microtask 讓它有機會發出去
-    await act(async () => {});
-    expect(vi.mocked(examImportApi.list)).not.toHaveBeenCalled();
-  });
+  it("enabled=false 不打清單端點；同一個 instance 翻成 true 才打", async () => {
+    const { rerender } = renderHook(({ on }) => useExamImport(on), {
+      initialProps: { on: false },
+    });
 
-  it("enabled=true 時會抓（確認上面那條不是因為整個 hook 沒跑起來）", async () => {
-    renderHook(() => useExamImport(true));
+    // 等到 macrotask（setTimeout 0）而不是只等一輪 microtask：日後 mount 的
+    // effect 若在呼叫 list 之前多了一個 await，單一 microtask 的 flush 會讓
+    // 「沒被呼叫」變成假通過 —— PR #1175 review 第 3 點提的正是這個。
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(vi.mocked(examImportApi.list)).not.toHaveBeenCalled();
+
+    // 同一個 hook instance 把 enabled 翻成 true 就會打。寫在同一條而不是另開
+    // 一條，是為了讓「0 次」有意義：證明它不是因為 hook 根本沒跑起來、或假後端
+    // 壞掉而為 0。兩條分開會各自新建 instance，對不上這個因果。
+    rerender({ on: true });
     await waitFor(() =>
       expect(vi.mocked(examImportApi.list)).toHaveBeenCalled(),
     );
