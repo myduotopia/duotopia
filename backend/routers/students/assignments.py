@@ -638,6 +638,14 @@ async def get_assignment_activities(
                                 sd.read_item_block(ci.item_metadata),
                                 content.scenario_settings,
                             )
+                            # #1158 E-4：重新進入時接著上次進度，前端要知道這題已用掉
+                            # 幾次求助（計數借用 retry_count，見
+                            # routers/students/scenario_dialogue.py「求助上限」），
+                            # 第 4 次起才能和後端一樣當正式作答算。
+                            if item_progress:
+                                item_data["help_count"] = int(
+                                    item_progress.retry_count or 0
+                                )
 
                         items_with_ids.append(item_data)
 

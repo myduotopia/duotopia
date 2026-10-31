@@ -1922,6 +1922,15 @@
         "scenarioPreviewNeedsContent": "Select a scenario dialogue material to preview",
         "scenarioPreviewEmpty": "This material has no questions to preview",
         "scenarioPreviewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
+        "replyMode": "Answer method",
+        "replyModeOption": {
+          "voice": "Voice",
+          "text": "Typing"
+        },
+        "replyModeDesc": {
+          "voice": "Students record their answers"
+        },
+        "replyModeComingSoon": "Coming soon",
         "selectModePrompt": "Select a mode to see the preview",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
@@ -3414,6 +3423,7 @@
     "selectDecisionFirst": "Please select a decision first (return or complete)",
     "singleSubmitSuccess": "Grading completed: {{name}}",
     "allSubmitSuccess": "Grading completed: {{graded}} completed, {{returned}} returned, {{unchanged}} pending",
+    "returnNotAllowedSkipped": "Scenario dialogue assignments can't be returned for revision at this time. Skipped \"Return\" for {{count}} student(s).",
     "returnForCorrection": "Return for Correction",
     "averageAccuracy": "Average Accuracy",
     "averageFluency": "Average Fluency",
@@ -4594,6 +4604,9 @@
       "suggestedDuration": "Suggested Recording Duration",
       "tapToRecord": "Tap to start recording",
       "tapToStop": "Tap again to stop",
+      "send": "Send",
+      "playRecording": "Play recording {{duration}}",
+      "startRecordingDisabled": "Start recording ({{reason}})",
       "stopRecording": "Stop recording",
       "processing": "Processing…",
       "reRecord": "Re-record"
@@ -4940,11 +4953,11 @@
       "overridden": "Customized",
       "globalRubric": "Answering Guidelines (visible to students)",
       "generateCount": "Questions per run",
-      "reference": "Settings reference",
       "scenarioContent": "Scenario",
       "articleLevel": "Text difficulty",
       "questionLevel": "Question difficulty",
-      "scenarioText": "Scenario text"
+      "scenarioText": "Scenario text",
+      "questionImage": "Question image"
     },
     "rubricPresets": {
       "tenseTime": "Time",
@@ -4965,15 +4978,10 @@
     "buttons": {
       "generating": "Generating…",
       "addQuestion": "Add Question",
-      "editSettings": "Edit in setup",
-      "backToSettings": "Back to setup",
-      "viewQuestions": "View questions",
-      "generateAnother": "Generate more questions",
       "uploadImage": "Upload",
       "replaceImage": "Replace",
       "removeImage": "Remove",
       "generateImage": "Generate",
-      "comingSoon": "Coming soon",
       "expandScenario": "Show all",
       "collapseScenario": "Show less"
     },
@@ -4984,10 +4992,9 @@
       "referenceAnswer": "Used by the AI to compare language features (tense, structure, vocabulary). Never shown to students; also the basis for suggested answers.",
       "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
       "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it.",
-      "referenceNote": "Check the questions against the scenario and instructions",
-      "noRubricYet": "No instructions yet",
       "optional": "Optional",
-      "noContextYet": "No scenario yet"
+      "noContextYet": "No scenario yet",
+      "questionsEmpty": "Questions will appear here"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",
@@ -5000,11 +5007,6 @@
       "generateFailed": "AI generation failed, please try again later",
       "goalRequired": "Please enter a teaching goal first",
       "audioFailed": "Audio generation failed, please try again later",
-      "imagePromptRequired": "Add a question first — there's nothing to base the image on",
-      "imageQuotaExceeded": "You've used all your AI image generations this month — you can upload an image manually",
-      "imageBlocked": "This description can't be turned into an image, please try a different one",
-      "imageFailed": "Image generation failed, please try again later",
-      "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now",
       "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead",
       "extractFailedFiles": "Couldn't extract these files: {{files}}. Content from the other files is in the scenario box — you can upload the failed ones again.",
       "extractAllFailed": "Couldn't extract any of the files: {{files}}. Upload them again, or paste the scenario into the scenario box.",
@@ -5042,6 +5044,7 @@
       "feedbackFailed": "AI feedback is unavailable right now. Please try again.",
       "questionImages": "Question images",
       "questionNo": "Question {{no}} / {{total}}",
+      "questionNoRetrying": "Question {{no}} / {{total}} · Retrying",
       "skipped": "Skipped",
       "averageScore": "Avg. {{score}}",
       "playQuestion": "Play question",
@@ -5052,12 +5055,17 @@
       "referenceAnswer": "Reference answer",
       "attemptNo": "Attempt {{no}}",
       "aiScore": "AI {{score}}",
-      "verdictGreat": "Great!",
+      "verdictGreat": "Great",
       "verdictImprove": "Could be better",
+      "verdictSeparator": ": ",
       "suggestion": "Try saying",
       "listenSuggestion": "Listen to suggestion",
+      "modelAnswerTitle": "You could say",
+      "phraseLabel": "In English",
+      "listenPhrase": "Listen to this phrase",
       "retry": "Try again",
       "attemptsUsedUp": "{{max}} attempts used — moving to the next question",
+      "attemptsUsedUpFinish": "{{max}} attempts used — wrapping up the conversation",
       "start": "Start conversation",
       "submitAssignment": "Submit assignment",
       "finishedHint": "Scroll up to listen again, or tap \"Try again\" on questions with attempts left",
@@ -5069,12 +5077,21 @@
       "waitTyping": "AI is typing…",
       "waitFeedback": "AI is reviewing your answer…",
       "waitAutoNext": "Moving to the next question…",
+      "waitAutoFinish": "Wrapping up…",
       "waitChoose": "Choose \"Try again\" or \"Next question\" above",
+      "waitChooseShort": "Choose above",
+      "waitRubric": "Starts after you read the instructions",
+      "rubricIntro": "First, take a look at the instructions 👇",
+      "rubricCountdown_one": "Starting in {{count}} second",
+      "rubricCountdown_other": "Starting in {{count}} seconds",
+      "landscapeTitle": "Please turn your phone upright to answer",
+      "landscapeHint": "If you turn it sideways while recording, that recording is discarded and you'll need to record again.",
       "previewMode": "Preview mode",
       "jumpToNo": "Jump to question {{no}}",
       "intro": "Hi! I'll ask you {{count}} questions. Listen, then answer in English. Tap \"Start conversation\" when you're ready.",
       "next": "Next question",
-      "closing": "That's all for today — nice work! Check your answers, then submit.",
+      "closing": "All done! Tap the green button below to submit 👇",
+      "closingPreview": "All done! (Previews are not submitted)",
       "newMessages": "New messages",
       "showEnglishFull": "Show English",
       "hideEnglish": "Hide English",
@@ -5086,9 +5103,54 @@
       "goToNo": "Scroll to question {{no}}",
       "dotLocked": "Question {{no}}: not reached yet",
       "notYet": "Not there yet",
+      "answeredNotReached": "Answered. You can view it once the conversation gets there",
+      "dotAnsweredLocked": "Question {{no}}: answered. You can view it once the conversation gets there",
+      "currentQuestion": "Question {{no}}: current",
+      "previewNoSubmit": "Previews are not submitted",
+      "submittedRecord": "Your answers",
+      "noAnswer": "Not answered",
+      "previousAnswer": "Previous answer",
+      "previousAnswerNoAudio": "You answered last time, but no recording was saved",
+      "conversation": "Conversation",
       "attemptsReached": "{{max}} attempts used",
+      "teacherPassed": "Passed by your teacher",
       "retrying": "Re-answering question {{no}}",
       "cancelRetry": "Cancel re-answer"
+    },
+    "imageGen": {
+      "titleScenario": "AI scenario image",
+      "titleQuestion": "AI question image",
+      "hint": "AI draws a black-and-white line drawing from the description. Edit it if you like, then press Generate.",
+      "descriptionLabel": "Image description",
+      "placeholder": "e.g. Two students having a picnic in the park, with sandwiches and juice on the table",
+      "suggesting": "AI is drafting a description…",
+      "suggestFailed": "AI couldn't draft a description. Write one yourself, then press Generate.",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "generatingHint": "Drawing the image, this takes about 10–20 seconds",
+      "closeLocked": "Generating the image. You can close this when it finishes.",
+      "imageReplacedDuringGenerate": "This question got a different image while generating, so the AI image was not applied.",
+      "quotaLoading": "Loading quota…",
+      "billing": {
+        "admin": "Admins have no image limit",
+        "org": "Uses organization points, about {{points}} points per image",
+        "points": "Uses plan points, about {{points}} points per image",
+        "subscription": "{{remaining}} / {{limit}} images left this month. After {{limit}} images a month, plan points are used (about {{points}} points per image)",
+        "free_daily": "{{remaining}} / {{limit}} images left today (resets daily)"
+      },
+      "blocked": {
+        "admin": "Can't generate right now",
+        "org": "Not enough organization or personal plan points to generate. You can upload an image instead.",
+        "points": "Not enough plan points to generate. You can upload an image instead.",
+        "subscription": "This month's {{limit}} images are used up and there aren't enough plan points. You can upload an image instead.",
+        "free_daily": "Today's {{limit}} images are used up (resets tomorrow). You can upload an image instead."
+      },
+      "errors": {
+        "quota": "You've used up your AI image quota. You can upload an image instead.",
+        "inProgress": "The previous image is still being generated. Please wait for it to finish.",
+        "blocked": "This description can't be turned into an image, please try a different one",
+        "failed": "Image generation failed, please try again later"
+      }
     },
     "images": {
       "label": "Scenario images",
@@ -5097,6 +5159,8 @@
       "add": "Upload image",
       "full": "Up to {{max}} scenario images. Delete one before uploading another.",
       "fullShort": "5 / 5 full",
+      "generate": "AI image",
+      "fullGenerate": "Up to {{max}} scenario images. Delete one before generating another.",
       "remove": "Delete this scenario image",
       "crop": "Adjust crop",
       "cropUnavailable": "This image was saved earlier and has no original to re-crop. Delete it and upload again to change the area.",
@@ -5109,13 +5173,9 @@
       "someNotCropped": "Some pictures couldn't be cropped automatically. You can upload them yourself."
     },
     "setup": {
-      "change": "Change",
-      "back": "Back",
-      "next": "Next",
+      "betaNote": "Beta: this feature may have bugs",
       "startGenerate": "Start generating",
-      "actionBar": "Actions",
       "countOption": "{{count}} questions",
-      "writeArticle": "Ask AI to write it",
       "writingArticle": "OK, writing a {{level}} scenario about \"{{goal}}\". One moment…",
       "extracting": "Extracting…",
       "uploadFile": "Upload image / PDF",
@@ -5123,25 +5183,23 @@
       "directionPlaceholder": "e.g. what they do on weekends, their views on phones in class",
       "materialRequired": "Please give a scenario (text or images) or a direction first, so the AI knows what to ask.",
       "reaskFallback": "I couldn't tell how to use that. Could you be more specific?",
-      "reopenConfirmTitle": "Change an earlier answer?",
-      "reopenConfirmDescription": "The settings after it will be cleared. Questions already generated are kept.",
       "reopenConfirm": "Change",
       "modeChangeConfirmTitle": "Change your answer?",
-      "modeChangeConfirmDescription": "The scenario text and pictures you added will be cleared. Questions already generated are kept.",
       "q": {
         "mode": "Do you want to give students a passage or pictures as the context for the questions?",
         "goal": "What do you want students to practise? Tell me the goal and pick a passage level, and I'll write a scenario.",
-        "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5).",
+        "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5). You can also ask AI to draw one.",
         "scenarioExisting": "Paste the scenario below, or upload an image / PDF and I'll extract the text and pictures (up to 5 scenario images).",
         "source": "Where do the questions come from?",
         "direction": "What do you want to ask students? Give me a topic or direction and I'll write questions on it.",
         "settings": "OK. Check the question settings and press \"Start generating\".",
-        "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\"."
+        "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\".",
+        "manualInput": "Type your questions below. You can type several at once."
       },
       "modes": {
         "none": "No context, I just want to ask students questions",
         "existing": "I have existing material to use as the context",
-        "ai": "I need AI to write a passage as the context"
+        "ai": "I need AI to write a passage or draw a picture as the context"
       },
       "modeHints": {
         "existing": "Upload text, images or a PDF"
@@ -5152,8 +5210,82 @@
       },
       "answers": {
         "goal": "Goal: \"{{goal}}\" (passage level {{level}})",
-        "scenario": "Passage: {{chars}} characters, {{images}} scenario image(s)"
-      }
+        "scenario": "Scenario confirmed ({{chars}} characters, {{images}} images)"
+      },
+      "placeholders": {
+        "goal": "e.g. ordering food at a night market, asking for directions",
+        "manualInput": "Type questions here, several at once is fine",
+        "done": "Type new questions, or say \"3 more questions about…\" or \"change question 2 to past tense\""
+      },
+      "chips": {
+        "scenario": "Context",
+        "source": "Source",
+        "direction": "Direction",
+        "settings": "Settings",
+        "editScenario": "Edit scenario"
+      },
+      "chipValues": {
+        "mode": {
+          "none": "None",
+          "existing": "My material",
+          "ai": "AI-written"
+        },
+        "source": {
+          "manual": "Typed by me",
+          "ai": "AI-written"
+        }
+      },
+      "settingsUpdatedNote": "Question settings updated",
+      "modeChangeKeepQuestionsDescription": "The scenario will be cleared. Questions and settings are kept.",
+      "sourceChangeConfirmTitle": "Change where questions come from?",
+      "sourceChangeConfirmDescription": "The question direction and settings will be cleared.",
+      "rewriteConfirmTitle": "Rewrite the scenario?",
+      "rewriteConfirmDescription": "The scenario passage will be rewritten and the current text replaced.",
+      "rewriteConfirm": "Rewrite",
+      "useScenario": "Use this scenario",
+      "generatedNote": "Generated {{count}} questions — see the question list",
+      "fullReason": "Already {{max}} questions",
+      "sourceLocked": "There are questions already, so the question source can’t be changed"
+    },
+    "compose": {
+      "full": "Already {{max}} questions. Please delete some on the right first.",
+      "added_one": "Added {{count}} question",
+      "added_other": "Added {{count}} questions",
+      "noneAdded": "No questions were added",
+      "skipped_one": "Skipped {{count}} part unrelated to the questions",
+      "skipped_other": "Skipped {{count}} parts unrelated to the questions",
+      "outputTruncated": "Some questions couldn't be read. Please enter them in smaller batches.",
+      "requestedOverRoom_one": "Only {{count}} spot left, so I'll make {{count}} for now.",
+      "requestedOverRoom_other": "Only {{count}} spots left, so I'll make {{count}} for now.",
+      "tooLong": "That's too long. Please enter it in smaller batches.",
+      "overLimitTitle": "Too many questions",
+      "overLimitDescription": "Only the first {{count}} will be added (limit {{max}}). Add them?",
+      "overLimitConfirm": "Add",
+      "reviseQuestionsTitle": "Revise questions",
+      "reviseQuestionsDescription_one": "{{count}} question will be rewritten. The original will be replaced.",
+      "reviseQuestionsDescription_other": "{{count}} questions will be rewritten. The originals will be replaced.",
+      "reviseScenarioTitle": "Revise scenario",
+      "reviseScenarioDescription": "The scenario text will be rewritten.",
+      "reviseConfirm": "Rewrite",
+      "revisedQuestions_one": "Rewrote {{count}} question",
+      "revisedQuestions_other": "Rewrote {{count}} questions",
+      "revisedScenario": "Rewrote the scenario text",
+      "revisedScenarioHint": "The questions and scenario pictures were not changed. If needed, say \"update the questions to match the new scenario\".",
+      "reviseQuestionsCancelled": "No questions were changed",
+      "reviseScenarioCancelled": "The scenario text was not changed",
+      "noQuestionsToRevise": "There are no questions to revise yet.",
+      "noScenarioToRevise": "There is no scenario to revise.",
+      "reviseOutOfRange_one": "Couldn't find that question (there is {{count}} question now).",
+      "reviseOutOfRange_other": "Couldn't find that question (there are {{count}} questions now).",
+      "reviseTruncated": "Some questions weren't changed. Please say again which ones to change."
+    },
+    "context": {
+      "title": "Scenario",
+      "edit": "Edit",
+      "done": "Done",
+      "rewrite": "Rewrite",
+      "rewriting": "Rewriting…",
+      "rewriteHint": "Change the training goal or article level, then press Rewrite to have AI rewrite the scenario"
     }
   },
   "vocabularySet": {
@@ -5365,6 +5497,7 @@
     "completeSuccess": "Marked {{count}} student(s) graded",
     "completeFailed": "Failed to mark graded",
     "returnShort": "Return",
+    "returnNotAllowedScenario": "Scenario dialogue assignments can't be returned for revision at this time",
     "gradeShort": "Graded",
     "resetShort": "Reset",
     "resetBtn": "Reset ({{count}})",
@@ -5815,6 +5948,7 @@
     "modeLabel": "Practice Mode",
     "creating": "Creating...",
     "start": "Start Practice",
+    "noModes": "No practice mode is available for this material yet",
     "error": "Failed to create instant practice",
     "advancedSettings": "Advanced Settings",
     "applyAndRestart": "Apply & Restart",
@@ -6739,6 +6873,32 @@
       "createSuccess": "Classroom created",
       "createFailed": "Failed to create classroom. Please try again later.",
       "updateSuccess": "Classroom updated"
+    }
+  },
+  "guidedChat": {
+    "placeholders": {
+      "choice": "Please pick one of the options above",
+      "text": "Type here…",
+      "card": "Please finish the card above first",
+      "pending": "Generating, one moment…"
+    },
+    "log": {
+      "changed": "Changed {{label}} to: {{value}}"
+    },
+    "change": "Change",
+    "tabs": {
+      "chat": "Chat",
+      "side": "Questions ({{count}})"
+    },
+    "chips": {
+      "label": "Selected options",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "apply": "Apply"
+    },
+    "composer": {
+      "label": "Message box",
+      "send": "Send"
     }
   }
 }

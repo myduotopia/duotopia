@@ -3,11 +3,16 @@
  * `ScenarioDialoguePanel.tsx` 原樣搬出來，讓面板只留 state 與流程。
  *
  * - `SortableRow`：題目、翻譯、參考答案／補充說明、單題評分標準（預設＋覆寫）、題目圖、題目語音。
- * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標）。
- * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：題目清單左欄也會用到。
+ * - `ScenarioImageSlot`：每題 1 張的題目圖（上傳／替換／移除；AI 生圖依旗標，#1158 起開
+ *   共用的 `AiImageGenerateDialog`，對話框由面板持有）。修正 C6 起圖用標準元件 `ZoomableImage`，
+ *   點圖放大；滑過時的替換／移除遮罩不接點擊（只有按鈕接），點按鈕不會觸發放大。觸控裝置
+ *   （hover:none）沒有滑過，替換／移除常駐在圖的底部（修正 C6b）。
+ * - `Chip`、`tenseLabel`、`voiceLabel`、`isTenseSet`：小工具（#1158 C commit 4 起右欄情境區不再
+ *   顯示評分標準，目前只有這支檔用到）。
  *
- * 窄寬度（< sm，第 3 輪）：題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
- * 輸入佔整列，不會超出卡片；評分準則標頭可換行。sm 以上維持圖左、欄位右。
+ * 窄版（`compact`，第 3 輪；#1158 C commit 4 起由所在欄寬度決定、不看 viewport 的 sm）：
+ * 題目圖移到題目上方直排，右邊欄位才有整張卡的寬度；必用字詞
+ * 輸入佔整列，不會超出卡片；評分準則標頭可換行。非窄版維持圖左、欄位右。
  * 停用的刪除（至少留 1 題）與生成語音（還沒輸入題目）用 `title` 說明原因。
  * 複製鍵在題數已滿時停用，`title` 改成上限說明（`duplicateBlockedReason`，第 3b 輪）。
  */
@@ -32,6 +37,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 import type { ScenarioDialogueRow, TenseSetting } from "@/lib/scenarioDialogue";
+import { ZoomableImage } from "@/components/question-bank/LayoutRenderer";
 import { TenseSelects } from "./TenseSelects";
 
 /** 只取字面翻譯用；型別放寬成字串以免每個呼叫點都要轉型 i18next 的 TFunction */
@@ -83,11 +89,10 @@ export function Chip({
 /**
  * 情境圖片欄位 —— AI 生成與手動上傳共用同一個位置。
  *
- * 老師不必先決定「這張要 AI 產還是自己傳」：勾了「AI 生成情境圖片」就在產題時
- * 自動填進來，任何時候都可以點縮圖換成自己的圖。因此這裡不提供生成按鈕，
- * 只負責顯示、上傳、替換、移除。
+ * 沒有圖時並列兩個入口：自己上傳，或「AI 生成」（#1158：開生圖對話框，由面板處理）。
+ * 有圖時滑過縮圖可以換成自己的圖或移除；點圖本身放大（修正 C6）。
  */
-function ScenarioImageSlot({
+export function ScenarioImageSlot({
   imageUrl,
   loading,
   onPick,
@@ -104,7 +109,7 @@ function ScenarioImageSlot({
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
-  // #1044: 生圖暫時關閉。上傳／替換／移除完全不受影響，既有圖片照常顯示。
+  // #1044 關閉、#1158 打開。關閉時只藏生圖入口，上傳／替換／移除不受影響。
   const imageGenerationEnabled = FEATURE_FLAGS.SCENARIO_IMAGE_GENERATION;
 
   const pick = () => inputRef.current?.click();
@@ -132,9 +137,21 @@ function ScenarioImageSlot({
         </div>
       ) : imageUrl ? (
         <>
-          <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-          {/* 有圖時才出現的替換／移除，平常不擋住圖 */}
-          <div className="absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50">
+          {/* 修正 C6：點圖放大（標準元件 ZoomableImage） */}
+          <ZoomableImage
+            src={imageUrl}
+            alt={t("scenarioDialogue.labels.questionImage")}
+            className="w-full h-full object-cover"
+            buttonClassName="block h-full w-full"
+            testId="scenario-question-image"
+          />
+          {/* 有圖時才出現的替換／移除，平常不擋住圖。遮罩本身不接點擊（pointer-events-none），
+              點按鈕以外的地方會穿到下面的圖、照樣放大；按鈕自己接點擊，不會觸發放大。
+              觸控裝置（hover:none）沒有滑過，按鈕常駐在圖的底部、不蓋暗色遮罩（修正 C6b） */}
+          <div
+            data-testid="scenario-question-image-actions"
+            className="pointer-events-none absolute inset-0 hidden group-hover:flex group-focus-within:flex items-center justify-center gap-1 bg-black/50 [&>button]:pointer-events-auto [@media(hover:none)]:flex [@media(hover:none)]:items-end [@media(hover:none)]:bg-transparent [@media(hover:none)]:pb-1"
+          >
             <button
               type="button"
               onClick={pick}
@@ -159,8 +176,8 @@ function ScenarioImageSlot({
          * 104 - 2×6（p-1.5）= 92px，實測四種標籤都塞得下：
          *   上傳圖片 48 + 圖示 14 + gap 4 = 66px
          *   Upload   40 + 圖示 14 + gap 4 = 58px
-         *   即將推出 48（停用狀態不放圖示）
-         *   Coming soon 約 74px
+         *   AI 生成 約 44 + 圖示 14 + gap 4 = 62px
+         *   Generate 約 52 + 圖示 14 + gap 4 = 70px
          * 新增語系或改這兩個標籤時請重算 —— 超過 92px 會被 overflow-hidden 切掉。
          */
         <div className="w-full h-full flex flex-col items-stretch justify-center gap-1 p-1.5">
@@ -172,7 +189,9 @@ function ScenarioImageSlot({
             <ImagePlus className="h-3.5 w-3.5 shrink-0" />
             {t("scenarioDialogue.buttons.uploadImage")}
           </button>
-          {imageGenerationEnabled ? (
+          {/* #1158：按下去開共用的「AI 生圖」對話框（描述預填 imagePrompt 或題目本文）。
+              開關關閉時不顯示（不再放「即將推出」）。 */}
+          {imageGenerationEnabled && (
             <button
               type="button"
               onClick={onGenerate}
@@ -180,26 +199,6 @@ function ScenarioImageSlot({
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               {t("scenarioDialogue.buttons.generateImage")}
-            </button>
-          ) : (
-            /*
-             * #1044: 生圖先關著，照專案既有的停用慣例做（ui-style-guide §3 規則 3 與
-             * BulkActionBar 的 disabledReason / disabledBadge）：**原因要看得見**，
-             * 不是點了才知道。
-             *
-             * 所以按鈕文字直接換成「即將推出」，title 補完整說明。原因既然不藏在
-             * click 後面，就沒有 #1033 那個問題（那次的坑是「唯一的說明被原生
-             * disabled 吃掉」），可以用原生 disabled。
-             *
-             * 停用狀態不放圖示：框只有 104px 寬，"Coming soon" 加上圖示會擠到換行。
-             */
-            <button
-              type="button"
-              disabled
-              title={t("scenarioDialogue.messages.imageGenerationComingSoon")}
-              className="rounded border border-gray-200 bg-gray-100 py-1 text-xs font-semibold text-gray-400 whitespace-nowrap opacity-70 cursor-not-allowed"
-            >
-              {t("scenarioDialogue.buttons.comingSoon")}
             </button>
           )}
         </div>
@@ -235,6 +234,11 @@ interface RowProps {
   onPlayAudio: () => void;
   /** 這一題的語音正在產生中 */
   audioLoading: boolean;
+  /**
+   * 窄版排法（題目圖在上、欄位直排、必用字詞佔整列）。由題目清單「所在欄的寬度」決定
+   * （#1158 C commit 4），不看 viewport 的 `sm` —— 同頁版面的右欄在大螢幕上也可能很窄。
+   */
+  compact?: boolean;
 }
 
 export function SortableRow({
@@ -258,6 +262,7 @@ export function SortableRow({
   onGenerateAudio,
   onPlayAudio,
   audioLoading,
+  compact = false,
 }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: row.id });
@@ -380,7 +385,7 @@ export function SortableRow({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className={`flex gap-3 ${compact ? "flex-col" : "flex-row"}`}>
         <ScenarioImageSlot
           imageUrl={row.imageUrl}
           loading={imageLoading}
@@ -552,7 +557,11 @@ export function SortableRow({
                   onTenseChange={overrideTense}
                   onVoiceChange={overrideVoice}
                 />
-                <label className="flex flex-col gap-1 flex-1 min-w-0 basis-full sm:basis-auto sm:min-w-[140px]">
+                <label
+                  className={`flex flex-col gap-1 flex-1 min-w-0 ${
+                    compact ? "basis-full" : "basis-auto min-w-[140px]"
+                  }`}
+                >
                   <span className="text-xs text-gray-500">
                     {t("scenarioDialogue.rubricPresets.keywords")}
                   </span>

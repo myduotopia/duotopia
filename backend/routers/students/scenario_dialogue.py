@@ -27,12 +27,25 @@ increment 落地之前連發幾十通 —— 存下來的數字仍停在 3，所
 進來 N 個請求最多只有 3 個領到號碼牌，**AI 呼叫數因此真的有上限**；領不到的直接 429，
 一個 token 都不花。AI 失敗再用 `refund_analysis_slot()` 把那一次還回去，學生不會因為
 我們的錯誤被扣機會。
+
+## 求助上限（#1158 E2b）
+
+求助（kind=phrase／model_answer）不算作答次數，但每題最多 ``MAX_HELP_PER_ITEM`` 次；
+第 4 次起不退額度、強制當 feedback（計次、給評語）。
+
+計數放在 ``StudentItemProgress.retry_count``：那一欄是例句重組專用的「重試次數」，
+情境對話的題目從來不寫它，**借用它就不必加欄位（不需 migration）**。計數由後端自己記，
+前端改不到；加一時同樣用 ``WHERE retry_count < MAX`` 的原子 UPDATE，並行的求助最多
+只有 MAX 個拿得到「不算次數」，搶輸的照正式作答算。
+注意：作業退回重做時 ai_analysis_count 會歸零，這個求助計數不會（不動例句重組的
+既有語意），所以退回後同一題已用完的求助不會恢復。
 """
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -45,6 +58,10 @@ from services.analysis_quota import (
     reserve_analysis_slot,
 )
 from services.scenario_student_feedback_ai import (
+    DEFAULT_KIND,
+    DEFAULT_VERDICT,
+    HELP_KINDS,
+    MAX_HELP_PER_ITEM,
     ScenarioStudentFeedbackInputError,
     get_scenario_student_feedback_service,
 )
@@ -55,6 +72,31 @@ from .dependencies import ensure_assignment_classroom_visible, get_student_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scenario-dialogue", tags=["students-scenario-dialogue"])
+
+
+def help_count_of(progress: StudentItemProgress) -> int:
+    """這一題已經用掉幾次求助（計數借用 retry_count，見檔頭「求助上限」）。"""
+    return int(progress.retry_count or 0)
+
+
+def take_help_slot(progress: StudentItemProgress, db: Session) -> bool:
+    """原子地把這題的求助次數 +1；已經用滿回 ``False``。呼叫端負責 commit。"""
+    rows = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress.id,
+            func.coalesce(StudentItemProgress.retry_count, 0) < MAX_HELP_PER_ITEM,
+        )
+        .update(
+            {
+                StudentItemProgress.retry_count: (
+                    func.coalesce(StudentItemProgress.retry_count, 0) + 1
+                )
+            },
+            synchronize_session=False,
+        )
+    )
+    return rows == 1
 
 
 class FeedbackRequest(BaseModel):
@@ -131,6 +173,9 @@ async def scenario_dialogue_feedback(
 
     recording_url = progress.recording_url
     progress_id = progress.id
+    # 求助用完了就先跟模型講「只能當作答」（prompt＋normalize 雙保險）；並行時仍可能
+    # 兩個都以為還有，下面 take_help_slot 會再把關一次。
+    allow_help = help_count_of(progress) < MAX_HELP_PER_ITEM
 
     # 原子地領一次額度。領不到＝這一題已經用到上限（並行時也只有 3 個領得到），
     # 直接 429，一個 token 都不花。見檔頭「先領額度再打 AI」。
@@ -161,6 +206,7 @@ async def scenario_dialogue_feedback(
             recording_url=recording_url,
             criteria=criteria,
             ui_language=payload.ui_language or "zh-TW",
+            allow_help=allow_help,
         )
         used = True
     except ScenarioStudentFeedbackInputError as exc:
@@ -189,10 +235,41 @@ async def scenario_dialogue_feedback(
             except Exception:
                 logger.exception("refund failed | progress=%s", progress_id)
 
+    # 求助（問某個字怎麼說、說不會答，#1158）不算作答次數：把剛領的額度退回。
+    # 前端 useScenarioChat 也同樣只把 kind=feedback 算進 maxAttempts，兩邊一致。
+    # 額度仍先領再打 AI（並行上限照舊）；已用滿 3 次時求助一樣會 429。
+    # 每題求助最多 MAX_HELP_PER_ITEM 次：領得到求助名額才退；領不到（並行搶輸、或
+    # 模型沒照 allow_help=False 的指示）就照正式作答算，verdict 補成預設。
+    kind = result.get("kind") or DEFAULT_KIND
+    verdict = result.get("verdict")
+    if kind in HELP_KINDS:
+        try:
+            if take_help_slot(progress, db):
+                count = refund_analysis_slot(progress, db)
+            else:
+                kind = DEFAULT_KIND
+                verdict = verdict or DEFAULT_VERDICT
+            db.commit()
+        except Exception:
+            # 退不回去只是學生少一次機會，不該讓已經拿到的幫助變成 503
+            logger.exception("help refund failed | progress=%s", progress_id)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    logger.info(
+        "scenario student feedback | progress=%s kind=%s allow_help=%s count=%s",
+        progress_id,
+        kind,
+        allow_help,
+        count,
+    )
+
     # **白名單輸出**：service 回的東西還帶著 usage／成本，模型有時也會自己多塞分數或
-    # 把參考答案抄回來。學生那一側只拿這三個欄位加配額資訊。
+    # 把參考答案抄回來。學生那一側只拿這幾個欄位加配額資訊。
     return {
-        "verdict": result["verdict"],
+        "kind": kind,
+        "verdict": verdict,
         "comment": result["comment"],
         "suggestion": result.get("suggestion"),
         "ai_analysis_count": count,

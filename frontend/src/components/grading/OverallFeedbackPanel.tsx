@@ -6,6 +6,7 @@
  *
  * 與 practice_mode 相關的調整由 GradingPage 透過 props 指示，元件本身不感知模式：
  *   - 省略 `onRequestRevision` → 不顯示「要求訂正」按鈕（auto-graded 模式無訂正概念）
+ *   - `returnDisabledReason` → 「要求訂正」停用並以 title 說明原因（#1158 情境對話不能退回）
  *   - `isAutoScored` → 主按鈕文案改為「儲存」（auto-graded 模式不是「完成批改」，
  *     批改在學生作答當下就完成了，老師只是儲存最終分數/評語）
  *
@@ -44,6 +45,8 @@ interface OverallFeedbackPanelProps {
   onReset?: () => void;
   // 省略不傳即不顯示「要求訂正」按鈕（用於自動評分模式，如 rearrangement）
   onRequestRevision?: () => void;
+  // #1158：有值時「要求訂正」按鈕停用，滑過顯示此原因（例：情境對話不能退回訂正）
+  returnDisabledReason?: string;
   // true 時主按鈕文案顯示「儲存」而非「完成批改」（auto-graded 模式）
   isAutoScored?: boolean;
   // true 時分數唯讀、不顯示主按鈕（小考完全自動判分，老師不可改分/完成批改，僅可退回）
@@ -66,6 +69,7 @@ export function OverallFeedbackPanel({
   onComplete,
   onReset,
   onRequestRevision,
+  returnDisabledReason,
   autoScoreReadOnly,
   onJumpToItem,
 }: OverallFeedbackPanelProps) {
@@ -96,7 +100,11 @@ export function OverallFeedbackPanel({
     !submission ||
     status === "NOT_STARTED" ||
     status === "unassigned";
-  const returnDisabled = submitting || !submission || status === "RETURNED";
+  const returnDisabled =
+    submitting ||
+    !submission ||
+    status === "RETURNED" ||
+    !!returnDisabledReason;
   // #861 c-2:「完成」鈕同時負責儲存老師改後的分數。已 GRADED 時預設禁用，
   // 但只要老師改動分數（與目前儲存值不同）就重新啟用，讓老師能存新分數。
   const storedScore =
@@ -287,18 +295,26 @@ export function OverallFeedbackPanel({
               )}
 
               {onRequestRevision && (
-                <button
-                  type="button"
-                  disabled={returnDisabled}
-                  onClick={onRequestRevision}
-                  title={t("gradingHub.returnShort")}
-                  className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  <RotateCcw className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline text-xs whitespace-nowrap">
-                    {t("gradingHub.returnShort")}
-                  </span>
-                </button>
+                // #1158：停用的按鈕吃不到滑鼠（pointer-events-none），原因掛在外層 span
+                <span className="inline-flex" title={returnDisabledReason}>
+                  <button
+                    type="button"
+                    disabled={returnDisabled}
+                    onClick={onRequestRevision}
+                    title={returnDisabledReason ?? t("gradingHub.returnShort")}
+                    aria-label={
+                      returnDisabledReason
+                        ? `${t("gradingHub.returnShort")}（${returnDisabledReason}）`
+                        : undefined
+                    }
+                    className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <RotateCcw className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline text-xs whitespace-nowrap">
+                      {t("gradingHub.returnShort")}
+                    </span>
+                  </button>
+                </span>
               )}
 
               <button

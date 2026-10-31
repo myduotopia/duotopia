@@ -39,7 +39,11 @@ import {
   isRetryableUploadError,
   retryAudioUpload,
 } from "@/utils/retryHelper";
-import { speakEnglish } from "@/utils/speakEnglish";
+import {
+  primeSpeechSynthesis,
+  speakEnglish,
+  stopSpeaking,
+} from "@/utils/speakEnglish";
 
 import { SCENARIO_MAX_RECORDING_SECONDS } from "./recordingLimits";
 
@@ -48,6 +52,7 @@ import type {
   ScenarioChatAdapters,
   ScenarioChatItem,
   ScenarioFeedback,
+  SpeakOptions,
 } from "./types";
 
 /** 後端的 429 detail code（`services/analysis_quota`）。 */
@@ -201,14 +206,23 @@ export async function uploadAnswerRecording(params: {
  * 不顯示分數，型別上 `score` 是選填，一旦哪天多帶一個就會自己長出來。
  */
 export function toScenarioFeedback(response: {
-  verdict?: string;
+  kind?: string;
+  verdict?: string | null;
   comment?: string;
   suggestion?: string | null;
 }): ScenarioFeedback {
+  // 求助類別（#1158）要有 suggestion 才成立；其他（含舊回應沒有 kind）一律 feedback
+  const suggestion = response.suggestion || undefined;
+  const kind =
+    (response.kind === "phrase" || response.kind === "model_answer") &&
+    suggestion
+      ? response.kind
+      : "feedback";
   return {
+    kind,
     verdict: response.verdict === "great" ? "great" : "improve",
     comment: response.comment ?? "",
-    suggestion: response.suggestion || undefined,
+    suggestion,
   };
 }
 
@@ -229,14 +243,15 @@ export function isQuotaExhausted(error: unknown): boolean {
  * 設計稿另外寫了一份簡化版，正式路徑不用那一份 —— 這個行為只能有一處實作。
  */
 const speechAdapters = {
-  speak: (text: string) => {
-    speakEnglish(text);
+  // onError：朗讀出錯／沒有英文 voice 時，題目改直接顯示英文（#1158 E2）
+  speak: (text: string, opts?: SpeakOptions) => {
+    speakEnglish(text, { onError: opts?.onError });
   },
-  stopSpeech: () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-  },
+  // 在「開始對話」的點擊裡先唸一段空字串並觸發載入語音清單，之後計時器裡的
+  // 自動朗讀才不會被瀏覽器的手勢限制擋掉（#1158 E-2 先聽後看實測沒聲音）
+  primeSpeech: primeSpeechSynthesis,
+  // 同時取消「沒開始唸」的逾時保底，停掉不算朗讀失敗（#1158 E2b）
+  stopSpeech: stopSpeaking,
 };
 
 /**

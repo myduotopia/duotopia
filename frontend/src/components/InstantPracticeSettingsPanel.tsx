@@ -9,6 +9,8 @@
  * - 模式 chip：`instantPracticeModesForContentType`(與 InstantPracticeDialog 啟動清單一致)。
  * - 進階設定本體：`<PracticeModeSettingsPanel>`(registry 驅動)。
  * - 變更耦合：`applySettingChange` 純函式；切模式套 `applyModeDefaults`。
+ * - 這個內容類型只有一種模式（例如情境對話，#1158 E-4）：不顯示模式切換列，只留進階設定，
+ *   免得看起來能切成其他作業類型（後端 reconfigure 也會擋，422）。
  */
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -143,74 +145,79 @@ export default function InstantPracticeSettingsPanel({
           {/* 向下下拉浮層：蓋在練習內容上，不推開題目 */}
           <div className="absolute right-0 top-full z-50 mt-2 flex max-h-[70vh] w-[min(92vw,720px)] flex-col overflow-hidden rounded-lg border border-amber-200 bg-white shadow-xl dark:bg-gray-900">
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
-              <div className="space-y-1.5">
-                <span className="text-xs text-gray-600">
-                  {t("instantPractice.modeLabel")}
-                </span>
-                {/* 模式 chip 列：橫向捲 + 左右箭頭（永遠顯示）+ 邊緣漸層（可捲才顯示） */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => scrollChips("left")}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
-                    aria-label="向左滑動"
-                  >
-                    <ChevronLeft className="h-4 w-4 text-gray-600" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollChips("right")}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
-                    aria-label="向右滑動"
-                  >
-                    <ChevronRight className="h-4 w-4 text-gray-600" />
-                  </button>
-                  {chipCanScrollLeft && (
-                    <div className="pointer-events-none absolute left-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-r from-white to-transparent" />
-                  )}
-                  {chipCanScrollRight && (
-                    <div className="pointer-events-none absolute right-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-l from-white to-transparent" />
-                  )}
-                  <div
-                    ref={chipRowRef}
-                    className="flex gap-2 overflow-x-auto px-9 pb-1 [&::-webkit-scrollbar]:hidden"
-                    style={{ scrollbarWidth: "none" }}
-                  >
-                    {modes.map((m) => {
-                      const cfg = getModeConfig(m);
-                      if (!cfg) return null;
-                      const ModeIcon = cfg.icon;
-                      const active = m === draftMode;
-                      return (
-                        <button
-                          type="button"
-                          key={m}
-                          ref={active ? activeChipRef : undefined}
-                          onClick={() => pickMode(m)}
-                          className={cn(
-                            "shrink-0 flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all",
-                            active
-                              ? cn(
-                                  cfg.chipSelectedClass,
-                                  "shadow-sm font-semibold",
-                                )
-                              : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
-                          )}
-                        >
-                          <ModeIcon className="h-4 w-4 shrink-0" />
-                          <span>{t(cfg.chipTitleKey ?? cfg.labelKey)}</span>
-                          {cfg.isMemoryBased && (
-                            <Brain
-                              className="h-3.5 w-3.5 shrink-0 opacity-70"
-                              aria-label="採用艾賓浩斯記憶曲線"
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
+              {modes.length > 1 && (
+                <div
+                  className="space-y-1.5"
+                  data-testid="instant-practice-mode-row"
+                >
+                  <span className="text-xs text-gray-600">
+                    {t("instantPractice.modeLabel")}
+                  </span>
+                  {/* 模式 chip 列：橫向捲 + 左右箭頭（永遠顯示）+ 邊緣漸層（可捲才顯示） */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => scrollChips("left")}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
+                      aria-label="向左滑動"
+                    >
+                      <ChevronLeft className="h-4 w-4 text-gray-600" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollChips("right")}
+                      className="absolute right-0 top-1/2 -translate-y-1/2 z-20 h-7 w-7 flex items-center justify-center rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50"
+                      aria-label="向右滑動"
+                    >
+                      <ChevronRight className="h-4 w-4 text-gray-600" />
+                    </button>
+                    {chipCanScrollLeft && (
+                      <div className="pointer-events-none absolute left-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-r from-white to-transparent" />
+                    )}
+                    {chipCanScrollRight && (
+                      <div className="pointer-events-none absolute right-7 top-0 bottom-0 z-10 w-6 bg-gradient-to-l from-white to-transparent" />
+                    )}
+                    <div
+                      ref={chipRowRef}
+                      className="flex gap-2 overflow-x-auto px-9 pb-1 [&::-webkit-scrollbar]:hidden"
+                      style={{ scrollbarWidth: "none" }}
+                    >
+                      {modes.map((m) => {
+                        const cfg = getModeConfig(m);
+                        if (!cfg) return null;
+                        const ModeIcon = cfg.icon;
+                        const active = m === draftMode;
+                        return (
+                          <button
+                            type="button"
+                            key={m}
+                            ref={active ? activeChipRef : undefined}
+                            onClick={() => pickMode(m)}
+                            className={cn(
+                              "shrink-0 flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all",
+                              active
+                                ? cn(
+                                    cfg.chipSelectedClass,
+                                    "shadow-sm font-semibold",
+                                  )
+                                : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50",
+                            )}
+                          >
+                            <ModeIcon className="h-4 w-4 shrink-0" />
+                            <span>{t(cfg.chipTitleKey ?? cfg.labelKey)}</span>
+                            {cfg.isMemoryBased && (
+                              <Brain
+                                className="h-3.5 w-3.5 shrink-0 opacity-70"
+                                aria-label="採用艾賓浩斯記憶曲線"
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <PracticeModeSettingsPanel
                 mode={draftMode}

@@ -5,6 +5,7 @@
  * - 同一個 async 流程裡連續擷取多個檔案（面板就是這樣依序擷取）
  * - 兩批同時在跑（擷取還在上傳、又補傳一批）時，空位不能被兩邊重複算
  * - 上傳失敗的那幾格要還回來
+ * - AI 生圖（#1158）沿用同一套預留：生成中先佔 1 格，失敗還回來
  */
 import { useState } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -28,6 +29,14 @@ vi.mock("sonner", () => ({
 
 const cropFigures = vi.fn();
 const uploadCrops = vi.fn();
+const generateScenarioImage = vi.fn();
+vi.mock("@/lib/api", () => ({
+  apiClient: {
+    generateScenarioImage: (...args: unknown[]) =>
+      generateScenarioImage(...args),
+  },
+}));
+
 vi.mock("../scenarioImages", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../scenarioImages")>()),
   cropFigures: (...args: unknown[]) => cropFigures(...args),
@@ -64,6 +73,7 @@ beforeEach(() => {
   toastError.mockReset();
   cropFigures.mockReset();
   uploadCrops.mockReset();
+  generateScenarioImage.mockReset();
   cropFigures.mockImplementation(async (f: File, figs: unknown[]) =>
     figs.map(() => ({ file: f, source: { file: f, box: [0, 0, 500, 500] } })),
   );
@@ -156,5 +166,93 @@ describe("useScenarioImages 5 張上限", () => {
 
     expect(uploadCrops.mock.calls[0][1]).toBe(1);
     expect(result.current.images).toHaveLength(5);
+  });
+});
+
+describe("useScenarioImages AI 生圖（#1158）", () => {
+  const saved = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `saved-${i}`,
+      url: `https://cdn/${i}.png`,
+      source: null,
+    }));
+
+  it("生成成功：以 kind=scenario 呼叫，附加一張標成 AI 生的圖（沒有原圖）", async () => {
+    generateScenarioImage.mockResolvedValue({
+      image_url: "https://cdn/ai.png",
+    });
+    const { result } = renderHook(() => useHarness());
+
+    await act(async () => {
+      await result.current.addGenerated("A park");
+    });
+
+    expect(generateScenarioImage).toHaveBeenCalledWith({
+      kind: "scenario",
+      description: "A park",
+    });
+    expect(result.current.images).toHaveLength(1);
+    expect(result.current.images[0]).toMatchObject({
+      url: "https://cdn/ai.png",
+      source: null,
+      generated: true,
+    });
+  });
+
+  it("已滿 5 張：不打 API，提示超過上限", async () => {
+    const { result } = renderHook(() => useHarness(saved(5)));
+
+    await act(async () => {
+      await result.current.addGenerated("A park");
+    });
+
+    expect(generateScenarioImage).not.toHaveBeenCalled();
+    expect(toastInfo).toHaveBeenCalledWith("scenarioDialogue.images.overLimit");
+    expect(result.current.images).toHaveLength(5);
+  });
+
+  it("生成中先預留 1 格：同時補傳只能拿到剩下的空位", async () => {
+    let resolveGenerate: (v: { image_url: string }) => void = () => {};
+    generateScenarioImage.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolveGenerate = r;
+        }),
+    );
+    const { result } = renderHook(() => useHarness(saved(3)));
+
+    let generating: Promise<void> = Promise.resolve();
+    act(() => {
+      generating = result.current.addGenerated("A park");
+    });
+    // 生圖還沒回來，另一批擷取只拿得到 5 - 3 - 1 = 1 格
+    await act(async () => {
+      await result.current.addExtracted(file, figures(3));
+    });
+    expect(uploadCrops.mock.calls[0][1]).toBe(1);
+
+    await act(async () => {
+      resolveGenerate({ image_url: "https://cdn/ai.png" });
+      await generating;
+    });
+    expect(result.current.images).toHaveLength(5);
+  });
+
+  it("生成失敗：釋放預留的格數，並把錯誤往上丟給對話框", async () => {
+    const err = Object.assign(new Error("quota"), { status: 402 });
+    generateScenarioImage.mockRejectedValue(err);
+    const { result } = renderHook(() => useHarness(saved(4)));
+
+    await act(async () => {
+      await expect(result.current.addGenerated("A park")).rejects.toBe(err);
+    });
+    expect(result.current.images).toHaveLength(4);
+    await waitFor(() => expect(result.current.busy).toBe(false));
+
+    // 名額有還回來：再擷取一批還拿得到 1 格
+    await act(async () => {
+      await result.current.addExtracted(file, figures(2));
+    });
+    expect(uploadCrops.mock.calls[0][1]).toBe(1);
   });
 });

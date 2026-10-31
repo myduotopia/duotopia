@@ -38,3 +38,43 @@ def validate_practice_mode(value: Optional[str]) -> Optional[str]:
             f"Allowed: {sorted(ALLOWED_PRACTICE_MODES)}"
         )
     return value
+
+
+# 每種內容類型可用的 practice_mode（#1158 E-4，即刻練習 create／reconfigure 用）。
+# 鏡射前端 lib/practiceMode.ts 的 PRACTICE_MODE_REGISTRY.supportedDatasets（＋單字集的
+# tug_of_war，見 instantPracticeModesForContentType）。前端照「是否開放派發」再過濾一次；
+# 後端只管「這種內容做不做得出這個模式」—— 例如情境對話內容不能切成 reading。
+_SENTENCE_MODES = frozenset({"reading", "rearrangement"})
+_VOCABULARY_MODES = _SENTENCE_MODES | frozenset(
+    {
+        "word_reading",
+        "word_selection",
+        "word_selection_quiz",
+        "word_spelling",
+        "word_spelling_quiz",
+        "word_cloze",
+        "word_cloze_quiz",
+        "tug_of_war",
+    }
+)
+MODES_BY_CONTENT_TYPE = {
+    "EXAMPLE_SENTENCES": _SENTENCE_MODES,
+    "READING_ASSESSMENT": _SENTENCE_MODES,
+    "VOCABULARY_SET": _VOCABULARY_MODES,
+    "SENTENCE_MAKING": _VOCABULARY_MODES,
+    "SCENARIO_DIALOGUE": frozenset({"scenario_dialogue"}),
+}
+
+
+def practice_mode_fits_content_type(mode: Optional[str], content_type) -> bool:
+    """這種內容類型能不能用這個 practice_mode。
+
+    ``content_type`` 可為 ``ContentType`` enum 或字串（大小寫皆可）。沒列在
+    ``MODES_BY_CONTENT_TYPE`` 的類型（例如單選題庫）不在這裡把關，一律放行，
+    以免擋到既有流程。
+    """
+    raw = getattr(content_type, "value", content_type)
+    allowed = MODES_BY_CONTENT_TYPE.get(str(raw or "").upper())
+    if allowed is None:
+        return True
+    return mode in allowed

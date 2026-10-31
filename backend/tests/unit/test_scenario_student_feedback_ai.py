@@ -153,6 +153,7 @@ class TestNormalizeResult:
             }
         )
         assert out == {
+            "kind": "feedback",
             "verdict": "improve",
             "comment": "意思有傳達到！試著說成完整的句子。",
             "suggestion": "I went to the park with my family.",
@@ -313,8 +314,69 @@ class TestStudentAsksInsteadOfAnswering:
         assert "not answering at all" in prompt
         # 不要把提問當成差勁的回答來評分
         assert "do not judge their answer" in prompt
-        # 問單字意思的時候不給「建議說法」（那會答錯方向）
-        assert "Leave `suggestion` out in that case." in prompt
+        # 提問改走求助類別（#1158），不當成 feedback
+        assert 'use kind "phrase" or "model_answer"' in prompt
+
+
+class TestThreeKinds:
+    """AI 回應分三類（#1158）：phrase／model_answer 是求助，feedback 是正式回答。"""
+
+    def test_prompt_asks_for_kind_in_the_json_shape(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        shape = prompt[prompt.index("Reply with JSON only") :]
+        assert '"kind": "feedback" | "phrase" | "model_answer"' in shape
+
+    def test_prompt_has_chinese_and_english_examples_for_each_help_kind(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        # phrase：問某個字怎麼說／字義
+        assert "公園英文怎麼說" in prompt
+        assert "How do I say 公園 in English?" in prompt
+        # model_answer：不會答
+        assert "我不知道怎麼回答" in prompt
+        assert "I don't know how to answer this." in prompt
+        # 拿不準時當正式回答
+        assert 'when in doubt, use "feedback"' in prompt
+
+    def test_phrase_is_only_the_word_and_model_answer_is_a_full_sentence(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "ONLY that English word or short phrase" in prompt
+        assert "one complete model answer to this question" in prompt
+
+    @pytest.mark.parametrize("kind", ["phrase", "model_answer"])
+    def test_help_kinds_parse_without_a_verdict(self, kind):
+        out = Svc.normalize_result(
+            {
+                "kind": kind,
+                "verdict": "great",
+                "comment": "試著用它回答看看",
+                "suggestion": "park",
+            }
+        )
+        assert out == {
+            "kind": kind,
+            "verdict": None,
+            "comment": "試著用它回答看看",
+            "suggestion": "park",
+        }
+
+    def test_missing_kind_is_feedback(self):
+        """舊格式沒有 kind：當正式回答（誤當求助會讓作答不算次數也沒評語）。"""
+        out = Svc.normalize_result({"verdict": "great", "comment": "很棒"})
+        assert out["kind"] == "feedback"
+        assert out["verdict"] == "great"
+
+    def test_unknown_kind_is_feedback(self):
+        out = Svc.normalize_result(
+            {"kind": "question", "verdict": "improve", "comment": "嗯"}
+        )
+        assert out["kind"] == "feedback"
+        assert out["verdict"] == "improve"
+
+    def test_help_without_suggestion_falls_back_to_feedback(self):
+        """求助的重點是那個字／那句範例，沒有就當一般建議顯示（有 verdict）。"""
+        out = Svc.normalize_result({"kind": "phrase", "comment": "spot 是地點"})
+        assert out["kind"] == "feedback"
+        assert out["verdict"] == "improve"
 
 
 class TestLanguageAccuracyIsNotWaivedByClearMeaning:
@@ -405,3 +467,69 @@ class TestLanguageAccuracyIsNotWaivedByClearMeaning:
         assert "AND has no language error a teacher would correct" in prompt
         assert "countable vs uncountable" in prompt
         assert '"many food" is wrong' in prompt
+
+
+class TestHelpLimitAndIDontKnowAnswers:
+    """修正 E2b（#1158）：每題求助上限、含 I don't know 的完整回答算作答。"""
+
+    def test_max_help_per_item_is_three(self):
+        from services.scenario_student_feedback_ai import MAX_HELP_PER_ITEM
+
+        assert MAX_HELP_PER_ITEM == 3
+
+    def test_an_english_answer_containing_i_dont_know_is_feedback(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW")
+        assert "WHOLE recording is a request for help" in prompt
+        assert "I don't know his name, but he is very tall." in prompt
+
+    def test_help_exhausted_prompt_only_allows_feedback(self):
+        prompt = Svc.build_prompt(CRITERIA, "zh-TW", allow_help=False)
+        assert 'Always use kind "feedback"' in prompt
+        assert "already used all the help" in prompt
+        # 求助類別的說明與「改走求助」那段都不能出現，免得模型兩邊矛盾
+        assert "ONLY that English word or short phrase" not in prompt
+        assert 'use kind "phrase" or "model_answer"' not in prompt
+        # 評語語言照舊
+        assert "Traditional Chinese" in prompt
+
+    @pytest.mark.parametrize("kind", ["phrase", "model_answer"])
+    def test_help_exhausted_normalize_forces_feedback(self, kind):
+        out = Svc.normalize_result(
+            {"kind": kind, "comment": "試著用它回答看看", "suggestion": "park"},
+            allow_help=False,
+        )
+        assert out["kind"] == "feedback"
+        assert out["verdict"] == "improve"
+        assert out["suggestion"] == "park"
+
+    @pytest.mark.asyncio
+    async def test_generate_passes_allow_help_to_prompt_and_normalize(
+        self, monkeypatch
+    ):
+        import json
+
+        fake, _ = _install_fake_vertex(monkeypatch)
+        monkeypatch.setattr(
+            "services.vertex_ai.VertexAIService._set_thinking_budget",
+            staticmethod(lambda config, budget: None),
+        )
+        prompts = []
+        real_build = Svc.build_prompt.__func__
+
+        def spy_build(cls, criteria, ui_language, allow_help=True):
+            prompts.append(allow_help)
+            return real_build(cls, criteria, ui_language, allow_help=allow_help)
+
+        monkeypatch.setattr(Svc, "build_prompt", classmethod(spy_build))
+        response = fake.GenerativeModel.return_value.generate_content_async.return_value
+        response.text = json.dumps(
+            {"kind": "phrase", "comment": "試試看", "suggestion": "park"}
+        )
+
+        out = await Svc().generate(
+            "https://storage.googleapis.com/b/recordings/a.webm",
+            {"question": "What did you do last weekend?"},
+            allow_help=False,
+        )
+        assert prompts == [False]
+        assert out["kind"] == "feedback"

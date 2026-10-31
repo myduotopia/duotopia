@@ -23,7 +23,7 @@ import {
 import { useAzurePronunciation } from "@/hooks/useAzurePronunciation";
 import { useDemoAzurePronunciation } from "@/hooks/useDemoAzurePronunciation";
 import { appendAudioToFormData } from "@/utils/audioFormatDetection";
-import { speakEnglish } from "@/utils/speakEnglish";
+import { SpeakableWords } from "./shared/SpeakableWords";
 
 interface Question {
   text?: string;
@@ -706,25 +706,14 @@ const GroupedQuestionsTemplate = memo(function GroupedQuestionsTemplate({
               <div className="text-base sm:text-lg font-medium text-gray-800 flex-1">
                 {currentQuestion?.text ? (
                   <div className="flex flex-col gap-1">
+                    {/* 點單字聽發音：共用 SpeakableWords（情境對話建議說法也用，#1158 E2） */}
                     {currentQuestion.text.split("\n").map((line, lineIndex) => (
-                      <div
+                      <SpeakableWords
                         key={lineIndex}
+                        text={line}
                         className="flex flex-wrap gap-1 min-h-[1em]"
-                      >
-                        {line
-                          .split(" ")
-                          .filter(Boolean)
-                          .map((word, wordIndex) => (
-                            <span
-                              key={wordIndex}
-                              className="cursor-pointer hover:text-blue-600 hover:underline transition-colors px-1"
-                              onClick={() => speakEnglish(word)}
-                              title={`${t("groupedQuestionsTemplate.labels.clickToPronounciate")}: ${word}`}
-                            >
-                              {word}
-                            </span>
-                          ))}
-                      </div>
+                        wordClassName="px-1"
+                      />
                     ))}
                   </div>
                 ) : (

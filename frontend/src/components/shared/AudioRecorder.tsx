@@ -46,10 +46,20 @@ interface AudioRecorderProps {
   // UI customization
   /**
    * `chat`（#1133 情境對話）：大圓麥克風，點一下開始（秒數＋聲波）、再點停止 →
-   * 可試聽／重錄；不包 Card、不跳「錄音完成」toast（由外層決定何時送出）。
+   * 重錄／送出／試聽（只用圖示按鈕，#1158 E3）；不包 Card、不跳「錄音完成」toast。
    * 畫面在 AudioRecorderChatControls.tsx。
    */
   variant?: "default" | "compact" | "minimal" | "chat";
+  /** chat 專用：錄完後中間的「送出」大鈕（由外層決定送出後做什麼） */
+  onSend?: () => void;
+  /** chat 專用：停用（disabled）時的原因，放進麥克風的 aria-label／title */
+  disabledReason?: string;
+  /**
+   * 丟棄訊號（#1158 E-3 手機橫放）：數字一變（非 0），正在錄的（含按了停止、還在處理的）
+   * 錄音立刻停止並丟掉 —— 不呼叫 onRecordingComplete／onRecordingStop／onError、不跳 toast，
+   * 回到待錄狀態。沒在錄音時不做事（已錄完未送出的保留）。
+   */
+  discardSignal?: number;
   className?: string;
   showProgress?: boolean;
   showTimer?: boolean;
@@ -75,6 +85,9 @@ export default function AudioRecorder({
   showProgress = true,
   showTimer = true,
   autoStop,
+  onSend,
+  disabledReason,
+  discardSignal = 0,
 }: AudioRecorderProps) {
   const { t } = useTranslation();
   const isChat = variant === "chat";
@@ -97,6 +110,10 @@ export default function AudioRecorder({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const strategyRef = useRef<RecordingStrategy>(getRecordingStrategy());
+  // 每段錄音一個編號；discardSignal 讓編號前進，舊錄音晚到的 onstop 結果就丟掉
+  const sessionRef = useRef(0);
+  const isActiveRef = useRef(false);
+  isActiveRef.current = isRecording || isStopping;
 
   // Update status from external prop
   useEffect(() => {
@@ -207,9 +224,12 @@ export default function AudioRecorder({
       };
 
       // Handle recording stop
+      const session = sessionRef.current;
       mediaRecorder.onstop = async () => {
         // 🔧 等待 Safari 完成 blob 編碼
         await new Promise((resolve) => setTimeout(resolve, 800));
+        // 已被丟棄（discardSignal）：不產生音檔、不呼叫任何 callback
+        if (session !== sessionRef.current) return;
 
         // ✅ 直接使用 mediaRecorder.mimeType（不要默認到 audio/webm）
         const audioBlob = new Blob(chunksRef.current, {
@@ -268,6 +288,10 @@ export default function AudioRecorder({
             audioUrl,
             strategy,
           );
+          if (session !== sessionRef.current) {
+            URL.revokeObjectURL(audioUrl);
+            return;
+          }
 
           if (!validationResult.valid) {
             console.error("Recording validation failed");
@@ -408,6 +432,23 @@ export default function AudioRecorder({
     }
   }, [isRecording]);
 
+  // 丟棄正在錄的錄音（discardSignal 改變時；初始值不算）
+  const lastDiscardRef = useRef(discardSignal);
+  useEffect(() => {
+    if (discardSignal === lastDiscardRef.current) return;
+    lastDiscardRef.current = discardSignal;
+    // 剛開始錄（onRecordingStart 裡就送訊號）時 state 可能還沒進 render，另看 recorder 在不在
+    if (!isActiveRef.current && !mediaRecorderRef.current) return;
+    sessionRef.current += 1;
+    if (mediaRecorderRef.current)
+      mediaRecorderRef.current.ondataavailable = null;
+    cleanup();
+    chunksRef.current = [];
+    setIsRecording(false);
+    setRecordingTime(0);
+    setStatus("idle");
+  }, [discardSignal, cleanup]);
+
   // Re-record
   const handleReRecord = useCallback(() => {
     if (readOnly || disabled) return;
@@ -454,15 +495,17 @@ export default function AudioRecorder({
               ? `${formatTime(recordingTime)} / ${formatTime(autoStop)}`
               : formatTime(recordingTime)
           }
+          recordedTimeLabel={formatTime(recordingTime)}
           audioUrl={localAudioUrl}
           showError={status === "error"}
           errorMessage={errorMessage}
-          description={description}
           readOnly={readOnly}
           disabled={disabled}
+          disabledReason={disabledReason}
           onStart={startRecording}
           onStop={stopRecording}
           onReRecord={handleReRecord}
+          onSend={onSend}
           onError={onError}
         />
       );

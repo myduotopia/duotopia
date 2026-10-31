@@ -3,6 +3,11 @@ Grading operations (AI and manual)
 
 Issue #1092: 小考批改視圖（_build_quiz_submission）每題附 default_deduction /
 deduction_detail，quiz_settings 加打字類小考評分設定。
+
+Issue #1158：情境對話作業不能退回訂正 —— 單筆退回 409
+（RETURN_NOT_ALLOWED_FOR_PRACTICE_MODE），批次退回／批次批改完成略過並回報。
+紫色「AI 批改」（batch-grade，Azure 發音評分）不適用情境對話 —— 回 400
+（AI_BATCH_GRADE_NOT_ALLOWED_FOR_PRACTICE_MODE），批改維持老師手動評分。
 """
 
 import json
@@ -102,6 +107,25 @@ def _check_not_archived(
             detail="Cannot modify grades: assignment is deleted",
         )
     return parent
+
+
+# #1158：情境對話作業不能退回「待訂正」（RETURNED）—— 狀態只有待完成、已提交、
+# 已批改。單筆退回回 409 + 這個錯誤碼；批次退回／批次批改完成則略過並回報。
+# 其他作業類型的退回流程完全不變。
+RETURN_NOT_ALLOWED_PRACTICE_MODES = frozenset({"scenario_dialogue"})
+RETURN_NOT_ALLOWED_CODE = "RETURN_NOT_ALLOWED_FOR_PRACTICE_MODE"
+
+
+# #1158：紫色「AI 批改」（batch-grade）用 Azure 發音評分算分，只適合有標準答案的
+# 朗讀類作業。情境對話是開放式回答，批改維持老師手動評分 —— batch-grade 回 400。
+# 前端 lib/practiceMode.ts 的 supportsAiBatchGrading 同值（入口直接不顯示）。
+AI_BATCH_GRADE_NOT_ALLOWED_PRACTICE_MODES = frozenset({"scenario_dialogue"})
+AI_BATCH_GRADE_NOT_ALLOWED_CODE = "AI_BATCH_GRADE_NOT_ALLOWED_FOR_PRACTICE_MODE"
+
+
+def _return_not_allowed(parent: Optional[Assignment]) -> bool:
+    """這份作業的類型是否禁止退回訂正（目前只有情境對話）。"""
+    return bool(parent and parent.practice_mode in RETURN_NOT_ALLOWED_PRACTICE_MODES)
 
 
 def _scenario_suggestion_view(
@@ -1417,7 +1441,8 @@ def _do_return_for_revision(
 ) -> str:
     """套用單筆「要求訂正」（不 commit，供單筆與批次共用）。
 
-    回傳 'already_returned'（已是 RETURNED，略過）或 'returned'。
+    回傳 'already_returned'（已是 RETURNED，略過）、'not_allowed'（作業類型
+    禁止退回，例如情境對話，#1158；不動任何資料）或 'returned'。
     小考走 `_return_quiz_for_revision`（清答錯、保留答對、凍結分數）；
     其餘維持 RETURNED + 重置 AI 分析額度。
 
@@ -1433,6 +1458,8 @@ def _do_return_for_revision(
             .filter(Assignment.id == student_assignment.assignment_id)
             .first()
         )
+    if _return_not_allowed(parent):
+        return "not_allowed"
     practice_mode = parent.practice_mode if parent else None
     if practice_mode and practice_mode.endswith("_quiz"):
         _return_quiz_for_revision(student_assignment, practice_mode, db)
@@ -1472,7 +1499,7 @@ async def return_for_revision(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    _check_not_archived(assignment, db)
+    parent = _check_not_archived(assignment, db)
 
     # 確認教師有權限（檢查班級關聯）
     classroom = (
@@ -1488,7 +1515,20 @@ async def return_for_revision(
             status_code=403, detail="Not authorized to return this assignment"
         )
 
-    result = _do_return_for_revision(assignment, db, data.get("message", ""))
+    # #1158：情境對話作業不能退回訂正（驗權之後才擋，避免洩漏作業類型）
+    if _return_not_allowed(parent):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": RETURN_NOT_ALLOWED_CODE,
+                "message": "情境對話作業目前不能退回訂正。",
+                "practice_mode": parent.practice_mode,
+            },
+        )
+
+    result = _do_return_for_revision(
+        assignment, db, data.get("message", ""), parent=parent
+    )
     db.commit()
     return {
         "message": (
@@ -1516,6 +1556,8 @@ async def batch_return_for_revision(
     """批次要求訂正 - 一次退回多位學生（#830）。
 
     body: { student_ids: List[int], message?: str }
+    回應：{ returned, skipped, count }；作業類型禁止退回（情境對話，#1158）時
+    學生全部列入 skipped，另加 not_allowed（同一批 id）與 code。
     """
     student_ids = data.get("student_ids")
     if not isinstance(student_ids, list) or not student_ids:
@@ -1554,19 +1596,32 @@ async def batch_return_for_revision(
 
     returned: List[int] = []
     skipped: List[int] = []
+    # #1158：作業類型禁止退回（情境對話）的學生略過，另外列出讓前端說明原因
+    not_allowed: List[int] = []
     for sid in student_ids:
         sa = sa_by_student.get(sid)
         if not sa:
             skipped.append(sid)
             continue
         # parent 已在上方載入，傳入避免每位學生重查 Assignment
-        if _do_return_for_revision(sa, db, message, parent=parent) == "returned":
+        outcome = _do_return_for_revision(sa, db, message, parent=parent)
+        if outcome == "returned":
             returned.append(sid)
         else:
             skipped.append(sid)
+            if outcome == "not_allowed":
+                not_allowed.append(sid)
 
     db.commit()
-    return {"returned": returned, "skipped": skipped, "count": len(returned)}
+    response: Dict[str, Any] = {
+        "returned": returned,
+        "skipped": skipped,
+        "count": len(returned),
+    }
+    if not_allowed:
+        response["not_allowed"] = not_allowed
+        response["code"] = RETURN_NOT_ALLOWED_CODE
+    return response
 
 
 @router.post("/{assignment_id}/batch-reset-not-started")
@@ -1799,6 +1854,17 @@ async def batch_grade_assignment(
             raise HTTPException(
                 status_code=403,
                 detail="Cannot modify grades: assignment is archived",
+            )
+
+        # #1158：情境對話不能用 AI 批改（驗權之後才擋，避免洩漏作業類型）
+        if assignment.practice_mode in AI_BATCH_GRADE_NOT_ALLOWED_PRACTICE_MODES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": AI_BATCH_GRADE_NOT_ALLOWED_CODE,
+                    "message": "情境對話作業不能使用 AI 批改，請由老師評分。",
+                    "practice_mode": assignment.practice_mode,
+                },
             )
         perf.checkpoint("Permission Check")
 
@@ -2180,6 +2246,9 @@ async def finalize_batch_grade(
     - "RETURNED" → Mark as RETURNED (sets returned_at)
     - "GRADED" → Mark as GRADED
     - None or missing → Keep original status (no change)
+
+    #1158：情境對話作業的 "RETURNED" 決定略過（狀態不變，計入 unchanged），
+    人數回報在 return_not_allowed_count。
     """
     perf = PerformanceSnapshot(f"Finalize_Batch_Grade_{assignment_id}")
 
@@ -2231,7 +2300,10 @@ async def finalize_batch_grade(
     returned_count = 0
     graded_count = 0
     unchanged_count = 0
+    return_not_allowed_count = 0
     returned_sa_ids: list[int] = []
+    # #1158：情境對話作業不能退回訂正 —— RETURNED 決定略過（狀態不變）並回報
+    return_blocked = _return_not_allowed(assignment)
 
     with start_span("Update Student Statuses"):
         for sa in student_assignments:
@@ -2240,7 +2312,10 @@ async def finalize_batch_grade(
             # Check teacher's decision for this student
             decision = request.teacher_decisions.get(student_id)
 
-            if decision == "RETURNED":
+            if decision == "RETURNED" and return_blocked:
+                return_not_allowed_count += 1
+                unchanged_count += 1
+            elif decision == "RETURNED":
                 sa.status = AssignmentStatus.RETURNED
                 sa.returned_at = datetime.now(timezone.utc)
                 returned_sa_ids.append(sa.id)
@@ -2275,6 +2350,7 @@ async def finalize_batch_grade(
         graded_count=graded_count,
         unchanged_count=unchanged_count,
         total_count=len(student_assignments),
+        return_not_allowed_count=return_not_allowed_count,
     )
 
 

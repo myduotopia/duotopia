@@ -65,6 +65,13 @@ ARTICLE_MAX_OUTPUT_TOKENS = 2048
 # 圖片座標與標題建議，2048 不夠用。截斷時仍有 _salvage_extract 兜底保住文章。
 EXTRACT_MAX_OUTPUT_TOKENS = 8192
 
+# #1158 生圖描述預填：只回一小段英文，但 thinking 會先吃掉幾百 token（#1119 實測
+# 284~330），所以預算給寬，避免輸出被吃光
+IMAGE_DESCRIPTION_MAX_OUTPUT_TOKENS = 2048
+# 預填描述的長度上限，與生圖端點收的描述上限一致
+# （ScenarioDialogueImageService.MAX_DESCRIPTION_CHARS）
+MAX_IMAGE_DESCRIPTION_CHARS = 1000
+
 # 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
 # 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
 # 會讓成本統計靜默變 0 —— 迴歸測試 tests/unit/test_issue_1119_model_migration.py
@@ -904,6 +911,66 @@ class ScenarioDialogueAIService:
             "truncated": truncated,
             "usage": usage,
             "estimated_cost_usd": self._log_usage("extract", usage),
+        }
+
+    # ------------------------------------------------------- #1158 生圖描述預填
+
+    @staticmethod
+    def build_image_description_prompt(
+        scenario_content: str, question: str = ""
+    ) -> str:
+        """依情境文章（和可選的題目）擬一段英文生圖描述，給老師在生圖對話框裡改。
+
+        描述只寫「畫面上有什麼」，不寫畫風 —— 畫風（黑白線稿、畫面合理）由生圖服務
+        統一補上，這裡再寫一次只會讓老師以為要自己維護那段。
+        """
+        scenario_text = (scenario_content or "").strip()
+        question_text = (question or "").strip()
+        if not scenario_text and not question_text:
+            raise ScenarioDialogueAIError("情境文章與題目至少要有一個")
+
+        lines = [
+            "Write a short English description of ONE picture for a speaking "
+            "practice worksheet. A teacher will read it, may edit it, and then an "
+            "image model will draw it.",
+            "",
+        ]
+        if scenario_text:
+            lines += ["Scenario passage:", scenario_text, ""]
+        if question_text:
+            lines += ["The picture should support this question:", question_text, ""]
+        lines += [
+            "Requirements:",
+            "- 1 to 3 sentences, at most 60 words.",
+            "- Describe only what is visible: setting, people (adults or a general "
+            "scene), objects and their number, and what is happening.",
+            "- Keep it realistic and consistent with the passage.",
+            "- Do not mention drawing style, colors, or any text/letters in the picture.",
+            "",
+            'Return JSON: {"description": "<the description>"}',
+        ]
+        return "\n".join(lines)
+
+    async def suggest_image_description(
+        self, scenario_content: str = "", question: str = ""
+    ) -> Dict[str, Any]:
+        """回傳 ``description`` / ``usage`` / ``estimated_cost_usd``。"""
+        prompt = self.build_image_description_prompt(scenario_content, question)
+        response, usage = await self._call_vertex(
+            prompt, IMAGE_DESCRIPTION_MAX_OUTPUT_TOKENS
+        )
+        cost = self._log_usage("image-description", usage)
+        raw = self.parse_json(response.text)
+        description = ""
+        if isinstance(raw, dict):
+            description = self._text(raw.get("description"))
+        description = re.sub(r"\s+", " ", description).strip()
+        if not description:
+            raise ScenarioDialogueAIOutputError("AI 沒有擬出圖片描述")
+        return {
+            "description": description[:MAX_IMAGE_DESCRIPTION_CHARS],
+            "usage": usage,
+            "estimated_cost_usd": cost,
         }
 
 

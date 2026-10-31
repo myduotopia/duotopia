@@ -38,6 +38,9 @@
  * - 開啟時把上一份作業的進階設定／評分／進度全部清掉，載入中不露出舊資料；詳情與進度（含重算
  *   後的重抓）只採用最新一次載入、且仍是同一份作業的回應。上一份作業的 PATCH 較晚失敗時只
  *   toast，不退回新面板的欄位。
+ *
+ * #1158：情境對話作業不顯示紫色「AI 批改」（supportsAiBatchGrading；批改維持老師手動評分，
+ * 後端 batch-grade 也會回 400）。其他作業類型不變。
  */
 import {
   useState,
@@ -68,7 +71,7 @@ import VocabularySetPanel, {
   type VocabularySetPanelHandle,
 } from "@/components/VocabularySetPanel";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
-import { isAutoScoredMode } from "@/lib/practiceMode";
+import { isAutoScoredMode, supportsAiBatchGrading } from "@/lib/practiceMode";
 import { PracticeModeSettingsPanel } from "@/components/assignment/PracticeModeSettingsPanel";
 import {
   clampPerQuestionTime,
@@ -948,6 +951,9 @@ export function AssignmentDetailSheet({
   const typeBadge = getContentTypeBadge();
   // 自動計分模式不需手動批改鈕；改用 registry 的 isAutoScoredMode（含三種小考，修舊本地 set 漏列）。
   const showGradingButtons = !isAutoScoredMode(assignment.practice_mode);
+  // #1158：情境對話批改維持老師手動評分 —— 不顯示紫色「AI 批改」
+  const showAiGradeButton =
+    canUseAiGrading && supportsAiBatchGrading(assignment.practice_mode);
   // #1092: 指派人數以詳情的 student_ids 為準（派發儲存後會更新），載入前用 prop 佔位
   const studentCount = Array.isArray(detailData?.student_ids)
     ? (detailData.student_ids as unknown[]).length
@@ -1041,7 +1047,7 @@ export function AssignmentDetailSheet({
                     <CheckCircle className="h-4 w-4 mr-2" />
                     {t("assignmentDetail.buttons.gradeAssignment", "批改作業")}
                   </Button>
-                  {canUseAiGrading && (
+                  {showAiGradeButton && (
                     <Button
                       className="flex-1 bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700 dark:text-white"
                       onClick={() => void closeThen(onBatchGradeClick)}

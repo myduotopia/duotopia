@@ -18,12 +18,12 @@
  * 所以這裡**逐欄白名單**，不做物件展開：老師端的欄位只要原樣往下傳一次，參考答案就
  * 跟著進了學生畫面的資料裡 —— 即使今天沒有元件渲染它，哪天多渲染一個欄位就漏了。
  *
- * ## 情境配圖沒有資料來源
+ * ## 情境圖（#1158 E5）
  *
- * `ScenarioChatContext.images` 目前一律空陣列。`scenario_settings` 只存
- * scenario_content / question_level / global_rubric / global_tense / global_voice /
- * translate_language / tts_settings —— **沒有情境圖片欄位**。設計稿那幾張情境圖是
- * `public/samples/` 的 mock。要有情境配圖得先加欄位，不在這裡硬湊。
+ * `ScenarioChatContext.images` 讀 `scenario_settings.scenario_images`（網址陣列，最多 5 張，
+ * #1146 起由老師上傳／擷取／AI 生成）。老師端拿到的是整份設定；學生端是後端
+ * `public_settings_view` 濾過的版本，情境圖本來就給學生看，兩邊都有這個欄位。
+ * 非字串、空字串一律略過；替代文字用固定格式（理由同題目圖片的 imageAlt）。
  */
 import type { ScenarioContentDetail } from "@/lib/scenarioDialogue";
 import type { ScenarioChatContext, ScenarioChatItem } from "./types";
@@ -60,22 +60,28 @@ export interface ChatSettingsInput {
  * 對話式 UI 的 settings。**預覽與學生作答共用這一份** —— 兩邊各寫一份就會漂移，
  * 而預覽的全部意義就是「老師看到的＝學生看到的」。
  *
- * 兩個欄位目前**沒有對應的派發設定**，先在這裡定死並寫明理由：
+ * 兩個欄位目前**沒有對應的派發設定**，在這裡決定並寫明理由：
  *
  * * `replyMode: "voice"` —— 情境對話的定位就是開口錄音作答（`practiceMode.ts` 的
  *   註解與 `scoreCategory: speaking` 都是這個語意）。文字作答是設計稿的變體，要開放
  *   得先有一個派發設定。
- * * `textDefaultHidden: false` —— 設計稿的「先聽後看」預設隱藏題目文字，但那要有題目
- *   語音才成立（沒有語音又把文字藏起來，學生就沒有東西可依據）。題目語音是選配的，
- *   所以這裡先一律顯示；要做「先聽後看」同樣需要一個派發設定。
+ * * `textDefaultHidden` —— 「先聽後看」（#1133 設計）：題目出現時自動唸、文字先藏起來，
+ *   學生按「英」才看。題目語音是**瀏覽器朗讀題目文字**（speakEnglish，不依賴老師有沒有上傳
+ *   音檔），所以只要瀏覽器能朗讀就預設隱藏；不能朗讀（沒有 speechSynthesis）才一律顯示，
+ *   免得學生沒有東西可依據（#1158 E-2：實測沒聽到語音、直接看到文字，就是這裡原本寫死 false）。
  */
+/** 瀏覽器能不能朗讀題目（見 scenarioChatSettings 的 textDefaultHidden） */
+export function canSpeakQuestions(): boolean {
+  return typeof window !== "undefined" && "speechSynthesis" in window;
+}
+
 export function scenarioChatSettings({
   showTranslation,
   isPreviewMode,
 }: ChatSettingsInput) {
   return {
     replyMode: "voice" as const,
-    textDefaultHidden: false,
+    textDefaultHidden: canSpeakQuestions(),
     showTranslation,
     isPreviewMode,
     maxAttempts: SCENARIO_MAX_ATTEMPTS,
@@ -92,8 +98,23 @@ function imageAlt(questionNumber: number): string {
   return `Question ${questionNumber} image`;
 }
 
+/** 情境圖網址陣列 → 對話式 UI 的圖片（見檔頭「情境圖」） */
+function scenarioImages(raw: unknown): ScenarioChatContext["images"] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(text)
+    .filter(Boolean)
+    .map((src, i) => ({ src, alt: `Scenario image ${i + 1}` }));
+}
+
 const text = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
+
+/** 計數欄位：非負整數才算，其他（null、負數、字串）一律 0 */
+const count = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
 
 /**
  * 老師端 content detail → 對話式 UI 的 context／items。
@@ -111,8 +132,7 @@ export function scenarioChatFromTeacherContent(
   const context: ScenarioChatContext = {
     title: text(detail.title),
     content: text(settings.scenario_content),
-    // 見檔頭：後端還沒有情境配圖欄位
-    images: [],
+    images: scenarioImages(settings.scenario_images),
     rubric: text(settings.global_rubric),
     level: text(settings.question_level),
   };
@@ -150,12 +170,21 @@ export interface ScenarioStudentActivity {
     scenario_content?: string | null;
     global_rubric?: string | null;
     translate_language?: string | null;
+    scenario_images?: string[] | null;
   } | null;
   items?: Array<{
     id?: number;
     text?: string | null;
     translation?: string | null;
     image_url?: string | null;
+    /** 學生自己已存的錄音（已提交唯讀紀錄、接著上次進度用，#1158 E6／E-4） */
+    recording_url?: string | null;
+    /** 這題已用掉的正式作答次數（伺服器計數，#1158 E-4） */
+    ai_analysis_count?: number | null;
+    /** 這題已用掉的求助次數（伺服器計數，#1158 E-4） */
+    help_count?: number | null;
+    /** 老師已把這題標成通過（#1158 修正 E4：重新進入後不能再試） */
+    teacher_passed?: boolean | null;
     scenario_dialogue?: {
       keywords?: string[];
       rubric_note?: string;
@@ -182,8 +211,7 @@ export function scenarioChatFromStudentActivity(
   const context: ScenarioChatContext = {
     title: text(activity.title),
     content: text(settings.scenario_content),
-    // 見檔頭：後端還沒有情境配圖欄位
-    images: [],
+    images: scenarioImages(settings.scenario_images),
     rubric: text(settings.global_rubric),
   };
 
@@ -200,6 +228,18 @@ export function scenarioChatFromStudentActivity(
         keywords: [...(block.keywords ?? [])],
         rubricNote: rubricNote || undefined,
         images: imageUrl ? [{ src: imageUrl, alt: imageAlt(index + 1) }] : [],
+        ...(text(item.recording_url)
+          ? { submittedAudioUrl: text(item.recording_url) }
+          : {}),
+        // 伺服器計數（#1158 E-4）：重新進入後的剩餘次數以它為準
+        ...(count(item.ai_analysis_count)
+          ? { priorAttempts: count(item.ai_analysis_count) }
+          : {}),
+        ...(count(item.help_count)
+          ? { priorHelp: count(item.help_count) }
+          : {}),
+        // 老師已通過（#1158 修正 E4）：只認 true，null／false 都不算
+        ...(item.teacher_passed === true ? { teacherPassed: true } : {}),
       };
     },
   );

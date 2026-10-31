@@ -12,6 +12,7 @@
 | 文件 | 用途 |
 |---|---|
 | [`ui-style-guide.md`](./ui-style-guide.md) | UI 規範：色調、按鈕層級、字型圓角間距、版面規則、共用元件目錄 |
+| [`.claude/skills/guided-chat/SKILL.md`](../../.claude/skills/guided-chat/SKILL.md) | 「新增內容」改成引導式對話：清點→轉成問題→套用 `shared/guided-chat/` 元件與流程引擎→驗收（範例：情境對話）。元件清單見 `ui-style-guide.md` 第 6.2 節 |
 | [`grading-page-architecture.md`](./grading-page-architecture.md) | 批改頁新增作業類型：同一個路由，依 `practice_mode` 換 Panel |
 | [`score-category-mapping.md`](./score-category-mapping.md) | 作業計分類別（口說／閱讀／寫作／聽力）的判定對照表 |
 | [`question-bank-question-types.md`](./question-bank-question-types.md) | 題庫新增題型：同一個 sheet 依題型分流，附加題型檢查清單 |

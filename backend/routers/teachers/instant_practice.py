@@ -11,7 +11,7 @@ All records are kept for review in the assignment management page.
 
 import logging
 import random
-from typing import Literal, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator, model_validator
@@ -31,7 +31,10 @@ from models import (
     AssignmentStatus,
 )
 from utils.permissions import check_content_access
-from utils.practice_mode import validate_practice_mode
+from utils.practice_mode import (
+    practice_mode_fits_content_type,
+    validate_practice_mode,
+)
 from utils.score_category import resolve_score_category
 from .dependencies import get_current_teacher
 from utils import scenario_dialogue as sd
@@ -46,9 +49,9 @@ class InstantPracticeRequest(BaseModel):
 
     content_id: int
     classroom_id: Optional[int] = None
-    practice_mode: Literal[
-        "reading", "rearrangement", "word_reading", "word_selection", "tug_of_war"
-    ] = "reading"
+    # #1158 E-4：改用單一真相源驗證（同 reconfigure）；是否屬於這份內容的類型在 handler 裡
+    # 查到 content 後再驗（_raise_if_mode_unfit）
+    practice_mode: str = "reading"
     time_limit_per_question: Optional[int] = None
     shuffle_questions: bool = False
     show_answer: bool = False
@@ -59,12 +62,40 @@ class InstantPracticeRequest(BaseModel):
     show_option_images: Optional[bool] = False  # Issue #631
     show_example_sentence: Optional[bool] = False  # Issue #860
 
+    @field_validator("practice_mode")
+    @classmethod
+    def _check_practice_mode(cls, v: str) -> str:
+        return validate_practice_mode(v)
+
     @model_validator(mode="after")
     def _option_images_xor_image(self) -> "InstantPracticeRequest":
         if self.show_image and self.show_option_images:
             raise ValueError("show_image and show_option_images are mutually exclusive")
         # Issue #860: 「顯示例句」是獨立附加開關，與圖片/選項圖片/播放音檔皆不互斥。
         return self
+
+
+def _raise_if_mode_unfit(practice_mode: str, contents) -> None:
+    """practice_mode 不屬於內容類型可用的模式 → 422（#1158 E-4）。
+
+    例如情境對話內容只能用 scenario_dialogue，不能切成 reading（學生端會拿情境題目去
+    跑例句朗讀）。create 與 reconfigure 共用。
+    """
+    for content in contents:
+        if not practice_mode_fits_content_type(practice_mode, content.type):
+            content_type = getattr(content.type, "value", content.type)
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "PRACTICE_MODE_NOT_SUPPORTED",
+                    "message": (
+                        f"practice_mode {practice_mode!r} is not available for "
+                        f"{content_type} content"
+                    ),
+                    "practice_mode": practice_mode,
+                    "content_type": content_type,
+                },
+            )
 
 
 def _ensure_distractors_for_content(db: Session, content_id: int) -> None:
@@ -166,6 +197,8 @@ async def create_instant_practice(
     )
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
+
+    _raise_if_mode_unfit(request.practice_mode, [content])
 
     # Issue #860: 即刻練習原本不走派發驗證，但開啟「顯示例句（答案挖空）」後同樣
     # 需要例句 + 可定位的 cloze 答案，否則學生端挖不出空。重用派發流程同一支守衛，
@@ -388,6 +421,20 @@ async def reconfigure_instant_practice(
             status_code=403, detail="You don't have permission for this practice"
         )
 
+    # #1158 E-4：只能切到這份內容類型可用的模式（例如情境對話不能切成 reading）。
+    # 要在寫入設定之前擋。
+    copy_contents = (
+        db.query(Content)
+        .join(
+            AssignmentContent,
+            AssignmentContent.content_id == Content.id,
+        )
+        .options(selectinload(Content.content_items))
+        .filter(AssignmentContent.assignment_id == assignment.id)
+        .all()
+    )
+    _raise_if_mode_unfit(request.practice_mode, copy_contents)
+
     # Issue #860: 與 create_instant_practice / 派發 create·PUT·PATCH 一致 —— 開啟
     # 「顯示例句（答案挖空）」時，本作業的副本內容必須齊備例句 + 可定位的 cloze 答案。
     # 少了這道守衛，老師從練習畫面切到「顯示例句」會拿到 200，學生端卻因 fail-closed
@@ -395,16 +442,6 @@ async def reconfigure_instant_practice(
     if request.show_example_sentence:
         from routers.assignments.crud import _raise_if_missing_examples
 
-        copy_contents = (
-            db.query(Content)
-            .join(
-                AssignmentContent,
-                AssignmentContent.content_id == Content.id,
-            )
-            .options(selectinload(Content.content_items))
-            .filter(AssignmentContent.assignment_id == assignment.id)
-            .all()
-        )
         _raise_if_missing_examples(
             copy_contents,
             request.practice_mode,

@@ -18,7 +18,7 @@ import ReadingAssessmentPanel from "@/components/ReadingAssessmentPanel";
 import VocabularySetPanel from "@/components/VocabularySetPanel";
 import BatchGradingModal from "@/components/BatchGradingModal";
 import { apiClient } from "@/lib/api";
-import type { PracticeMode } from "@/lib/practiceMode";
+import { supportsAiBatchGrading, type PracticeMode } from "@/lib/practiceMode";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -1032,6 +1032,10 @@ export default function TeacherAssignmentDetailPage() {
     );
   }
 
+  // #1158：情境對話批改維持老師手動評分 —— 不顯示紫色「AI 批改」
+  const showAiGradeButton =
+    canUseAiGrading && supportsAiBatchGrading(assignment?.practice_mode);
+
   return (
     <TeacherLayout>
       <div className="space-y-6">
@@ -1083,8 +1087,8 @@ export default function TeacherAssignmentDetailPage() {
                   <CheckCircle className="h-4 w-4 mr-2" />
                   {t("assignmentDetail.buttons.gradeAssignment")}
                 </Button>
-                {/* AI批改按鈕 — 只有額度足夠時顯示 (#227) */}
-                {canUseAiGrading && (
+                {/* AI批改按鈕 — 只有額度足夠時顯示 (#227)；情境對話不顯示（#1158） */}
+                {showAiGradeButton && (
                   <div className="flex-1 flex flex-col">
                     <Button
                       onClick={() => setShowBatchGradingModal(true)}

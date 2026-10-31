@@ -358,6 +358,9 @@ class BatchGradeFinalizeResponse(BaseModel):
     graded_count: int
     unchanged_count: int
     total_count: int
+    # #1158：情境對話作業不能退回訂正，決定為 RETURNED 的學生略過（狀態不變），
+    # 在這裡回報人數；其他作業類型永遠是 0。
+    return_not_allowed_count: int = 0
 
 
 # Issue #335 item 5: typed request bodies for the manual/teacher grading

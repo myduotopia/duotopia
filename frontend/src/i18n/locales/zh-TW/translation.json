@@ -2066,6 +2066,15 @@
         "scenarioPreviewNeedsContent": "請先選擇要派發的情境對話教材",
         "scenarioPreviewEmpty": "此教材沒有題目可預覽",
         "scenarioPreviewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
+        "replyMode": "作答方式",
+        "replyModeOption": {
+          "voice": "語音",
+          "text": "打字"
+        },
+        "replyModeDesc": {
+          "voice": "學生錄音回答"
+        },
+        "replyModeComingSoon": "即將上線",
         "selectModePrompt": "選擇一個模式查看預覽",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
@@ -3412,6 +3421,7 @@
     "selectDecisionFirst": "請先選擇狀態（退回或完成）",
     "singleSubmitSuccess": "已完成批改：{{name}}",
     "allSubmitSuccess": "已完成批改：{{graded}} 位完成，{{returned}} 位退回，{{unchanged}} 位待決定",
+    "returnNotAllowedSkipped": "情境對話作業目前不能退回訂正，已略過 {{count}} 位學生的「退回」",
     "returnForCorrection": "退回訂正",
     "averageAccuracy": "平均準確度",
     "averageFluency": "平均流暢度",
@@ -4606,6 +4616,9 @@
       "suggestedDuration": "建議錄音時長",
       "tapToRecord": "點一下開始錄音",
       "tapToStop": "再點一下停止",
+      "send": "送出",
+      "playRecording": "試聽 {{duration}}",
+      "startRecordingDisabled": "開始錄音（{{reason}}）",
       "stopRecording": "停止錄音",
       "processing": "處理中…",
       "reRecord": "重錄"
@@ -4959,11 +4972,11 @@
       "overridden": "本題自訂",
       "globalRubric": "作答指引（學生看得到）",
       "generateCount": "一次產生幾題",
-      "reference": "設定對照",
       "scenarioContent": "情境內容",
       "articleLevel": "文章難度",
       "questionLevel": "題目難度",
-      "scenarioText": "情境文章"
+      "scenarioText": "情境文章",
+      "questionImage": "題目圖片"
     },
     "rubricPresets": {
       "tenseTime": "時間",
@@ -4984,15 +4997,10 @@
     "buttons": {
       "generating": "產生中…",
       "addQuestion": "新增題目",
-      "editSettings": "回對話修改",
-      "backToSettings": "上一步：回到對話",
-      "viewQuestions": "查看題目清單",
-      "generateAnother": "再產一批題目",
       "uploadImage": "上傳圖片",
       "replaceImage": "替換",
       "removeImage": "移除",
       "generateImage": "AI 生成",
-      "comingSoon": "即將推出",
       "expandScenario": "展開全文",
       "collapseScenario": "收合"
     },
@@ -5003,10 +5011,9 @@
       "referenceAnswer": "給 AI 對照語言特徵用（時態、句型、用字），學生看不到；也是回饋「建議答案」的依據",
       "visibleToStudents": "這段文字會提供給 AI 評分，學生作答時也看得到",
       "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目",
-      "referenceNote": "對照情境與作答指引，確認題目出得合不合適",
-      "noRubricYet": "尚未設定作答指引",
       "optional": "選填",
-      "noContextYet": "尚未設定情境內容"
+      "noContextYet": "尚未設定情境內容",
+      "questionsEmpty": "題目會出現在這裡"
     },
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
@@ -5019,11 +5026,6 @@
       "generateFailed": "AI 產生失敗，請稍後再試",
       "goalRequired": "請先填寫訓練目標",
       "audioFailed": "語音產生失敗，請稍後再試",
-      "imagePromptRequired": "請先填寫題目或產生題目，才有生圖的依據",
-      "imageQuotaExceeded": "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片",
-      "imageBlocked": "這個描述沒辦法生成圖片，請換個描述再試",
-      "imageFailed": "圖片生成失敗，請稍後再試",
-      "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
       "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入",
       "extractFailedFiles": "這些檔案沒有擷取成功：{{files}}。其他檔案的內容已放進情境框，可以再傳一次失敗的檔案。",
       "extractAllFailed": "檔案都沒有擷取成功：{{files}}。可以再傳一次，或直接把情境貼進情境框。",
@@ -5052,6 +5054,11 @@
     "tenseCombo": "{{time}}{{aspect}}",
     "chat": {
       "typing": "AI 輸入中",
+      "conversation": "對話",
+      "submittedRecord": "你的作答紀錄",
+      "noAnswer": "沒有作答",
+      "previousAnswer": "上次的回答",
+      "previousAnswerNoAudio": "上次有作答，但沒有留下錄音",
       "previewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
       "recordingTooLong": "錄音太長了（最多 {{seconds}} 秒），請重新錄一段短一點的。",
       "recordingTooShort": "這段錄音太短，聽不到內容，請再錄一次。",
@@ -5061,6 +5068,7 @@
       "feedbackFailed": "AI 建議暫時拿不到，請再試一次。",
       "questionImages": "題目圖片",
       "questionNo": "第 {{no}} / {{total}} 題",
+      "questionNoRetrying": "第 {{no}} / {{total}} 題・重答中",
       "skipped": "略過",
       "averageScore": "本題平均 {{score}}",
       "playQuestion": "播放題目",
@@ -5071,12 +5079,17 @@
       "referenceAnswer": "參考答案",
       "attemptNo": "第 {{no}} 次",
       "aiScore": "AI {{score}} 分",
-      "verdictGreat": "很棒！",
+      "verdictGreat": "很棒",
       "verdictImprove": "可以更好",
+      "verdictSeparator": "・",
       "suggestion": "建議說法",
       "listenSuggestion": "聽建議說法",
+      "modelAnswerTitle": "可以這樣說",
+      "phraseLabel": "英文說法",
+      "listenPhrase": "聽這個說法",
       "retry": "再試一次",
       "attemptsUsedUp": "已達 {{max}} 次，即將進入下一題",
+      "attemptsUsedUpFinish": "已達 {{max}} 次，即將結束對話",
       "start": "開始對話",
       "submitAssignment": "提交作業",
       "finishedHint": "可以往上捲重聽，或在還沒答滿的題目按「再試一次」",
@@ -5088,12 +5101,20 @@
       "waitTyping": "AI 正在輸入…",
       "waitFeedback": "AI 正在看你的回答…",
       "waitAutoNext": "即將進入下一題…",
+      "waitAutoFinish": "即將結束對話…",
       "waitChoose": "請在上方選擇「再試一次」或「下一題」",
+      "waitChooseShort": "請在上方選擇",
+      "waitRubric": "看完作答要求就開始",
+      "rubricIntro": "先看一下作答要求 👇",
+      "rubricCountdown": "{{count}} 秒後開始",
+      "landscapeTitle": "請把手機轉回直立再作答",
+      "landscapeHint": "錄音中轉成橫的，這段錄音會作廢，轉回直立後要重錄。",
       "previewMode": "預覽模式",
       "jumpToNo": "跳到第 {{no}} 題",
       "intro": "嗨！我會問你 {{count}} 個問題，請聽完後用英文回答。準備好就按「開始對話」。",
       "next": "下一題",
-      "closing": "今天的對話到這裡，你表現得很好！檢查一下，沒問題就提交作業吧。",
+      "closing": "全部答完了！請點下面的綠色按鈕提交作業 👇",
+      "closingPreview": "全部答完了！（預覽不會送出）",
       "newMessages": "新訊息",
       "showEnglishFull": "顯示英文",
       "hideEnglish": "隱藏英文",
@@ -5105,9 +5126,49 @@
       "goToNo": "捲到第 {{no}} 題",
       "dotLocked": "第 {{no}} 題：還沒到這題",
       "notYet": "還沒到這題",
+      "answeredNotReached": "已作答，對話到這題後可查看",
+      "dotAnsweredLocked": "第 {{no}} 題：已作答，對話到這題後可查看",
+      "currentQuestion": "第 {{no}} 題：目前這題",
+      "previewNoSubmit": "預覽不會送出",
       "attemptsReached": "已達 {{max}} 次",
+      "teacherPassed": "老師已通過",
       "retrying": "正在重答第 {{no}} 題",
       "cancelRetry": "取消重答"
+    },
+    "imageGen": {
+      "titleScenario": "AI 生成情境圖",
+      "titleQuestion": "AI 生成題目圖",
+      "hint": "AI 會依描述畫一張黑白線稿。描述可以直接修改，改好再按「生成」。",
+      "descriptionLabel": "圖片描述",
+      "placeholder": "例如：兩個學生在公園野餐，桌上有三明治和果汁",
+      "suggesting": "AI 正在擬描述…",
+      "suggestFailed": "AI 沒擬出描述，可以自己寫一段再按「生成」",
+      "generate": "生成",
+      "generating": "生成中…",
+      "generatingHint": "正在畫圖，大約需要 10～20 秒",
+      "closeLocked": "圖片生成中，完成後可關閉",
+      "imageReplacedDuringGenerate": "這題在生圖時已經換了圖，AI 生成的圖沒有放上去",
+      "quotaLoading": "讀取額度中…",
+      "billing": {
+        "admin": "管理員不限張數",
+        "org": "使用機構點數，每張約 {{points}} 點",
+        "points": "使用方案點數，每張約 {{points}} 點",
+        "subscription": "本月還可以生成 {{remaining}} / {{limit}} 張；超過每月 {{limit}} 張後會用到方案點數（每張約 {{points}} 點）",
+        "free_daily": "今天還可以生成 {{remaining}} / {{limit}} 張，每天重置"
+      },
+      "blocked": {
+        "admin": "目前無法生成",
+        "org": "機構與個人方案的點數都不足，無法生成；可以改用「上傳圖片」",
+        "points": "方案點數不足，無法生成；可以改用「上傳圖片」",
+        "subscription": "本月的 {{limit}} 張已用完，方案點數也不足；可以改用「上傳圖片」",
+        "free_daily": "今天的 {{limit}} 張已用完，明天會重置；可以改用「上傳圖片」"
+      },
+      "errors": {
+        "quota": "AI 生圖額度已用完，可以改用「上傳圖片」",
+        "inProgress": "上一張圖還在生成，請等它完成再生成下一張",
+        "blocked": "這個描述沒辦法生成圖片，請換個描述再試",
+        "failed": "圖片生成失敗，請稍後再試"
+      }
     },
     "images": {
       "label": "情境圖",
@@ -5116,6 +5177,8 @@
       "add": "上傳圖片",
       "full": "情境圖最多 {{max}} 張，請先刪掉一張再上傳",
       "fullShort": "已滿 5 張",
+      "generate": "AI 生圖",
+      "fullGenerate": "情境圖最多 {{max}} 張，請先刪掉一張再生成",
       "remove": "刪除這張情境圖",
       "crop": "調整裁切範圍",
       "cropUnavailable": "這張圖是之前存的，沒有原圖可以重新裁切；要換範圍請刪掉後重新上傳",
@@ -5128,13 +5191,9 @@
       "someNotCropped": "有些圖沒辦法自動裁下來，可以自己另外上傳"
     },
     "setup": {
-      "change": "改選",
-      "back": "回上一步",
-      "next": "下一步",
+      "betaNote": "測試版本，可能會有錯誤",
       "startGenerate": "開始產生",
-      "actionBar": "操作",
       "countOption": "{{count}} 題",
-      "writeArticle": "請 AI 寫情境",
       "writingArticle": "好，我依「{{goal}}」寫一篇 {{level}} 程度的情境，請稍等…",
       "extracting": "擷取中…",
       "uploadFile": "上傳圖片／PDF",
@@ -5142,25 +5201,23 @@
       "directionPlaceholder": "例如：週末做什麼、對手機進教室的看法",
       "materialRequired": "請先提供情境（文字或情境圖）或出題方向，AI 才知道要問什麼",
       "reaskFallback": "我沒看懂這段要怎麼用，可以再具體一點嗎？",
-      "reopenConfirmTitle": "要改前面的回答嗎？",
-      "reopenConfirmDescription": "後面的設定會清空，已產生的題目保留。",
       "reopenConfirm": "改選",
       "modeChangeConfirmTitle": "要改選嗎？",
-      "modeChangeConfirmDescription": "已填的情境文章與情境圖會清空，已產生的題目保留。",
       "q": {
         "mode": "需要提供給學生一段文章或圖片，作為問答情境嗎？",
         "goal": "這次想訓練學生什麼？告訴我訓練目標、選好文章難度，我來寫一篇情境。",
-        "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張）。",
+        "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張），也可以請 AI 畫情境圖。",
         "scenarioExisting": "請把情境貼在下面，或上傳圖片／PDF 讓我擷取文字和圖片（情境圖最多 5 張）。",
         "source": "題目怎麼來？",
         "direction": "想問學生什麼呢？說個主題或方向，我來照著出題",
         "settings": "好的，請確認出題設定，按「開始產生」我就開始出題。",
-        "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。"
+        "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。",
+        "manualInput": "請直接把題目打在下面，一次可以打好幾題"
       },
       "modes": {
         "none": "我不需要情境，想直接問學生問題",
         "existing": "有既有的教材作為情境",
-        "ai": "我需要 AI 幫我生成文章作為情境"
+        "ai": "我需要 AI 幫我生成文章或圖片作為情境"
       },
       "modeHints": {
         "existing": "上傳文字、圖片或 PDF 檔"
@@ -5171,8 +5228,76 @@
       },
       "answers": {
         "goal": "訓練目標：「{{goal}}」（文章難度 {{level}}）",
-        "scenario": "情境文章 {{chars}} 字、情境圖 {{images}} 張"
-      }
+        "scenario": "已確認情境（文章 {{chars}} 字、情境圖 {{images}} 張）"
+      },
+      "placeholders": {
+        "goal": "例如：在夜市點餐、問路",
+        "manualInput": "直接打題目，一次可以打好幾題",
+        "done": "可以直接打新題目，或說「再出 3 題關於…」；也可以說「把第 2 題改成過去式」"
+      },
+      "chips": {
+        "scenario": "情境",
+        "source": "來源",
+        "direction": "方向",
+        "settings": "設定",
+        "editScenario": "編輯情境內容"
+      },
+      "chipValues": {
+        "mode": {
+          "none": "不需要",
+          "existing": "既有教材",
+          "ai": "AI 生成"
+        },
+        "source": {
+          "manual": "自己輸入",
+          "ai": "AI 出題"
+        }
+      },
+      "settingsUpdatedNote": "已更新出題設定",
+      "modeChangeKeepQuestionsDescription": "情境會清空，題目和設定保留。",
+      "sourceChangeConfirmTitle": "要改題目來源嗎？",
+      "sourceChangeConfirmDescription": "出題方向和設定會清空。",
+      "rewriteConfirmTitle": "要重寫情境嗎？",
+      "rewriteConfirmDescription": "會重寫情境文章，目前的文章會被取代。",
+      "rewriteConfirm": "重寫",
+      "useScenario": "用這篇情境",
+      "generatedNote": "已產生 {{count}} 題，題目在題目清單",
+      "fullReason": "已滿 {{max}} 題",
+      "sourceLocked": "已經有題目了，不能改題目來源"
+    },
+    "compose": {
+      "full": "已滿 {{max}} 題，請先在右邊刪除題目",
+      "added": "已加入 {{count}} 題",
+      "noneAdded": "沒有加入題目",
+      "skipped": "已略過 {{count}} 段與題目無關的內容",
+      "outputTruncated": "部分題目沒讀到，請分次輸入",
+      "tooLong": "內容太長，請分次輸入",
+      "requestedOverRoom": "只剩 {{count}} 個空位，先出 {{count}} 題",
+      "overLimitTitle": "題目超過上限",
+      "overLimitDescription": "只會加入前 {{count}} 題（上限 {{max}} 題），要加入嗎？",
+      "overLimitConfirm": "加入",
+      "reviseQuestionsTitle": "改寫題目",
+      "reviseQuestionsDescription": "會改寫 {{count}} 題，原本的內容會被取代",
+      "reviseScenarioTitle": "改寫情境文章",
+      "reviseScenarioDescription": "會改寫情境文章",
+      "reviseConfirm": "改寫",
+      "revisedQuestions": "已改寫 {{count}} 題",
+      "revisedScenario": "已改寫情境文章",
+      "revisedScenarioHint": "題目和情境圖沒有跟著改，需要的話可以說「把題目改成配合新情境」",
+      "reviseQuestionsCancelled": "沒有修改題目",
+      "reviseScenarioCancelled": "沒有修改情境文章",
+      "noQuestionsToRevise": "目前還沒有題目可以修改",
+      "noScenarioToRevise": "目前沒有情境可以修改",
+      "reviseOutOfRange": "找不到要修改的題目（目前共 {{count}} 題）",
+      "reviseTruncated": "部分題目沒改到，請再說一次要改哪幾題"
+    },
+    "context": {
+      "title": "情境",
+      "edit": "編輯",
+      "done": "完成",
+      "rewrite": "重寫",
+      "rewriting": "重寫中…",
+      "rewriteHint": "改訓練目標或文章難度後按「重寫」，AI 會重寫情境文章"
     }
   },
   "vocabularySet": {
@@ -5392,6 +5517,7 @@
     "completeSuccess": "已完成 {{count}} 位學生批改",
     "completeFailed": "完成批改失敗",
     "returnShort": "退回",
+    "returnNotAllowedScenario": "情境對話作業目前不能退回訂正",
     "gradeShort": "完成",
     "resetShort": "還原",
     "resetBtn": "還原（{{count}}）",
@@ -5858,6 +5984,7 @@
     "modeLabel": "練習模式",
     "creating": "建立中...",
     "start": "開始練習",
+    "noModes": "這份教材目前沒有可用的練習模式",
     "error": "建立即刻練習失敗",
     "advancedSettings": "進階設定",
     "applyAndRestart": "套用並重新開始",
@@ -6776,6 +6903,32 @@
       "createSuccess": "班級建立成功",
       "createFailed": "建立班級失敗，請稍後再試",
       "updateSuccess": "班級更新成功"
+    }
+  },
+  "guidedChat": {
+    "placeholders": {
+      "choice": "請點選上面的選項",
+      "text": "請在這裡輸入…",
+      "card": "請先完成上面的卡片",
+      "pending": "產生中，請稍候…"
+    },
+    "log": {
+      "changed": "已把{{label}}改成：{{value}}"
+    },
+    "change": "改選",
+    "tabs": {
+      "chat": "對話",
+      "side": "題目（{{count}}）"
+    },
+    "chips": {
+      "label": "已選項目",
+      "expand": "展開",
+      "collapse": "收合",
+      "apply": "確定"
+    },
+    "composer": {
+      "label": "對話輸入框",
+      "send": "送出"
     }
   }
 }

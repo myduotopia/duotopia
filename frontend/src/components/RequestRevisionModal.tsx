@@ -9,6 +9,7 @@
  *
  * 退回訂正 → batch-return-for-revision（小考會建訂正 session、凍結分數）。
  * 完成批改 → finalize-batch-grade（勾選學生設 GRADED;不覆寫分數）。
+ * 情境對話作業不能退回訂正（#1158）：批次與每列「退回」停用，滑過說明原因。
  *
  * title 顯示作業名稱 + 上一份/下一份箭頭。學生名單在 modal 內捲動。
  */
@@ -38,6 +39,7 @@ import {
 import StudentStatusPanel, {
   type StudentProgress,
 } from "@/components/StudentStatusPanel";
+import { canReturnForRevision } from "@/lib/practiceMode";
 
 interface HubAssignment {
   id: number;
@@ -189,6 +191,8 @@ export function RequestRevisionModal({
   // 送出前先排除已是 RETURNED 的學生（取消其勾選）。
   const handleReturn = useCallback(async () => {
     if (!current) return;
+    // #1158：情境對話作業不能退回訂正（按鈕已停用，這裡再擋一次）
+    if (!canReturnForRevision(current.practice_mode)) return;
     const ids = selected.filter((id) => {
       const s = students.find((x) => x.student_id === id);
       return !!s && s.status !== "RETURNED";
@@ -328,6 +332,8 @@ export function RequestRevisionModal({
   const handleReturnOne = useCallback(
     async (studentId: number) => {
       if (!current) return;
+      // #1158：情境對話作業不能退回訂正（列按鈕已停用，這裡再擋一次）
+      if (!canReturnForRevision(current.practice_mode)) return;
       try {
         await apiClient.post(
           `/api/teachers/assignments/${current.id}/batch-return-for-revision`,
@@ -434,6 +440,10 @@ export function RequestRevisionModal({
   const resetCount = countExcluding("NOT_STARTED", "unassigned");
   const returnCount = countExcluding("RETURNED");
   const gradeCount = countExcluding("GRADED");
+  // #1158：情境對話作業不能退回訂正 → 批次退回鈕停用並說明原因
+  const returnBlockedReason = canReturnForRevision(current?.practice_mode)
+    ? undefined
+    : t("gradingHub.returnNotAllowedScenario", "情境對話作業目前不能退回訂正");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -538,21 +548,32 @@ export function RequestRevisionModal({
               count: resetCount,
             })}
           </Button>
-          <Button
-            type="button"
-            onClick={handleReturn}
-            disabled={submitting || aiGrading || returnCount === 0}
-            className="h-8 px-3 py-1 text-[13px] bg-orange-600 hover:bg-orange-700 text-white"
-          >
-            {submitting ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <RotateCcw className="h-4 w-4 mr-2" />
-            )}
-            {t("gradingHub.returnBtn", "退回訂正（{{count}}）", {
-              count: returnCount,
-            })}
-          </Button>
+          {/* #1158：停用的 Button 吃不到滑鼠（pointer-events-none），原因掛在外層 span */}
+          <span className="flex" title={returnBlockedReason}>
+            <Button
+              type="button"
+              onClick={handleReturn}
+              disabled={
+                submitting ||
+                aiGrading ||
+                returnCount === 0 ||
+                !!returnBlockedReason
+              }
+              title={returnBlockedReason}
+              className="w-full h-8 px-3 py-1 text-[13px] bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-2" />
+              )}
+              {returnBlockedReason
+                ? t("batchGrading.returnForCorrection", "退回訂正")
+                : t("gradingHub.returnBtn", "退回訂正（{{count}}）", {
+                    count: returnCount,
+                  })}
+            </Button>
+          </span>
           <Button
             type="button"
             onClick={handleComplete}

@@ -12,6 +12,9 @@
  * chunk —— SpeechSDK 內部 class 繼承鏈在 production bundle 對 eager import 很敏感，
  * 一同打包會在進頁時 `Class extends value undefined` crash 整頁）。
  *
+ * 右欄「要求訂正」：自動評分模式不顯示；不能退回的類型（#1158 情境對話，
+ * canReturnForRevision）停用並說明原因 —— 由本頁以 props 指示，右欄元件不感知模式。
+ *
  * 新增作業類型 / 修改此分流邏輯前請先閱讀：
  *   docs/design/grading-page-architecture.md
  */
@@ -23,7 +26,7 @@ import { useTranslation } from "react-i18next";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 import { Assignment } from "@/types";
-import type { PracticeMode } from "@/lib/practiceMode";
+import { canReturnForRevision, type PracticeMode } from "@/lib/practiceMode";
 import {
   GradingHeader,
   StudentListPanel,
@@ -1300,6 +1303,12 @@ export default function GradingPage() {
                   isAutoScoredMode(submission?.practice_mode)
                     ? undefined
                     : handleRequestRevision
+                }
+                // #1158：情境對話作業不能退回訂正 → 退回鈕停用並說明原因
+                returnDisabledReason={
+                  canReturnForRevision(submission?.practice_mode)
+                    ? undefined
+                    : t("gradingHub.returnNotAllowedScenario")
                 }
                 isAutoScored={isAutoScoredMode(submission?.practice_mode)}
                 // #861 c-2: 小考分數改為可編輯（老師可手動調整後按 graded 存檔），

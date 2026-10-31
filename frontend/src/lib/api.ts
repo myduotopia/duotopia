@@ -81,6 +81,53 @@ function parseSuccessBody<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/** 生圖種類（#1158）：情境圖或題目圖 */
+export type ScenarioImageKind = "scenario" | "question";
+
+/**
+ * compose 送出的既有題目（#1158 修正 C6）。`number` 是右欄畫面上的題號（1 起算；
+ * 中間有空白題時不連續），AI 修改題目時回的 `revisions[].index` 就是這個數字。
+ */
+export interface ScenarioComposeExistingQuestion {
+  number: number;
+  question: string;
+  translation: string;
+  keywords: string[];
+  reference_answer: string;
+  image_prompt: string;
+}
+
+/** compose 修改題目的一筆結果（#1158 修正 C6）：`index` ＝題號（1 起算） */
+export interface ScenarioComposeRevision {
+  index: number;
+  question: string;
+  translation: string;
+  keywords: string[];
+  reference_answer: string;
+  image_prompt: string;
+}
+
+/** compose 沒辦法照做的原因代碼（#1158 修正 C6）；空字串＝一般答非所問 */
+export type ScenarioComposeRefusal =
+  | ""
+  | "full"
+  | "no_questions"
+  | "no_scenario"
+  | "revise_out_of_range";
+
+/** `GET /scenario-dialogue/image-quota` 的回傳（#1158） */
+export interface ScenarioImageQuota {
+  billing: "admin" | "org" | "subscription" | "points" | "free_daily";
+  /** 剩餘張數；以點數計費（org / points）或 admin 時為 null */
+  remaining: number | null;
+  limit: number | null;
+  period: "day" | "month" | null;
+  /** 一張圖大約會扣的點數 */
+  points_per_image_estimate: number;
+  /** 現在按得下去嗎（後端已算好） */
+  can_generate: boolean;
+}
+
 /**
  * Custom API Error class for better error handling
  */
@@ -1551,7 +1598,9 @@ class ApiClient {
     item_progress_id: number;
     ui_language?: string;
   }): Promise<{
-    verdict: "improve" | "great";
+    /** #1158：phrase／model_answer 是求助（不算次數、verdict 為 null）；舊回應沒有＝feedback */
+    kind?: "feedback" | "phrase" | "model_answer";
+    verdict: "improve" | "great" | null;
     comment: string;
     suggestion?: string | null;
     ai_analysis_count: number;
@@ -1630,22 +1679,114 @@ class ApiClient {
   }
 
   /**
-   * 逐題 AI 生圖（Issue #1024）。
+   * 對話框打字（#1158 C 段）：一次 AI 呼叫判斷老師是「自己打題目」（`add_questions`）
+   * 還是「請 AI 再出題」（`generate`），並產出題目。
    *
-   * `image_prompt` 是產題時 AI 一併回傳、存在 item_metadata 裡的生圖描述，前端只是
-   * 帶回去，不解讀內容。後端會把兒童相關描述改寫成場景（Imagen 對兒童影像有嚴格
-   * 限制），所以送回來的 `prompt` 可能與送出去的不同。
+   * 輸入是產題請求的共通部分（不含 `count`）＋老師打的 `text`；`existing_questions` 只放
+   * 非空白題，後端依此算剩餘名額。
+   *
+   * - `add_questions`：translation 一律空字串；**不截斷**到剩餘名額，`truncated_count`
+   *   告訴前端超出幾題，由前端確認後截斷。
+   * - `generate`：最多出剩餘名額那麼多題；`requested_count` 是老師要的題數（沒說為 0）。
+   * - `usable=false`：整段與題目無關，只回 `reask`，不計次。
+   * - `output_truncated`：AI 輸出被截斷，只救回部分題目（提示老師分次輸入）。
+   *
+   * - `revise_questions`（修正 C6）：`revisions` 是要改的題目，`index` ＝題號（1 起算，
+   *   ＝送出的 `existing_questions[].number`，右欄畫面上的第幾題），其餘是改寫後的完整欄位。
+   * - `revise_scenario`（修正 C6）：`scenario_content` 是改寫後的整篇情境文章。
+   * - `refusal`（usable=false 時）：沒辦法照做的原因代碼 —— `full`（已滿 10 題卻要加題／
+   *   出題）、`no_questions`、`no_scenario`、`revise_out_of_range`；空字串＝一般答非所問。
+   *
+   * `existing_questions` 修正 C6 起送物件（題號＋完整欄位，修改題目要用），只放非空白題。
+   * 已滿 10 題也照樣呼叫（可能是修改），後端判斷出是加題／出題時回 `refusal: "full"`。
+   *
+   * 錯誤：402 本月額度用完、422 輸入過長、502 AI 失敗。
    */
-  async generateScenarioImage(imagePrompt: string): Promise<{
+  async composeScenarioQuestions(data: {
+    text: string;
+    scenario_content: string;
+    direction?: string;
+    scenario_images?: string[];
+    ui_language?: string;
+    question_level?: string;
+    global_tense?: { time: string; aspect: string } | null;
+    global_voice?: string;
+    global_rubric?: string;
+    translate_language?: string;
+    existing_questions?: ScenarioComposeExistingQuestion[];
+  }): Promise<{
+    usable: boolean;
+    reask?: string;
+    refusal?: ScenarioComposeRefusal;
+    intent:
+      | "add_questions"
+      | "generate"
+      | "revise_questions"
+      | "revise_scenario"
+      | null;
+    questions: Array<{
+      question: string;
+      translation: string;
+      keywords: string[];
+      reference_answer: string;
+      image_prompt: string;
+    }>;
+    revisions?: ScenarioComposeRevision[];
+    scenario_content?: string;
+    skipped_count?: number;
+    truncated_count?: number;
+    requested_count?: number;
+    suggested_title?: string;
+    output_truncated?: boolean;
+    usage?: { input_tokens: number; output_tokens: number };
+    estimated_cost_usd?: number;
+  }> {
+    return this.request("/api/teachers/scenario-dialogue/compose", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * AI 生圖（Issue #1024；#1158 起情境圖與題目圖共用）。
+   *
+   * `description` 是老師在生圖對話框裡確認過的描述。錯誤以狀態碼區分：
+   * 402 額度用完、409 上一張還在生成（`SCENARIO_IMAGE_IN_PROGRESS`）、
+   * 422 被安全過濾擋下（換描述）、502 AI 服務暫時失敗（稍後再試）。
+   */
+  async generateScenarioImage(data: {
+    kind: ScenarioImageKind;
+    description: string;
+  }): Promise<{
     image_url: string;
     prompt: string;
+    kind?: ScenarioImageKind;
     estimated_cost_usd?: number;
-    quota?: { used: number; remaining: number; limit: number };
+    quota?: ScenarioImageQuota;
   }> {
     return this.request("/api/teachers/scenario-dialogue/generate-image", {
       method: "POST",
-      body: JSON.stringify({ image_prompt: imagePrompt }),
+      body: JSON.stringify(data),
     });
+  }
+
+  /**
+   * AI 先擬一段生圖描述（#1158），給老師在生圖對話框裡改。不計任何次數。
+   * 情境圖帶情境文章；題目圖可以只帶題目。
+   */
+  async suggestScenarioImageDescription(data: {
+    scenario_content?: string;
+    question?: string;
+  }): Promise<{ description: string }> {
+    return this.request(
+      "/api/teachers/scenario-dialogue/suggest-image-description",
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  }
+
+  /** 老師目前的生圖計費方式與剩餘量（#1158），生圖對話框顯示用 */
+  async getScenarioImageQuota(): Promise<ScenarioImageQuota> {
+    return this.request("/api/teachers/scenario-dialogue/image-quota");
   }
 
   /**

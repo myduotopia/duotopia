@@ -1,4 +1,11 @@
-import { useState } from "react";
+/**
+ * StudentLayout — 學生端版面：左側選單（< lg 收成 ☰ 抽屜）、頂部標題列、內容區（Outlet）。
+ *
+ * 內容區的頁面可經 StudentLayoutChromeContext 要求窄螢幕（< lg）隱藏頂部標題列（#1158 E-3，
+ * 目前只有情境對話作答頁用，把高度留給作答畫面；其他作業類型統一處理在 #1166）。
+ * 隱藏時 ☰ 也一起不見，作答頁自己的「返回」鈕回到作業。
+ */
+import { useMemo, useState } from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useStudentAuthStore } from "@/stores/studentAuthStore";
@@ -7,6 +14,8 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { ClassroomSwitcher } from "@/components/ClassroomSwitcher";
 import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
+import { StudentLayoutChromeContext } from "@/contexts/StudentLayoutChromeContext";
+import { cn } from "@/lib/utils";
 import {
   BookOpen,
   Home,
@@ -25,6 +34,9 @@ export default function StudentLayout() {
   const location = useLocation();
   const { user, logout } = useStudentAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // #1158 E-3：作答頁要求窄螢幕隱藏標題列
+  const [hideHeaderOnMobile, setHideHeaderOnMobile] = useState(false);
+  const chrome = useMemo(() => ({ setHideHeaderOnMobile }), []);
 
   const handleLogout = () => {
     logout();
@@ -251,7 +263,13 @@ export default function StudentLayout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
+        <header
+          className={cn(
+            "bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700",
+            hideHeaderOnMobile && "hidden lg:block",
+          )}
+          data-testid="student-layout-header"
+        >
           <div className="px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -284,7 +302,9 @@ export default function StudentLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto relative bg-notebook">
-          <Outlet />
+          <StudentLayoutChromeContext.Provider value={chrome}>
+            <Outlet />
+          </StudentLayoutChromeContext.Provider>
         </main>
       </div>
     </div>
