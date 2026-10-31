@@ -20,6 +20,7 @@
  *     { "goto": "/teacher/classrooms" },
  *     { "click": "text=分組" },
  *     { "fill": ["input[name=name]", "第一組"] },
+ *     { "selectOption": ["select#grade", "7"] },
  *     { "waitFor": "text=第一組" },
  *     { "wait": 800 }
  *   ]
@@ -99,6 +100,7 @@ async function runSteps(page, base, steps) {
     else if (step.click) await page.locator(step.click).first().click();
     else if (step.fill) await page.locator(step.fill[0]).first().fill(step.fill[1]);
     else if (step.hover) await page.locator(step.hover).first().hover();
+    else if (step.selectOption) await page.locator(step.selectOption[0]).first().selectOption(step.selectOption[1]);
     else if (step.waitFor) await page.locator(step.waitFor).first().waitFor();
     else if (step.wait) await page.waitForTimeout(Number(step.wait));
     else fail(`不認得的步驟：${JSON.stringify(step)}`);
