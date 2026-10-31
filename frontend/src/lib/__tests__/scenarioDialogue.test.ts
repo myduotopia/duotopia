@@ -58,7 +58,56 @@ describe("toScenarioSavePayload — 整份設定", () => {
       global_voice: "active",
       translate_language: "chinese",
       tts_settings: { accent: "US", gender: "Female", speed: "Normal x1" },
+      // #1146：舊呼叫端沒帶對話紀錄與情境圖 → 一律送空值，不送 undefined
+      scenario_images: [],
+      scenario_mode: "",
+      question_source: "",
+      goal: "",
+      article_level: "",
+      direction: "",
     });
+  });
+
+  it("#1146 對話紀錄與情境圖原樣送出，空白網址略過", () => {
+    const { scenario_settings } = toScenarioSavePayload(
+      makeInput({
+        scenarioImages: ["https://cdn/a.png", " ", "https://cdn/b.png"],
+        scenarioMode: "ai",
+        questionSource: "ai",
+        goal: "交通工具與問路",
+        articleLevel: "A2",
+        direction: "",
+      }),
+    );
+    expect(scenario_settings.scenario_images).toEqual([
+      "https://cdn/a.png",
+      "https://cdn/b.png",
+    ]);
+    expect(scenario_settings.scenario_mode).toBe("ai");
+    expect(scenario_settings.question_source).toBe("ai");
+    expect(scenario_settings.goal).toBe("交通工具與問路");
+    expect(scenario_settings.article_level).toBe("A2");
+  });
+
+  it("#1146 回填：已存的對話紀錄與情境圖還原，舊資料落成空值", () => {
+    const state = fromScenarioContentDetail({
+      id: 1,
+      scenario_settings: {
+        scenario_images: ["https://cdn/a.png"],
+        scenario_mode: "none",
+        question_source: "ai",
+        direction: "週末做什麼",
+      },
+    });
+    expect(state.scenarioImages).toEqual(["https://cdn/a.png"]);
+    expect(state.scenarioMode).toBe("none");
+    expect(state.questionSource).toBe("ai");
+    expect(state.direction).toBe("週末做什麼");
+
+    const old = fromScenarioContentDetail({ id: 2, scenario_settings: {} });
+    expect(old.scenarioImages).toEqual([]);
+    expect(old.scenarioMode).toBe("");
+    expect(old.goal).toBe("");
   });
 
   it("情境內容留空仍然存得起來（老師自己出題是合法路徑）", () => {

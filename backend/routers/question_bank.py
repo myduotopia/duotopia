@@ -16,6 +16,7 @@
 - GET    /api/question-bank/exam-points?q=            考點清單（含 alias 命中）
 - GET    /api/question-bank/sources?q=                來源清單（平台公用 + 自己機構 + 自己建的）
 - POST   /api/question-bank/sources                   新增來源（可打字下拉的「新增」）
+- /api/question-bank/exam-imports…                   上傳題本匯入（#1112；端點在 question_bank_exam_imports.py）
 
 可見範圍、重複偵測、考點歸一都在 services/question_bank_service.py，這裡只做
 驗證、權限與序列化。列表的 filter 參數已含 P3（#1066）需要的全部欄位。
@@ -82,7 +83,11 @@ from routers.question_bank_schemas import (
     SourceCreate,
     _validate_options,
 )
-from routers import question_bank_ai_routes, question_bank_groups
+from routers import (
+    question_bank_ai_routes,
+    question_bank_exam_imports,
+    question_bank_groups,
+)
 from routers.question_bank_common import (
     _exam_point_out,
     _grade_filter,
@@ -456,6 +461,11 @@ def replace_program_links(
 # ============ AI 工具（#1065；端點在 routers/question_bank_ai_routes.py）============
 
 router.include_router(question_bank_ai_routes.router)
+
+
+# ============ 上傳題本匯入（#1112；端點在 routers/question_bank_exam_imports.py）============
+
+router.include_router(question_bank_exam_imports.router)
 
 
 @router.get("/exam-points")

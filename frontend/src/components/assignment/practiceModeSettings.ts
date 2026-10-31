@@ -134,6 +134,37 @@ const AUDIO_LOCKS_SHOW_ANSWER: ReadonlySet<PracticeMode> = new Set([
   "word_cloze_quiz",
 ]);
 
+/**
+ * 開關說明文字的「依模式覆寫」規則；回 `null` 代表用該設定鍵的通用文案。
+ *
+ * 同一個設定鍵在不同模式指的不是同一件事：
+ *
+ * | 模式 | `show_translation` 顯示的是 |
+ * |---|---|
+ * | `word_*` | 單字的翻譯（通用文案就是在講這個） |
+ * | `reading` | 句子的翻譯（#880） |
+ * | `scenario_dialogue` | 口說題目的翻譯 —— 情境對話沒有單字，用通用文案等於講錯 |
+ *
+ * 抽成純函式是為了**驗得到**：這條規則原本寫在 `PracticeModeSettingsPanel` 的 render
+ * 裡，新增模式時漏掉不會有型別或測試訊號（情境對話就是這樣漏的）。同檔測試有一條
+ * 回歸護欄會掃過 registry，確保不吃單字集的模式都有自己的文案。
+ *
+ * 回傳的是 i18n key 的**尾段**，前綴由呼叫端補 —— 這個模組不碰 i18n namespace。
+ */
+export function toggleDescOverride(
+  key: SettingKey,
+  mode: PracticeMode,
+): string | null {
+  if (key === "show_answer" && mode === "rearrangement") {
+    return "showAnswerDesc";
+  }
+  if (key === "show_translation") {
+    if (mode === "reading") return "showSentenceTranslationDesc";
+    if (mode === "scenario_dialogue") return "showQuestionTranslationDesc";
+  }
+  return null;
+}
+
 export function isShowAnswerLockedByAudio(
   mode: PracticeMode,
   value: PracticeModeSettings,

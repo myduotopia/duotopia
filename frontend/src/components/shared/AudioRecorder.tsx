@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import AudioPlayer from "./AudioPlayer";
+import AudioRecorderChatControls from "./AudioRecorderChatControls";
 import { Mic, MicOff, Square, RotateCcw, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AudioErrorData } from "@/utils/audioErrorLogger";
@@ -43,7 +44,12 @@ interface AudioRecorderProps {
   errorMessage?: string;
 
   // UI customization
-  variant?: "default" | "compact" | "minimal";
+  /**
+   * `chat`（#1133 情境對話）：大圓麥克風，點一下開始（秒數＋聲波）、再點停止 →
+   * 可試聽／重錄；不包 Card、不跳「錄音完成」toast（由外層決定何時送出）。
+   * 畫面在 AudioRecorderChatControls.tsx。
+   */
+  variant?: "default" | "compact" | "minimal" | "chat";
   className?: string;
   showProgress?: boolean;
   showTimer?: boolean;
@@ -71,6 +77,7 @@ export default function AudioRecorder({
   autoStop,
 }: AudioRecorderProps) {
   const { t } = useTranslation();
+  const isChat = variant === "chat";
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -81,6 +88,8 @@ export default function AudioRecorder({
   const [status, setStatus] = useState<
     "idle" | "recording" | "completed" | "error"
   >(externalStatus);
+  // 按下停止到音檔驗證完成之間（約 1 秒），chat 版顯示處理中
+  const [isStopping, setIsStopping] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -110,6 +119,7 @@ export default function AudioRecorder({
 
   // Cleanup helper - 消除重複代碼
   const cleanup = useCallback(() => {
+    setIsStopping(false);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -282,12 +292,14 @@ export default function AudioRecorder({
             return;
           }
 
-          // 驗證通過，設定錄音
-          toast.success(t("audioRecorder.toast.recordingComplete"), {
-            description: t("audioRecorder.toast.recordingDuration", {
-              duration: validationResult.duration.toFixed(1),
-            }),
-          });
+          // 驗證通過，設定錄音（chat 版直接顯示試聽，不另跳 toast）
+          if (!isChat) {
+            toast.success(t("audioRecorder.toast.recordingComplete"), {
+              description: t("audioRecorder.toast.recordingDuration", {
+                duration: validationResult.duration.toFixed(1),
+              }),
+            });
+          }
 
           setLocalAudioUrl(audioUrl);
           setStatus("completed");
@@ -369,6 +381,7 @@ export default function AudioRecorder({
     autoStop,
     cleanup,
     recordingTime,
+    isChat,
   ]);
 
   // Stop recording
@@ -378,6 +391,7 @@ export default function AudioRecorder({
   // browser has time to flush the final chunk before we signal stop.
   const stopRecording = useCallback(async () => {
     if (mediaRecorderRef.current && isRecording) {
+      setIsStopping(true);
       if (mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.requestData();
         // Give the browser ~80 ms to deliver the final ondataavailable event
@@ -428,6 +442,32 @@ export default function AudioRecorder({
 
   // Render based on variant
   const renderRecordingControls = () => {
+    if (isChat) {
+      return (
+        <AudioRecorderChatControls
+          isRecording={isRecording}
+          isStopping={isStopping}
+          // 有上限時連上限一起顯示（"0:12 / 2:00"）—— 學生要在**錄的時候**知道
+          // 還剩多久，而不是送出後才被伺服器以 400 擋下來（#1140）
+          recordingTimeLabel={
+            autoStop
+              ? `${formatTime(recordingTime)} / ${formatTime(autoStop)}`
+              : formatTime(recordingTime)
+          }
+          audioUrl={localAudioUrl}
+          showError={status === "error"}
+          errorMessage={errorMessage}
+          description={description}
+          readOnly={readOnly}
+          disabled={disabled}
+          onStart={startRecording}
+          onStop={stopRecording}
+          onReRecord={handleReRecord}
+          onError={onError}
+        />
+      );
+    }
+
     if (variant === "minimal") {
       return (
         <div className="flex items-center gap-3">
@@ -629,6 +669,10 @@ export default function AudioRecorder({
       </div>
     );
   };
+
+  if (isChat) {
+    return <div className={className}>{renderRecordingControls()}</div>;
+  }
 
   return (
     <Card className={cn("p-6", className)}>

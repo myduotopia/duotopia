@@ -15,7 +15,11 @@
  * B2-b（後續）：router #1 的 word/quiz 分支。
  */
 import type { ReactNode } from "react";
-import type { PracticeMode } from "@/lib/practiceMode";
+import {
+  PRACTICE_MODE_REGISTRY,
+  type PracticeDataset,
+  type PracticeMode,
+} from "@/lib/practiceMode";
 import WordReadingPreview from "@/components/activities/WordReadingPreview";
 import WordSelectionPreview from "@/components/activities/WordSelectionPreview";
 import WordSpellingPreview from "@/components/activities/WordSpellingPreview";
@@ -25,6 +29,41 @@ import WordSpellingQuizPreview from "@/components/activities/WordSpellingQuizPre
 import WordClozeQuizPreview from "@/components/activities/WordClozeQuizPreview";
 import RearrangementPreview from "@/components/activities/RearrangementPreview";
 import ReadingPreview from "@/components/activities/ReadingPreview";
+import ScenarioDialoguePreview from "@/components/activities/ScenarioDialoguePreview";
+
+/**
+ * 我們為哪些資料集準備了「沒選教材時可以借來預覽」的範例教材。
+ *
+ * * `vocabulary_set` —— `PREVIEW_VOCAB_CONTENT_ID` 那份示範單字集（word_* 的 fallback）
+ * * `example_sentences` —— `/api/demo/config` 的 demo 作業（reading / rearrangement 的 ByDemo）
+ *
+ * **新增資料集預設不在此列**，而這是刻意的：寧可少說一句，也不要對老師宣稱預覽用了
+ * 一份其實不存在的範例教材。情境對話就是這樣 —— 它只吃自己的資料集，借範例單字集
+ * 等於顯示一個永遠派不出去的畫面（見 `ScenarioDialoguePreview` 檔頭），所以沒選教材
+ * 時它顯示的是「請先選擇教材」，不是範例內容。
+ */
+const DATASETS_WITH_SAMPLE_MATERIAL: ReadonlySet<PracticeDataset> =
+  new Set<PracticeDataset>(["vocabulary_set", "example_sentences"]);
+
+/**
+ * 這次預覽顯示的是「範例教材」還是「老師自己選的教材」（Issue #1136）。
+ *
+ * 所有 wrapper 的規則一致：**拿得到 `contentId` 就用那份真實教材**，拿不到才退回
+ * 範例。預覽上方的標題與免責說明要照這個結果走 —— 原本不分情況都寫「預覽使用範例
+ * 教材、設定不會跟著變動」，但購物車有教材時兩句話都是錯的。
+ *
+ * 放在這個檔案是因為「哪個模式用哪個 wrapper」就登記在隔壁的 `DISPATCH_PREVIEW`，
+ * 兩者要一起看、一起改。
+ */
+export function previewUsesSampleMaterial(
+  mode: PracticeMode,
+  contentId: number | null | undefined,
+): boolean {
+  if (contentId != null) return false;
+  return PRACTICE_MODE_REGISTRY[mode].supportedDatasets.some((dataset) =>
+    DATASETS_WITH_SAMPLE_MATERIAL.has(dataset),
+  );
+}
 
 /** 派發預覽用的設定子集（鏡射 AssignmentDialog 的 formData 相關欄位/型別）。 */
 export interface DispatchPreviewSettings {
@@ -163,6 +202,18 @@ export const DISPATCH_PREVIEW: Partial<
       contentId={contentId}
       shuffleQuestions={settings.shuffle_questions}
       timeLimitPerQuestion={settings.time_limit_per_question}
+      showTranslation={settings.show_translation}
+    />
+  ),
+  // 刻意不吃 vocabFallbackContentId：情境對話只吃自己的資料集，借示範單字集來預覽
+  // 等於顯示一個永遠派不出去的畫面（見 ScenarioDialoguePreview 檔頭）。
+  //
+  // #1140 Stage 2: 不傳 time_limit_per_question —— 對話式 UI 目前沒有倒數計時，
+  // 傳進去也不會有人用。這是已知缺口（要嘛在對話 UI 做倒數，要嘛把這個設定從
+  // 情境對話的 settings 移掉），記在 #1140，不在這裡假裝有在用。
+  scenario_dialogue: ({ contentId, settings }) => (
+    <ScenarioDialoguePreview
+      contentId={contentId}
       showTranslation={settings.show_translation}
     />
   ),

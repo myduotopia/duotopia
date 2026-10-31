@@ -533,6 +533,10 @@ async def get_assignment_activities(
                             "text": q_text,
                             "translation": q_translation,
                             "audio_url": q_audio,
+                            # #1140 Stage 3: 題目圖片。情境對話的對話式作答畫面會顯示
+                            # 它（老師生圖或自己上傳的，#1024），之前沒傳 —— 老師在
+                            # 派發預覽看得到圖、學生卻看不到，等於預覽在說謊。
+                            "image_url": ci.image_url,
                             "order_index": ci.order_index,
                         }
 

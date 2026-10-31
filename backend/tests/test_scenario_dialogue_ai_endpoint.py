@@ -27,8 +27,9 @@ def captured(monkeypatch):
     """把服務層換成固定回傳，並記下呼叫參數。"""
     calls = {}
 
-    async def fake_article(self, goal, level=""):
+    async def fake_article(self, goal, level="", ui_language="zh-TW"):
         calls["article"] = {"goal": goal, "level": level}
+        calls["article_ui_language"] = ui_language
         return {
             "content": "It is Monday morning.",
             "usage": {"input_tokens": 10, "output_tokens": 20},
@@ -43,10 +44,17 @@ def captured(monkeypatch):
             "estimated_cost_usd": 0.0002,
         }
 
-    async def fake_extract(self, file_bytes, mime_type):
-        calls["extract"] = {"size": len(file_bytes), "mime": mime_type}
+    async def fake_extract(self, file_bytes, mime_type, ui_language="zh-TW"):
+        calls["extract"] = {
+            "size": len(file_bytes),
+            "mime": mime_type,
+            "ui_language": ui_language,
+        }
         return {
             "content": "Extracted passage.",
+            "figures": [{"page": 1, "box_2d": [10, 20, 300, 400]}],
+            "suggested_title": "Shopping",
+            "truncated": False,
             "usage": {"input_tokens": 5, "output_tokens": 6},
             "estimated_cost_usd": 0.00005,
         }
@@ -102,7 +110,7 @@ def test_generate_article_invalid_params_return_400(
 ):
     from services import scenario_dialogue_ai as mod
 
-    async def boom(self, goal, level=""):
+    async def boom(self, goal, level="", ui_language="zh-TW"):
         raise ScenarioDialogueAIError("訓練目標不可為空")
 
     monkeypatch.setattr(mod.ScenarioDialogueAIService, "generate_article", boom)
@@ -119,7 +127,7 @@ def test_generate_article_provider_error_returns_502(
 ):
     from services import scenario_dialogue_ai as mod
 
-    async def boom(self, goal, level=""):
+    async def boom(self, goal, level="", ui_language="zh-TW"):
         raise RuntimeError("vertex exploded")
 
     monkeypatch.setattr(mod.ScenarioDialogueAIService, "generate_article", boom)
@@ -337,3 +345,89 @@ def test_bad_params_still_return_400(test_client, auth_headers_teacher, monkeypa
     )
     assert resp.status_code == 400
     assert "情境內容" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------- #1146
+
+
+def test_generate_questions_without_scenario_forwards_direction(
+    test_client, auth_headers_teacher, captured
+):
+    """「不需要情境，問日常生活」：沒有情境文章，只帶出題方向也要能出題。"""
+    resp = test_client.post(
+        QUESTIONS_URL,
+        headers=auth_headers_teacher,
+        json={
+            "direction": "問學生週末通常做什麼",
+            "count": 5,
+            "ui_language": "en",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    sent = captured["questions"]
+    assert sent["scenario_content"] == ""
+    assert sent["direction"] == "問學生週末通常做什麼"
+    assert sent["scenario_images"] == []
+    assert sent["ui_language"] == "en"
+
+
+def test_generate_questions_forwards_scenario_images(
+    test_client, auth_headers_teacher, captured
+):
+    images = [f"https://storage.googleapis.com/b/images/{i}.png" for i in range(5)]
+    resp = test_client.post(
+        QUESTIONS_URL,
+        headers=auth_headers_teacher,
+        json={"scenario_content": "S", "count": 3, "scenario_images": images},
+    )
+    assert resp.status_code == 200, resp.text
+    assert captured["questions"]["scenario_images"] == images
+
+
+def test_generate_questions_rejects_more_than_five_images(
+    test_client, auth_headers_teacher, captured
+):
+    images = [f"https://storage.googleapis.com/b/images/{i}.png" for i in range(6)]
+    resp = test_client.post(
+        QUESTIONS_URL,
+        headers=auth_headers_teacher,
+        json={"scenario_content": "S", "count": 3, "scenario_images": images},
+    )
+    assert resp.status_code == 422
+    assert "questions" not in captured
+
+
+def test_generate_article_forwards_ui_language(
+    test_client, auth_headers_teacher, captured
+):
+    resp = test_client.post(
+        ARTICLE_URL,
+        headers=auth_headers_teacher,
+        json={"goal": "transport", "ui_language": "en"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert captured["article_ui_language"] == "en"
+
+
+def test_extract_article_returns_figures(test_client, auth_headers_teacher, captured):
+    """擷取要一併回檔內圖片的座標，前端才裁得出情境圖。"""
+    resp = test_client.post(
+        EXTRACT_URL, headers=auth_headers_teacher, files={"file": _png()}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["figures"] == [{"page": 1, "box_2d": [10, 20, 300, 400]}]
+
+
+def test_extract_article_returns_suggested_title_and_ui_language(
+    test_client, auth_headers_teacher, captured
+):
+    """#1146 使用者決定 5：擷取同一次呼叫一併建議標題，標題語言跟老師介面語言。"""
+    resp = test_client.post(
+        EXTRACT_URL,
+        headers=auth_headers_teacher,
+        files={"file": _png()},
+        data={"ui_language": "en"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["suggested_title"] == "Shopping"
+    assert captured["extract"]["ui_language"] == "en"

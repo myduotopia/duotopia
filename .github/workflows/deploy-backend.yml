@@ -296,7 +296,7 @@ jobs:
               'subscription_periods', 'point_usage_logs', 'credit_packages', 'plans',
               'magic_paste_usage',
               -- 情境對話 AI 生圖月配額（#1024，JWT auth 業務表）
-              'scenario_image_usage',
+              'scenario_image_usage', 'scenario_text_usage',
               'teacher_subscription_transaction', 'teacher_subscription_transactions', 'invoice_status_history',
               'user_word_progress', 'practice_sessions', 'practice_answers',
               'organizations', 'schools', 'teacher_organizations', 'teacher_schools', 'classroom_schools', 'student_schools',
@@ -325,6 +325,8 @@ jobs:
               'exam_points', 'exam_point_aliases', 'question_sources',
               'question_groups', 'question_group_segments', 'questions', 'question_options',
               'question_exam_points', 'question_source_links', 'question_program_links',
+              -- 上傳題本匯入草稿與用量（#1112，JWT auth 業務表）
+              'exam_imports', 'exam_import_pages', 'exam_import_usage',
               -- n8n 系統表（外部服務，不適用 RLS）
               'annotation_tag_entity', 'auth_identity', 'auth_provider_sync_history', 'binary_data',
               'chat_hub_agents', 'chat_hub_messages', 'chat_hub_sessions', 'credentials_entity',

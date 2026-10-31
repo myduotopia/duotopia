@@ -205,6 +205,25 @@ jobs:
           echo "ENABLE_SCENARIO_DIALOGUE=true" >> $GITHUB_OUTPUT
         fi
 
+        # 情境對話「派發」的開關，與上面的「建立教材入口」分開（#1052 的註解寫明
+        # 兩者各管各的）。staging / develop 開著讓團隊驗證「派發 → 學生作答 →
+        # 批改」整條線；驗完要開 prod 就把下面 main 那行改成 true。
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=false" >> $GITHUB_OUTPUT
+        else
+          echo "ENABLE_SCENARIO_DIALOGUE_DISPATCH=true" >> $GITHUB_OUTPUT
+        fi
+
+        # Issue #1112 — 題庫「上傳題本」。同樣的理由：擷取引擎與上傳畫面已經進
+        # staging，但人工驗證還沒做完，而這一版 staging→main 要帶上其他功能。
+        # prod 先關著，staging / develop 保持開啟才驗得下去。
+        # 驗完把下面 main 那行改成 true。
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "ENABLE_QUESTION_BANK_EXAM_IMPORT=false" >> $GITHUB_OUTPUT
+        else
+          echo "ENABLE_QUESTION_BANK_EXAM_IMPORT=true" >> $GITHUB_OUTPUT
+        fi
+
     - name: Resolve Supabase Realtime values per environment
       id: supabase
       run: |
@@ -231,6 +250,8 @@ jobs:
         echo "VITE_ENVIRONMENT=${{ steps.env_vars.outputs.ENV_NAME }}" >> .env
         echo "VITE_ENABLE_GROUP_BUY=${{ steps.feature_flags.outputs.ENABLE_GROUP_BUY }}" >> .env
         echo "VITE_ENABLE_SCENARIO_DIALOGUE=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE }}" >> .env
+        echo "VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE_DISPATCH }}" >> .env
+        echo "VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT=${{ steps.feature_flags.outputs.ENABLE_QUESTION_BANK_EXAM_IMPORT }}" >> .env
         echo "Created .env with:"
         cat .env
 
@@ -268,6 +289,8 @@ jobs:
           --build-arg VITE_ENVIRONMENT=${{ steps.env_vars.outputs.ENV_NAME }} \
           --build-arg VITE_ENABLE_GROUP_BUY=${{ steps.feature_flags.outputs.ENABLE_GROUP_BUY }} \
           --build-arg VITE_ENABLE_SCENARIO_DIALOGUE=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE }} \
+          --build-arg VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH=${{ steps.feature_flags.outputs.ENABLE_SCENARIO_DIALOGUE_DISPATCH }} \
+          --build-arg VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT=${{ steps.feature_flags.outputs.ENABLE_QUESTION_BANK_EXAM_IMPORT }} \
           --build-arg VITE_TAPPAY_SERVER_TYPE=$TAPPAY_SERVER_TYPE \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_ID=$TAPPAY_PRODUCTION_APP_ID \
           --build-arg VITE_TAPPAY_PRODUCTION_APP_KEY=$TAPPAY_PRODUCTION_APP_KEY \

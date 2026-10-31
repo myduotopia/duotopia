@@ -1,3 +1,13 @@
+/**
+ * AudioPlayer — 播放音檔（播放／暫停、進度條、時間、重新播放）。
+ *
+ * variant：default（大卡）、compact（一列）、minimal（只有播放鈕）。
+ * tone（選用，#1133）：`onPrimary` 給放在主色藍底上的地方（例如情境對話的學生回答氣泡），
+ * 只影響 compact 外觀：不鋪綠底、按鈕半透明白、進度條與文字白色。預設 `default` ＝原本綠色外觀，
+ * 既有使用處不變。
+ * fallbackDuration（選用，秒，#1133）：音檔還讀不到時長時（例如 Chrome 錄音 webm 播放前常是
+ * 未知）改顯示這個秒數，不顯示 `--:--`；讀到真正時長後以真正時長為準。不傳時行為不變。
+ */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Pause, RotateCcw, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,7 +25,11 @@ interface AudioPlayerProps {
   autoPlay?: boolean;
   showTitle?: boolean;
   variant?: "default" | "compact" | "minimal";
+  /** compact 專用配色：onPrimary＝放在主色藍底上（淺色按鈕）；預設綠色外觀 */
+  tone?: "default" | "onPrimary";
   readOnly?: boolean;
+  /** 讀不到音檔時長時改顯示的秒數（例如錄音當下記下的秒數）；不傳＝顯示 --:-- */
+  fallbackDuration?: number;
 }
 
 export default function AudioPlayer({
@@ -29,7 +43,9 @@ export default function AudioPlayer({
   autoPlay = false,
   showTitle = true,
   variant = "default",
+  tone = "default",
   readOnly = false,
+  fallbackDuration,
 }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -298,7 +314,11 @@ export default function AudioPlayer({
     return null;
   }
 
-  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // 讀不到真正時長時，用外層給的秒數顯示（不傳 fallbackDuration 時就是 duration）
+  const shownDuration =
+    duration > 0 ? duration : (fallbackDuration ?? duration);
+  const progressPercentage =
+    shownDuration > 0 ? Math.min(100, (currentTime / shownDuration) * 100) : 0;
 
   // Minimal variant - only play button
   if (variant === "minimal") {
@@ -321,10 +341,12 @@ export default function AudioPlayer({
   }
 
   if (variant === "compact") {
+    const onPrimary = tone === "onPrimary";
     return (
       <div
         className={cn(
-          "bg-green-50 rounded-lg p-3 flex items-center gap-3",
+          "rounded-lg flex items-center gap-3",
+          onPrimary ? "p-0" : "bg-green-50 p-3",
           className,
         )}
       >
@@ -332,7 +354,12 @@ export default function AudioPlayer({
 
         <button
           onClick={togglePlayback}
-          className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-700 transition-colors"
+          className={cn(
+            "rounded-full flex items-center justify-center transition-colors",
+            onPrimary
+              ? "w-11 h-11 bg-white/20 hover:bg-white/30"
+              : "w-10 h-10 bg-green-600 hover:bg-green-700",
+          )}
         >
           {isPlaying ? (
             <Pause className="w-5 h-5 text-white" />
@@ -350,26 +377,45 @@ export default function AudioPlayer({
 
         <div className="flex-1 flex items-center gap-2">
           <div
-            className="flex-1 h-1.5 bg-green-200 rounded-full cursor-pointer overflow-hidden"
+            className={cn(
+              "flex-1 h-1.5 rounded-full cursor-pointer overflow-hidden",
+              onPrimary ? "bg-white/30" : "bg-green-200",
+            )}
             onClick={handleProgressClick}
           >
             <div
-              className="h-full bg-green-500 rounded-full transition-all duration-100"
+              className={cn(
+                "h-full rounded-full transition-all duration-100",
+                onPrimary ? "bg-white" : "bg-green-500",
+              )}
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
-          <span className="text-xs text-gray-700 font-medium whitespace-nowrap min-w-[65px] text-right">
-            {formatTime(currentTime)} / {formatTime(duration, true)}
+          <span
+            className={cn(
+              "text-xs font-medium whitespace-nowrap min-w-[65px] text-right",
+              onPrimary ? "text-primary-foreground" : "text-gray-700",
+            )}
+          >
+            {formatTime(currentTime)} / {formatTime(shownDuration, true)}
           </span>
         </div>
 
         {!readOnly && (
           <button
             onClick={resetPlayback}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-green-100 transition-colors"
+            className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
+              onPrimary ? "hover:bg-white/20" : "hover:bg-green-100",
+            )}
             title="重新播放"
           >
-            <RotateCcw className="w-4 h-4 text-green-600" />
+            <RotateCcw
+              className={cn(
+                "w-4 h-4",
+                onPrimary ? "text-white" : "text-green-600",
+              )}
+            />
           </button>
         )}
       </div>
@@ -423,7 +469,7 @@ export default function AudioPlayer({
 
             {/* Time Display - Current / Total */}
             <span className="text-sm text-gray-700 font-medium whitespace-nowrap min-w-[80px] text-right">
-              {formatTime(currentTime)} / {formatTime(duration, true)}
+              {formatTime(currentTime)} / {formatTime(shownDuration, true)}
             </span>
           </div>
         </div>

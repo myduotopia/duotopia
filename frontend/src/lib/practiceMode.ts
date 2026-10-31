@@ -38,6 +38,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ScoreCategory } from "@/utils/scoreCategory";
+import { ENABLE_SCENARIO_DIALOGUE_DISPATCH } from "@/config/featureFlags";
 
 export type PracticeMode =
   | "reading"
@@ -421,8 +422,15 @@ export const PRACTICE_MODE_REGISTRY: Record<PracticeMode, ModeConfig> = {
     burnsTokens: false,
     autoGraded: false,
     gradable: true,
-    settings: [SELECT_TIME_READING, TOGGLE_SHOW_TRANSLATION],
-    defaults: { time_limit_per_question: 30 },
+    // #1140 Stage 3: **刻意沒有每題時間限制**。
+    //
+    // 對話式作答畫面（#1133）沒有倒數計時（ScenarioChatSettings 沒有這個欄位，
+    // ReplyComposer／AudioRecorderChatControls 也沒有），留著 SELECT_TIME_READING
+    // 等於讓老師調一個完全沒有作用的設定 —— 對老師說謊比少一個設定糟。
+    //
+    // 要開放限時得先在對話 UI 做倒數（CountdownRing 已有現成元件），那是獨立的一張單。
+    settings: [TOGGLE_SHOW_TRANSLATION],
+    defaults: {},
     chipTitleKey: `${PM}.scenario_dialogue`,
     chipDescKey: `${PM}.scenario_dialogueDesc`,
     chipSelectedClass: "border-purple-500 bg-purple-50 text-purple-700",
@@ -759,7 +767,7 @@ export function getModeConfig(mode?: string | null): ModeConfig | undefined {
  * AssignmentDialog chip 列的顯示順序（base 模式後緊接其小考）。tug_of_war 不經 dialog 派發，
  * 故不在此清單；`listModesForDataset` 也據此排除。
  */
-const ASSIGNABLE_MODE_ORDER: PracticeMode[] = [
+export const ASSIGNABLE_MODE_ORDER: PracticeMode[] = [
   "reading",
   "rearrangement",
   "word_reading",
@@ -836,7 +844,13 @@ export const DATASET_DISPATCH_STATUS: Record<
 > = {
   example_sentences: "released",
   vocabulary_set: "released",
-  scenario_dialogue: "in_development",
+  // 情境對話改成 per-environment：staging / develop 開著讓團隊驗證
+  // 「派發 → 學生作答 → 批改」整條線，production 關著直到驗完
+  // （同 ENABLE_SCENARIO_DIALOGUE 的做法，值由 deploy-frontend.yml 依分支給）。
+  // 這張表仍是唯一開關 —— 不要在元件或其他 helper 另外加判斷。
+  scenario_dialogue: ENABLE_SCENARIO_DIALOGUE_DISPATCH
+    ? "released"
+    : "in_development",
 };
 
 export function isDatasetDispatchable(dataset: PracticeDataset): boolean {

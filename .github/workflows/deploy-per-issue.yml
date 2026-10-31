@@ -283,6 +283,8 @@ jobs:
           # Per-issue previews are always non-prod test traffic — GA/Meta Pixel IDs
           # are passed empty (disabled via index.html guard) to avoid polluting
           # production analytics. (Issue #959)
+          # 情境對話開關比照 staging 打開（deploy-frontend.yml 非 main 皆為 true），
+          # 否則 per-issue 看不到情境對話功能與 /sample/scenario-dialogue。(Issue #1133)
           docker build \
             -f Dockerfile.staging \
             --build-arg VITE_API_URL="${BACKEND_URL}" \
@@ -294,6 +296,9 @@ jobs:
             --build-arg VITE_META_PIXEL_ID="" \
             --build-arg VITE_SUPABASE_URL="${{ secrets.STAGING_SUPABASE_URL }}" \
             --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.STAGING_SUPABASE_ANON_KEY }}" \
+            --build-arg VITE_ENABLE_SCENARIO_DIALOGUE=true \
+            --build-arg VITE_ENABLE_SCENARIO_DIALOGUE_DISPATCH=true \
+            --build-arg VITE_ENABLE_QUESTION_BANK_EXAM_IMPORT=true \
             -t "${IMAGE}" \
             .
 

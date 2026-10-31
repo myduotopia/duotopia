@@ -4,20 +4,27 @@
 - POST /api/teachers/scenario-dialogue/generate-questions 依情境文章與出題設定產題
 - POST /api/teachers/scenario-dialogue/extract-article    從圖片/PDF 擷取情境文章
 
+#1146：generate-article / generate-questions 多回 ``usable`` / ``reask`` /
+``suggested_title``（答非所問不產內容、不扣額度）；generate-questions 接受無情境＋
+``direction`` 與 ``scenario_images``；extract-article 多回 ``figures``（box_2d）。
+
 三個端點都**不寫 DB**：產出來的東西先回前端給老師看、能改，按儲存才走
 `/api/teachers/lessons/{id}/contents`（#1013）存起來。
 
-配額：這一版不擋，只記 token 用量與估算成本（回傳裡也帶著，方便觀測）。等實際用量
-出來再決定免費額度，屆時比照 `services/magic_paste_quota`。
+配額（#1025）：三個端點都走每月硬上限（`services/scenario_text_quota`，50 次/月），
+順序一律是「**先佔位 → 打 AI → 失敗就退款**」。生圖另有一池（30 張/月，成本貴一個
+量級，見 `services/scenario_image_quota`）。回傳仍帶 token 用量與估算成本供觀測。
 """
 
 import logging
-from typing import Annotated, Dict, List, Optional
+from collections import Counter
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional
 
 from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
     status,
@@ -31,12 +38,14 @@ from models import Teacher
 # 共用同一份教師鑑權依賴，避免 auth 邏輯分叉（同 magic_paste）
 from routers.teachers import get_current_teacher
 from services import scenario_image_quota as siq
+from services import scenario_text_quota as stq
 from services.scenario_dialogue_image import (
     ScenarioDialogueImageService,
     ScenarioImageBlockedError,
     ScenarioImageError,
     get_scenario_dialogue_image_service,
 )
+from utils.scenario_dialogue import MAX_IMAGE_URL_CHARS, MAX_SCENARIO_IMAGES
 from services.scenario_dialogue_ai import (
     MAX_TRANSLATE_LANGUAGE_CHARS,
     ScenarioDialogueAIError,
@@ -64,6 +73,10 @@ MAX_EXISTING_QUESTION_CHARS = 1000
 # 與服務層同一個來源 —— 兩邊各寫一次 1000 的話，改了 Pydantic 上限卻忘了改截斷
 # 上限（或反過來）不會有人發現（PR #1027 review）
 MAX_IMAGE_PROMPT_CHARS = ScenarioDialogueImageService.MAX_PROMPT_CHARS
+# #1146 無情境出題時的「想問的方向」—— 與訓練目標同級的自由文字
+MAX_DIRECTION_CHARS = MAX_GOAL_CHARS
+# 介面語言代碼（zh-TW / en），決定重問句與標題建議用什麼語言
+MAX_UI_LANGUAGE_CHARS = 10
 
 
 class GenerateArticleRequest(BaseModel):
@@ -72,6 +85,8 @@ class GenerateArticleRequest(BaseModel):
     goal: str = Field(max_length=MAX_GOAL_CHARS)
     # 文章難度，空字串 = 不指定（CEFR 代碼，服務層驗證）
     level: str = Field(default="", max_length=MAX_LEVEL_CHARS)
+    # #1146 老師介面語言：答非所問時的重問句與標題建議用這個語言
+    ui_language: str = Field(default="zh-TW", max_length=MAX_UI_LANGUAGE_CHARS)
 
 
 class GenerateImageRequest(BaseModel):
@@ -93,7 +108,15 @@ class GenerateImageRequest(BaseModel):
 
 
 class GenerateQuestionsRequest(BaseModel):
-    scenario_content: str = Field(max_length=MAX_SCENARIO_CHARS)
+    # #1146：情境不再必填 —— 「不需要情境，問日常生活」改用 direction 當出題依據。
+    # 兩者（加上情境圖）至少要有一個，由服務層把關。
+    scenario_content: str = Field(default="", max_length=MAX_SCENARIO_CHARS)
+    direction: str = Field(default="", max_length=MAX_DIRECTION_CHARS)
+    # 情境圖網址（最多 5 張）。服務層只讀本站 bucket / 本機 static 的圖（防 SSRF）
+    scenario_images: List[
+        Annotated[str, StringConstraints(max_length=MAX_IMAGE_URL_CHARS)]
+    ] = Field(default_factory=list, max_length=MAX_SCENARIO_IMAGES)
+    ui_language: str = Field(default="zh-TW", max_length=MAX_UI_LANGUAGE_CHARS)
     count: int
     question_level: str = Field(default="", max_length=MAX_LEVEL_CHARS)
     # 穩定代碼，例如 {"time": "past", "aspect": "simple"}；服務層會翻成英文描述
@@ -122,56 +145,181 @@ def _ai_failed(what: str, exc: Exception) -> HTTPException:
     )
 
 
+# #1146 review 9：答非所問（usable=False）會退額度，等於不限次數免費呼叫 AI。
+# 先只記錄、不設上限 —— 用 log 觀察有沒有人反覆送無效輸入，再決定要不要擋。
+# 計數存在記憶體：每個 Cloud Run instance 各自計、重啟歸零，只供觀察趨勢用。
+_reask_refund_counts: Counter = Counter()
+
+
+def _log_reask_refund(teacher: Teacher, endpoint: str) -> None:
+    key = (getattr(teacher, "id", None), endpoint)
+    _reask_refund_counts[key] += 1
+    logger.warning(
+        "scenario_text_quota | reask_refund | teacher_id=%s | endpoint=%s | count=%s",
+        key[0],
+        endpoint,
+        _reask_refund_counts[key],
+    )
+
+
+async def _with_text_quota(
+    db: Session,
+    teacher: Teacher,
+    endpoint: str,
+    run: Callable[[], Awaitable[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    """文字 AI 的配額包裝（#1025）：先佔位 → 執行 → 沒交出東西就退款。
+
+    順序很重要，不是風格問題：先查 `get_quota_status` 再打 AI 是擋不住並發的 ——
+    同一位老師在 49/50 時同時送兩個請求，兩個都會通過那次檢查（PR #1027 review）。
+    先 consume 佔位，額度用完在**打 AI 之前**就回 402，一次呼叫都不浪費。
+
+    退款走 ``finally`` 而不是在每個 except 分支各退一次：老師在 AI 跑到一半關掉分頁
+    時，Starlette 丟的是 ``asyncio.CancelledError``，它是 BaseException 而不是
+    Exception，``except Exception`` 接不到，那個名額就永遠回不來（PR #1027 review R2）。
+
+    ``year_month`` 一定要傳 consume 回傳的那個值，不能讓 refund 自己重算：AI 慢起來
+    可能跨過 UTC 午夜，扣在 A 月、退到 B 月的話 A 月永遠少一格（PR #1027 review R3）。
+
+    三個端點共用這一份，而不是各自複製 —— 上面這幾個坑每一個都是踩過才長成這樣的。
+    """
+    charge = stq.consume(db, teacher)
+    if charge["charged"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "SCENARIO_TEXT_QUOTA_EXCEEDED",
+                "message": "本月情境對話 AI 次數已用完（下個月 1 日自動重置），可以改用手動輸入。",
+                "quota": charge,
+            },
+        )
+
+    delivered = False
+    try:
+        result = await run()
+        # #1146 答非所問（usable=False）時沒有產出任何內容，只回一句重問 ——
+        # 同樣算「沒把東西交到老師手上」，退款。
+        delivered = result.get("usable") is not False
+        if not delivered:
+            _log_reask_refund(teacher, endpoint)
+        return {**result, "quota": charge}
+    finally:
+        # 沒把東西交到老師手上就退款（參數錯、模型沒產出、中途取消都算）——
+        # 扣他一次只會讓他不敢再試（比照 magic_paste 擷取到 0 項不扣額的決策）
+        final = charge
+        if not delivered:
+            try:
+                final = stq.refund(db, teacher, year_month=charge["year_month"])
+            except Exception:
+                # finally 裡再丟例外會**取代**原本要回給老師的那個錯誤（含 HTTP 狀態
+                # 碼），老師會看到一個莫名的 500。退款失敗頂多是少退一次額度，
+                # 不該把真正的原因吃掉（PR #1123 review 4）。
+                logger.exception("scenario_text_quota | 退款失敗，額度少退一次 | %s", endpoint)
+        # 印**退款後**的值。印 charge["used"] 的話，退掉的失敗會被記成已消耗，
+        # 而這些 log 正是日後用來校準 FREE_MONTHLY_LIMIT 的依據（本機 review 指出）。
+        logger.info(
+            "scenario_text_quota | %s | delivered=%s | used=%s/%s",
+            endpoint,
+            delivered,
+            final["used"],
+            final["limit"],
+        )
+
+
+@router.get("/text-quota")
+def text_quota(
+    current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """本月情境對話文字 AI 的剩餘次數（Issue #1025）。
+
+    **目前前端沒有呼叫它** —— 每次產題都是直接送出，額度用完由後端回 402，面板跳
+    「本月次數已用完，填好的內容都還在，可以改用手動輸入」。這支是給「面板上顯示
+    本月還剩 N 次」預留的查詢面，先做好並有測試涵蓋（同 `/image-quota` 的狀態）。
+
+    之所以沒一起做顯示：那會動到面板的版面，而 #1044 正在改同一個檔案的字級與圖片
+    欄位，兩張單互相衝突。等 #1044 合併後再補。
+    """
+    return stq.get_quota_status(db, current_teacher)
+
+
 @router.post("/generate-article")
 async def generate_article(
     payload: GenerateArticleRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
 ):
     service = get_scenario_dialogue_ai_service()
-    try:
-        return await service.generate_article(goal=payload.goal, level=payload.level)
-    except ScenarioDialogueAIOutputError as e:
-        # 呼叫成功但模型沒給出可用的東西 —— 不是老師填錯，回 502「請稍後再試」。
-        # 這個 except 必須排在父類 ScenarioDialogueAIError 前面（PR #1023 review）
-        raise _ai_failed("generate-article", e)
-    except ScenarioDialogueAIError as e:
-        # 參數問題（空的訓練目標、不合法的難度）→ 400，訊息直接給老師看
-        raise _bad_request(e)
-    except Exception as e:
-        raise _ai_failed("generate-article", e)
+
+    async def run():
+        try:
+            return await service.generate_article(
+                goal=payload.goal,
+                level=payload.level,
+                ui_language=payload.ui_language,
+            )
+        except ScenarioDialogueAIOutputError as e:
+            # 呼叫成功但模型沒給出可用的東西 —— 不是老師填錯，回 502「請稍後再試」。
+            # 這個 except 必須排在父類 ScenarioDialogueAIError 前面（PR #1023 review）
+            raise _ai_failed("generate-article", e)
+        except ScenarioDialogueAIError as e:
+            # 參數問題（空的訓練目標、不合法的難度）→ 400，訊息直接給老師看
+            raise _bad_request(e)
+        except Exception as e:
+            raise _ai_failed("generate-article", e)
+
+    return await _with_text_quota(db, current_teacher, "generate-article", run)
 
 
 @router.post("/generate-questions")
 async def generate_questions(
     payload: GenerateQuestionsRequest,
     current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
 ):
+    """產一批題目。
+
+    一次產 10 題與重新產 1 題都算**一次**額度 —— 不按題數加權是刻意的，見
+    `services/scenario_text_quota` 的說明（鼓勵批次產題，要擋的是連按重產單題）。
+    """
     service = get_scenario_dialogue_ai_service()
-    try:
-        return await service.generate_questions(
-            scenario_content=payload.scenario_content,
-            count=payload.count,
-            question_level=payload.question_level,
-            global_tense=payload.global_tense,
-            global_voice=payload.global_voice,
-            global_rubric=payload.global_rubric,
-            translate_language=payload.translate_language,
-            existing_questions=payload.existing_questions,
-        )
-    except ScenarioDialogueAIOutputError as e:
-        raise _ai_failed("generate-questions", e)
-    except ScenarioDialogueAIError as e:
-        raise _bad_request(e)
-    except Exception as e:
-        raise _ai_failed("generate-questions", e)
+
+    async def run():
+        try:
+            return await service.generate_questions(
+                scenario_content=payload.scenario_content,
+                count=payload.count,
+                question_level=payload.question_level,
+                global_tense=payload.global_tense,
+                global_voice=payload.global_voice,
+                global_rubric=payload.global_rubric,
+                translate_language=payload.translate_language,
+                existing_questions=payload.existing_questions,
+                direction=payload.direction,
+                scenario_images=payload.scenario_images,
+                ui_language=payload.ui_language,
+            )
+        except ScenarioDialogueAIOutputError as e:
+            raise _ai_failed("generate-questions", e)
+        except ScenarioDialogueAIError as e:
+            raise _bad_request(e)
+        except Exception as e:
+            raise _ai_failed("generate-questions", e)
+
+    return await _with_text_quota(db, current_teacher, "generate-questions", run)
 
 
 @router.post("/extract-article")
 async def extract_article(
     file: UploadFile = File(...),
+    ui_language: str = Form("zh-TW", max_length=MAX_UI_LANGUAGE_CHARS),
     current_teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
 ):
-    """從老師上傳的圖片 / PDF 擷取情境文章。"""
+    """從老師上傳的圖片 / PDF 擷取情境文章（#1146 起一併回 ``suggested_title``）。
+
+    ``ui_language`` 決定標題建議的語言（同 generate-article）。
+    """
     service = get_scenario_dialogue_ai_service()
 
     # 大小把關優先：最多讀「上限 + 1」bytes，超過就中止，避免超大檔整包先進記憶體
@@ -184,16 +332,23 @@ async def extract_article(
             detail=f"檔案過大（上限 {max_bytes // (1024 * 1024)}MB）",
         )
 
-    try:
-        return await service.extract_article(
-            file_bytes=file_bytes, mime_type=file.content_type
-        )
-    except ScenarioDialogueAIOutputError as e:
-        raise _ai_failed("extract-article", e)
-    except ScenarioDialogueAIError as e:
-        raise _bad_request(e)
-    except Exception as e:
-        raise _ai_failed("extract-article", e)
+    # 注意：上面的大小把關在**佔位之前** —— 檔案過大是老師根本還沒用到 AI 就被擋，
+    # 不該扣他一次額度。
+    async def run():
+        try:
+            return await service.extract_article(
+                file_bytes=file_bytes,
+                mime_type=file.content_type,
+                ui_language=ui_language,
+            )
+        except ScenarioDialogueAIOutputError as e:
+            raise _ai_failed("extract-article", e)
+        except ScenarioDialogueAIError as e:
+            raise _bad_request(e)
+        except Exception as e:
+            raise _ai_failed("extract-article", e)
+
+    return await _with_text_quota(db, current_teacher, "extract-article", run)
 
 
 @router.get("/image-quota")

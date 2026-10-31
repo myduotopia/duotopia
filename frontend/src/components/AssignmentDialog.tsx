@@ -103,13 +103,21 @@ import {
   type QuizScoringSettings,
 } from "@/lib/quizScoring";
 import { ContentSelectCard } from "./assignment/ContentSelectCard";
+import {
+  canUseModeForContentTypes,
+  initialModeForContentTypes,
+  isContentTypeUsableForMode,
+} from "@/lib/dispatchableContent";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceSafe } from "@/contexts/WorkspaceContext";
 import { formatClassroomDisplayName } from "@/components/classroom/classroomGrade";
 import { getScoreCategory, type ScoreCategory } from "@/utils/scoreCategory";
 // #854 B2-a: 派發預覽改吃單一 registry（消除手寫 ternary 鏈），各 *Preview 元件
 // 已移入 activityRegistry。
-import { DISPATCH_PREVIEW } from "@/lib/activityRegistry";
+import {
+  DISPATCH_PREVIEW,
+  previewUsesSampleMaterial,
+} from "@/lib/activityRegistry";
 
 // Issue #752 PoC: 預覽固定使用 contact@duotopia.co 的官方公開單字集
 // production 用 id 2212（"RPG" VOCABULARY_SET）；其他環境（staging / develop /
@@ -783,7 +791,16 @@ export function AssignmentDialog({
         assign_to_all: true,
         due_date: undefined,
         start_date: new Date(),
-        practice_mode: "word_selection",
+        // 帶著內容開啟時（教材卡派發）從內容的資料集推導初始模式。
+        // 寫死 word_selection 會讓下面那段清理把非單字集的預選內容整批
+        // 請出購物車 —— 老師還沒看到畫面，內容就已經不見了（夥伴 staging
+        // 回報「教材卡派發情境對話失敗」的根因）。空購物車維持舊預設。
+        practice_mode:
+          initialModeForContentTypes(
+            hasPreSelectedContents
+              ? preSelectedContents!.map((i) => i.contentType)
+              : [],
+          ) ?? "word_selection",
         time_limit_per_question: 30 as 0 | 10 | 20 | 30 | 40,
         quiz_time_limit_seconds: 0 as 0 | 180 | 300 | 600 | 900 | 1200 | 1800,
         is_live_quiz: false,
@@ -804,27 +821,29 @@ export function AssignmentDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load functions recreated each render; only run on dialog open/context change
   }, [open, classroomId, students, showOrgTab]);
 
-  // 當練習模式改變時，清除不相容的購物車項目
-  // 單字模式只能選單字集，需要移除例句集項目
-  // 例句模式（朗讀 / 重組）可以選全部，不需要清除
+  // 切換練習模式時，把這個模式吃不下的內容請出購物車。
+  //
+  // 規則查 registry 的 supportedDatasets（`isContentTypeUsableForMode`），不列舉模式。
+  // 原本寫成「模式是 word_* 就只留單字集」—— 手寫列舉，新增資料集時不會有任何訊號，
+  // 而且語意是反的：不是「word 模式只收單字集」，是「每個模式只收它支援的資料集」。
+  //
+  // 這段本身沒錯，錯的是它曾經配上寫死的初始模式 word_selection：帶著情境對話或
+  // 例句集從教材卡派發時，內容在老師看到畫面之前就被這裡清掉了。初始模式改成從
+  // 預選內容推導之後，這段只會在老師**真的去切模式**時動作。
+  //
+  // 比對用的是**當次 render 的 cartItems**，不是 `setCartItems(prev => ...)`。
+  // 這不是風格問題，是這個 bug 的另一半：對話框開啟時 reset 會在同一次 effect flush
+  // 裡同時排入「購物車 ← 預選內容」與「模式 ← 推導值」，而 functional update 的
+  // `prev` 讀得到那個已排隊的新購物車，`formData.practice_mode` 卻還是舊 render 的
+  // `word_selection` —— 新內容就這樣被舊模式刷掉。用 render 快照兩邊才是同一個時間點。
   useEffect(() => {
-    if (
-      formData.practice_mode === "word_reading" ||
-      formData.practice_mode === "word_selection" ||
-      formData.practice_mode === "word_spelling" ||
-      formData.practice_mode === "word_cloze" ||
-      formData.practice_mode === "word_selection_quiz" ||
-      formData.practice_mode === "word_spelling_quiz" ||
-      formData.practice_mode === "word_cloze_quiz"
-    ) {
-      setCartItems((prev) => {
-        const filtered = prev.filter((item) =>
-          isVocabularySetType(item.contentType),
-        );
-        return filtered.length !== prev.length ? filtered : prev;
-      });
-    }
-  }, [formData.practice_mode]);
+    const mode = formData.practice_mode;
+    if (!mode) return;
+    const filtered = cartItems.filter((item) =>
+      isContentTypeUsableForMode(mode, item.contentType),
+    );
+    if (filtered.length !== cartItems.length) setCartItems(filtered);
+  }, [formData.practice_mode, cartItems]);
 
   // Issue #1052: 選中的模式必須在 chip 列裡。開啟時 reset 一律寫 word_selection，
   // 「先帶入內容」的路徑（教材卡派發）若是例句集，word_selection 不在清單裡 ——
@@ -1704,7 +1723,16 @@ export function AssignmentDialog({
           selectedClassrooms.some((c) => c.selectedStudentIds.length > 0)
         );
       case 1:
-        return !!formData.practice_mode;
+        // 選中的模式必須在「這些內容實際可用」的清單裡。
+        //
+        // 原本只檢查「有沒有選模式」—— 預選內容的路徑會跳過「選擇內容」那一步，
+        // #1030／#1033 的反灰守衛就被繞過了：情境對話的內容可以配著殘留的
+        // word_selection 一路派出去，學生端拿到不認得的資料形狀。
+        // 購物車空的（先選方式、後選教材）不介入，交給選內容那步擋。
+        return canUseModeForContentTypes(
+          formData.practice_mode,
+          cartItems.map((item) => item.contentType),
+        );
       case 2:
         return cartItems.length > 0;
       case 3:
@@ -3029,6 +3057,10 @@ export function AssignmentDialog({
               const modeList = dataset
                 ? listModesForDataset(dataset)
                 : listAllDispatchableModes();
+              // 清單是空的＝購物車裡的題型目前不能派發。沒有這段的話畫面只會是
+              // 一排空白加上按不動的「下一步」，老師完全不知道發生什麼事
+              // （而且預選內容的路徑沒有「選擇內容」那步可以退回去改）。
+              const noModesAvailable = modeList.length === 0;
               const currentConfig = formData.practice_mode
                 ? getModeConfig(formData.practice_mode)
                 : undefined;
@@ -3044,6 +3076,11 @@ export function AssignmentDialog({
               };
               return (
                 <div className="h-full flex flex-col">
+                  {noModesAvailable && (
+                    <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      {t("dialogs.assignmentDialog.errors.noModesForContent")}
+                    </div>
+                  )}
                   {/* 上方 chip 列：橫向卷 + 箭頭永遠顯示 + 邊緣漸層 */}
                   <div className="relative mb-4">
                     <button
@@ -3171,13 +3208,22 @@ export function AssignmentDialog({
 
                     {/* 右：學生畫面預覽（viewport ≥ 960px 才顯示；min-w 320 確保可讀） */}
                     <div className="hidden min-[960px]:block flex-1 min-w-[320px] overflow-y-auto pr-1 h-full">
-                      {formData.practice_mode && (
-                        <div className="mb-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
-                          {t(
-                            "dialogs.assignmentDialog.practiceMode.studentPreviewDisclaimer",
-                          )}
-                        </div>
-                      )}
+                      {/*
+                        #1136: 只有真的借了範例教材才說「使用範例教材」。購物車裡有
+                        教材時預覽用的就是老師自己那份、設定也跟著左側即時變動，
+                        原本不分情況都顯示這段，兩句話在最常見的情況下都是錯的。
+                      */}
+                      {formData.practice_mode &&
+                        previewUsesSampleMaterial(
+                          formData.practice_mode as PracticeMode,
+                          cartItems[0]?.contentId,
+                        ) && (
+                          <div className="mb-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
+                            {t(
+                              "dialogs.assignmentDialog.practiceMode.studentPreviewDisclaimer",
+                            )}
+                          </div>
+                        )}
                       {(() => {
                         // #854 B2-a: 單一 registry 取代手寫 ternary 鏈
                         const render =
@@ -3201,7 +3247,12 @@ export function AssignmentDialog({
                           <Card className="p-3 border-gray-200">
                             <h4 className="text-xs font-semibold mb-2 text-gray-700">
                               {t(
-                                "dialogs.assignmentDialog.practiceMode.studentPreview",
+                                previewUsesSampleMaterial(
+                                  formData.practice_mode as PracticeMode,
+                                  cartItems[0]?.contentId,
+                                )
+                                  ? "dialogs.assignmentDialog.practiceMode.studentPreviewSample"
+                                  : "dialogs.assignmentDialog.practiceMode.studentPreview",
                               )}
                             </h4>
                             {render({

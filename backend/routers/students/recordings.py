@@ -90,12 +90,26 @@ async def upload_student_recording(
 
         # 上傳新錄音（不傳 content_id 和 item_index，讓它用 UUID）
         user_agent = request.headers.get("user-agent", "")
+        # 錄音上限依練習模式（#1140）：情境對話是開放式口說，30 秒不夠。
+        # 唯一判定在 services.audio_upload.recording_limits_for_mode。
+        from models import Assignment
+        from services.audio_upload import recording_limits_for_mode
+
+        practice_mode = (
+            db.query(Assignment.practice_mode)
+            .filter(Assignment.id == assignment.assignment_id)
+            .scalar()
+        )
+        max_seconds, max_bytes = recording_limits_for_mode(practice_mode)
+
         audio_url = await audio_service.upload_audio(
             audio_file,
             duration_seconds=duration_seconds if duration_seconds is not None else 30,
             assignment_id=assignment_id,
             student_id=student_id,
             user_agent=user_agent,
+            max_duration_seconds=max_seconds,
+            max_file_size=max_bytes,
         )
 
         # 刪除舊錄音檔案（如果存在且不同）

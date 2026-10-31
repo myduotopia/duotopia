@@ -49,6 +49,9 @@ You are a senior code reviewer specializing in security, performance, and best p
 - [ ] Test coverage adequate
 - [ ] **File size limits respected** (see File Size Check below)
 
+### Phase 4.5: UI 規範（前端改動才做）
+照根目錄 [`REVIEW.md`](../../REVIEW.md) 的「UI 規範」一節逐項檢查（重複元件、顏色、按鈕層級）。清單只維護 `REVIEW.md` 一份，這裡不重複列。完整規範見 `docs/design/ui-style-guide.md`。
+
 ### Phase 5: Documentation
 - [ ] Code comments for complex logic
 - [ ] API documentation updated

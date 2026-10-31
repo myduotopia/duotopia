@@ -53,6 +53,9 @@
   },
   "common": {
     "orderOption": "第 {{number}} 號",
+    "selection": {
+      "clear": "取消選取"
+    },
     "save": "儲存",
     "cancel": "取消",
     "confirm": "確認",
@@ -2002,7 +2005,8 @@
         "missingClozeAnswer": "缺少克漏字答案",
         "missingClozeAnswerDesc": "以下單字集有單字尚未設定克漏字答案：{{contents}}。請先到單字集編輯內容、點擊單字或框選片語設定答案後再派發。",
         "contentTypeNotAssignable": "{{type}}目前還不能派發作業（學生端作答功能尚未開放）",
-        "contentTypeNotSelectable": "這個內容與目前選的練習模式不合，請換個模式，或先清除已選擇的內容"
+        "contentTypeNotSelectable": "這個內容與目前選的練習模式不合，請換個模式，或先清除已選擇的內容",
+        "noModesForContent": "這份教材的題型目前還不能派發作業（學生端作答功能尚未開放），請改選其他教材。"
       },
       "warnings": {
         "quotaLow": "AI 分析額度不足",
@@ -2053,9 +2057,15 @@
         "default": "預設",
         "shuffleQuestions": "隨機題目順序",
         "shuffleQuestionsDesc": "每次練習時隨機排列題目順序",
-        "studentPreview": "學生畫面預覽（demo 教材）",
-        "studentPreviewDisclaimer": "預覽使用範例教材，部分模式（例句朗讀、例句重組）的時間／音檔等設定以示範作業為準，不會跟著左側設定變動。",
+        "studentPreview": "學生畫面預覽",
+        "studentPreviewSample": "學生畫面預覽（範例教材）",
+        "studentPreviewDisclaimer": "購物車還沒有教材，預覽先借範例教材顯示；部分模式（例句朗讀、例句重組）的時間／音檔等設定以示範作業為準，不會跟著左側設定變動。選好教材後就會改用你選的那一份。",
         "previewNotImplemented": "此模式預覽尚未實作",
+        "previewLoading": "載入預覽中…",
+        "previewLoadFailed": "預覽載入失敗",
+        "scenarioPreviewNeedsContent": "請先選擇要派發的情境對話教材",
+        "scenarioPreviewEmpty": "此教材沒有題目可預覽",
+        "scenarioPreviewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
         "selectModePrompt": "選擇一個模式查看預覽",
         "showAnswer": "顯示答案",
         "showAnswerDesc": "答題結束後顯示正確答案",
@@ -2089,6 +2099,7 @@
         "showTranslation": "顯示翻譯",
         "showTranslationDesc": "練習時顯示單字的翻譯",
         "showSentenceTranslationDesc": "練習時顯示句子的中文翻譯",
+        "showQuestionTranslationDesc": "作答時顯示題目的翻譯",
         "showWord": "顯示單字",
         "showWordDesc": "練習時顯示英文單字",
         "showImage": "顯示圖片",
@@ -4592,7 +4603,12 @@
       "viewModeNoRecording": "檢視模式中無法錄音",
       "recordedAudio": "已錄製音檔",
       "recordingFailedCheckMic": "錄音失敗，請檢查麥克風權限",
-      "suggestedDuration": "建議錄音時長"
+      "suggestedDuration": "建議錄音時長",
+      "tapToRecord": "點一下開始錄音",
+      "tapToStop": "再點一下停止",
+      "stopRecording": "停止錄音",
+      "processing": "處理中…",
+      "reRecord": "重錄"
     }
   },
   "studentActivity": {
@@ -4930,15 +4946,9 @@
     "dialogTitle": "新增情境對話",
     "editTitle": "編輯情境對話",
     "badge": "口說練習",
-    "tabs": {
-      "sourceManual": "直接輸入情境文章",
-      "sourceAi": "AI 輔助生成",
-      "sourceUpload": "上傳圖片 / PDF"
-    },
     "labels": {
       "title": "標題",
       "goal": "訓練目標",
-      "uploadTitle": "點擊或拖放檔案",
       "rubric": "評分準則（AI 回饋依據）",
       "notSpecified": "不指定",
       "rubricNote": "本題額外說明",
@@ -4953,8 +4963,7 @@
       "scenarioContent": "情境內容",
       "articleLevel": "文章難度",
       "questionLevel": "題目難度",
-      "scenarioText": "情境文章",
-      "sectionGenerate": "出題設定"
+      "scenarioText": "情境文章"
     },
     "rubricPresets": {
       "tenseTime": "時間",
@@ -4975,42 +4984,36 @@
     "buttons": {
       "generating": "產生中…",
       "addQuestion": "新增題目",
-      "skipGeneration": "跳過，我想自己出題",
-      "generateAndContinue": "產生題目並繼續",
-      "editSettings": "回設定修改",
-      "backToSettings": "上一步：設定",
+      "editSettings": "回對話修改",
+      "backToSettings": "上一步：回到對話",
       "viewQuestions": "查看題目清單",
       "generateAnother": "再產一批題目",
       "uploadImage": "上傳圖片",
       "replaceImage": "替換",
       "removeImage": "移除",
-      "generateScenario": "生成情境文章",
-      "extractScenario": "從檔案擷取",
-      "generateImage": "AI 生成"
+      "generateImage": "AI 生成",
+      "comingSoon": "即將推出",
+      "expandScenario": "展開全文",
+      "collapseScenario": "收合"
     },
     "hints": {
       "rateLimit": "每分鐘最多重新生成 5 次",
-      "uploadFormats": "支援 JPG、PNG、PDF",
       "itemRange": "最少 {{min}} 題、最多 {{max}} 題",
       "maxReached": "已達 {{max}} 題上限",
       "referenceAnswer": "給 AI 對照語言特徵用（時態、句型、用字），學生看不到；也是回饋「建議答案」的依據",
       "visibleToStudents": "這段文字會提供給 AI 評分，學生作答時也看得到",
       "globalTense": "所有題目預設沿用；單題可個別調整，之後改這裡不會影響已自訂的題目",
-      "step1Foot": "設定完成後產題，或直接跳到清單自己出題",
-      "untitled": "尚未命名",
       "referenceNote": "對照情境與作答指引，確認題目出得合不合適",
       "noRubricYet": "尚未設定作答指引",
-      "scenarioRequiredForAi": "使用 AI 產題時必填",
-      "sourceManual": "在下方「情境文章」直接輸入",
       "optional": "選填",
-      "noContextYet": "尚未設定情境內容",
-      "scenarioText": "三種方式產生後都可以在這裡修改",
-      "sectionGenerate": "AI 產題時使用；產完仍可逐題調整"
+      "noContextYet": "尚未設定情境內容"
     },
     "tooltips": {
       "regenerateQuestion": "重新生成這一題（會避開已出現過的題目）",
       "generateAudio": "生成語音",
-      "resetToGlobal": "改回沿用整體評分標準"
+      "resetToGlobal": "改回沿用整體評分標準",
+      "deleteDisabled": "至少要保留 1 題，無法刪除",
+      "generateAudioDisabled": "請先輸入題目，才能生成語音"
     },
     "messages": {
       "generateFailed": "AI 產生失敗，請稍後再試",
@@ -5020,7 +5023,11 @@
       "imageQuotaExceeded": "本月 AI 生成圖片次數已用完，可以改用手動上傳圖片",
       "imageBlocked": "這個描述沒辦法生成圖片，請換個描述再試",
       "imageFailed": "圖片生成失敗，請稍後再試",
-      "scenarioRequired": "請先輸入情境內容，AI 才有素材可以出題"
+      "imageGenerationComingSoon": "AI 生成圖片功能調整中，即將推出。目前請先使用「上傳圖片」",
+      "textQuotaExceeded": "本月情境對話 AI 次數已用完（下個月 1 日自動重置）。填好的內容都還在，可以改用手動輸入",
+      "extractFailedFiles": "這些檔案沒有擷取成功：{{files}}。其他檔案的內容已放進情境框，可以再傳一次失敗的檔案。",
+      "extractAllFailed": "檔案都沒有擷取成功：{{files}}。可以再傳一次，或直接把情境貼進情境框。",
+      "extractTruncated": "檔案內容較長，擷取到的文章結尾可能不完整，請核對情境框。"
     },
     "tenseTimes": {
       "present": "現在",
@@ -5042,7 +5049,131 @@
       "voice": "語態：{{value}}",
       "keywords": "必用：{{value}}"
     },
-    "tenseCombo": "{{time}}{{aspect}}"
+    "tenseCombo": "{{time}}{{aspect}}",
+    "chat": {
+      "typing": "AI 輸入中",
+      "previewFeedback": "（預覽）學生實際作答時，這裡會出現 AI 針對他的回答給的建議。預覽不會呼叫 AI，所以不扣點數。",
+      "recordingTooLong": "錄音太長了（最多 {{seconds}} 秒），請重新錄一段短一點的。",
+      "recordingTooShort": "這段錄音太短，聽不到內容，請再錄一次。",
+      "recordingTooLarge": "錄音檔太大，請重新錄一段短一點的。",
+      "uploadFailed": "錄音上傳失敗，請再試一次。",
+      "quotaExhausted": "這一題的 AI 建議次數已經用完了，你還是可以繼續回答下一題。",
+      "feedbackFailed": "AI 建議暫時拿不到，請再試一次。",
+      "questionImages": "題目圖片",
+      "questionNo": "第 {{no}} / {{total}} 題",
+      "skipped": "略過",
+      "averageScore": "本題平均 {{score}}",
+      "playQuestion": "播放題目",
+      "showEnglish": "看英文",
+      "showChinese": "看中文",
+      "keywords": "關鍵字",
+      "hint": "作答提示",
+      "referenceAnswer": "參考答案",
+      "attemptNo": "第 {{no}} 次",
+      "aiScore": "AI {{score}} 分",
+      "verdictGreat": "很棒！",
+      "verdictImprove": "可以更好",
+      "suggestion": "建議說法",
+      "listenSuggestion": "聽建議說法",
+      "retry": "再試一次",
+      "attemptsUsedUp": "已達 {{max}} 次，即將進入下一題",
+      "start": "開始對話",
+      "submitAssignment": "提交作業",
+      "finishedHint": "可以往上捲重聽，或在還沒答滿的題目按「再試一次」",
+      "send": "送出",
+      "typePlaceholder": "輸入你的回答…",
+      "scenario": "情境",
+      "scenarioImages": "情境圖片",
+      "rubric": "作答要求",
+      "waitTyping": "AI 正在輸入…",
+      "waitFeedback": "AI 正在看你的回答…",
+      "waitAutoNext": "即將進入下一題…",
+      "waitChoose": "請在上方選擇「再試一次」或「下一題」",
+      "previewMode": "預覽模式",
+      "jumpToNo": "跳到第 {{no}} 題",
+      "intro": "嗨！我會問你 {{count}} 個問題，請聽完後用英文回答。準備好就按「開始對話」。",
+      "next": "下一題",
+      "closing": "今天的對話到這裡，你表現得很好！檢查一下，沒問題就提交作業吧。",
+      "newMessages": "新訊息",
+      "showEnglishFull": "顯示英文",
+      "hideEnglish": "隱藏英文",
+      "englishShort": "英",
+      "showChineseFull": "顯示中文",
+      "hideChinese": "隱藏中文",
+      "chineseShort": "中",
+      "questionNav": "題號",
+      "goToNo": "捲到第 {{no}} 題",
+      "dotLocked": "第 {{no}} 題：還沒到這題",
+      "notYet": "還沒到這題",
+      "attemptsReached": "已達 {{max}} 次",
+      "retrying": "正在重答第 {{no}} 題",
+      "cancelRetry": "取消重答"
+    },
+    "images": {
+      "label": "情境圖",
+      "hint": "學生作答時看得到，最多 5 張",
+      "alt": "情境圖 {{n}}",
+      "add": "上傳圖片",
+      "full": "情境圖最多 {{max}} 張，請先刪掉一張再上傳",
+      "fullShort": "已滿 5 張",
+      "remove": "刪除這張情境圖",
+      "crop": "調整裁切範圍",
+      "cropUnavailable": "這張圖是之前存的，沒有原圖可以重新裁切；要換範圍請刪掉後重新上傳",
+      "cropTitle": "調整裁切範圍",
+      "cropHint": "在原圖上拖拉出要保留的範圍，按「套用」後會換成新的裁切結果。",
+      "applyCrop": "套用",
+      "cropFailed": "裁切失敗，請再試一次",
+      "uploadFailed": "{{count}} 張情境圖上傳失敗，可以再自己補傳",
+      "overLimit": "情境圖最多 {{max}} 張，其餘 {{count}} 張已略過",
+      "someNotCropped": "有些圖沒辦法自動裁下來，可以自己另外上傳"
+    },
+    "setup": {
+      "change": "改選",
+      "back": "回上一步",
+      "next": "下一步",
+      "startGenerate": "開始產生",
+      "actionBar": "操作",
+      "countOption": "{{count}} 題",
+      "writeArticle": "請 AI 寫情境",
+      "writingArticle": "好，我依「{{goal}}」寫一篇 {{level}} 程度的情境，請稍等…",
+      "extracting": "擷取中…",
+      "uploadFile": "上傳圖片／PDF",
+      "uploadHint": "支援 JPG、PNG、PDF（10MB 以內）。文字放進下面的情境框，檔案裡的圖會自動裁成情境圖",
+      "directionPlaceholder": "例如：週末做什麼、對手機進教室的看法",
+      "materialRequired": "請先提供情境（文字或情境圖）或出題方向，AI 才知道要問什麼",
+      "reaskFallback": "我沒看懂這段要怎麼用，可以再具體一點嗎？",
+      "reopenConfirmTitle": "要改前面的回答嗎？",
+      "reopenConfirmDescription": "後面的設定會清空，已產生的題目保留。",
+      "reopenConfirm": "改選",
+      "modeChangeConfirmTitle": "要改選嗎？",
+      "modeChangeConfirmDescription": "已填的情境文章與情境圖會清空，已產生的題目保留。",
+      "q": {
+        "mode": "需要提供給學生一段文章或圖片，作為問答情境嗎？",
+        "goal": "這次想訓練學生什麼？告訴我訓練目標、選好文章難度，我來寫一篇情境。",
+        "scenarioAi": "情境寫好了，可以直接修改；也可以補上情境圖（學生作答時看得到，最多 5 張）。",
+        "scenarioExisting": "請把情境貼在下面，或上傳圖片／PDF 讓我擷取文字和圖片（情境圖最多 5 張）。",
+        "source": "題目怎麼來？",
+        "direction": "想問學生什麼呢？說個主題或方向，我來照著出題",
+        "settings": "好的，請確認出題設定，按「開始產生」我就開始出題。",
+        "settingsWithDirection": "好的，我會依「{{direction}}」出題。請確認出題設定，按「開始產生」就開始。"
+      },
+      "modes": {
+        "none": "我不需要情境，想直接問學生問題",
+        "existing": "有既有的教材作為情境",
+        "ai": "我需要 AI 幫我生成文章作為情境"
+      },
+      "modeHints": {
+        "existing": "上傳文字、圖片或 PDF 檔"
+      },
+      "sources": {
+        "manual": "我自己輸入",
+        "ai": "請 AI 出題"
+      },
+      "answers": {
+        "goal": "訓練目標：「{{goal}}」（文章難度 {{level}}）",
+        "scenario": "情境文章 {{chars}} 字、情境圖 {{images}} 張"
+      }
+    }
   },
   "vocabularySet": {
     "dialogTitle": "新增單字集",
@@ -5601,7 +5732,8 @@
       "contents": "內容",
       "copyToMy": "複製到我的教材",
       "copyToOrg": "複製到組織教材",
-      "copiedToday": "今日已複製"
+      "copiedToday": "今日已複製",
+      "noCopyPermissionOrg": "只有機構管理員可以複製到機構教材，如需使用請聯絡機構管理員"
     },
     "detail": {
       "backToList": "返回列表",
@@ -5644,7 +5776,8 @@
       "copyFailed": "複製失敗，請稍後再試",
       "autoCopySuccess": "已把「{{name}}」複製到我的教材，可以開始練習了！",
       "autoCopySuccessOrg": "已把「{{name}}」複製到機構教材，可以開始練習了！",
-      "autoCopyFailed": "自動複製教材失敗，請到「資源教材包」手動複製"
+      "autoCopyFailed": "自動複製教材失敗，請到「資源教材包」手動複製",
+      "loadFailed": "載入資源教材包失敗，請重新整理頁面"
     }
   },
   "contentCopy": {
@@ -5717,7 +5850,8 @@
     "showExamAnswers": "考後顯示答案"
   },
   "tree": {
-    "assign": "指派為作業"
+    "assign": "指派為作業",
+    "assignNotAvailable": "此題型目前還不能派發作業（學生端作答功能尚未開放）"
   },
   "instantPractice": {
     "title": "即刻練習",
@@ -6189,9 +6323,9 @@
       "selected": "已選 {{count}} 題",
       "dirty": "{{count}} 題有未儲存的修改",
       "save": "儲存",
+      "nothingToSave": "沒有要儲存的修改",
       "delete": "刪除",
       "dispatch": "派發",
-      "clearSelection": "取消選取",
       "confirmDelete": "確定刪除 {{count}} 題？已派發的考卷不受影響。",
       "saved": "已儲存 {{count}} 題",
       "saveFailed": "{{count}} 題儲存失敗，請再試一次",
@@ -6314,6 +6448,142 @@
     "groupTypes": {
       "reading": "閱讀題組",
       "cloze": "克漏字題組"
+    },
+    "examImport": {
+      "menu": {
+        "upload": "上傳題本",
+        "uploadHint": "上傳考卷、習作（PDF 或照片），AI 一次擷取整份題目",
+        "uploadComingSoon": "即將推出",
+        "uploadBusy": "目前有一份題本正在處理，處理完才能再上傳",
+        "aiGenerate": "AI 出題",
+        "selfAuthored": "自己出題"
+      },
+      "accents": {
+        "american": "美式",
+        "british": "英式",
+        "indian": "印度",
+        "australian": "澳洲"
+      },
+      "upload": {
+        "title": "上傳題本",
+        "description": "上傳一份考卷或習作，AI 會逐頁擷取題目、答案與考點。",
+        "fileLabel": "題本檔案",
+        "dropHint": "點這裡選檔案，或把檔案拖進來（PDF 一個，或多張照片）",
+        "limitHint": "最多 {{max}} 頁；PDF 和照片不能混用",
+        "preparing": "正在讀取檔案…",
+        "photosName": "{{name}} 等 {{count}} 張照片",
+        "pageCount": "共 {{count}} 頁",
+        "settingsHint": "整份設定只填一次，會套用到這份題本的全部題目。",
+        "grade": "年段",
+        "gradeEmpty": "請拖曳選擇年段",
+        "source": "考題來源",
+        "program": "教材與單元（選填）",
+        "visibility": "是否公開",
+        "accents": "朗讀口音",
+        "accentsHint": "可以多選；選多種時每一題（題組連同小題）會平均分配一種。不會記住這次的選擇。",
+        "missing": "還沒填：{{items}}",
+        "listSeparator": "、",
+        "need": {
+          "file": "題本檔案",
+          "grade": "年段",
+          "source": "考題來源",
+          "visibility": "是否公開",
+          "accents": "朗讀口音"
+        },
+        "start": "開始擷取",
+        "openExisting": "打開那次匯入"
+      },
+      "progress": {
+        "title": "處理進度",
+        "description": "一次處理一頁，處理完的頁會先存起來。",
+        "count": "{{done}}／{{total}} 頁",
+        "countWithBlank": "{{done}}／{{total}} 頁（含 {{blank}} 頁空白）",
+        "failedCount": "{{count}} 頁失敗",
+        "keepOpen": "網頁開著才會繼續處理；關掉這個面板、切到「教材」分頁都不會中斷。關掉網頁或離開「我的教材」頁的話，下次從「我的題庫」上方繼續。",
+        "allDone": "每一頁都處理過了，共擷取 {{count}} 題。",
+        "pageNo": "第 {{n}} 頁",
+        "answerPage": "答案頁",
+        "pageOrderHint": "頁碼是 PDF 檔的頁序，可能和題本上印的頁碼不同",
+        "status": {
+          "pending": "等待中",
+          "processing": "處理中",
+          "done": "完成・擷取 {{count}} 題",
+          "blank": "空白頁略過",
+          "failed": "失敗",
+          "merged": "已併入第 {{target}} 頁的題組（第 {{range}} 題）",
+          "mergedNoRange": "已併入第 {{target}} 頁的題組",
+          "doneSpan": "完成・擷取 {{count}} 題（跨第 {{from}}–{{to}} 頁）",
+          "empty": "沒有題目"
+        },
+        "blankHint": "看起來是空白頁，沒有送去擷取。如果其實有題目，請按「仍要送出這一頁」。",
+        "sendBlank": "仍要送出這一頁",
+        "resend": "重送這一頁",
+        "manualFill": "這一頁讀不出來，請手動補題",
+        "stopped": "處理停下來了，還有 {{count}} 頁沒送出。",
+        "resume": "繼續處理",
+        "reselect": "請再選一次〈{{name}}〉以繼續處理",
+        "reselectPhotos": "如果是照片，請照第一次的順序選取。",
+        "reselectButton": "選擇檔案",
+        "anotherRunning": "另一份題本正在處理中，請等它處理完再打開",
+        "close": "關閉",
+        "review": "開始核對"
+      },
+      "banner": {
+        "one": "你有 1 份題本還沒處理完（{{name}}，{{progress}}）",
+        "many": "你有 {{count}} 份題本還沒處理完",
+        "view": "查看",
+        "hide": "收起",
+        "continue": "繼續",
+        "abandon": "放棄"
+      },
+      "abandon": {
+        "button": "放棄這次匯入",
+        "title": "放棄這次匯入？",
+        "description": "〈{{name}}〉已擷取的內容和頁面圖片都會刪除，無法復原。放棄的匯入不算進每天的上傳次數。",
+        "confirm": "放棄",
+        "done": "已放棄這次匯入"
+      },
+      "errors": {
+        "duplicate": "這個題本已經匯入過，不需要再匯入。",
+        "dailyLimit": "今天已經上傳過 1 本題本（每天最多 1 本），請明天再上傳。",
+        "aiTimeout": "AI 處理超過 2 分鐘沒有回應，這一頁標為失敗，可以重送。",
+        "aiFailed": "AI 擷取失敗，請稍後重送這一頁。",
+        "pageBusy": "這一頁正在處理中，稍等一下就會更新。",
+        "retryLimit": "這一頁已經重送 2 次還是讀不出來，請手動補題。",
+        "pageDone": "這一頁已經處理完了。",
+        "closed": "這次匯入已經結束（可能已放棄或存入題庫），不能再處理。",
+        "notFound": "找不到這次匯入，可能已經放棄了。",
+        "pageNotFound": "找不到這一頁。",
+        "notAbandonable": "這次匯入已經存入題庫，不能放棄。",
+        "notBlank": "這一頁不是略過的空白頁。",
+        "pageImageMissing": "找不到這一頁的圖片，請放棄這次匯入後重新上傳。",
+        "pageNotDone": "這一頁還沒處理完，請先重送整頁。",
+        "retryTarget": "請指定要重試的題目；漏掉的題請手動補。",
+        "retryEmpty": "AI 沒有讀到這一題，請手動補這一題。",
+        "retryMerged": "跨頁題組裡找不到這一題，請手動補這一題。",
+        "cardNotFound": "找不到這一題，漏掉的題請手動補。",
+        "badImage": "頁面圖片太大或格式不支援（只收 PNG、JPEG、WebP），這一頁先跳過。可以按「重送這一頁」再試一次；仍然不行就之後手動補題。",
+        "invalid": "資料格式不正確，請重新整理後再試。",
+        "network": "網路連線中斷，請確認網路後再按「繼續處理」。",
+        "unknown": "發生錯誤，請稍後再試。",
+        "noFile": "請選擇檔案。",
+        "mixedFiles": "PDF 和照片不能混在一起上傳，請只選一種。",
+        "onePdfOnly": "一次只能上傳一個 PDF。",
+        "tooManyPages": "這個 PDF 有 {{count}} 頁，超過 {{max}} 頁上限，請拆成幾份再上傳。",
+        "tooManyPhotos": "選了 {{count}} 張照片，超過 {{max}} 張上限，請分成幾份上傳。",
+        "unsupportedFile": "只能上傳 PDF，或 PNG、JPEG、WebP 照片。",
+        "fileTooLarge": "〈{{name}}〉超過 {{max}}MB，請壓縮或拆成幾份再上傳。",
+        "pdfPassword": "這個 PDF 有設定密碼，請先移除密碼再上傳。",
+        "pdfInvalid": "這個 PDF 已損壞或不是 PDF 檔，請換一個檔案再試。",
+        "pdfLoaderFailed": "PDF 讀取元件載入失敗，請重新整理頁面後再試一次。",
+        "imageUnreadable": "這張照片讀不出來，請換一張再試。",
+        "renderFailed": "這一頁轉成圖片時失敗，請重新選檔案再試。",
+        "pageTooLarge": "這一頁的圖片壓縮後仍然太大，無法送出。",
+        "hashUnavailable": "瀏覽器不支援檔案比對，請改用最新版的 Chrome、Edge 或 Safari。",
+        "hashMismatch": "這不是同一份題本（內容或頁數不同）。請選第一次上傳的那個檔案。",
+        "needFile": "請先重新選擇檔案。",
+        "anotherRunning": "目前有一份題本正在處理，請等它處理完再上傳。"
+      }
     }
   },
   "orgMaterials": {
@@ -6334,8 +6604,7 @@
     "selection": {
       "selectedCount": "已選 {{count}} 個班級",
       "selectAll": "全選目前列出的班級",
-      "selectRow": "選取 {{name}}",
-      "clear": "取消選取"
+      "selectRow": "選取 {{name}}"
     },
     "banner": {
       "message": "有 {{count}} 個班級尚未設定年級",
@@ -6353,13 +6622,18 @@
       "description": "選擇升一級或降一級，確認每班調整前後的年級後套用。班級名稱不會變更。",
       "up": "升一級",
       "down": "降一級",
+      "set": "設為指定年級",
+      "targetLabel": "目標年級",
+      "descriptionSet": "所選班級的年級都會改成 {{grade}} 年級；班級名稱不會變更。",
+      "descriptionSetPending": "選擇目標年級後，所選班級的年級都會改成該年級；班級名稱不會變更。",
       "changesTitle": "將調整 {{count}} 個班級",
       "skippedTitle": "略過 {{count}} 個班級",
       "nothingToChange": "沒有可以調整的班級",
       "reason": {
         "max": "已是 {{grade}} 年級，無法再升",
         "min": "已是 {{grade}} 年級，無法再降",
-        "unset": "尚未設定年級"
+        "unset": "尚未設定年級",
+        "same": "已是 {{grade}} 年級（不變）"
       },
       "confirm": "套用（{{count}}）"
     },
@@ -6417,6 +6691,48 @@
       "activated": "已啟用 {{count}} 個班級",
       "switchDisableAria": "停用選取的班級",
       "switchEnableAria": "啟用選取的班級"
+    },
+    "batchEdit": {
+      "button": "批次編輯",
+      "title": "批次編輯班級",
+      "description": "修改所選班級的名稱與年級，確認後一次儲存。沒有修改的班級不會送出。",
+      "setAllLabel": "全部年級設為",
+      "nameLabel": "{{name}} 的班級名稱",
+      "gradeLabel": "{{name}} 的年級",
+      "preview": "顯示為：{{name}}",
+      "changed": "已修改",
+      "aiChanged": "AI 修改",
+      "nameRequired": "請輸入班級名稱",
+      "nameTooLong": "班級名稱最多 {{max}} 字",
+      "changedCount": "已修改 {{count}} 個班級",
+      "save": "儲存（{{count}}）",
+      "saveSuccess": "已更新 {{count}} 個班級",
+      "saveFailed": "儲存班級修改失敗，請稍後再試",
+      "forbidden": "您沒有權限編輯這些班級",
+      "limitExceeded": "一次最多儲存 {{max}} 個班級的修改，請分批處理",
+      "ai": {
+        "title": "AI 助手",
+        "adminOnly": "（只有平台管理員看得到）",
+        "intro": "告訴 AI 要怎麼改這些班級的名稱或年級，例如「把名稱裡的年級拿掉」。AI 只會填進表格，按「儲存」才會寫入。",
+        "inputLabel": "給 AI 的指示",
+        "placeholder": "例如：把名稱裡的年級拿掉",
+        "send": "送出",
+        "stop": "停止",
+        "thinking": "AI 思考中…",
+        "applying": "正在套用 {{current}}/{{total}}",
+        "applied": "已填入 {{count}} 個班級，確認後按「儲存」。",
+        "stopped": "已停止，填入了 {{current}}/{{total}} 個班級，其餘捨棄。",
+        "cancelled": "已停止，表格沒有變動。",
+        "noChanges": "AI 沒有修改任何班級。",
+        "error": "AI 暫時無法回應，請重試",
+        "changeLine": "{{from}} → {{to}}",
+        "gradeChange": "（年級：{{from}} → {{to}}）",
+        "undo": "復原上一次 AI 修改",
+        "undoHint": "復原會回到該次 AI 修改前的整張表格，之後的手動修改也會一起還原。",
+        "undone": "已復原到上一次 AI 修改前的表格。",
+        "expand": "展開 AI 助手",
+        "collapse": "收合 AI 助手"
+      }
     },
     "sort": {
       "gradeAsc": "年級 低→高",

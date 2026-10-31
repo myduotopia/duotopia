@@ -1,3 +1,10 @@
+/**
+ * 「我的班級」頁測試。
+ *
+ * 涵蓋清單、篩選、排序、列內編輯、年級／等級調整與停用／啟用；勾選後的底部操作列為共用
+ * BulkActionBar（#1116），用 test id `bulk-action-bar` 找，取消選取文字用 common.selection.clear；
+ * 按鈕層級以 class 判斷：「調整年級」「調整等級」同一樣式（都有 bg-white/15、沒有 ring-white/40）。
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -110,7 +117,7 @@ vi.mock("react-i18next", () => ({
           "{{count}} classroom(s) selected",
         "classroomGrade.selection.selectAll": "Select all listed classrooms",
         "classroomGrade.selection.selectRow": "Select {{name}}",
-        "classroomGrade.selection.clear": "Clear selection",
+        "common.selection.clear": "Clear selection",
         "classroomGrade.banner.message":
           "{{count}} classroom(s) have no grade set",
         "classroomGrade.banner.action": "Set now",
@@ -233,7 +240,7 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
-// GradeBulkBar reads the sidebar width for its left offset
+// BulkActionBar reads the sidebar width for its left offset
 vi.mock("@/contexts/SidebarContext", () => ({
   useSidebar: () => ({ sidebarWidth: 0 }),
 }));
@@ -827,6 +834,14 @@ describe("TeacherClassrooms", () => {
       expect(
         screen.getByRole("button", { name: /Adjust grade/ }),
       ).toBeInTheDocument();
+      // 按鈕層級（#1116）：批次操作列不分主次，調整年級與調整等級同一樣式
+      const gradeBtn = screen.getByRole("button", { name: /Adjust grade/ });
+      const levelBtn = screen.getByRole("button", { name: /Adjust level/ });
+      expect(gradeBtn).toHaveClass("bg-white/15");
+      expect(levelBtn).toHaveClass("bg-white/15");
+      expect(gradeBtn).not.toHaveClass("ring-white/40");
+      expect(levelBtn).not.toHaveClass("ring-white/40");
+      expect(gradeBtn.className).toBe(levelBtn.className);
     });
 
     it("shows the missing-grade banner when a classroom has no grade", async () => {
@@ -901,7 +916,7 @@ describe("TeacherClassrooms", () => {
       ]);
       // Selection is cleared after a successful adjust
       await waitFor(() => {
-        expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
       });
     });
 
@@ -991,7 +1006,7 @@ describe("TeacherClassrooms", () => {
 
       await user.selectOptions(findGradeFilter()!, "3");
       await waitFor(() => {
-        expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
       });
     });
 
@@ -1284,7 +1299,7 @@ describe("TeacherClassrooms", () => {
         ]);
       });
       await waitFor(() => {
-        expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
       });
     });
 
@@ -1326,7 +1341,7 @@ describe("TeacherClassrooms", () => {
       await waitForList();
 
       await tickRow(user, "Beta Class");
-      expect(screen.getByTestId("grade-bulk-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("bulk-action-bar")).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Set now" }),
       ).toBeInTheDocument();
@@ -1336,7 +1351,7 @@ describe("TeacherClassrooms", () => {
       expect(
         within(row(1)).getByRole("checkbox", { name: "Select Alpha Class" }),
       ).toBeDisabled();
-      expect(screen.queryByTestId("grade-bulk-bar")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Set now" }),
       ).not.toBeInTheDocument();
@@ -1357,7 +1372,7 @@ describe("TeacherClassrooms", () => {
 
       // Leaving edit mode brings the bar back
       await user.click(within(row(1)).getByRole("button", { name: "Cancel" }));
-      expect(screen.getByTestId("grade-bulk-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("bulk-action-bar")).toBeInTheDocument();
     });
 
     it("ignores a stale background reload that resolves after a newer one", async () => {

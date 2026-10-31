@@ -53,6 +53,9 @@
   },
   "common": {
     "orderOption": "No. {{number}}",
+    "selection": {
+      "clear": "Clear selection"
+    },
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -1839,7 +1842,8 @@
         "missingClozeAnswer": "Cloze answer required",
         "missingClozeAnswerDesc": "These vocabulary sets are missing a cloze answer for some words: {{contents}}. Please open the vocabulary set and set an answer (click a word or select a phrase) before assigning.",
         "contentTypeNotAssignable": "{{type}} can't be assigned yet (student practice isn't available for it)",
-        "contentTypeNotSelectable": "This content doesn't match the practice mode you picked. Switch mode, or clear the selected content first."
+        "contentTypeNotSelectable": "This content doesn't match the practice mode you picked. Switch mode, or clear the selected content first.",
+        "noModesForContent": "This material's content type can't be assigned yet (student practice isn't available for it). Please pick different material."
       },
       "warnings": {
         "quotaLow": "AI analysis quota insufficient",
@@ -1909,9 +1913,15 @@
         "default": "Default",
         "shuffleQuestions": "Shuffle Questions",
         "shuffleQuestionsDesc": "Randomize question order for each practice session",
-        "studentPreview": "Student preview (demo content)",
-        "studentPreviewDisclaimer": "Preview uses demo content. For some modes (Reading, Rearrangement) the timing / audio / shuffle settings come from the demo assignment and don't reflect your selections on the left.",
+        "studentPreview": "Student preview",
+        "studentPreviewSample": "Student preview (sample content)",
+        "studentPreviewDisclaimer": "No content selected yet, so the preview borrows sample content. For some modes (Reading, Rearrangement) the timing / audio / shuffle settings come from the demo assignment and don't reflect your selections on the left. Once you pick content, the preview switches to it.",
         "previewNotImplemented": "Preview not implemented for this mode yet",
+        "previewLoading": "Loading preview…",
+        "previewLoadFailed": "Failed to load preview",
+        "scenarioPreviewNeedsContent": "Select a scenario dialogue material to preview",
+        "scenarioPreviewEmpty": "This material has no questions to preview",
+        "scenarioPreviewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
         "selectModePrompt": "Select a mode to see the preview",
         "showAnswer": "Show Answer",
         "showAnswerDesc": "Show correct answer after completing each question",
@@ -1945,6 +1955,7 @@
         "showTranslation": "Show Translation",
         "showTranslationDesc": "Show word translation during practice",
         "showSentenceTranslationDesc": "Show sentence translation during practice",
+        "showQuestionTranslationDesc": "Show the question translation while answering",
         "showWord": "Show Word",
         "showWordDesc": "Show the word in English during practice",
         "showImage": "Show Image",
@@ -4580,7 +4591,12 @@
       "viewModeNoRecording": "Cannot record in view mode",
       "recordedAudio": "Recorded Audio",
       "recordingFailedCheckMic": "Recording failed, please check microphone permissions",
-      "suggestedDuration": "Suggested Recording Duration"
+      "suggestedDuration": "Suggested Recording Duration",
+      "tapToRecord": "Tap to start recording",
+      "tapToStop": "Tap again to stop",
+      "stopRecording": "Stop recording",
+      "processing": "Processing…",
+      "reRecord": "Re-record"
     }
   },
   "studentActivity": {
@@ -4911,15 +4927,9 @@
     "dialogTitle": "Add Scenario Dialogue",
     "editTitle": "Edit Scenario Dialogue",
     "badge": "Speaking",
-    "tabs": {
-      "sourceManual": "Write it yourself",
-      "sourceAi": "Generate with AI",
-      "sourceUpload": "Upload image / PDF"
-    },
     "labels": {
       "title": "Title",
       "goal": "Learning Goal",
-      "uploadTitle": "Click or drop files here",
       "rubric": "Scoring Criteria (AI feedback basis)",
       "notSpecified": "Not specified",
       "rubricNote": "Extra note for this question",
@@ -4934,8 +4944,7 @@
       "scenarioContent": "Scenario",
       "articleLevel": "Text difficulty",
       "questionLevel": "Question difficulty",
-      "scenarioText": "Scenario text",
-      "sectionGenerate": "Question settings"
+      "scenarioText": "Scenario text"
     },
     "rubricPresets": {
       "tenseTime": "Time",
@@ -4956,42 +4965,36 @@
     "buttons": {
       "generating": "Generating…",
       "addQuestion": "Add Question",
-      "skipGeneration": "Skip — I'll write my own",
-      "generateAndContinue": "Generate and continue",
-      "editSettings": "Edit settings",
-      "backToSettings": "Back to settings",
+      "editSettings": "Edit in setup",
+      "backToSettings": "Back to setup",
       "viewQuestions": "View questions",
       "generateAnother": "Generate more questions",
-      "uploadImage": "Upload image",
+      "uploadImage": "Upload",
       "replaceImage": "Replace",
       "removeImage": "Remove",
-      "generateScenario": "Generate scenario",
-      "extractScenario": "Extract from files",
-      "generateImage": "Generate"
+      "generateImage": "Generate",
+      "comingSoon": "Coming soon",
+      "expandScenario": "Show all",
+      "collapseScenario": "Show less"
     },
     "hints": {
       "rateLimit": "Up to 5 regenerations per minute",
-      "uploadFormats": "Supports JPG, PNG, PDF",
       "itemRange": "min {{min}}, max {{max}} questions",
       "maxReached": "Reached the {{max}}-question limit",
       "referenceAnswer": "Used by the AI to compare language features (tense, structure, vocabulary). Never shown to students; also the basis for suggested answers.",
       "visibleToStudents": "This text is sent to the AI grader and is also shown to students",
       "globalTense": "Applied to all questions by default. Customizing a question detaches it, so later changes here won't affect it.",
-      "step1Foot": "Generate once you're set, or skip ahead and write your own",
-      "untitled": "Untitled",
       "referenceNote": "Check the questions against the scenario and instructions",
       "noRubricYet": "No instructions yet",
-      "scenarioRequiredForAi": "Required to generate questions with AI",
-      "sourceManual": "Type it in the Scenario text box below",
       "optional": "Optional",
-      "noContextYet": "No scenario yet",
-      "scenarioText": "Edit here after producing it any of the three ways",
-      "sectionGenerate": "Used when AI writes the questions; each one stays editable afterwards"
+      "noContextYet": "No scenario yet"
     },
     "tooltips": {
       "regenerateQuestion": "Regenerate this question (avoids previous ones)",
       "generateAudio": "Generate audio",
-      "resetToGlobal": "Reset to the shared scoring criteria"
+      "resetToGlobal": "Reset to the shared scoring criteria",
+      "deleteDisabled": "Keep at least 1 question; this one can't be deleted",
+      "generateAudioDisabled": "Type the question first to generate audio"
     },
     "messages": {
       "generateFailed": "AI generation failed, please try again later",
@@ -5001,7 +5004,11 @@
       "imageQuotaExceeded": "You've used all your AI image generations this month — you can upload an image manually",
       "imageBlocked": "This description can't be turned into an image, please try a different one",
       "imageFailed": "Image generation failed, please try again later",
-      "scenarioRequired": "Add the scenario first — AI needs it to write questions"
+      "imageGenerationComingSoon": "AI image generation is being revised and is coming soon. Please use Upload for now",
+      "textQuotaExceeded": "You've used all of this month's scenario dialogue AI calls (resets on the 1st). Everything you've filled in is still here — you can type it manually instead",
+      "extractFailedFiles": "Couldn't extract these files: {{files}}. Content from the other files is in the scenario box — you can upload the failed ones again.",
+      "extractAllFailed": "Couldn't extract any of the files: {{files}}. Upload them again, or paste the scenario into the scenario box.",
+      "extractTruncated": "This file is long, so the end of the extracted passage may be missing. Please check the scenario box."
     },
     "tenseTimes": {
       "present": "Present",
@@ -5023,7 +5030,131 @@
       "voice": "Voice: {{value}}",
       "keywords": "Must use: {{value}}"
     },
-    "tenseCombo": "{{time}} {{aspect}}"
+    "tenseCombo": "{{time}} {{aspect}}",
+    "chat": {
+      "typing": "AI is typing",
+      "previewFeedback": "(Preview) When a student answers, AI feedback on their own answer appears here. Previews never call AI, so they cost no credits.",
+      "recordingTooLong": "That recording is too long (max {{seconds}} seconds). Please record a shorter one.",
+      "recordingTooShort": "That recording is too short to hear. Please record again.",
+      "recordingTooLarge": "That recording file is too large. Please record a shorter one.",
+      "uploadFailed": "Could not upload your recording. Please try again.",
+      "quotaExhausted": "You've used all the AI feedback for this question. You can still answer the next one.",
+      "feedbackFailed": "AI feedback is unavailable right now. Please try again.",
+      "questionImages": "Question images",
+      "questionNo": "Question {{no}} / {{total}}",
+      "skipped": "Skipped",
+      "averageScore": "Avg. {{score}}",
+      "playQuestion": "Play question",
+      "showEnglish": "Show English",
+      "showChinese": "Show Chinese",
+      "keywords": "Keywords",
+      "hint": "Answer tips",
+      "referenceAnswer": "Reference answer",
+      "attemptNo": "Attempt {{no}}",
+      "aiScore": "AI {{score}}",
+      "verdictGreat": "Great!",
+      "verdictImprove": "Could be better",
+      "suggestion": "Try saying",
+      "listenSuggestion": "Listen to suggestion",
+      "retry": "Try again",
+      "attemptsUsedUp": "{{max}} attempts used — moving to the next question",
+      "start": "Start conversation",
+      "submitAssignment": "Submit assignment",
+      "finishedHint": "Scroll up to listen again, or tap \"Try again\" on questions with attempts left",
+      "send": "Send",
+      "typePlaceholder": "Type your answer…",
+      "scenario": "Scenario",
+      "scenarioImages": "Scenario images",
+      "rubric": "Requirements",
+      "waitTyping": "AI is typing…",
+      "waitFeedback": "AI is reviewing your answer…",
+      "waitAutoNext": "Moving to the next question…",
+      "waitChoose": "Choose \"Try again\" or \"Next question\" above",
+      "previewMode": "Preview mode",
+      "jumpToNo": "Jump to question {{no}}",
+      "intro": "Hi! I'll ask you {{count}} questions. Listen, then answer in English. Tap \"Start conversation\" when you're ready.",
+      "next": "Next question",
+      "closing": "That's all for today — nice work! Check your answers, then submit.",
+      "newMessages": "New messages",
+      "showEnglishFull": "Show English",
+      "hideEnglish": "Hide English",
+      "englishShort": "EN",
+      "showChineseFull": "Show Chinese",
+      "hideChinese": "Hide Chinese",
+      "chineseShort": "中",
+      "questionNav": "Questions",
+      "goToNo": "Scroll to question {{no}}",
+      "dotLocked": "Question {{no}}: not reached yet",
+      "notYet": "Not there yet",
+      "attemptsReached": "{{max}} attempts used",
+      "retrying": "Re-answering question {{no}}",
+      "cancelRetry": "Cancel re-answer"
+    },
+    "images": {
+      "label": "Scenario images",
+      "hint": "Students see these while answering (up to 5)",
+      "alt": "Scenario image {{n}}",
+      "add": "Upload image",
+      "full": "Up to {{max}} scenario images. Delete one before uploading another.",
+      "fullShort": "5 / 5 full",
+      "remove": "Delete this scenario image",
+      "crop": "Adjust crop",
+      "cropUnavailable": "This image was saved earlier and has no original to re-crop. Delete it and upload again to change the area.",
+      "cropTitle": "Adjust crop",
+      "cropHint": "Drag on the original to select the area to keep, then press Apply.",
+      "applyCrop": "Apply",
+      "cropFailed": "Cropping failed. Please try again.",
+      "uploadFailed": "{{count}} scenario image(s) failed to upload. You can upload them yourself.",
+      "overLimit": "Up to {{max}} scenario images; {{count}} more were skipped.",
+      "someNotCropped": "Some pictures couldn't be cropped automatically. You can upload them yourself."
+    },
+    "setup": {
+      "change": "Change",
+      "back": "Back",
+      "next": "Next",
+      "startGenerate": "Start generating",
+      "actionBar": "Actions",
+      "countOption": "{{count}} questions",
+      "writeArticle": "Ask AI to write it",
+      "writingArticle": "OK, writing a {{level}} scenario about \"{{goal}}\". One moment…",
+      "extracting": "Extracting…",
+      "uploadFile": "Upload image / PDF",
+      "uploadHint": "JPG, PNG or PDF (up to 10MB). Text goes into the box below; pictures in the file are cropped into scenario images.",
+      "directionPlaceholder": "e.g. what they do on weekends, their views on phones in class",
+      "materialRequired": "Please give a scenario (text or images) or a direction first, so the AI knows what to ask.",
+      "reaskFallback": "I couldn't tell how to use that. Could you be more specific?",
+      "reopenConfirmTitle": "Change an earlier answer?",
+      "reopenConfirmDescription": "The settings after it will be cleared. Questions already generated are kept.",
+      "reopenConfirm": "Change",
+      "modeChangeConfirmTitle": "Change your answer?",
+      "modeChangeConfirmDescription": "The scenario text and pictures you added will be cleared. Questions already generated are kept.",
+      "q": {
+        "mode": "Do you want to give students a passage or pictures as the context for the questions?",
+        "goal": "What do you want students to practise? Tell me the goal and pick a passage level, and I'll write a scenario.",
+        "scenarioAi": "Here is the scenario. You can edit it, and add scenario images (students see them while answering, up to 5).",
+        "scenarioExisting": "Paste the scenario below, or upload an image / PDF and I'll extract the text and pictures (up to 5 scenario images).",
+        "source": "Where do the questions come from?",
+        "direction": "What do you want to ask students? Give me a topic or direction and I'll write questions on it.",
+        "settings": "OK. Check the question settings and press \"Start generating\".",
+        "settingsWithDirection": "OK, I'll write questions about \"{{direction}}\". Check the settings and press \"Start generating\"."
+      },
+      "modes": {
+        "none": "No context, I just want to ask students questions",
+        "existing": "I have existing material to use as the context",
+        "ai": "I need AI to write a passage as the context"
+      },
+      "modeHints": {
+        "existing": "Upload text, images or a PDF"
+      },
+      "sources": {
+        "manual": "I'll type them",
+        "ai": "Ask AI to write them"
+      },
+      "answers": {
+        "goal": "Goal: \"{{goal}}\" (passage level {{level}})",
+        "scenario": "Passage: {{chars}} characters, {{images}} scenario image(s)"
+      }
+    }
   },
   "vocabularySet": {
     "dialogTitle": "Add Vocabulary Set",
@@ -5558,7 +5689,8 @@
       "contents": "Contents",
       "copyToMy": "Copy to My Materials",
       "copyToOrg": "Copy to Org Materials",
-      "copiedToday": "Copied Today"
+      "copiedToday": "Copied Today",
+      "noCopyPermissionOrg": "Only organization admins can copy to organization materials. Please contact your admin."
     },
     "detail": {
       "backToList": "Back to List",
@@ -5601,7 +5733,8 @@
       "copyFailed": "Copy failed. Please try again later.",
       "autoCopySuccess": "\"{{name}}\" is now in My Materials — ready to practise!",
       "autoCopySuccessOrg": "\"{{name}}\" is now in Organization Materials — ready to practise!",
-      "autoCopyFailed": "Could not copy the material automatically. Please copy it from Resource Materials."
+      "autoCopyFailed": "Could not copy the material automatically. Please copy it from Resource Materials.",
+      "loadFailed": "Failed to load resource materials. Please refresh the page."
     }
   },
   "contentCopy": {
@@ -5674,7 +5807,8 @@
     "showExamAnswers": "Show answers after exam"
   },
   "tree": {
-    "assign": "Assign"
+    "assign": "Assign",
+    "assignNotAvailable": "This content type can't be assigned yet (student practice isn't available for it)"
   },
   "instantPractice": {
     "title": "Instant Practice",
@@ -6146,9 +6280,9 @@
       "selected": "{{count}} selected",
       "dirty": "{{count}} with unsaved changes",
       "save": "Save",
+      "nothingToSave": "No changes to save",
       "delete": "Delete",
       "dispatch": "Assign",
-      "clearSelection": "Clear selection",
       "confirmDelete": "Delete {{count}} question(s)? Assigned papers are not affected.",
       "saved": "Saved {{count}} question(s)",
       "saveFailed": "{{count}} question(s) failed to save",
@@ -6271,6 +6405,148 @@
     "groupTypes": {
       "reading": "Reading group",
       "cloze": "Cloze group"
+    },
+    "examImport": {
+      "menu": {
+        "upload": "Upload an exam paper",
+        "uploadHint": "Upload a test or workbook (PDF or photos); AI extracts every question at once",
+        "uploadComingSoon": "Coming soon",
+        "uploadBusy": "An exam paper is being processed. You can upload another one when it finishes.",
+        "aiGenerate": "AI-generated questions",
+        "selfAuthored": "Write your own"
+      },
+      "accents": {
+        "american": "American",
+        "british": "British",
+        "indian": "Indian",
+        "australian": "Australian"
+      },
+      "upload": {
+        "title": "Upload an exam paper",
+        "description": "Upload a test or workbook. AI extracts questions, answers and exam points page by page.",
+        "fileLabel": "Exam paper file",
+        "dropHint": "Click to choose, or drag files here (one PDF, or several photos)",
+        "limitHint": "Up to {{max}} pages; PDF and photos can't be mixed",
+        "preparing": "Reading the file…",
+        "photosName": "{{name}} and {{count}} photos in total",
+        "pageCount_one": "{{count}} page",
+        "pageCount_other": "{{count}} pages",
+        "settingsHint": "Fill in these settings once; they apply to every question in this paper.",
+        "grade": "Grade range",
+        "gradeEmpty": "Drag to choose a grade range",
+        "source": "Question source",
+        "program": "Program and lesson (optional)",
+        "visibility": "Sharing",
+        "accents": "Reading accent",
+        "accentsHint": "Choose one or more. With several, each question (a group together with its questions) gets one, spread evenly. Your choice is not remembered.",
+        "missing": "Still needed: {{items}}",
+        "listSeparator": ", ",
+        "need": {
+          "file": "file",
+          "grade": "grade range",
+          "source": "question source",
+          "visibility": "sharing",
+          "accents": "reading accent"
+        },
+        "start": "Start extracting",
+        "openExisting": "Open that import"
+      },
+      "progress": {
+        "title": "Progress",
+        "description": "Pages are processed one at a time; finished pages are saved right away.",
+        "count": "{{done}}/{{total}} pages",
+        "countWithBlank": "{{done}}/{{total}} pages ({{blank}} blank)",
+        "failedCount_one": "{{count}} page failed",
+        "failedCount_other": "{{count}} pages failed",
+        "keepOpen": "Processing continues only while this web page is open. Closing this panel or switching to the Materials tab won't stop it; if you close the page or leave My Materials, continue later from the top of My Question Bank.",
+        "allDone_one": "Every page has been processed: {{count}} question extracted.",
+        "allDone_other": "Every page has been processed: {{count}} questions extracted.",
+        "pageNo": "Page {{n}}",
+        "answerPage": "Answer page",
+        "pageOrderHint": "Page numbers follow the order of pages in the PDF file and may differ from the numbers printed on the paper.",
+        "status": {
+          "pending": "Waiting",
+          "processing": "Processing",
+          "done_one": "Done · {{count}} question",
+          "done_other": "Done · {{count}} questions",
+          "blank": "Blank, skipped",
+          "failed": "Failed",
+          "merged": "Part of the question group on page {{target}} (Q{{range}})",
+          "mergedNoRange": "Part of the question group on page {{target}}",
+          "doneSpan_one": "Done · {{count}} question (spans pages {{from}}–{{to}})",
+          "doneSpan_other": "Done · {{count}} questions (spans pages {{from}}–{{to}})",
+          "empty": "No questions"
+        },
+        "blankHint": "This page looks blank, so it wasn't sent for extraction. If it does have questions, choose \"Send this page anyway\".",
+        "sendBlank": "Send this page anyway",
+        "resend": "Resend this page",
+        "manualFill": "This page couldn't be read. Please add its questions manually.",
+        "stopped_one": "Processing stopped. {{count}} page hasn't been sent yet.",
+        "stopped_other": "Processing stopped. {{count}} pages haven't been sent yet.",
+        "resume": "Continue processing",
+        "reselect": "Choose \"{{name}}\" again to continue",
+        "reselectPhotos": "For photos, select them in the same order as the first time.",
+        "reselectButton": "Choose file",
+        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes.",
+        "close": "Close",
+        "review": "Start reviewing"
+      },
+      "banner": {
+        "one": "You have 1 exam paper that isn't finished ({{name}}, {{progress}})",
+        "many": "You have {{count}} exam papers that aren't finished",
+        "view": "View",
+        "hide": "Hide",
+        "continue": "Continue",
+        "abandon": "Discard"
+      },
+      "abandon": {
+        "button": "Discard this import",
+        "title": "Discard this import?",
+        "description": "Everything extracted from \"{{name}}\" and its page images will be deleted. This can't be undone. Discarded imports don't count toward the daily upload limit.",
+        "confirm": "Discard",
+        "done": "Import discarded"
+      },
+      "errors": {
+        "duplicate": "You've already imported this exam paper.",
+        "dailyLimit": "You've already uploaded an exam paper today (limit: 1 per day). Please try again tomorrow.",
+        "aiTimeout": "AI didn't respond within 2 minutes. This page is marked as failed; you can resend it.",
+        "aiFailed": "AI extraction failed. Please resend this page later.",
+        "pageBusy": "This page is still being processed and will update shortly.",
+        "retryLimit": "This page still couldn't be read after 2 resends. Please add its questions manually.",
+        "pageDone": "This page has already been processed.",
+        "closed": "This import has ended (discarded or saved) and can't be processed further.",
+        "notFound": "This import couldn't be found. It may have been discarded.",
+        "pageNotFound": "This page couldn't be found.",
+        "notAbandonable": "This import has already been saved to the question bank and can't be discarded.",
+        "notBlank": "This page isn't a skipped blank page.",
+        "pageImageMissing": "This page's image is missing. Please discard this import and upload again.",
+        "pageNotDone": "This page isn't processed yet. Please resend the whole page first.",
+        "retryTarget": "Please choose the question to retry; add missed questions manually.",
+        "retryEmpty": "AI couldn't find this question. Please add it manually.",
+        "retryMerged": "This question wasn't found in the multi-page group. Please add it manually.",
+        "cardNotFound": "This question couldn't be found. Add missed questions manually.",
+        "badImage": "The page image is too large or not supported (PNG, JPEG or WebP only), so this page was skipped. Choose \"Resend this page\" to try again; if it still fails, add its questions manually later.",
+        "invalid": "The data was invalid. Please refresh and try again.",
+        "network": "The network connection was lost. Check your connection, then choose Continue processing.",
+        "unknown": "Something went wrong. Please try again later.",
+        "noFile": "Please choose a file.",
+        "mixedFiles": "PDF and photos can't be uploaded together. Please choose one kind.",
+        "onePdfOnly": "Only one PDF can be uploaded at a time.",
+        "tooManyPages": "This PDF has {{count}} pages, over the {{max}}-page limit. Please split it into smaller files.",
+        "tooManyPhotos": "You chose {{count}} photos, over the {{max}}-photo limit. Please upload them in smaller batches.",
+        "unsupportedFile": "Only a PDF, or PNG, JPEG or WebP photos, can be uploaded.",
+        "fileTooLarge": "\"{{name}}\" is larger than {{max}} MB. Please compress it or split it into smaller files.",
+        "pdfPassword": "This PDF is password-protected. Please remove the password and upload it again.",
+        "pdfInvalid": "This PDF is damaged or isn't a PDF file. Please try another file.",
+        "pdfLoaderFailed": "The PDF reader failed to load. Please refresh the page and try again.",
+        "imageUnreadable": "This photo can't be read. Please try another one.",
+        "renderFailed": "This page couldn't be turned into an image. Please choose the file again.",
+        "pageTooLarge": "This page's image is still too large after compression and can't be sent.",
+        "hashUnavailable": "Your browser can't compare files. Please use the latest Chrome, Edge or Safari.",
+        "hashMismatch": "This isn't the same exam paper (different content or page count). Please choose the file you uploaded the first time.",
+        "needFile": "Please choose the file again first.",
+        "anotherRunning": "Another exam paper is being processed. Please wait until it finishes before uploading a new one."
+      }
     }
   },
   "orgMaterials": {
@@ -6291,8 +6567,7 @@
     "selection": {
       "selectedCount": "{{count}} classroom(s) selected",
       "selectAll": "Select all listed classrooms",
-      "selectRow": "Select {{name}}",
-      "clear": "Clear selection"
+      "selectRow": "Select {{name}}"
     },
     "banner": {
       "message": "{{count}} classroom(s) have no grade set",
@@ -6310,13 +6585,18 @@
       "description": "Choose to move up or down one grade, check each classroom's before and after, then apply. Classroom names are not changed.",
       "up": "Up one grade",
       "down": "Down one grade",
+      "set": "Set to grade",
+      "targetLabel": "Target grade",
+      "descriptionSet": "All selected classes will be set to Grade {{grade}}. Class names won't change.",
+      "descriptionSetPending": "Choose a target grade. All selected classes will be set to it. Class names won't change.",
       "changesTitle": "{{count}} classroom(s) will change",
       "skippedTitle": "{{count}} classroom(s) skipped",
       "nothingToChange": "No classrooms can be adjusted",
       "reason": {
         "max": "Already Grade {{grade}}, cannot go up",
         "min": "Already Grade {{grade}}, cannot go down",
-        "unset": "Grade not set"
+        "unset": "Grade not set",
+        "same": "Already Grade {{grade}} (no change)"
       },
       "confirm": "Apply ({{count}})"
     },
@@ -6374,6 +6654,48 @@
       "activated": "Activated {{count}} classroom(s)",
       "switchDisableAria": "Disable selected classrooms",
       "switchEnableAria": "Enable selected classrooms"
+    },
+    "batchEdit": {
+      "button": "Batch edit",
+      "title": "Edit classrooms",
+      "description": "Edit the names and grades of the selected classrooms, then save them all at once. Unchanged classrooms are not sent.",
+      "setAllLabel": "Set all grades to",
+      "nameLabel": "Class name for {{name}}",
+      "gradeLabel": "Grade for {{name}}",
+      "preview": "Shown as: {{name}}",
+      "changed": "Edited",
+      "aiChanged": "Edited by AI",
+      "nameRequired": "Enter a class name",
+      "nameTooLong": "Class names can be up to {{max}} characters",
+      "changedCount": "{{count}} classroom(s) edited",
+      "save": "Save ({{count}})",
+      "saveSuccess": "Updated {{count}} classroom(s)",
+      "saveFailed": "Failed to save classroom changes. Please try again later.",
+      "forbidden": "You don't have permission to edit these classrooms",
+      "limitExceeded": "You can save changes to up to {{max}} classrooms at a time. Please work in batches.",
+      "ai": {
+        "title": "AI assistant",
+        "adminOnly": "(visible to platform admins only)",
+        "intro": "Tell the AI how to change these classrooms' names or grades, e.g. \"Remove the grade from the class names\". The AI only fills in the table; nothing is saved until you click Save.",
+        "inputLabel": "Instructions for the AI",
+        "placeholder": "e.g. Remove the grade from the class names",
+        "send": "Send",
+        "stop": "Stop",
+        "thinking": "AI is thinking…",
+        "applying": "Applying {{current}}/{{total}}",
+        "applied": "Filled in {{count}} classroom(s). Review them, then click Save.",
+        "stopped": "Stopped. Filled in {{current}}/{{total}} classroom(s); the rest were discarded.",
+        "cancelled": "Stopped. The table was not changed.",
+        "noChanges": "The AI didn't change any classrooms.",
+        "error": "The AI is temporarily unavailable. Please try again.",
+        "changeLine": "{{from}} → {{to}}",
+        "gradeChange": " (grade: {{from}} → {{to}})",
+        "undo": "Undo last AI edit",
+        "undoHint": "Undo restores the whole table to how it was before that AI edit, including any manual edits made since.",
+        "undone": "Restored the table to before the last AI edit.",
+        "expand": "Expand AI assistant",
+        "collapse": "Collapse AI assistant"
+      }
     },
     "sort": {
       "gradeAsc": "Grade low→high",

@@ -32,6 +32,16 @@ import { QuizNavSlotContext } from "@/contexts/QuizNavSlotContext";
 import ReadingAssessmentTemplate from "@/components/activities/ReadingAssessmentTemplate";
 import ListeningClozeTemplate from "@/components/activities/ListeningClozeTemplate";
 import GroupedQuestionsTemplate from "@/components/activities/GroupedQuestionsTemplate";
+import { ScenarioChatActivity } from "@/components/activities/scenario-dialogue/ScenarioChatActivity";
+import {
+  scenarioChatFromStudentActivity,
+  scenarioChatSettings,
+} from "@/components/activities/scenario-dialogue/fromApi";
+import {
+  createPreviewScenarioAdapters,
+  createStudentScenarioAdapters,
+} from "@/components/activities/scenario-dialogue/studentAdapters";
+import { unansweredQuestionNumbers } from "@/components/activities/scenario-dialogue/submitGuard";
 import SentenceMakingActivity from "@/components/activities/SentenceMakingActivity";
 import RearrangementActivity, {
   type RearrangementQuestion,
@@ -102,6 +112,8 @@ export interface Activity {
     text?: string;
     translation?: string;
     audio_url?: string;
+    // #1140 Stage 3: 題目圖片（老師生圖或上傳的，#1024）。對話式作答畫面會顯示它。
+    image_url?: string;
     recording_url?: string;
     progress_id?: number;
     // Server-authoritative AI analysis count for this item; used by the
@@ -113,8 +125,12 @@ export interface Activity {
     scenario_dialogue?: {
       keywords: string[];
       rubric_note: string;
-      tense: { time: string; aspect: string };
-      voice: string;
+      // 學生畫面不顯示這兩個（只有 AI 評分與老師批改用得到），而「沿用整體」要解析成
+      // 生效值，唯一判定處在後端 utils/scenario_dialogue.resolve_effective_tense /
+      // resolve_effective_voice —— 前端不複製那條規則。所以派發預覽
+      // （ScenarioDialoguePreview）只餵畫面真的會用到的欄位，這兩個設成選填。
+      tense?: { time: string; aspect: string };
+      voice?: string;
     };
     ai_assessment?: {
       accuracy_score?: number;
@@ -266,6 +282,15 @@ const RECORDING_REQUIRED_TYPES = new Set([
   "SPEAKING",
 ]);
 
+// ⚠️ **不要把 SCENARIO_DIALOGUE 加進上面那個 set。**
+//
+// 學生確實是開口錄音作答，所以加進去看起來「明顯正確」—— 但 handleSubmit 的逐題檢查
+// 讀的是 `activities` state 裡的 `item.recording_url`，而情境對話的錄音是在
+// `studentAdapters` 裡上傳的（#1140 Stage 3），**不會回寫那份 state**。一加進去，
+// 送出時就會把每一題都列成「尚未錄音」。
+//
+// 真正要擋「沒答完就送出」的話，得讓對話式畫面把已完成的題目回報上來，而不是改這個 set。
+
 // 單字集搭配需要錄音的練習模式：
 // - reading       → 朗讀單字的例句
 // - word_reading  → 單字朗讀
@@ -363,6 +388,26 @@ export default function StudentActivityPageContent({
     analyzeAndUpload,
   } = useAutoAnalysis(assignmentId, isPreviewMode);
 
+  // #1140 Stage 3: 情境對話的 AI 建議與朗讀。hook 對 getFeedback 的 reject 只會還原
+  // 狀態、不會說話，所以把錯誤接出來跳 toast，學生才知道為什麼要重答。
+  const scenarioAdapters = useMemo(
+    () =>
+      // 預覽（老師看真實作業、demo）**一定要用不碰網路的那組**：學生版會拿老師的
+      // token 去打學生專用端點（401／403），還會寫 StudentItemProgress、動到配額。
+      //
+      // demo 用預覽版 adapters，但 settings 的 isPreviewMode 仍是 false —— 這是刻意的：
+      // demo 的訪客不該看到「預覽模式」那個給老師看的標示，但同樣不能打 AI。
+      isPreviewMode || isDemoMode
+        ? createPreviewScenarioAdapters(
+            t("scenarioDialogue.chat.previewFeedback"),
+          )
+        : createStudentScenarioAdapters({
+            assignmentId,
+            onError: (message) => toast.error(message),
+          }),
+    [assignmentId, isPreviewMode, isDemoMode, t],
+  );
+
   // State management
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
@@ -375,6 +420,9 @@ export default function StudentActivityPageContent({
   const [submitting, setSubmitting] = useState(false);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [incompleteItems, setIncompleteItems] = useState<string[]>([]);
+  // #1140 A 項：情境對話每題「有沒有答過」。由 ScenarioChatActivity 回報 —— 它的
+  // 錄音是在 adapters 裡上傳的，不會回寫 activities state，所以送出檢查讀不到。
+  const [scenarioAnswered, setScenarioAnswered] = useState<boolean[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🔒 GroupedQuestionsTemplate 錄音分析中狀態
 
   // Issue #835: Live quiz — 進入 guard + 收卷輪詢
@@ -2134,6 +2182,47 @@ export default function StudentActivityPageContent({
         }
       });
 
+      // #1140 Stage 3: 情境對話改用專屬的訊息對話式作答畫面（#1133／PR #1138）。
+      //
+      // 這條在 GroupedQuestionsTemplate 之前就 return —— 情境對話的流程（先看情境、
+      // 開始對話、逐題錄音、拿 AI 建議、可重答）與題組畫面完全不同，不是多傳幾個
+      // prop 能表達的。老師的派發預覽走的是同一個元件（ScenarioDialoguePreview，
+      // #1142），兩邊一致才叫預覽。
+      if (practiceMode === "scenario_dialogue") {
+        const chat = scenarioChatFromStudentActivity(activity);
+        return (
+          <ScenarioChatActivity
+            context={chat.context}
+            items={chat.items}
+            settings={scenarioChatSettings({
+              showTranslation,
+              isPreviewMode: Boolean(isPreviewMode),
+            })}
+            adapters={scenarioAdapters}
+            onProgressChange={setScenarioAnswered}
+            onSubmit={() => {
+              // 略過的題目 attempts 是空的 —— 全部略過也走得到「送出」。這裡沿用
+              // 其他模式那個「未完成」dialog（可以取消，也可以堅持送出），而不是
+              // 直接擋掉：學生有可能真的想先交。
+              const unanswered = unansweredQuestionNumbers(
+                chat.items.length,
+                scenarioAnswered,
+              );
+              if (unanswered.length > 0 && !isPreviewMode) {
+                setIncompleteItems(
+                  unanswered.map((number) =>
+                    t("studentActivityPage.validation.itemNumber", { number }),
+                  ),
+                );
+                setShowSubmitDialog(true);
+                return;
+              }
+              void handleSubmit();
+            }}
+          />
+        );
+      }
+
       const assessmentResults =
         Object.keys(aiAssessments).length > 0
           ? { items: aiAssessments }
@@ -2141,46 +2230,6 @@ export default function StudentActivityPageContent({
 
       return (
         <>
-          {/*
-            Issue #1031: 情境對話的情境內容置頂常駐。
-            題目都是從情境來的（「你上週末做了什麼？」要看得到那段情境才答得出來），
-            所以不是讀完一次就收起來，而是作答每一題時都看得到。
-          */}
-          {practiceMode === "scenario_dialogue" &&
-            activity.scenario_settings?.scenario_content && (
-              <div className="mb-4 rounded-xl border border-purple-200 bg-purple-50/60 p-4">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-                  {activity.scenario_settings.scenario_content}
-                </p>
-                {activity.scenario_settings.global_rubric && (
-                  <p className="mt-3 border-t border-purple-200 pt-2 text-xs text-purple-800">
-                    {activity.scenario_settings.global_rubric}
-                  </p>
-                )}
-              </div>
-            )}
-
-          {/* 本題的必用字詞 —— 逐題獨立，答題時要看得到 */}
-          {practiceMode === "scenario_dialogue" &&
-            (activity.items?.[currentSubQuestionIndex]?.scenario_dialogue
-              ?.keywords?.length ?? 0) > 0 && (
-              <div className="mb-3 flex flex-wrap items-center gap-1">
-                <span className="text-xs text-gray-500">
-                  {t("studentActivity.scenarioDialogue.useTheseWords")}
-                </span>
-                {activity.items?.[
-                  currentSubQuestionIndex
-                ]?.scenario_dialogue?.keywords.map((word) => (
-                  <span
-                    key={word}
-                    className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
-                  >
-                    {word}
-                  </span>
-                ))}
-              </div>
-            )}
-
           <GroupedQuestionsTemplate
             items={activity.items}
             currentQuestionIndex={currentSubQuestionIndex}
@@ -2302,12 +2351,7 @@ export default function StudentActivityPageContent({
               });
             }}
             onAnalyzingStateChange={setIsAnalyzing} // 🔒 接收分析狀態變化
-            canUseAiAnalysis={
-              // Issue #1031: 情境對話沒有 AI 分析。既有那套是 Azure 發音評測，要有
-              // reference_text 才能評「唸得多準」；開放式回答沒有正解可比，硬跑會把
-              // 「講得跟範例不同」判成錯。改由老師在批改頁人工評分。
-              practiceMode === "scenario_dialogue" ? false : canUseAiAnalysis
-            }
+            canUseAiAnalysis={canUseAiAnalysis}
             recordingDisabled={recordingDisabledForCurrent}
             attemptsHint={recordingAttemptsHint}
           />

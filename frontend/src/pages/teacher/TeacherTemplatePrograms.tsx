@@ -35,6 +35,9 @@ import MaterialsPageTabs, {
   type MaterialsPageTab,
 } from "@/components/shared/MaterialsPageTabs";
 import QuestionBankTab from "@/components/question-bank/QuestionBankTab";
+import ExamImportSheet from "@/components/question-bank/exam-import/ExamImportSheet";
+import { useExamImport } from "@/components/question-bank/exam-import/useExamImport";
+import { ENABLE_QUESTION_BANK_EXAM_IMPORT } from "@/config/featureFlags";
 import MultipleChoiceQuestionSheet from "@/components/question-bank/MultipleChoiceQuestionSheet";
 import type { Question, QuestionType } from "@/types/questionBank";
 import type { ViewMode } from "@/components/shared/MaterialsToolbar";
@@ -71,6 +74,12 @@ function TeacherTemplateProgramsInner() {
   const vocabPanelRef = useRef<VocabularySetPanelHandle>(null);
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  // 上傳題本（#1112 C3）：狀態放在頁面層，不跟題庫分頁一起卸載——切到「教材」分頁時處理繼續；
+  // 提示列在題庫分頁（QuestionBankTab），上傳／進度 Sheet 在這一層
+  // 旗標關閉（production，#1112 驗證完才開）時連清單都不去打，入口也不往下傳 ——
+  // 下游全部走「沒傳 examImport」那條既有路徑：按鈕反灰說「即將推出」、提示列與
+  // Sheet 都不出現。
+  const examImport = useExamImport(ENABLE_QUESTION_BANK_EXAM_IMPORT);
   // 題庫：新增／編輯選擇題 dialog（issue #1064）
   const [questionDialog, setQuestionDialog] = useState<{
     open: boolean;
@@ -809,6 +818,9 @@ function TeacherTemplateProgramsInner() {
           <QuestionBankTab
             scope="mine"
             refreshKey={questionRefreshKey}
+            examImport={
+              ENABLE_QUESTION_BANK_EXAM_IMPORT ? examImport : undefined
+            }
             onCreateQuestion={(type) =>
               setQuestionDialog({
                 open: true,
@@ -1525,6 +1537,15 @@ function TeacherTemplateProgramsInner() {
         onSaved={() => setQuestionRefreshKey((k) => k + 1)}
         onDeleted={() => setQuestionRefreshKey((k) => k + 1)}
       />
+
+      {/* 上傳題本（#1112 C3）：放在分頁外，切到教材分頁也不卸載 */}
+      {ENABLE_QUESTION_BANK_EXAM_IMPORT && (
+        <ExamImportSheet
+          controller={examImport}
+          programs={programs}
+          sidebarWidth={sidebarWidth}
+        />
+      )}
 
       <ProgramDialog
         program={selectedProgram}

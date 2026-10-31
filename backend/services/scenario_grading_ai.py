@@ -56,6 +56,10 @@ MODEL = settings.VERTEX_AI_FLASH_MODEL
 # 逐字稿 + 四個面向 + 回饋，抓寬一點避免截斷
 MAX_OUTPUT_TOKENS = 2048
 
+# 情境文章送進評分 prompt 的長度上限（#1146）。存檔端沒有上限，這裡截一刀避免
+# 異常長的情境讓每一題評分都燒大量 token。出題端點的上限是 8000，這裡同值。
+MAX_SCENARIO_CHARS_FOR_GRADING = 8000
+
 # 音檔輸入也計在 input tokens。
 # 模型單價：單一來源在 core/config.py（PR #1122 review 第 6 點），
 # 避免像模型 ID 那樣散在多個檔案各自飄。以模型名為 key，換模型忘了加價格
@@ -145,6 +149,34 @@ def mime_type_for_recording(url: Optional[str]) -> str:
     return EXTENSION_TO_MIME.get(ext.lower(), _DEFAULT_MIME)
 
 
+async def build_audio_part(recording_url: str, mime_type: str) -> Any:
+    """把錄音變成 Gemini 的 Part。
+
+    GCS 上的檔案用 ``from_uri`` 直接引用（不必下載，省頻寬也省記憶體）；本機開發
+    把錄音存在自己的 static 目錄，只能抓下來用 ``from_data``。
+
+    下載走 ``asyncio.to_thread``：requests 是同步的，直接在 async 路徑上呼叫會把
+    整個 event loop 卡住最長 30 秒（timeout），同一個 process 上其他請求全部跟著
+    停。production 走 GCS 那條不下載，但本機開發與未來的非 GCS 來源會踩到。
+
+    放在模組層是因為學生端的逐題建議（`scenario_student_feedback_ai`，#1140）要用
+    同一段管線。上面那個「同步 requests 會卡住 event loop」的陷阱不可以被複製一份。
+    """
+    from vertexai.generative_models import Part
+
+    gcs_uri = to_gcs_uri(recording_url)
+    if gcs_uri:
+        return Part.from_uri(gcs_uri, mime_type=mime_type)
+
+    import asyncio
+
+    import requests
+
+    response = await asyncio.to_thread(requests.get, recording_url, timeout=30)
+    response.raise_for_status()
+    return Part.from_data(data=response.content, mime_type=mime_type)
+
+
 def _describe_tense(tense: Optional[Dict[str, str]]) -> str:
     """時態穩定代碼 → 英文描述。時間與動貌都要有才算指定（同前端 isTenseSet）。"""
     if not isinstance(tense, dict):
@@ -186,9 +218,30 @@ class ScenarioGradingService:
         rubric_note = (criteria.get("rubric_note") or "").strip()
         global_rubric = (criteria.get("global_rubric") or "").strip()
         level = (criteria.get("question_level") or "").strip()
+        scenario = (criteria.get("scenario_content") or "").strip()[
+            :MAX_SCENARIO_CHARS_FOR_GRADING
+        ]
+        image_count = int(criteria.get("scenario_image_count") or 0)
 
         lines = [
             "Listen to the student's recorded answer and grade it.",
+        ]
+        # #1146：題目常是「圖中的人在做什麼？」這類離開情境就答不出來的問題，評分端
+        # 看不到情境的話只能瞎猜學生答得對不對。情境文字與情境圖都是學生作答時看得到
+        # 的東西，所以拿來當判斷「有沒有答到問題」的依據。
+        if scenario:
+            lines += [
+                "",
+                "Scenario the student read before answering:",
+                scenario,
+            ]
+        if image_count > 0:
+            lines += [
+                "",
+                f"The student also saw {image_count} scenario picture(s), attached "
+                "above. Use them to judge whether the answer fits the scenario.",
+            ]
+        lines += [
             "",
             f"Question the student was answering: {question}",
         ]
@@ -333,28 +386,8 @@ class ScenarioGradingService:
 
     @classmethod
     async def _audio_part(cls, recording_url: str, mime_type: str) -> Any:
-        """把錄音變成 Gemini 的 Part。
-
-        GCS 上的檔案用 ``from_uri`` 直接引用（不必下載，省頻寬也省記憶體）；本機開發
-        把錄音存在自己的 static 目錄，只能抓下來用 ``from_data``。
-
-        下載走 ``asyncio.to_thread``：requests 是同步的，直接在 async 路徑上呼叫會把
-        整個 event loop 卡住最長 30 秒（timeout），同一個 process 上其他請求全部跟著
-        停。production 走 GCS 那條不下載，但本機開發與未來的非 GCS 來源會踩到。
-        """
-        from vertexai.generative_models import Part
-
-        gcs_uri = to_gcs_uri(recording_url)
-        if gcs_uri:
-            return Part.from_uri(gcs_uri, mime_type=mime_type)
-
-        import asyncio
-
-        import requests
-
-        response = await asyncio.to_thread(requests.get, recording_url, timeout=30)
-        response.raise_for_status()
-        return Part.from_data(data=response.content, mime_type=mime_type)
+        """保留原本的呼叫方式；實作搬到模組層的 :func:`build_audio_part`。"""
+        return await build_audio_part(recording_url, mime_type)
 
     async def grade(
         self,
@@ -369,7 +402,14 @@ class ScenarioGradingService:
         if not recording_url:
             raise ScenarioGradingInputError("這一題沒有錄音，無法評分")
 
-        prompt = self.build_prompt(criteria)
+        # #1146 情境圖：讀不到的圖略過（見 scenario_context_images），張數以實際
+        # 送出的為準寫進 prompt，避免叫模型看一張不存在的圖。
+        from services.scenario_context_images import build_image_parts
+
+        image_parts = build_image_parts(criteria.get("scenario_images"))
+        prompt = self.build_prompt(
+            {**criteria, "scenario_image_count": len(image_parts)}
+        )
 
         from vertexai.generative_models import GenerationConfig, GenerativeModel
         from services.vertex_ai import get_vertex_ai_service
@@ -385,6 +425,7 @@ class ScenarioGradingService:
         )
         response = await model.generate_content_async(
             [
+                *image_parts,
                 await self._audio_part(
                     recording_url, mime_type_for_recording(recording_url)
                 ),

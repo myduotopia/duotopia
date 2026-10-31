@@ -51,6 +51,15 @@ export interface ResourceMaterialDetail {
   created_at: string | null;
 }
 
+export interface ResourceMaterialsListResult {
+  materials: ResourceMaterial[];
+  count: number;
+  /** Viewer may copy into the target scope (org scope needs manage_materials). */
+  can_copy: boolean;
+  /** Set when the request failed, so callers don't mistake it for "no materials". */
+  failed?: boolean;
+}
+
 export function useResourceMaterialsAPI() {
   const token = useTeacherAuthStore((state) => state.token);
   const [loading, setLoading] = useState(false);
@@ -68,7 +77,7 @@ export function useResourceMaterialsAPI() {
     async (
       scope: "individual" | "organization" = "individual",
       organizationId?: string,
-    ): Promise<{ materials: ResourceMaterial[]; count: number }> => {
+    ): Promise<ResourceMaterialsListResult> => {
       setLoading(true);
       setError(null);
       try {
@@ -83,7 +92,7 @@ export function useResourceMaterialsAPI() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         setError(msg);
-        return { materials: [], count: 0 };
+        return { materials: [], count: 0, can_copy: false, failed: true };
       } finally {
         setLoading(false);
       }

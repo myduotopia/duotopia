@@ -15,7 +15,9 @@
  *
  * useClassroomStatusActions：
  * - toggleActive：單列 Switch，PUT is_active。
- * - runBatchUpdate：POST batch-update（等級／停用／啟用共用），超過 BATCH_GRADE_MAX_ITEMS 直接擋下。
+ * - runBatchUpdate：POST batch-update（等級／停用／啟用／批次編輯名稱＋年級共用，#1139），
+ *   超過 BATCH_GRADE_MAX_ITEMS 直接擋下；成功以回傳的 name／grade／level／is_active 就地更新。
+ *   failureKey 可傳函式，依錯誤決定訊息（批次編輯用 batchGradeErrorMessageKey(…, "batchEdit")：403 → 權限提示）。
  * - bulkSetActive：只送狀態會改變的班級。
  */
 import { useCallback, useState } from "react";
@@ -182,7 +184,7 @@ export function useClassroomStatusActions({
   const runBatchUpdate = async (
     items: BatchClassroomUpdateItem[],
     successKey: string,
-    failureKey: string,
+    failureKey: string | ((error: unknown) => string),
   ): Promise<boolean> => {
     if (items.length > BATCH_GRADE_MAX_ITEMS) {
       toast.error(
@@ -197,6 +199,7 @@ export function useClassroomStatusActions({
           (res.updated ?? []).map((u) => [
             u.id,
             {
+              ...(typeof u.name === "string" ? { name: u.name } : {}),
               grade: u.grade,
               level: u.level ?? undefined,
               is_active: u.is_active,
@@ -208,7 +211,9 @@ export function useClassroomStatusActions({
       return true;
     } catch (err) {
       console.error("Failed to batch update classrooms:", err);
-      toast.error(t(failureKey));
+      toast.error(
+        t(typeof failureKey === "function" ? failureKey(err) : failureKey),
+      );
       return false;
     }
   };

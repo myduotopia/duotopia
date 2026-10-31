@@ -110,11 +110,30 @@ export interface ScenarioTTSSettings {
   speed: string;
 }
 
+/**
+ * 引導式對話的回答（#1146）。存進 `scenario_settings`，題目清單按「上一步」回到對話、
+ * 或編輯既有內容時，才還原得出已答步驟。舊資料沒有這幾項 → 一律空值。
+ */
+export interface ScenarioSetupRecord {
+  /** 需要情境嗎？`none` / `existing` / `ai`，空字串 = 舊資料 */
+  scenarioMode: string;
+  /** 題目怎麼來？`manual` / `ai`，空字串 = 舊資料 */
+  questionSource: string;
+  /** AI 寫情境的訓練目標 */
+  goal: string;
+  /** AI 寫情境的文章難度（CEFR） */
+  articleLevel: string;
+  /** 無情境 AI 出題的「想問的方向」 */
+  direction: string;
+}
+
 /** 面板 `onSave` 交出來的整份資料 */
-export interface ScenarioSaveInput {
+export interface ScenarioSaveInput extends ScenarioSetupRecord {
   title: string;
   rows: ScenarioDialogueRow[];
   scenarioContent: string;
+  /** 情境圖網址（最多 5 張，學生看得到，#1146） */
+  scenarioImages: string[];
   questionLevel: string;
   globalRubric: string;
   globalTense: TenseSetting;
@@ -132,6 +151,13 @@ export interface ScenarioSettingsPayload {
   global_voice: string;
   translate_language: string;
   tts_settings: ScenarioTTSSettings | null;
+  // ---- #1146 引導式對話與情境圖 ----
+  scenario_images: string[];
+  scenario_mode: string;
+  question_source: string;
+  goal: string;
+  article_level: string;
+  direction: string;
 }
 
 /** 寫進 `content_items.item_metadata["scenario_dialogue"]` 的逐題區塊 */
@@ -176,9 +202,10 @@ export interface ScenarioContentDetail {
 }
 
 /** 編輯模式回填面板用的初始 state */
-export interface ScenarioDialogueInitialState {
+export interface ScenarioDialogueInitialState extends ScenarioSetupRecord {
   title: string;
   scenarioContent: string;
+  scenarioImages: string[];
   questionLevel: string;
   globalRubric: string;
   globalTense: TenseSetting;
@@ -284,6 +311,14 @@ export function toScenarioSavePayload(
           speed: text(input.ttsSettings.speed),
         }
       : null,
+    scenario_images: (input.scenarioImages || [])
+      .map((u) => text(u).trim())
+      .filter(Boolean),
+    scenario_mode: text(input.scenarioMode),
+    question_source: text(input.questionSource),
+    goal: text(input.goal),
+    article_level: text(input.articleLevel),
+    direction: text(input.direction),
   };
 
   const items = (input.rows || [])
@@ -330,6 +365,14 @@ export function fromScenarioContentDetail(
   return {
     title: text(detail.title),
     scenarioContent: text(settings.scenario_content),
+    scenarioImages: Array.isArray(settings.scenario_images)
+      ? settings.scenario_images.map(text).filter(Boolean)
+      : [],
+    scenarioMode: text(settings.scenario_mode),
+    questionSource: text(settings.question_source),
+    goal: text(settings.goal),
+    articleLevel: text(settings.article_level),
+    direction: text(settings.direction),
     questionLevel: text(settings.question_level),
     globalRubric: text(settings.global_rubric),
     globalTense: rawTense

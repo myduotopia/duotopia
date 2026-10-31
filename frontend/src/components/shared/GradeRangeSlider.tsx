@@ -4,6 +4,8 @@
  * 專案沒裝 radix slider，沿用既有做法用原生 <input type="range">，兩支疊在同一軌道上：
  * 下層 min、上層 max；拖曳時互相夾住（min ≤ max）。刻度 1…12，目前值顯示在軌道上方。
  * value 為 [min|null, max|null]；「不限」鍵清成 [null, null]（顯示成整段淡色）。
+ * `emptyLabel`（選填）：還沒選時標籤改顯示這段文字（預設「不限」）。年段必選的畫面（上傳題本，
+ * #1112）用它寫「請拖曳選擇年段」，避免「不限」看起來像已經選好了；不傳時外觀不變。
  */
 import { useTranslation } from "react-i18next";
 
@@ -18,6 +20,8 @@ export interface GradeRangeSliderProps {
   disabled?: boolean;
   /** 單題卡片用的緊湊版（刻度字更小） */
   compact?: boolean;
+  /** 還沒選（[null, null]）時標籤顯示的文字；不傳＝「不限」 */
+  emptyLabel?: string;
   "data-testid"?: string;
 }
 
@@ -31,6 +35,7 @@ export function GradeRangeSlider({
   onChange,
   disabled = false,
   compact = false,
+  emptyLabel,
   "data-testid": testId = "grade-range-slider",
 }: GradeRangeSliderProps) {
   const { t } = useTranslation();
@@ -45,7 +50,7 @@ export function GradeRangeSlider({
   const setMax = (n: number) => onChange([lo, Math.max(n, lo)]);
 
   const label = unlimited
-    ? t("questionBank.form.gradeAny")
+    ? (emptyLabel ?? t("questionBank.form.gradeAny"))
     : lo === hi
       ? t("questionBank.gradeSingle", { grade: lo })
       : t("questionBank.gradeRange", { min: lo, max: hi });

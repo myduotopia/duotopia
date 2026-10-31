@@ -192,7 +192,14 @@ class Content(Base):
     #     "global_tense": {"time": str, "aspect": str},   # 整體評分標準（穩定代碼）
     #     "global_voice": str,          # "active" / "passive" / ""
     #     "translate_language": str,
-    #     "tts_settings": {"accent": str, "gender": str, "speed": str} | None
+    #     "tts_settings": {"accent": str, "gender": str, "speed": str} | None,
+    #     # ---- #1146 引導式對話：還原「已答步驟」用（舊資料沒有這幾項，一律當空值）----
+    #     "scenario_mode": str,         # "none"（不需要情境）/ "existing" / "ai" / ""
+    #     "question_source": str,       # "manual" / "ai" / ""
+    #     "goal": str,                  # AI 寫情境時的訓練目標
+    #     "article_level": str,         # AI 寫情境時的文章難度 CEFR
+    #     "direction": str,             # 無情境 AI 出題時的「想問的方向」
+    #     "scenario_images": [str]      # 情境圖網址，最多 5 張，學生看得到
     #   }
     # 逐題的覆寫值放在 content_items.item_metadata["scenario_dialogue"]，
     # 其中 tense_override/voice_override 為 None 代表「沿用這裡的 global_*」，

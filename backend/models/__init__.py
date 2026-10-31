@@ -38,6 +38,7 @@ from .credit_package_definition import CreditPackageDefinition
 # Magic Paste 每月配額計數（issue #891）
 from .magic_paste_usage import MagicPasteUsage
 from .scenario_image_usage import ScenarioImageUsage
+from .scenario_text_usage import ScenarioTextUsage
 from .social_post import SocialPost
 from .release_announcement import ReleaseAnnouncement
 
@@ -103,6 +104,9 @@ from .question_bank import (
     QuestionSourceLink,
 )
 
+# 上傳題本匯入草稿（issue #1112）
+from .exam_import import ExamImport, ExamImportPage, ExamImportUsage
+
 # Assignment models
 from .assignment import (
     Assignment,
@@ -158,6 +162,7 @@ __all__ = [
     "CreditPackageDefinition",
     "MagicPasteUsage",
     "ScenarioImageUsage",
+    "ScenarioTextUsage",
     "SocialPost",
     "ReleaseAnnouncement",
     # Plans
@@ -207,6 +212,10 @@ __all__ = [
     "QuestionProgramLink",
     "QuestionSource",
     "QuestionSourceLink",
+    # Exam import (issue #1112)
+    "ExamImport",
+    "ExamImportPage",
+    "ExamImportUsage",
     # Assignments
     "Assignment",
     "AssignmentContent",

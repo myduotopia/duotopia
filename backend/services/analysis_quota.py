@@ -9,6 +9,8 @@ Items that the teacher already approved (teacher_passed=True) are still
 locked from re-analysis — but via the 403 branch in check_can_analyze,
 not by skipping the reset. Two-rule design keeps each rule simple.
 """
+from typing import Optional
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -88,6 +90,70 @@ def increment_analysis_count(progress: StudentItemProgress, db: Session) -> int:
     # a fallback, since `or` would short-circuit a legitimate 0 (which
     # can't happen here, but the defensive `or` masked any future bug).
     return int(progress.ai_analysis_count)
+
+
+def reserve_analysis_slot(progress: StudentItemProgress, db: Session) -> Optional[int]:
+    """**先佔一次額度再打 AI**；佔不到回 ``None``。回傳佔用後的次數。
+
+    ## 為什麼需要這個（而不是「成功後才加」）
+
+    「先 gate、成功後才 +1」只擋得住**依序**的第 4 次。並行時每個請求都在 count < MAX
+    時通過 gate，於是各自打一通付費的 Gemini —— 一個腳本可以在任何 increment 落地之前
+    連發幾十通，**花費沒有上限**（存下來的數字仍然停在 3，所以從資料看不出來）。
+    PR #1141 的 review 指出這一點，而 #1025 在老師端踩過同一個坑。
+
+    這裡把那一次 UPDATE 當成「領號碼牌」：`WHERE count < MAX` 是原子的，所以同時進來
+    N 個請求最多只有 MAX 個領到，**AI 呼叫數因此真的有上限**。領不到的直接 429，
+    一個 token 都不花。
+
+    代價是 AI 失敗也會先吃掉一次 —— 用 :func:`refund_analysis_slot` 還回去。
+
+    呼叫端負責 commit。
+    """
+    rows = (
+        db.query(StudentItemProgress)
+        .filter(
+            StudentItemProgress.id == progress.id,
+            StudentItemProgress.ai_analysis_count < MAX_AI_ANALYSIS_ATTEMPTS,
+        )
+        .update(
+            {
+                StudentItemProgress.ai_analysis_count: (
+                    StudentItemProgress.ai_analysis_count + 1
+                )
+            },
+            synchronize_session="fetch",
+        )
+    )
+    if rows == 0:
+        # 沒領到：別人已經把這一題用到上限。
+        #
+        # **刻意不寫記憶體物件**（原本這裡會設成 MAX）。那會讓 ORM 物件變 dirty，
+        # 接下來任何一次 commit 都可能 flush 出 `SET ai_analysis_count = 3` ——
+        # 若老師剛好在這之間把作業退回重做（計數歸零），那次 flush 就會把歸零蓋掉。
+        # 視窗極小，但這條路徑本來就不需要寫任何東西（PR #1141 review R3）。
+        return None
+    return int(progress.ai_analysis_count)
+
+
+def refund_analysis_slot(progress: StudentItemProgress, db: Session) -> int:
+    """AI 失敗時把 :func:`reserve_analysis_slot` 佔走的那一次還回去。
+
+    AI 爆掉是我們的問題，不該吃掉學生的機會。``WHERE count > 0`` 讓重複退款不會把
+    數字壓成負數。呼叫端負責 commit。
+    """
+    db.query(StudentItemProgress).filter(
+        StudentItemProgress.id == progress.id,
+        StudentItemProgress.ai_analysis_count > 0,
+    ).update(
+        {
+            StudentItemProgress.ai_analysis_count: (
+                StudentItemProgress.ai_analysis_count - 1
+            )
+        },
+        synchronize_session="fetch",
+    )
+    return int(progress.ai_analysis_count or 0)
 
 
 def reset_analysis_count_for_assignment(student_assignment_id: int, db: Session) -> int:

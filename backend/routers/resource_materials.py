@@ -27,7 +27,10 @@ from services.resource_materials_service import (
     update_program_visibility,
     get_resource_account,
 )
-from utils.permissions import has_manage_materials_permission
+from utils.permissions import (
+    has_manage_materials_permission,
+    has_read_org_materials_permission,
+)
 from routers.teachers import get_current_teacher
 
 logger = logging.getLogger(__name__)
@@ -47,6 +50,34 @@ class VisibilityUpdateRequest(BaseModel):
     visibility: Literal["private", "public", "organization_only", "individual_only"]
 
 
+# ============ Helpers ============
+
+
+def _require_org_member(
+    organization_id: Optional[str], teacher: Teacher, db: Session
+) -> uuid.UUID:
+    """Browsing resource materials in org scope only needs active membership;
+    copying into the org is gated separately by manage_materials (#1162)."""
+    if not organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="organization_id required for organization scope",
+        )
+    try:
+        org_uuid = uuid.UUID(organization_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid organization_id format",
+        )
+    if not has_read_org_materials_permission(teacher.id, org_uuid, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No permission to access organization resources",
+        )
+    return org_uuid
+
+
 # ============ Endpoints ============
 
 
@@ -59,26 +90,15 @@ async def list_materials(
     teacher: Teacher = Depends(get_current_teacher),
     db: Session = Depends(get_db),
 ):
-    """List available resource materials filtered by scope and visibility."""
+    """List available resource materials filtered by scope and visibility.
+
+    `can_copy` tells the client whether the viewer may copy into the target:
+    always true for individual scope; org scope needs manage_materials.
+    """
+    can_copy = True
     if scope == "organization":
-        if not organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="organization_id required for organization scope",
-            )
-        # Check org permission
-        try:
-            org_uuid = uuid.UUID(organization_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid organization_id format",
-            )
-        if not has_manage_materials_permission(teacher.id, org_uuid, db):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No permission to access organization resources",
-            )
+        org_uuid = _require_org_member(organization_id, teacher, db)
+        can_copy = has_manage_materials_permission(teacher.id, org_uuid, db)
 
     materials = list_resource_materials(
         db=db,
@@ -86,7 +106,7 @@ async def list_materials(
         viewer_teacher_id=teacher.id,
         organization_id=organization_id,
     )
-    return {"materials": materials, "count": len(materials)}
+    return {"materials": materials, "count": len(materials), "can_copy": can_copy}
 
 
 @router.get("/copy-status")
@@ -108,11 +128,7 @@ async def get_copy_status(
         copied_by_type = COPIED_BY_INDIVIDUAL
         copied_by_id = str(teacher.id)
     elif scope == "organization":
-        if not organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="organization_id required",
-            )
+        _require_org_member(organization_id, teacher, db)
         copied_by_type = COPIED_BY_ORGANIZATION
         copied_by_id = str(organization_id)
     else:
