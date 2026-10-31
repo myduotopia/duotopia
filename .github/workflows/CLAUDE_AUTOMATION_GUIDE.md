@@ -8,7 +8,11 @@ Claude 會自動化處理 GitHub Issues，遵循專案的 PDCA 流程。
 
 ## 🎯 三種觸發方式
 
+> ⏸️ **已暫停（#1170），#1169 改寫**：`automation-claude-pdca.yml` 目前不會在開 issue、貼標籤或留言時自動執行（job 已設 `if: false`）。下面三種觸發方式暫時都不會叫出 PDCA。
+
 ### 1️⃣ 自動觸發（Issue 新開時）
+
+> ⏸️ **已暫停（#1170），#1169 改寫**：開 issue 不再自動跑 Plan 分析。
 
 **行為**：
 - Issue 新開時自動執行 **Plan 階段**
@@ -25,6 +29,8 @@ Claude 會自動化處理 GitHub Issues，遵循專案的 PDCA 流程。
 ```
 
 ### 2️⃣ 手動批准實作
+
+> ⏸️ **已暫停（#1170），#1169 改寫**：留言「開始實作」或加 `🤖 claude: auto-implement` 標籤都不會觸發 PDCA。
 
 **方式 A - 留言**：
 ```
@@ -45,6 +51,8 @@ Claude 會自動化處理 GitHub Issues，遵循專案的 PDCA 流程。
 - 等待 CI/CD 部署 Per-Issue Test Environment
 
 ### 3️⃣ 隨時 @mention
+
+> ⏸️ **已暫停（#1170），#1169 改寫**：PDCA 的 @claude 已停；`automation-claude.yml` 仍會回應 @claude，但沒有留言權限（`issues: read`）。
 
 **方式**：
 ```
@@ -106,6 +114,8 @@ Claude 每次在 Issue 留言後，都會在最後提供「建議回覆選項」
 
 ### 1️⃣ Plan（Claude 自動執行）
 
+> ⏸️ **已暫停（#1170），#1169 改寫**：開 issue 不再自動執行 Plan。
+
 **觸發時機**：Issue 新開時
 
 **Claude 會做什麼**：
@@ -123,6 +133,8 @@ Claude 每次在 Issue 留言後，都會在最後提供「建議回覆選項」
 - 回覆「開始實作」或加 `🤖 claude: auto-implement` label
 
 ### 2️⃣ Do（需要你批准後執行）
+
+> ⏸️ **已暫停（#1170），#1169 改寫**：「開始實作」留言與 `🤖 claude: auto-implement` 標籤目前都不會觸發。
 
 **觸發條件**：
 - 你留言「開始實作」
@@ -205,7 +217,7 @@ Claude **不會**做以下事情：
 | Label | 說明 | 誰加上 |
 |-------|------|--------|
 | `✅ PDCA: Plan` | Plan 階段完成 | Claude |
-| `🤖 claude: auto-implement` | 批准 Claude 實作 | 你 |
+| `🤖 claude: auto-implement` | 批准 Claude 實作（⏸️ 已暫停（#1170），#1169 改寫：加了不會觸發） | 你 |
 | `✅ PDCA: Do` | Do 階段完成 | Claude |
 | `⏳ 等待 CI/CD` | 等待部署 | Claude |
 | `✅ PDCA: Check` | Check 階段 | 手動 |
@@ -216,6 +228,8 @@ Claude **不會**做以下事情：
 ---
 
 ## 🎯 使用場景
+
+> ⏸️ **已暫停（#1170），#1169 改寫**：場景 1～4 中「Claude 自動留言 Plan」「加 `🤖 claude: auto-implement` 直接實作」「@claude 互動」的步驟目前都不會發生。
 
 ### 場景 1：Bug 修復（標準流程）
 

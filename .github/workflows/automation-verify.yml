@@ -1,0 +1,145 @@
+name: Verify Screenshots (/verify)
+
+# ---------------------------------------------------------------------------
+# #1170 的空殼（shell）。
+#
+# 目前只做一件事：團隊帳號在 issue 留言 `/verify`（或用 workflow_dispatch 觸發）時，
+# 回一則固定留言說明「`/verify` 尚未上線」。不截圖、不叫 Claude、不碰 GCS。
+#
+# 為什麼先送空殼：issue_comment 與 workflow_dispatch 都要求 workflow 檔先存在於
+# 預設分支 main，之後才能在 claude/issue-1170 分支上用
+#   gh workflow run automation-verify.yml --ref claude/issue-1170 -f issue=<N> -f args="..."
+# 反覆測試正式版。
+#
+# 正式版（#1170 第 3 段）會換成三個 job：
+#   1. prepare  （固定程式）正規化參數、拒絕正式站、選環境、偵測 migration、等部署、算改動
+#   2. generate （Claude，無 GCP 金鑰、不能留言）截圖＋說明＋result.json 成 artifact
+#   3. publish  （固定程式）驗證 artifact → 上傳 GCS → 貼留言 → 寫 output
+# 屆時也會加上 workflow_call（給 #1169／#1172 呼叫）。空殼先不加 workflow_call：
+# 目前沒有呼叫端，加了也只是多一個沒被用到的入口，留到正式版跟 outputs 一起定。
+#
+# workflow_dispatch 的 inputs 已是最終版，之後不再改名：
+#   issue     目標 issue 編號（必填）
+#   args      /verify 後面的參數（例如「staging 批改頁」「重現：…」）
+#   skill_ref skill 與腳本取自哪個 ref；留空＝觸發時指定的分支（github.ref）。
+#             issue_comment 一律用 main（正式版才會用到）
+#   post_to   結果改貼到哪個 issue（留空＝貼回 issue）
+# ---------------------------------------------------------------------------
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "目標 issue 編號"
+        required: true
+        type: number
+      args:
+        description: "/verify 後面的參數（可留空）"
+        required: false
+        type: string
+        default: ""
+      skill_ref:
+        description: "skill 取自哪個 ref（留空＝本次觸發的分支）"
+        required: false
+        type: string
+        default: ""
+      post_to:
+        description: "結果改貼到哪個 issue（留空＝貼回 issue）"
+        required: false
+        type: number
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # issue_comment：排除 PR 留言、排除 bot、只認團隊 4 帳號（同 automation-auto-approve.yml），
+    # 且留言含 `/verify`（粗篩；精確判斷在下面 normalize step）。
+    # workflow_dispatch：能觸發的人本來就要有 repo 寫入權限，不另外檢查帳號。
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request == null &&
+        github.event.comment.user.type != 'Bot' &&
+        !endsWith(github.event.comment.user.login, '[bot]') &&
+        contains(fromJSON('["kaddy-eunice","cbtzeng","Youngger9765","myduotopia"]'), github.event.comment.user.login) &&
+        contains(github.event.comment.body, '/verify')
+      )
+    # 放在 job 層（不是 workflow 層）：被 if 跳過的留言不會佔用同一個群組，
+    # 避免一連串一般留言把排隊中的 /verify 擠掉（同群組只保留 1 個排隊中的 run）。
+    concurrency:
+      group: verify-issue-${{ inputs.issue || github.event.issue.number }}
+      cancel-in-progress: false
+    timeout-minutes: 5
+    steps:
+      - name: Normalize parameters
+        id: params
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // 三種觸發整理成同一組 issue／args／skill_ref／post_to（K4）。
+            // 之後的 step 只看這組 output，不直接讀 github.event。
+            // 留言判斷：trim 後等於 `/verify`，或 `/verify` 後接空白（含換行）再接參數。
+            // `/verifyxx`、`請 /verify` 都不算。
+            const isVerifyCommand = (raw) => /^\/verify(?:\s|$)/.test((raw || '').trim());
+
+            let issue, args, skillRef, postTo;
+            if (context.eventName === 'workflow_dispatch') {
+              const inputs = context.payload.inputs || {};
+              issue = Number(inputs.issue);
+              args = (inputs.args || '').trim();
+              skillRef = (inputs.skill_ref || '').trim() || context.ref.replace(/^refs\/heads\//, '');
+              postTo = inputs.post_to ? Number(inputs.post_to) : issue;
+            } else {
+              const body = context.payload.comment.body;
+              if (!isVerifyCommand(body)) {
+                core.info('Comment is not a /verify command - skip');
+                core.setOutput('run', 'false');
+                return;
+              }
+              issue = context.payload.issue.number;
+              args = body.trim().replace(/^\/verify/, '').trim();
+              skillRef = 'main';
+              postTo = issue;
+            }
+
+            for (const [name, n] of [['issue', issue], ['post_to', postTo]]) {
+              if (!Number.isInteger(n) || n <= 0) {
+                core.setFailed(`Invalid ${name}: ${n}`);
+                return;
+              }
+            }
+
+            core.info(`issue=${issue} post_to=${postTo} skill_ref=${skillRef} args=${JSON.stringify(args)}`);
+            core.setOutput('run', 'true');
+            core.setOutput('issue', String(issue));
+            core.setOutput('args', args);
+            core.setOutput('skill_ref', skillRef);
+            core.setOutput('post_to', String(postTo));
+
+      - name: Reply "not available yet"
+        if: steps.params.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          POST_TO: ${{ steps.params.outputs.post_to }}
+        run: |
+          set -euo pipefail
+          # 目標必須是 issue，不是 PR
+          is_pr=$(gh api "repos/${GH_REPO}/issues/${POST_TO}" --jq '.pull_request != null')
+          if [ "$is_pr" = "true" ]; then
+            echo "::error::#${POST_TO} is a pull request, not an issue"
+            exit 1
+          fi
+          # 固定文字：開頭是標頭（不會以 /verify 開頭、整則不等於「測試通過」），不 @ 任何人
+          cat > "$RUNNER_TEMP/verify-reply.md" <<'EOF'
+          ## 📸 畫面檢查結果（/verify）
+
+          `/verify` 尚未上線，預計 #1170 完成後開放。這次沒有截圖，也沒有做任何檢查。
+          EOF
+          gh issue comment "$POST_TO" --body-file "$RUNNER_TEMP/verify-reply.md"
