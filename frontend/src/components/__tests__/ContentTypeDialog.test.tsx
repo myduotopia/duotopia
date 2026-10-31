@@ -348,6 +348,33 @@ describe("ContentTypeDialog", () => {
       }
     });
 
+    it("開關打開：角標是紫色 Beta，不是 New／Soon（#1158）", async () => {
+      await renderWithFlag(true);
+      const card = screen.getByTestId(testId);
+      const badge = within(card).getByTestId("content-type-badge-beta");
+      expect(within(badge).getByText("Beta")).toBeInTheDocument();
+      expect(within(card).queryByText("New")).not.toBeInTheDocument();
+      expect(within(card).queryByText("Soon")).not.toBeInTheDocument();
+    });
+
+    it("開關關閉：不顯示 Beta 角標（#1158）", async () => {
+      await renderWithFlag(false);
+      expect(
+        within(screen.getByTestId(testId)).queryByTestId(
+          "content-type-badge-beta",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("開關打開：其他類型的 New 角標不受影響（#1158）", async () => {
+      await renderWithFlag(true);
+      expect(
+        within(
+          screen.getByTestId("content-type-card-vocabulary_set"),
+        ).getByText("New"),
+      ).toBeInTheDocument();
+    });
+
     it("開關打開：可選，並帶出正確的 type", async () => {
       await renderWithFlag(true);
       const card = screen.getByTestId(testId);

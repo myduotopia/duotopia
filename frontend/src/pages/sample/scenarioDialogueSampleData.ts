@@ -10,14 +10,18 @@
  * 學生模式下只有 mock AI（模擬後端）拿得到，用來產生「建議說法」。
  * 翻譯語言（translateLanguage）照兩份教材的 `scenario_settings.translate_language`，都是中文
  * （"chinese"）；學生介面語言＝中文時才有翻譯鈕。
- * 朗讀用瀏覽器 speechSynthesis，speakEnglish 回傳「唸完」的 Promise（元件不使用回傳值）。
+ * 朗讀用瀏覽器 speechSynthesis，speakEnglish 回傳「唸完」的 Promise（元件不使用回傳值）；
+ * 朗讀出錯時呼叫 onError（題目改直接顯示英文）。primeSpeech 與正式版共用
+ * utils/speakEnglish 的 primeSpeechSynthesis（「開始對話」點擊當下解鎖朗讀，#1158 E2）。
  */
 
+import { primeSpeechSynthesis } from "@/utils/speakEnglish";
 import type {
   ScenarioChatAdapters,
   ScenarioChatContext,
   ScenarioChatItem,
   ScenarioFeedback,
+  SpeakOptions,
 } from "@/components/activities/scenario-dialogue/types";
 
 export type MaterialId = 648 | 650;
@@ -262,7 +266,7 @@ function mockScore(itemId: string, attemptIndex: number) {
 }
 
 /** 朗讀英文；回傳的 Promise 在唸完（或出錯、被打斷）時 resolve */
-export function speakEnglish(text: string): Promise<void> {
+export function speakEnglish(text: string, opts?: SpeakOptions): Promise<void> {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     return Promise.resolve();
   }
@@ -272,7 +276,13 @@ export function speakEnglish(text: string): Promise<void> {
     u.lang = "en-US";
     u.rate = 0.95;
     u.onend = () => resolve();
-    u.onerror = () => resolve();
+    u.onerror = (e) => {
+      // 被 cancel／打斷不算朗讀失敗
+      if (e.error !== "canceled" && e.error !== "interrupted") {
+        opts?.onError?.();
+      }
+      resolve();
+    };
     window.speechSynthesis.speak(u);
   });
 }
@@ -288,6 +298,7 @@ export function createMockAdapters(material: MaterialId): ScenarioChatAdapters {
   const m = MATERIALS[material];
   return {
     speak: speakEnglish,
+    primeSpeech: primeSpeechSynthesis,
     stopSpeech,
     getFeedback: (item, _answer, attemptIndex) =>
       new Promise<ScenarioFeedback>((resolve) => {

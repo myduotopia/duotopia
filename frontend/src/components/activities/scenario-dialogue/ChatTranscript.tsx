@@ -1,22 +1,50 @@
 /**
  * ChatTranscript — 情境對話的訊息流（#1133），從 ScenarioChatActivity 拆出來。
  *
- * 由上而下：開始前的開場招呼 → 每題（題目氣泡＋該題所有回答與建議，重答接在該題原有
+ * 由上而下：開始前的開場招呼（按「開始對話」後若有作答要求，換成 rubricIntro：熊熊請學生先看
+ * 作答要求＋作答要求卡與倒數，倒數完留著當紀錄，#1158 E-3）→ 每題（題目氣泡＋該題所有回答與建議，重答接在該題原有
  * 紀錄下方）→「輸入中…」→ 結尾語。按「開始對話」後直接問第 1 題（沒有 AI 開場複述）。
  * 每題翻譯鈕是否出現由外層算好的 translatable[i] 決定。
+ * 回頭重答某題（chat.retry）時：該題題目氣泡標「重答中」；還沒送出新回答前，該題舊的回答與建議
+ * 全部變淡（#1158 E-2 重答流程）；但最後一筆若是求助（回答＋片語／範例），重答中正要用它，
+ * 不變淡（#1158 E2b）。
  * 每題外層 div 交給外層登記（registerBlock），供點點捲動與重答後捲回。
  *
  * 每題「最後一則」建議氣泡的操作（FeedbackBubble actions）：
- * 目前這題剛看完建議＝再試一次＋下一題；已答滿＝「已達 N 次」（目前這題附「即將進入下一題」）；
+ * 目前這題剛看完建議＝再試一次＋下一題；已答滿＝「已達 N 次」（目前這題附「即將進入下一題」，
+ * 最後一步改「即將結束對話」）；最後一步拿到建議就直接收尾，所以最後一題不會出現「下一題」，
+ * 只留「再試一次」（#1158 E-4 提交按鈕）；
  * 其他可重答的題目＝再試一次（回頭重答）。學生畫面不顯示分數；老師預覽顯示 mock 分數與本題平均。
+ *
+ * 接著上次進度（#1158 E-4）：上次答過的題目（至少一次正式作答 isRestored(item)，且有伺服器錄音
+ * item.submittedAudioUrl）在題目下方放一則學生回答氣泡，
+ * 小字「上次的回答」、可播放伺服器存的錄音；沒有 AI 建議（當時的建議沒有存）。下方用同一份操作列
+ * （FeedbackActionRow）：還有次數＝「↺ 再試一次」，用完＝「已達 N 次」。本次再答之後，新的回答與建議
+ * 接在它下面、它變淡。次數（含「第 N 次」編號）都把上次用掉的算進去（chat.usedFor）。
+ * 老師已通過的題目（item.teacherPassed）操作列一律是「老師已通過」，不能再試（#1158 修正 E4）。
+ * #1158 修正 E4b：上次答過（priorAttempts > 0）但伺服器沒有錄音的題目，回答氣泡換成一行小字
+ * 「上次有作答，但沒有留下錄音」，下方操作列照常（還有次數＝再試一次）；學生沒答、老師就通過的
+ * 題目，題目下方只放操作列「老師已通過」（不放回答氣泡）。
+ * 結尾語：學生＝請點綠色按鈕提交；老師預覽＝「全部答完了！（預覽不會送出）」。
  */
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import { AnswerBubble } from "./AnswerBubble";
-import { FeedbackBubble, type FeedbackActions } from "./FeedbackBubble";
+import {
+  FeedbackActionRow,
+  FeedbackBubble,
+  type FeedbackActions,
+} from "./FeedbackBubble";
 import { QuestionBubble } from "./QuestionBubble";
-import { AiRow, TypingIndicator } from "./TypingIndicator";
-import type { ScenarioChatState } from "./useScenarioChat";
+import { AiRow, TypingIndicator, aiBubbleClass } from "./TypingIndicator";
+import {
+  isHelpFeedback,
+  isRestored,
+  usedAttempts,
+  type ScenarioChatState,
+} from "./useScenarioChat";
 import type {
   ScenarioChatAdapters,
   ScenarioChatItem,
@@ -32,10 +60,11 @@ interface Props {
   translatable: boolean[];
   registerBlock: (index: number, el: HTMLDivElement | null) => void;
   onRetry: (index: number) => void;
+  /** 按「開始對話」後的作答要求（倒數）；有傳就取代開場招呼（#1158 E-3） */
+  rubricIntro?: ReactNode;
 }
 
-const bubble =
-  "inline-block rounded-2xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2";
+const bubble = aiBubbleClass;
 
 export function ChatTranscript({
   chat,
@@ -45,6 +74,7 @@ export function ChatTranscript({
   translatable,
   registerBlock,
   onRetry,
+  rubricIntro,
 }: Props) {
   const { t } = useTranslation();
   const { phase, current, attempts } = chat;
@@ -52,17 +82,33 @@ export function ChatTranscript({
   const isPreview = settings.isPreviewMode;
 
   const actionsFor = (i: number): FeedbackActions => {
-    const used = attempts[i].length;
+    // 老師已通過的題目不能再答（#1158 修正 E4）
+    if (items[i]?.teacherPassed) return "teacherPassed";
+    // 求助（#1158）不算次數；上次（伺服器）用掉的也算（#1158 E-4）
+    const used = chat.usedFor(i);
     const isCurrentDone = i === current && phase === "feedbackShown";
-    if (used >= maxAttempts) return isCurrentDone ? "autoNext" : "reached";
+    if (used >= maxAttempts)
+      return isCurrentDone
+        ? chat.atLastStep
+          ? "autoFinish"
+          : "autoNext"
+        : "reached";
     if (isCurrentDone && !chat.retry) return "current";
     if (chat.canRetry(i)) return "retry";
     return "none";
   };
 
+  /** 上次答過的紀錄下方的操作（本次還沒再答時才有） */
+  const restoredActionsFor = (i: number): FeedbackActions => {
+    if (items[i]?.teacherPassed) return "teacherPassed";
+    if (chat.usedFor(i) >= maxAttempts) return "reached";
+    return chat.canRetry(i) ? "retry" : "none";
+  };
+
   return (
     <>
-      {phase === "intro" && (
+      {rubricIntro}
+      {!rubricIntro && phase === "intro" && (
         <AiRow>
           <div className={`${bubble} text-sm text-gray-700`}>
             {t("scenarioDialogue.chat.intro", { count: items.length })}
@@ -73,6 +119,15 @@ export function ChatTranscript({
       {items.slice(0, chat.revealedCount).map((item, i) => {
         const list = attempts[i];
         const last = list.length - 1;
+        const retrying = chat.retry?.index === i;
+        // 重答中、還沒送出新回答：這題舊的回答與建議全部變淡；
+        // 最後一筆是求助時留著不淡 —— 學生正要照著那個片語／範例回答
+        const fadeAll = retrying && chat.retry?.status === "answering";
+        const lastIsHelp = last >= 0 && isHelpFeedback(list[last].feedback);
+        const fadedAt = (j: number) =>
+          j < last || (fadeAll && !(j === last && lastIsHelp));
+        const prior = item.priorAttempts ?? 0;
+        const totalUsed = prior + usedAttempts(list);
         return (
           <div
             key={item.id}
@@ -88,16 +143,58 @@ export function ChatTranscript({
               isPreviewMode={isPreview}
               skipped={chat.skipped[i] && list.length === 0}
               averageScore={isPreview ? chat.averageFor(i) : null}
+              retrying={retrying}
               onPlay={() => adapters.speak(item.text)}
               onToggle={(w) => chat.toggleText(i, w)}
             />
+            {(isRestored(item) || item.teacherPassed) && (
+              <div className="space-y-2" data-testid="scenario-previous-answer">
+                {isRestored(item) &&
+                  (item.submittedAudioUrl ? (
+                    <AnswerBubble
+                      answer={{
+                        kind: "voice",
+                        audioUrl: item.submittedAudioUrl,
+                      }}
+                      attemptNo={prior}
+                      showAttemptNo={false}
+                      label={t("scenarioDialogue.chat.previousAnswer")}
+                      faded={list.length > 0 || fadeAll}
+                    />
+                  ) : (
+                    // 上次有正式作答但伺服器沒有錄音（#1158 修正 E4b）：說明一句，
+                    // 不讓題目看起來像沒答過；次數照舊算，下方操作列照常
+                    <p
+                      className={cn(
+                        "text-right text-xs text-gray-500",
+                        (list.length > 0 || fadeAll) && "opacity-50",
+                      )}
+                      data-testid="scenario-previous-answer-no-audio"
+                    >
+                      {t("scenarioDialogue.chat.previousAnswerNoAudio")}
+                    </p>
+                  ))}
+                {list.length === 0 && (
+                  <div className="flex justify-end">
+                    <FeedbackActionRow
+                      actions={restoredActionsFor(i)}
+                      maxAttempts={maxAttempts}
+                      retryDisabled={chat.retryBusy}
+                      onRetry={() => onRetry(i)}
+                      onNext={chat.goNext}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             {list.map((a, j) => (
               <div key={j} className="space-y-3">
                 <AnswerBubble
                   answer={a.answer}
-                  attemptNo={j + 1}
-                  showAttemptNo={list.length > 1}
-                  faded={j < last}
+                  // 次數編號只數正式回答；求助的那一則不標（#1158）
+                  attemptNo={prior + usedAttempts(list.slice(0, j + 1))}
+                  showAttemptNo={totalUsed > 1 && !isHelpFeedback(a.feedback)}
+                  faded={fadedAt(j)}
                   score={isPreview ? a.feedback?.score : undefined}
                 />
                 {a.feedback ? (
@@ -107,6 +204,7 @@ export function ChatTranscript({
                     actions={j === last ? actionsFor(i) : "none"}
                     maxAttempts={maxAttempts}
                     retryDisabled={chat.retryBusy}
+                    faded={fadeAll && !(j === last && lastIsHelp)}
                     onRetry={() => onRetry(i)}
                     onNext={chat.goNext}
                   />
@@ -124,7 +222,10 @@ export function ChatTranscript({
       {chat.closingShown && (
         <AiRow>
           <div className={`${bubble} text-gray-800`}>
-            {t("scenarioDialogue.chat.closing")}
+            {/* 老師預覽沒有綠色提交鈕可點，結尾語不叫人去點（#1158 修正 E4） */}
+            {isPreview
+              ? t("scenarioDialogue.chat.closingPreview")
+              : t("scenarioDialogue.chat.closing")}
           </div>
         </AiRow>
       )}

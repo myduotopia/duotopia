@@ -22,6 +22,16 @@
 ## 兩條不能破的線
 
 1. **參考答案不外洩**。它只進 prompt 當語言特徵對照；回給學生等於把答案送他抄。
+   例外是學生自己說「不會答」（kind=model_answer，#1158 使用者核准）：模型寫一句範例
+   請他照著念，可以參考它，但 normalize_result 仍不帶出 reference_answer 欄位。
+
+## 三種回應（#1158）
+
+`kind`：`feedback`（正式回答，verdict＋評語＋建議說法）／`phrase`（問某個字怎麼說或
+字義 → 只給那個字或片語）／`model_answer`（說不會答 → 一句完整範例）。後兩者是求助，
+verdict 為 None、router 把額度退回，**不算作答次數**（前端 useScenarioChat 同步排除）。
+每題求助最多 :data:`MAX_HELP_PER_ITEM` 次；用完後 ``allow_help=False``：prompt 只准回
+feedback，:func:`normalize_result` 也強制成 feedback（雙保險）。
 2. **不逐字比對**。開放式口說同一題每個人講的都不同，拿範例逐字比會把「不一樣但
    正確」的回答全判成要改進。prompt 明文禁止，與 #1035 同一條規則。
 """
@@ -48,6 +58,15 @@ MAX_OUTPUT_TOKENS = 2048
 VERDICTS = ("improve", "great")
 #: 認不得的 verdict 落在這裡。誤誇比誤糾難補救：學生以為講對了就不會再練。
 DEFAULT_VERDICT = "improve"
+
+#: 回應種類（#1158）：feedback＝正式回答的建議；phrase＝學生問某個字／片語怎麼說或字義；
+#: model_answer＝學生說不會答，給一句完整範例請他照著念。後兩者是「求助」，不算作答次數。
+KINDS = ("feedback", "phrase", "model_answer")
+HELP_KINDS = ("phrase", "model_answer")
+DEFAULT_KIND = "feedback"
+#: 每題最多幾次求助（#1158 使用者決定）。第 4 次起再求助就當成一次正式作答：計次、給評語。
+#: 計數存在哪裡、怎麼原子地加，見 routers/students/scenario_dialogue.py。
+MAX_HELP_PER_ITEM = 3
 
 #: 評語要用學生看得懂的語言寫。值是給模型看的語言名稱。
 _COMMENT_LANGUAGE = {
@@ -99,13 +118,74 @@ class ScenarioStudentFeedbackService:
             "no commentary."
         )
 
+    @staticmethod
+    def _help_kind_lines(language: str) -> List[str]:
+        """可以求助時：教模型分辨三種回應（#1158）。"""
+        return [
+            # #1158：學生的錄音不一定是在回答。求助（問某個字怎麼說／字義、說不會答）
+            # 要分出來 —— 那不是一次作答，不評、不算次數（router 會把額度退回）。
+            "First decide which kind of recording this is:",
+            '- "phrase": the student is asking how to say a word or phrase in '
+            "English, or what an English word means — for example "
+            "「公園英文怎麼說？」, 「spot 是什麼意思？」, "
+            '"How do I say 公園 in English?", "What does spot mean?".',
+            '- "model_answer": the student says they do not know how to answer — '
+            "for example 「我不知道怎麼回答」, 「我不會」, 「這題要怎麼講？」, "
+            '"I don\'t know", "I don\'t know how to answer this.".',
+            '- "feedback": anything else — the student is trying to answer the '
+            'question. This is the normal case; when in doubt, use "feedback".',
+            "",
+            'For "phrase": put ONLY that English word or short phrase in '
+            "`suggestion` (not a full sentence). In `comment`, one short sentence: "
+            "if they asked what a word means, say what it means; otherwise invite "
+            "them to use it in their answer (for example "
+            "「試著用它回答看看」). Do not judge anything and leave `verdict` out.",
+            "",
+            'For "model_answer": put one complete model answer to this question '
+            "in `suggestion`, in English, at the student's level, using the "
+            "asked-for words and tense where they apply (the example of a good "
+            "answer above may guide it). In `comment`, one short sentence asking "
+            "them to say it once themselves (for example 「照著念一次看看」). "
+            "Leave `verdict` out.",
+            "",
+            f"Whatever the kind, write `comment` in {language} and "
+            "`suggestion` in English.",
+            "",
+            # #1158 E2b：「I don't know」出現在完整英文回答裡（例如 "I don't know his
+            # name, but he is tall."）是在作答，不是求助。只有整段錄音都在求助才分出去。
+            "Only use a help kind when the WHOLE recording is a request for help. "
+            "If the student says an English sentence that answers the question — "
+            'even one that contains "I don\'t know" (for example "I don\'t know '
+            'his name, but he is very tall.") — that is an answer: use '
+            '"feedback".',
+            "",
+        ]
+
+    @staticmethod
+    def _help_exhausted_lines(language: str) -> List[str]:
+        """這題求助次數用完了（#1158）：一律當正式回答。"""
+        return [
+            # 每題求助最多 MAX_HELP_PER_ITEM 次；之後再求助就當成一次作答（計次、給評語）
+            'Always use kind "feedback" for this recording — the student has '
+            "already used all the help available for this question. Even if they "
+            "ask how to say a word, or say they do not know how to answer, treat "
+            'the recording as their answer: verdict "improve", a short '
+            f"encouraging `comment` in {language} inviting them to try answering "
+            "in English, and one full sentence they could say in `suggestion`.",
+            "",
+        ]
+
     @classmethod
-    def build_prompt(cls, criteria: Dict[str, Any], ui_language: str) -> str:
+    def build_prompt(
+        cls, criteria: Dict[str, Any], ui_language: str, allow_help: bool = True
+    ) -> str:
         """組出「給學生的建議」prompt。
 
         ``criteria`` 用的是 `utils/scenario_dialogue.grading_criteria` 的輸出（題目、
         參考答案、必用字詞、生效時態語態、本題說明、整份作答指引、題目難度）—— 與老師端
         同一個來源，資料形狀只有一處。
+
+        ``allow_help=False``：這題求助次數已用完（#1158），只准回 feedback。
         """
         question = (criteria.get("question") or "").strip()
         if not question:
@@ -165,10 +245,18 @@ class ScenarioStudentFeedbackService:
             "",
             "Reply with JSON only, in this shape:",
             "{",
+            '  "kind": "feedback" | "phrase" | "model_answer",',
             '  "verdict": "great" | "improve",',
             '  "comment": "...",',
             '  "suggestion": "..."',
             "}",
+            "",
+            *(
+                cls._help_kind_lines(language)
+                if allow_help
+                else cls._help_exhausted_lines(language)
+            ),
+            'Everything below is about "feedback".',
             "",
             'Use "great" only when the answer does what the question asked '
             "AND has no language error a teacher would correct. If the meaning "
@@ -236,13 +324,15 @@ class ScenarioStudentFeedbackService:
             # 的回答來評。這兩句處理這兩件事（#1140 2A）。
             "If the student spells a word out letter by letter (for example "
             '"S-P-O-T"), understand it as that word.',
-            "",
-            "Sometimes the student is not answering at all — they are asking what a "
-            "word means, or asking for help. When that happens, do not judge their "
-            'answer: use verdict "improve", tell them what the word means in one '
-            "short sentence, and invite them to try answering. Leave `suggestion` "
-            "out in that case.",
         ]
+        if allow_help:
+            lines += [
+                "",
+                "Sometimes the student is not answering at all — they are asking what "
+                "a word means, or asking for help. When that happens, do not judge "
+                'their answer: use kind "phrase" or "model_answer" as described '
+                'above, never "feedback".',
+            ]
         return "\n".join(lines)
 
     @staticmethod
@@ -257,8 +347,11 @@ class ScenarioStudentFeedbackService:
         return value.strip() if isinstance(value, str) else ""
 
     @classmethod
-    def normalize_result(cls, raw: Any) -> Dict[str, Any]:
+    def normalize_result(cls, raw: Any, allow_help: bool = True) -> Dict[str, Any]:
         """只留下學生畫面真的會用到的三個欄位。
+
+        ``allow_help=False``（這題求助次數已用完，#1158）：模型就算還是回了求助類別，
+        也強制當正式回答 —— prompt 已經講了，這裡是第二道保險。
 
         刻意**白名單**而不是把模型回的東西原樣往外帶：模型有時會自己多塞分數或
         把參考答案抄回來，那兩樣都不該出現在學生那一側。
@@ -271,20 +364,43 @@ class ScenarioStudentFeedbackService:
             # 評語是對話裡唯一要顯示的東西 —— 空的就是一顆空泡泡，不如讓呼叫端重試
             raise ScenarioStudentFeedbackError("AI 沒有給評語")
 
+        # 舊格式（沒有 kind）與認不得的值一律當正式回答 —— 誤當求助會讓一次作答
+        # 不算次數、也拿不到評語，比誤當作答更糟。
+        kind = cls._text(raw.get("kind")).lower()
+        if kind not in KINDS:
+            kind = DEFAULT_KIND
+
+        suggestion = cls._text(raw.get("suggestion")) or None
+        if kind in HELP_KINDS and not suggestion:
+            # 求助的重點就是那個字／那句範例；沒有就是空的幫助，不如當一般建議顯示
+            kind = DEFAULT_KIND
+        if kind in HELP_KINDS and not allow_help:
+            kind = DEFAULT_KIND
+
         verdict = cls._text(raw.get("verdict")).lower()
         if verdict not in VERDICTS:
             verdict = DEFAULT_VERDICT
+        if kind in HELP_KINDS:
+            # 求助不評：verdict 對求助沒有意義，固定成 None 免得前端誤顯示「很棒／可以更好」
+            verdict = None
 
-        suggestion = cls._text(raw.get("suggestion")) or None
-        return {"verdict": verdict, "comment": comment, "suggestion": suggestion}
+        return {
+            "kind": kind,
+            "verdict": verdict,
+            "comment": comment,
+            "suggestion": suggestion,
+        }
 
     async def generate(
         self,
         recording_url: str,
         criteria: Dict[str, Any],
         ui_language: str = "zh-TW",
+        allow_help: bool = True,
     ) -> Dict[str, Any]:
         """聽一段錄音，回一則給學生的建議。呼叫端負責配額與所有權。
+
+        ``allow_help=False``：這題求助次數已用完（#1158），只回 feedback。
 
         音檔格式由網址推導（`mime_type_for_recording`），不開放呼叫端傳 —— #1036 的
         教訓：那是個會忘的參數，忘了就是靜靜把 mp4 標成 webm 送出去。
@@ -292,7 +408,7 @@ class ScenarioStudentFeedbackService:
         if not recording_url:
             raise ScenarioStudentFeedbackInputError("這一題沒有錄音，無法給建議")
 
-        prompt = self.build_prompt(criteria, ui_language)
+        prompt = self.build_prompt(criteria, ui_language, allow_help=allow_help)
 
         from vertexai.generative_models import GenerationConfig, GenerativeModel
         from services.vertex_ai import VertexAIService, get_vertex_ai_service
@@ -323,7 +439,9 @@ class ScenarioStudentFeedbackService:
 
         usage = ScenarioGradingService._usage_of(response)
         try:
-            result = self.normalize_result(self.parse_json(response.text))
+            result = self.normalize_result(
+                self.parse_json(response.text), allow_help=allow_help
+            )
         except Exception:
             # 把 finish_reason 記下來 —— MAX_TOKENS 就是「又被截斷了」，不必再猜。
             # 第一次踩這個坑時 log 裡只有 JSONDecodeError，查了一輪才確認是截斷。
@@ -339,8 +457,12 @@ class ScenarioStudentFeedbackService:
             )
             raise
         cost = ScenarioGradingService.estimate_cost(usage)
+        # kind 一起記（#1158 E2b）：求助分類準不準、多常被用，只能從 log 看
         logger.info(
-            "scenario_student_feedback_ai | in=%s out=%s | cost≈$%.5f",
+            "scenario_student_feedback_ai | kind=%s allow_help=%s | in=%s out=%s "
+            "| cost≈$%.5f",
+            result["kind"],
+            allow_help,
             usage.get("input_tokens"),
             usage.get("output_tokens"),
             cost,

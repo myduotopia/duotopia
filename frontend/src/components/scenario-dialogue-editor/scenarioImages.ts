@@ -9,6 +9,7 @@
  * 2. 上傳 **PDF** 擷取 → 前端用 pdf.js 把有圖的那幾頁畫成頁面圖（`lib/pdfToImages`）→
  *    從頁面圖裁切
  * 3. 老師自己另外上傳（不經擷取）→ 整張就是一張情境圖
+ * 4. AI 生圖（#1158）→ 後端生好、存好直接回網址，沒有原圖（不能重裁）
  *
  * 裁切用的原圖（`source.file`）留在前端記憶體，老師才能「調整裁切範圍」重裁；
  * 存檔後重開編輯就沒有原圖了（只有網址），那時不能重裁、只能刪掉重傳。
@@ -43,8 +44,10 @@ export interface ScenarioImage {
   id: string;
   /** 已上傳的網址（存進 scenario_settings.scenario_images） */
   url: string;
-  /** 可重裁時才有；存檔後重開的圖為 null */
+  /** 可重裁時才有；存檔後重開的圖、AI 生的圖為 null */
   source: ScenarioImageSource | null;
+  /** AI 生的圖（#1158）：沒有原圖可裁，不顯示「調整裁切」 */
+  generated?: boolean;
 }
 
 /** 擷取端點回傳的一張圖 */

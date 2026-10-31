@@ -137,6 +137,26 @@ class Settings:
     # 不是技術選擇。迴歸測試：tests/unit/test_issue_1119_model_migration.py
     VERTEX_AI_LOCATION: str = os.getenv("VERTEX_AI_LOCATION", "asia-northeast1")
 
+    # ── 生圖例外（Issue #1158）──────────────────────────────────────────
+    # 情境對話的 AI 生圖是**唯一**不走上面 VERTEX_AI_LOCATION 的呼叫：亞洲 region
+    # 沒有任何可用的 Gemini 生圖模型（2026-10-29 實測 asia-northeast1 全部 404），
+    # 所以生圖改走 global（或 us-central1）。
+    #
+    # 這是 #959「學生學習資料不出亞洲」承諾的例外，成立的前提是：生圖**只送老師
+    # 自己寫的描述與情境文字**，不送任何學生資料（姓名、錄音、作答）。往這條路徑
+    # 加任何學生資料之前，必須先重新取得合規確認。
+    # 詳見 docs/design/issue-1073-vertex-sdk-migration.md「生圖例外」段。
+    #
+    # 模型選擇：2026-10-29 實測，global 上可用的 Gemini 生圖模型有
+    # gemini-3.1-flash-lite-image、gemini-3.1-flash-image、gemini-3-pro-image
+    # （us-central1 上 3.x 生圖模型全部 404；gemini-2.5-flash-image 屬已退役的 2.5 系列不採用）。
+    # 取最便宜的 flash-lite：單張 4:3 實測輸出 1120 image tokens，黑白線稿品質足夠。
+    # 迴歸測試：tests/unit/test_issue_1119_model_migration.py
+    VERTEX_IMAGE_MODEL: str = os.getenv(
+        "VERTEX_IMAGE_MODEL", "gemini-3.1-flash-lite-image"
+    )
+    VERTEX_IMAGE_LOCATION: str = os.getenv("VERTEX_IMAGE_LOCATION", "global")
+
     # 模型 ID 單一來源（Issue #1119）。
     #
     # gemini-2.5-flash / gemini-2.5-pro 於 2026-10-20 退役，必須汰換。

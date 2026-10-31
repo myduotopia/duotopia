@@ -2,29 +2,44 @@
  * 情境對話的說明卡（#1133）：作答要求卡、情境卡，以及開始後收合成的一條膠囊列。
  *
  * - `RubricCard`：作答要求（global_rubric）。UI 規範資訊色（藍色淺底＋左側粗藍邊＋📋），
- *   標題加粗，內文字級同題目（`.quiz-input-font`），不收合。
+ *   標題加粗，內文字級同題目（`.quiz-input-font`），不收合。children 放在卡片底部
+ *   （按「開始對話」後的作答要求倒數進度條，#1158 E-3）。
  * - `ScenarioContextCard`：情境（題組文章＋圖）。圖片在上（多張 → ImageCarousel compact
  *   左右滑動、圓點、點圖放大），文章在下。紫色（情境對話分類色，lib/practiceMode.ts）
  *   只用在這張卡與標題列的點綴。沒有文章也沒有圖（情境 C）時外層不渲染。
  * - `InfoStrip`：按「開始對話」後兩張卡收合成上方一條，內有 `[📋 作答要求] [📖 情境]`
- *   小膠囊，點哪個展開哪個（再點收起）；情境 C 只有作答要求膠囊。
+ *   小膠囊，點哪個展開哪個（再點收起）；情境 C 只有作答要求膠囊。膠囊沒有外框，開＝淺藍底藍字、
+ *   關＝白底（與 RevealCapsules 同一份 TOGGLE_ON_CLASS／TOGGLE_OFF_CLASS，#1158 E4、E-2）。
+ * - InfoStrip 底部有一條灰色分隔線（#1158 E-3）：對話往上捲時，被切到的學生回答氣泡
+ *   （藍底）底邊不會像一條貼在膠囊下面的藍色粗線（手機實測回報），看得出是內容捲到下面。
+ * - 情境圖：`context.images` 來自 `scenario_settings.scenario_images`（fromApi，#1158 E5），
+ *   學生頁、派發預覽、批改頁都用這張卡顯示；圖固定在卡片頂部，切換時不跳位。
  *
  * 開始前：手機在對話區依序顯示 作答要求卡 → 情境卡 → 底部「開始對話」；
  * 電腦（≥ lg）左欄同樣上下兩張卡、常駐展開（由 ScenarioChatActivity 排版）。
  */
 
+import type { ReactNode } from "react";
 import { BookOpen, ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ImageCarousel } from "@/components/ImageCarousel";
 import { cn } from "@/lib/utils";
+import { TOGGLE_OFF_CLASS, TOGGLE_ON_CLASS } from "./RevealCapsules";
 import type { ScenarioChatContext } from "./types";
 
 export function hasContextCard(ctx: ScenarioChatContext) {
   return Boolean(ctx.content?.trim()) || ctx.images.length > 0;
 }
 
-export function RubricCard({ rubric }: { rubric: string }) {
+export function RubricCard({
+  rubric,
+  children,
+}: {
+  rubric: string;
+  /** 卡片底部的附加內容（作答要求倒數的進度條，#1158 E-3） */
+  children?: ReactNode;
+}) {
   const { t } = useTranslation();
   return (
     <section
@@ -38,6 +53,7 @@ export function RubricCard({ rubric }: { rubric: string }) {
       <p className="quiz-input-font mt-1 whitespace-pre-line leading-snug text-gray-900">
         {rubric}
       </p>
+      {children}
     </section>
   );
 }
@@ -117,8 +133,11 @@ export function InfoStrip({
         {context.rubric && (
           <Button
             type="button"
-            variant={open === "rubric" ? "default" : "outline"}
-            className={pill}
+            variant="ghost"
+            className={cn(
+              pill,
+              open === "rubric" ? TOGGLE_ON_CLASS : TOGGLE_OFF_CLASS,
+            )}
             onClick={() => toggle("rubric")}
             aria-expanded={open === "rubric"}
           >
@@ -129,8 +148,11 @@ export function InfoStrip({
         {showScenario && (
           <Button
             type="button"
-            variant={open === "scenario" ? "default" : "outline"}
-            className={pill}
+            variant="ghost"
+            className={cn(
+              pill,
+              open === "scenario" ? TOGGLE_ON_CLASS : TOGGLE_OFF_CLASS,
+            )}
             onClick={() => toggle("scenario")}
             aria-expanded={open === "scenario"}
           >

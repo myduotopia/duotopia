@@ -69,6 +69,8 @@ interface BatchGradeFinalizeResponse {
   graded_count: number;
   unchanged_count: number;
   total_count: number;
+  /** #1158：情境對話作業的「退回」決定被後端略過的人數（其他作業類型恆為 0）。 */
+  return_not_allowed_count?: number;
 }
 
 interface BatchGradingModalProps {
@@ -178,13 +180,23 @@ export default function BatchGradingModal({
 
     setIsSubmitting(true);
     try {
-      await apiClient.post<BatchGradeFinalizeResponse>(
+      const response = await apiClient.post<BatchGradeFinalizeResponse>(
         `/api/teachers/assignments/${assignmentId}/finalize-batch-grade`,
         {
           classroom_id: classroomId,
           teacher_decisions: { [studentId]: decision },
         },
       );
+
+      // #1158：情境對話作業的「退回」被後端略過 → 說明原因，學生留在清單
+      if (response?.return_not_allowed_count) {
+        toast.warning(
+          t("batchGrading.returnNotAllowedSkipped", {
+            count: response.return_not_allowed_count,
+          }),
+        );
+        return;
+      }
 
       const studentName =
         results?.find((r) => r.student_id === studentId)?.student_name || "";
@@ -230,6 +242,14 @@ export default function BatchGradingModal({
           unchanged: response.unchanged_count,
         }),
       );
+      // #1158：情境對話作業的「退回」被後端略過 → 另外說明原因
+      if (response.return_not_allowed_count) {
+        toast.warning(
+          t("batchGrading.returnNotAllowedSkipped", {
+            count: response.return_not_allowed_count,
+          }),
+        );
+      }
 
       onComplete?.();
       onOpenChange(false);

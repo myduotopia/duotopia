@@ -219,7 +219,7 @@
 |---|---|---|
 | AIScoreDisplay | `frontend/src/components/shared/AIScoreDisplay.tsx` | 顯示 AI 發音評分 |
 | AudioPlayer | `frontend/src/components/shared/AudioPlayer.tsx` | 播放音檔（含時間顯示）。`tone="onPrimary"`（#1133，只影響 `compact`）：放在主色藍底上用的淺色樣式（無綠底、半透明白按鈕、白色進度條），例如情境對話的學生回答氣泡；預設為原本綠色外觀。`fallbackDuration`（#1133，行為擴充、非外觀）：讀不到音檔時長時改顯示傳入的秒數（例如錄音秒數），不傳時照舊顯示 `--:--` |
-| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音。`variant="chat"`（#1133 情境對話）：大圓麥克風、點一下開始／再點停止（秒數＋聲波）→ 試聽／重錄，不包 Card、不跳完成 toast（畫面在同資料夾 `AudioRecorderChatControls.tsx`，只給 AudioRecorder 內部用） |
+| AudioRecorder | `frontend/src/components/shared/AudioRecorder.tsx` | 錄音。`variant="chat"`（#1133 情境對話）：大圓麥克風、點一下開始／再點停止（秒數＋聲波）→ 試聽／重錄，不包 Card、不跳完成 toast（畫面在同資料夾 `AudioRecorderChatControls.tsx`，只給 AudioRecorder 內部用）。`discardSignal`：數字一變就丟掉正在錄的錄音、回到待錄，不呼叫任何 callback（#1158 手機橫放用） |
 | BatchPasteArea | `frontend/src/components/shared/BatchPasteArea.tsx` | 帶行號的批次貼上文字區 |
 | BatchTranslateSettings | `frontend/src/components/shared/BatchTranslateSettings.tsx` | 批次翻譯語言設定。card 變體在手機（< sm）語言下拉自成一列、撐滿寬度；sm 以上不變（#1146） |
 | BatchTTSSettings | `frontend/src/components/shared/BatchTTSSettings.tsx` | 語音設定（口音、性別、語速）。card 變體在手機（< sm）改兩欄（口音整列、性別／語速並排）；sm 以上三欄一行（#1146） |
@@ -245,6 +245,21 @@
 | TTSSettingsDialog | `frontend/src/components/shared/TTSSettingsDialog.tsx` | 單題產生語音前的設定視窗 |
 | VisibilitySelect | `frontend/src/components/shared/VisibilitySelect.tsx` | 公開設定下拉 |
 
+#### 引導式對話（`frontend/src/components/shared/guided-chat/`，#1158）
+
+「新增內容」改成一問一答時用這一套（目前情境對話在用）。做法與步驟見 skill `/guided-chat`（`.claude/skills/guided-chat/SKILL.md`）。
+
+| 元件 | 路徑 | 什麼情況用 |
+|---|---|---|
+| GuidedChatSheet | `frontend/src/components/shared/guided-chat/GuidedChatSheet.tsx` | 外層側滑面板外框（標題列＋徽章＋動作＋✕）；`sheet` 左緣貼齊側邊欄，`modal` 置中 |
+| GuidedChatLayout | `frontend/src/components/shared/guided-chat/GuidedChatLayout.tsx` | 同頁外框：左對話、右 slot。依外框實際寬度（ResizeObserver）切換：≥ 925px 並列，以下頂端 Tabs「對話／題目（N）」，切換時兩邊狀態保留；右欄自帶浮動工具列留白。`useGuidedChatLayout()` 給 slot 判斷寬窄 |
+| SelectedChipsBar（含 ChipOptionList、ChipTextEditor） | `frontend/src/components/shared/guided-chat/SelectedChipsBar.tsx` | 左欄頂端的已選項目列：點標籤跳 Popover 原地修改（選項／文字／功能自畫）；AI 工作中整列停用並寫原因；窄版可收合 |
+| ChatComposer | `frontend/src/components/shared/guided-chat/ChatComposer.tsx` | 左欄底部固定的對話框：灰字依步驟換，停用時灰字＝原因；Enter 預設換行 |
+| ChatBubbles（BotBubble、TeacherBubble） | `frontend/src/components/shared/guided-chat/ChatBubbles.tsx` | 機器人泡泡（灰底＋圖示）、老師泡泡（藍底白字，可帶「改選」） |
+| ChoiceCards | `frontend/src/components/shared/guided-chat/ChoiceCards.tsx` | 選項型步驟的直排選項卡（主句＋灰色說明） |
+| CefrChips | `frontend/src/components/shared/guided-chat/CefrChips.tsx` | CEFR 程度 A1～C2 單選小方塊 |
+| flowEngine | `frontend/src/components/shared/guided-chat/flowEngine.ts` | 通用流程引擎（純 TS，沒有 UI）：各功能寫步驟設定（`FlowDef`／`StepDef`），引擎推導目前步驟、已選項目列、對話框狀態、清除規則、確認框、還原與對話紀錄。範例：`scenario-dialogue-editor/scenarioSteps.ts` |
+
 ### 6.3 作答共用元件（`frontend/src/components/activities/shared/`）
 
 | 元件 | 路徑 | 什麼情況用 |
@@ -264,6 +279,7 @@
 | QuizOptionChip | `frontend/src/components/activities/shared/QuizOptionChip.tsx` | 小考選項唯讀格（檢討頁、批改頁） |
 | QuizReviewView | `frontend/src/components/activities/shared/QuizReviewView.tsx` | 小考提交後的複盤畫面 |
 | ScoreOverlay | `frontend/src/components/activities/shared/ScoreOverlay.tsx` | 答對／答錯分數動畫 |
+| SpeakableWords | `frontend/src/components/activities/shared/SpeakableWords.tsx` | 英文句子點單字聽發音（例句朗讀題目、情境對話建議說法） |
 | VirtualKeyboard | `frontend/src/components/activities/shared/VirtualKeyboard.tsx` | 觸控裝置的螢幕鍵盤 |
 | WordActivityCard | `frontend/src/components/activities/shared/WordActivityCard.tsx` | 單字活動卡片 |
 | WordCard | `frontend/src/components/activities/shared/WordCard.tsx` | 答對後的正解單字卡 |

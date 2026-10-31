@@ -39,7 +39,7 @@ SDK 遷移本身**不緊急**（我們版本鎖在 1.95.0，不動就不會壞�
 | `backend/services/scenario_grading_ai.py` | `Part.from_uri`（GCS 錄音）、`Part.from_data`、JSON mime、`usage_metadata` |
 | `backend/services/scenario_dialogue_ai.py` | `GenerativeModel`、`Part.from_data`、`usage_metadata` |
 | `backend/services/magic_paste_service.py` | `Part.from_data`（檔案 bytes）、JSON、thinking hack、`usage_metadata` |
-| `backend/services/scenario_dialogue_image.py` | `vertexai.vision_models.ImageGenerationModel`、`response.images[0]._image_bytes` |
+| `backend/services/scenario_dialogue_image.py` | ~~`vertexai.vision_models.ImageGenerationModel`~~ → #1158 起改用 `google-auth` 直接打 Gemini 生圖 REST（見「生圖例外」） |
 
 ### 透過共用封裝呼叫
 
@@ -217,6 +217,75 @@ ADK（Agent Development Kit）是 agent 編排框架：多 agent、工具呼叫�
 **我們用不到。** 所有呼叫點都是單次無狀態的請求（翻一個詞、改一份錄音、抽一個檔案、畫一張圖），導入 ADK 只會多一層框架與 session/runner 抽象，換不到任何好處。ADK 官方文件也說呼叫 Gemini 不需要它。
 
 **未來什麼情況再評估**：出現模型需要自行決定流程的功能，例如 AI 助教要多輪對話、中途自己去查學生成績與作業再決定怎麼回應。屆時應**只針對該功能**開獨立服務，不動現有這些呼叫。
+
+---
+
+## 生圖例外（Issue #1158）
+
+> 2026-10-29 定案。這是 #959「學生學習資料不出亞洲」承諾的**唯一例外**，只限情境對話的 AI 生圖。
+
+### 為什麼生圖不能留在亞洲
+
+Imagen（`imagen-3.0-generate-002`）已經 404，改用 Gemini 生圖模型。2026-10-29 用 `countTokens` 逐一實測（project `duotopia-472708`），再對入選模型打一次真的生圖：
+
+| 模型 | global | us-central1 | asia-northeast1 |
+|---|---|---|---|
+| `gemini-3.1-flash-lite-image` | ✅（實際生圖成功，4:3 一張輸出 1120 image tokens） | 404 | 404 |
+| `gemini-3.1-flash-image` | ✅（只測可用性） | 404 | 404 |
+| `gemini-3-pro-image` | ✅（只測可用性） | 404 | 404 |
+| `gemini-2.5-flash-image` | 可呼叫，但屬已退役的 2.5 系列，不採用 | — | — |
+
+亞洲沒有任何 Gemini 生圖模型，所以生圖改走 **global**，模型選最便宜的 `gemini-3.1-flash-lite-image`。
+
+### 設定與界線
+
+| 設定 | 預設 | 用途 |
+|---|---|---|
+| `VERTEX_AI_LOCATION` | `asia-northeast1` | **其他所有 AI 呼叫**，不變（#959） |
+| `VERTEX_IMAGE_LOCATION` | `global` | 只有情境對話生圖 |
+| `VERTEX_IMAGE_MODEL` | `gemini-3.1-flash-lite-image` | 只有情境對話生圖 |
+
+例外成立的前提：**生圖只送老師寫的描述與情境文字，不送任何學生資料**（姓名、錄音、作答都不送）。往生圖路徑加任何學生資料之前，必須先重新取得合規確認。對外連線清單需補一行「AI 生圖：Vertex AI global endpoint（僅教師撰寫的圖片描述）」。
+
+迴歸測試：`tests/unit/test_issue_1119_model_migration.py`（`VERTEX_AI_LOCATION` 仍須在亞洲；生圖 location 只能是 global／us-central1；生圖模型不可為退役模型、不可寫死在服務檔）。
+
+### 為什麼沒有用 `google-genai` SDK
+
+設定 4:3 比例與 `personGeneration` 需要 `imageConfig`。舊的 `vertexai` SDK 沒有這個欄位；`google-genai` 從有 `ImageConfig` 的版本（約 1.40 起）都要求 `httpx>=0.28.1`，而後端鎖在 `httpx==0.25.2` —— httpx 0.28 拿掉了 `Client(app=...)`，目前 starlette 0.27 的 `TestClient` 正是這樣用，升上去整套 API 測試會壞。部分版本另要求 `pydantic>=2.9`（我們鎖 2.5.0）。
+
+所以 `services/scenario_dialogue_image.py` 用 `google-auth`（`google-cloud-aiplatform` 已帶進來）取 ADC 憑證，**直接呼叫 `generateContent` REST 端點**，請求／回應都是官方 JSON 格式。之後 Phase 2 做 SDK 遷移、升級 httpx／FastAPI 時，只要換掉 `ScenarioDialogueImageService._post`。
+
+### 人物年齡（`personGeneration`）
+
+使用者定案：人物年齡依描述決定，有時要畫成人、有時要畫兒童；描述沒寫明時，依情境自然判斷。
+
+2026-10-29 實測（global、`gemini-3.1-flash-lite-image`，同一句「two young children, about eight years old, talking in a school classroom」）：
+
+| `personGeneration` | 結果 |
+|---|---|
+| `ALLOW_ALL` | 200，正常生出兒童線稿（1120 output tokens），不需另外申請 |
+| `ALLOW_ADULT` | 200 但沒有圖，`finishReason=IMAGE_SAFETY` |
+
+因此生圖改用 `ALLOW_ALL`，並拿掉 #1024 為了配合 `ALLOW_ADULT` 加的兩道繞路：描述裡「students／kids／children…」改寫成「a classroom scene／people」的字詞替換，以及畫風提示裡「人物都是成人」那句。畫風提示改成「人物年齡依描述；未指明時依情境自然判斷」。上面「Phase 1：模型汰換」引言第 4 點說的「兒童影像防線」已不適用於生圖路徑。
+
+**備案（萬一 Google 之後拒絕 `ALLOW_ALL`，例如要求另外申請或回 400）：**
+1. `personGeneration` 退回 `ALLOW_ADULT`。
+2. 恢復描述的字詞改寫，但只把「students／kids／children…」改成「people」，**不再**改成「a classroom scene」（會讓畫面變成空教室）。
+3. 畫風提示加回「人物都是成人」。
+4. 前端生圖對話框加一行說明「目前無法生成兒童人物」（`scenarioDialogue.imageGen` 底下新增文案，中英文都要）。
+
+### 稽核紀錄
+
+生圖資料出境是合規例外，所以每次生圖都保留誰、生什麼的紀錄（Cloud Logging）：
+
+- `routers/scenario_dialogue_ai.py` 的 `/generate-image` 在打 AI **之前**寫一行 `scenario_image_generate | teacher_id=… | kind=… | description=…`（老師確認過的描述全文），被安全過濾擋下或失敗的請求也有紀錄。
+- `services/scenario_dialogue_image.py` 生成成功後再寫一行 model／location／output_tokens／預估成本。
+- `services/scenario_image_billing.py` 扣點時寫一筆點數紀錄（含 teacher_id 與 `feature_detail.kind`）。
+- 預填描述（`/suggest-image-description`）不計次，只記 `teacher_id` 與次數。
+
+### 計費
+
+生圖改依老師身分計費（`services/scenario_image_billing.py`）：admin 不限、機構扣機構點數、訂閱每月 60 張後扣點、點數制依實際輸出 token 扣（130 token = 1 點，無條件進位）、未付費非機構每天 3 張（台灣時區）。#1024 的每月 30 張規則作廢。
 
 ---
 

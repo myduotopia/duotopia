@@ -16,6 +16,8 @@ import {
   clampQuizTime,
   isSegmentedOptionActive,
   isShowAnswerLockedByAudio,
+  replyModeOptions,
+  DEFAULT_REPLY_MODE,
   segmentedScoreCategory,
   toggleDescOverride,
   type PracticeModeSettings,
@@ -277,5 +279,23 @@ describe("toggleDescOverride — 同一個設定鍵在不同模式講的不是�
       return toggleDescOverride("show_translation", mode) === null;
     });
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("replyModeOptions — 派發「作答方式」只有情境對話有（#1158）", () => {
+  it("情境對話：語音可用、打字停用（即將上線），預設語音", () => {
+    const opts = replyModeOptions("scenario_dialogue");
+    expect(opts).toEqual([
+      { value: "voice", available: true },
+      { value: "text", available: false },
+    ]);
+    expect(DEFAULT_REPLY_MODE).toBe("voice");
+  });
+
+  it("其他模式都不顯示", () => {
+    for (const mode of Object.keys(PRACTICE_MODE_REGISTRY) as PracticeMode[]) {
+      if (mode === "scenario_dialogue") continue;
+      expect(replyModeOptions(mode)).toBeNull();
+    }
   });
 });

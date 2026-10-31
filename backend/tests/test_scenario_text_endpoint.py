@@ -237,7 +237,8 @@ def test_text_and_image_pools_are_independent(
     image_quota = test_client.get(
         "/api/teachers/scenario-dialogue/image-quota", headers=auth_headers_teacher
     ).json()
-    assert image_quota["used"] == 0
+    # #1158 起 demo 老師是「未付費每天 N 張」，文字 AI 不會吃掉生圖名額
+    assert image_quota["remaining"] == image_quota["limit"]
 
 
 def test_refunded_failure_is_logged_as_not_consumed(

@@ -3243,9 +3243,23 @@ export function AssignmentDialog({
                             </div>
                           );
                         }
+                        // #1158 E2：情境對話是對話式畫面，預覽 Card 撐滿欄高，
+                        // 對話在裡面自己捲動（其他作業類型照舊依內容長高）
+                        const fillHeight =
+                          formData.practice_mode === "scenario_dialogue";
                         return (
-                          <Card className="p-3 border-gray-200">
-                            <h4 className="text-xs font-semibold mb-2 text-gray-700">
+                          <Card
+                            className={cn(
+                              "p-3 border-gray-200",
+                              fillHeight && "flex h-full min-h-0 flex-col",
+                            )}
+                          >
+                            <h4
+                              className={cn(
+                                "text-xs font-semibold mb-2 text-gray-700",
+                                fillHeight && "shrink-0",
+                              )}
+                            >
                               {t(
                                 previewUsesSampleMaterial(
                                   formData.practice_mode as PracticeMode,

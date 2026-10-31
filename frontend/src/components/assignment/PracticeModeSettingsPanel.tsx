@@ -18,7 +18,12 @@
  *   才呼叫 onCommit，避免每一格都 PATCH。派發 dialog 不傳，行為不變。
  * - `context.liveQuizOpen`：live 小考開考中（已開放、未收卷）時「即時小考」開關已開就
  *   disabled＋提示（後端不允許開考中關閉）。
+ *
+ * Issue #1158（作答方式，只有情境對話）：設定區最上面多一組「作答方式」大按鈕，用跟 segmented
+ * 同一顆按鈕（`SegmentedOptionButton`）：「語音」預設選取；「打字」停用，按鈕上寫「即將上線」
+ * 說明原因。純前端顯示，不改 value、不呼叫 onChange（選項定義在 practiceModeSettings.replyModeOptions）。
  */
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -38,8 +43,50 @@ import {
   isShowAnswerLockedByAudio,
   toggleDescOverride,
   segmentedScoreCategory,
+  replyModeOptions,
+  DEFAULT_REPLY_MODE,
   type PracticeModeSettings,
 } from "./practiceModeSettings";
+
+/**
+ * segmented 的一顆大按鈕（選中＝藍框淺藍底）。設定區的 segmented 與「作答方式」共用，
+ * 外觀只有這一份。
+ */
+function SegmentedOptionButton({
+  active,
+  disabled,
+  onClick,
+  title,
+  sub,
+  children,
+}: {
+  active: boolean;
+  disabled: boolean;
+  onClick?: () => void;
+  title?: string;
+  sub?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      aria-pressed={active}
+      className={cn(
+        "flex-1 p-3 rounded-lg border text-sm",
+        disabled && "opacity-50 cursor-not-allowed",
+        active
+          ? "border-blue-500 bg-blue-50 text-blue-700"
+          : "border-gray-200 hover:border-gray-300",
+      )}
+    >
+      {children}
+      {sub && <span className="block text-xs text-gray-500 mt-0.5">{sub}</span>}
+    </button>
+  );
+}
 
 const PM = "dialogs.assignmentDialog.practiceMode";
 
@@ -260,32 +307,52 @@ export function PracticeModeSettingsPanel({
               ? t(SCORE_I18N[segmentedScoreCategory(mode, spec, opt, value)])
               : null;
           return (
-            <button
-              type="button"
+            <SegmentedOptionButton
               key={String(opt.value)}
+              active={active}
               disabled={locked || allDisabled}
               onClick={() => apply(spec, opt.value)}
-              className={cn(
-                "flex-1 p-3 rounded-lg border text-sm",
-                (locked || allDisabled) && "opacity-50 cursor-not-allowed",
-                active
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-gray-200 hover:border-gray-300",
-              )}
+              sub={sub}
             >
               {opt.emoji ? `${opt.emoji} ` : ""}
               {t(opt.labelKey)}
-              {sub && (
-                <span className="block text-xs text-gray-500 mt-0.5">
-                  {sub}
-                </span>
-              )}
-            </button>
+            </SegmentedOptionButton>
           );
         })}
       </div>
     </div>
   );
+
+  // #1158：作答方式（只有情境對話）。純顯示：語音固定選中，打字停用＋「即將上線」
+  const replyModes = replyModeOptions(mode);
+  const renderReplyMode = () =>
+    replyModes && (
+      <div
+        className="pb-3 border-b border-gray-100 space-y-1.5"
+        data-testid="reply-mode-setting"
+      >
+        <Label className="text-xs text-gray-600 mb-2 block">
+          {t(`${PM}.replyMode`)}
+        </Label>
+        <div className="flex gap-3">
+          {replyModes.map((opt) => (
+            <SegmentedOptionButton
+              key={opt.value}
+              active={opt.value === DEFAULT_REPLY_MODE}
+              disabled={!opt.available || allDisabled}
+              title={opt.available ? undefined : t(`${PM}.replyModeComingSoon`)}
+              sub={
+                opt.available
+                  ? t(`${PM}.replyModeDesc.${opt.value}`)
+                  : t(`${PM}.replyModeComingSoon`)
+              }
+            >
+              {t(`${PM}.replyModeOption.${opt.value}`)}
+            </SegmentedOptionButton>
+          ))}
+        </div>
+      </div>
+    );
 
   const renderSpec = (spec: SettingSpec) => {
     // Issue #835: 依另一個 setting 的值條件隱藏（如 is_live_quiz 開啟時隱藏整卷限時）。
@@ -321,6 +388,7 @@ export function PracticeModeSettingsPanel({
         </p>
       )}
       <div className="space-y-3">
+        {renderReplyMode()}
         {config.settings.map((spec, i) => (
           <div key={`${spec.kind}-${spec.key}-${i}`}>{renderSpec(spec)}</div>
         ))}

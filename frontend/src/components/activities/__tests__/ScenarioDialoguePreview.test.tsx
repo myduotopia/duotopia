@@ -51,6 +51,15 @@ const DETAIL = {
   ],
 };
 
+/**
+ * 沒有作答要求：按「開始對話」直接出第 1 題。有作答要求時會先倒數 5 秒（#1158 E-3，
+ * 見 scenario-dialogue/__tests__/e3Mobile.test.tsx），這裡測流程時不等倒數。
+ */
+const DETAIL_NO_RUBRIC = {
+  ...DETAIL,
+  scenario_settings: { ...DETAIL.scenario_settings, global_rubric: "" },
+};
+
 beforeEach(() => {
   getContentDetail.mockReset();
   getContentDetail.mockResolvedValue(DETAIL);
@@ -79,6 +88,7 @@ describe("ScenarioDialoguePreview", () => {
 
   it("按下「開始對話」才問第一題（與設計稿的流程一致）", async () => {
     const user = userEvent.setup();
+    getContentDetail.mockResolvedValue(DETAIL_NO_RUBRIC);
     render(<ScenarioDialoguePreview contentId={501} showTranslation />);
     await waitFor(() => expect(startButton()).toBeTruthy());
 
@@ -95,6 +105,7 @@ describe("ScenarioDialoguePreview", () => {
 
   it("換教材會重新開始，不帶著舊教材的對話", async () => {
     const user = userEvent.setup();
+    getContentDetail.mockResolvedValue(DETAIL_NO_RUBRIC);
     const { rerender } = render(
       <ScenarioDialoguePreview contentId={501} showTranslation />,
     );
@@ -117,6 +128,60 @@ describe("ScenarioDialoguePreview", () => {
     // 回到「開始對話」那一步，而且舊教材的題目不該還留在對話裡
     await waitFor(() => expect(startButton()).toBeTruthy());
     expect(screen.queryByText(/What did you do last weekend\?/)).toBeNull();
+  });
+
+  it("預覽欄用單欄（compact）：情境卡只排一份，不分左欄（#1158 E2）", async () => {
+    render(<ScenarioDialoguePreview contentId={501} showTranslation />);
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    expect(document.querySelector('[data-layout="compact"]')).not.toBeNull();
+    expect(document.querySelector("aside")).toBeNull();
+    expect(
+      screen.getAllByText(/你和朋友在討論這個週末要做什麼。/),
+    ).toHaveLength(1);
+    // 右側留白讓開數位教學工具列
+    expect(screen.getByTestId("scenario-preview-frame").className).toMatch(
+      /pr-8/,
+    );
+  });
+
+  it("預覽欄有題號方格：開始前全部鎖住，開始後可跳題、目前題標示（#1158 E-1 修正）", async () => {
+    const user = userEvent.setup();
+    getContentDetail.mockResolvedValue({
+      ...DETAIL_NO_RUBRIC,
+      items: [
+        DETAIL.items[0],
+        { ...DETAIL.items[0], id: 9002, text: "Who did you go with?" },
+      ],
+    });
+    render(<ScenarioDialoguePreview contentId={501} showTranslation />);
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    expect(screen.getByTestId("scenario-question-nav")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-nav-1")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByTestId("scenario-nav-2")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+
+    await user.click(startButton()!);
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-nav-1")).toHaveAttribute(
+        "aria-current",
+        "step",
+      ),
+    );
+    expect(screen.getByTestId("scenario-nav-2")).not.toHaveAttribute(
+      "aria-disabled",
+    );
+    await user.click(screen.getByTestId("scenario-nav-2"));
+    await waitFor(() =>
+      expect(screen.getByTestId("scenario-nav-2")).toHaveAttribute(
+        "aria-current",
+        "step",
+      ),
+    );
   });
 
   it("沒有 contentId 時說明原因，不去抓任何教材", () => {

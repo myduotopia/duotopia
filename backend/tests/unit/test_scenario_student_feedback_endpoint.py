@@ -26,6 +26,7 @@ from models import (
     Assignment,
     AssignmentContent,
     StudentAssignment,
+    StudentContentProgress,
     StudentItemProgress,
 )
 
@@ -188,6 +189,50 @@ class TestHappyPath:
 
         db_session.refresh(world["progress"])
         assert world["progress"].ai_analysis_count == 1
+
+    def test_old_style_result_is_a_feedback_kind(self, test_client: TestClient, world):
+        """service 沒給 kind（舊格式）→ 回 kind=feedback、照常算一次（#1158）。"""
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            body = _post(test_client, world).json()
+        assert body["kind"] == "feedback"
+        assert body["ai_analysis_count"] == 1
+
+    @pytest.mark.parametrize("kind", ["phrase", "model_answer"])
+    def test_help_requests_do_not_consume_an_attempt(
+        self, test_client: TestClient, db_session: Session, world, kind
+    ):
+        """問某個字怎麼說、說不會答都是求助，不算作答次數（#1158）。"""
+        help_result = {
+            **AI_RESULT,
+            "kind": kind,
+            "verdict": None,
+            "suggestion": "park",
+        }
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=help_result)):
+            resp = _post(test_client, world)
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["kind"] == kind
+        assert body["verdict"] is None
+        assert body["suggestion"] == "park"
+        assert body["ai_analysis_count"] == 0
+        assert body["ai_analysis_remaining"] == 3
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 0
+
+    def test_help_then_three_answers_still_allowed(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        """求助過後，三次正式作答一次都沒少；第四次才 429。"""
+        help_result = {**AI_RESULT, "kind": "phrase", "verdict": None}
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=help_result)):
+            assert _post(test_client, world).status_code == 200
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            for expected in (1, 2, 3):
+                assert _post(test_client, world).json()["ai_analysis_count"] == expected
+            assert _post(test_client, world).status_code == 429
 
     def test_never_leaks_scores_or_the_reference_answer(
         self, test_client: TestClient, world
@@ -545,3 +590,125 @@ class TestQuotaExhaustedBodyShape:
         assert detail["code"] == "AI_ANALYSIS_QUOTA_EXCEEDED"
         assert detail["ai_analysis_remaining"] == 0
         assert detail["max_attempts"] == MAX_AI_ANALYSIS_ATTEMPTS
+
+
+class TestHelpLimit:
+    """每題求助最多 3 次（#1158 E2b）；第 4 次起不退額度、當正式作答。
+
+    計數由後端自己記在 StudentItemProgress.retry_count（情境對話不用那一欄，借用免
+    migration），前端改不到。
+    """
+
+    HELP = {**AI_RESULT, "kind": "phrase", "verdict": None, "suggestion": "park"}
+
+    def test_three_helps_are_free_then_the_fourth_counts(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        spy = AsyncMock(return_value=self.HELP)
+        with patch(PATCH_TARGET, new=spy):
+            for _ in range(3):
+                body = _post(test_client, world).json()
+                assert body["kind"] == "phrase"
+                assert body["ai_analysis_count"] == 0
+            # 前三次都允許求助
+            assert [c.kwargs["allow_help"] for c in spy.await_args_list] == [True] * 3
+
+            body = _post(test_client, world).json()
+
+        # 第 4 次：告訴 service 不准求助；就算模型還是回 phrase，也當正式作答
+        assert spy.await_args.kwargs["allow_help"] is False
+        assert body["kind"] == "feedback"
+        assert body["verdict"] == "improve"
+        assert body["ai_analysis_count"] == 1
+        assert body["ai_analysis_remaining"] == 2
+
+        db_session.refresh(world["progress"])
+        assert world["progress"].ai_analysis_count == 1
+        assert world["progress"].retry_count == 3
+
+    def test_formal_answers_do_not_use_up_help(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        with patch(PATCH_TARGET, new=AsyncMock(return_value=AI_RESULT)):
+            _post(test_client, world)
+        db_session.refresh(world["progress"])
+        assert (world["progress"].retry_count or 0) == 0
+
+    def test_help_slot_is_atomic_and_capped(self, db_session: Session, world):
+        from routers.students.scenario_dialogue import take_help_slot
+
+        progress = world["progress"]
+        taken = [take_help_slot(progress, db_session) for _ in range(5)]
+        db_session.commit()
+        assert taken == [True, True, True, False, False]
+        db_session.refresh(progress)
+        assert progress.retry_count == 3
+
+    def test_lost_race_counts_as_an_answer(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        """讀計數時還有名額，但 AI 回來前名額被別的請求用完 → 不退額度、當作答。"""
+        progress = world["progress"]
+
+        async def fill_up_while_waiting(**kwargs):
+            assert kwargs["allow_help"] is True
+            db_session.query(StudentItemProgress).filter(
+                StudentItemProgress.id == progress.id
+            ).update({StudentItemProgress.retry_count: 3})
+            db_session.commit()
+            return self.HELP
+
+        with patch(PATCH_TARGET, new=AsyncMock(side_effect=fill_up_while_waiting)):
+            body = _post(test_client, world).json()
+
+        assert body["kind"] == "feedback"
+        assert body["verdict"] == "improve"
+        assert body["ai_analysis_count"] == 1
+
+
+class TestResumePayload:
+    """接著上次進度（#1158 E-4）：作業 payload 帶這題的錄音、作答次數與求助次數。
+
+    前端重新進入時靠這三個欄位把上次答過的題目排成紀錄、從第一題沒答的開始，並讓
+    剩餘次數與求助上限和後端一致（避免前端以為還有次數、後端回 429）。
+    """
+
+    def _activities(self, client: TestClient, db: Session, world):
+        # 正式流程裡學生第一次打開作業時就建好了；這裡先建，免得端點自動補建題目進度
+        # 而和 fixture 的那一筆撞到唯一鍵
+        sa_id = world["progress"].student_assignment_id
+        db.add(
+            StudentContentProgress(
+                student_assignment_id=sa_id,
+                content_id=world["item"].content_id,
+                order_index=0,
+            )
+        )
+        db.commit()
+        resp = client.get(
+            f"/api/students/assignments/{sa_id}/activities",
+            headers=world["headers"],
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["activities"]
+
+    def test_payload_carries_recording_and_counts(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        world["progress"].ai_analysis_count = 2
+        world["progress"].retry_count = 1
+        db_session.commit()
+
+        activities = self._activities(test_client, db_session, world)
+        item = activities[0]["items"][0]
+        assert item["recording_url"] == world["progress"].recording_url
+        assert item["ai_analysis_count"] == 2
+        assert item["help_count"] == 1
+
+    def test_help_count_defaults_to_zero(
+        self, test_client: TestClient, db_session: Session, world
+    ):
+        world["progress"].retry_count = None
+        db_session.commit()
+        item = self._activities(test_client, db_session, world)[0]["items"][0]
+        assert item["help_count"] == 0

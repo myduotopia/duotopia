@@ -1,28 +1,28 @@
 /**
  * ScenarioDialogueEditorSheet — 情境對話面板的外框（Issue #1014）。
  *
- * 搭配 `useScenarioDialogueEditor()`：hook 管 state 與存檔，這裡管「長什麼樣、
- * 怎麼關」。四個接線點只要各寫一行 `<ScenarioDialogueEditorSheet editor={editor} />`，
+ * 搭配 `useScenarioDialogueEditor()`：hook 管 state 與存檔，這裡管「標題、怎麼關」。
+ * 四個接線點只要各寫一行 `<ScenarioDialogueEditorSheet editor={editor} />`，
  * 不必再各自複製一份側滑容器 + RefSaveButton + 關閉確認。
+ *
+ * 外框本身（側滑／置中 modal、標題列、✕、`100dvh`、內容區不捲動不加內距）從 #1158 C 段
+ * commit 3 起改用共用的 `components/shared/guided-chat/GuidedChatSheet`，例句集、單字集
+ * 之後也會換成同一份；這裡只填情境對話自己的標題、徽章、儲存鈕與關閉確認。
  *
  * 兩種呈現方式是照現況分的，不是新發明：教材頁（我的／機構／學校／班級）用的是
  * 從右側滑出、避開側邊欄的面板；`ProgramTreeView` 用的是置中 modal。硬要統一會動到
  * 其他題型在那些頁面的既有版面，不在這張單的範圍。
  *
- * 面板外框只負責撐出 header 以下的高度（`flex-1 min-h-0 flex flex-col`），**不捲動、不加內距**：
- * 面板裡面自己分「捲動區＋固定在底端的操作列」（#1146 修正第 4 輪，見
- * `scenario-dialogue-editor/ScenarioSheetLayout`）。外框若再 overflow-auto，操作列就會
- * 跟著內容一起捲走。
+ * 面板裡面是同頁版面（#1158 C commit 4：左對話、右題目，見 `ScenarioDialoguePanel`），
+ * 沒有底部操作列了；瀏海機 home bar 的 safe-area 內距由左欄底部對話框（`ChatComposer`）自己留。
  *
- * 側滑面板高度用 `h-[100dvh]`（第 4b 輪，比照學生端 `ScenarioChatActivity`）：手機瀏覽器的
- * 網址列／工具列會吃掉 `100vh` 的一截，用 `h-screen` 時固定在底端的操作列會被蓋住。
- * 瀏海機 home bar 的 safe-area 內距由操作列自己留（`ScenarioActionBar`）。
+ * Beta 標籤和灰字「測試版本，可能會有錯誤」放在「情境對話」徽章旁（#1158 C commit 4 從對話
+ * 頂端搬過來）；寬度不夠時灰字隱藏（`lg` 以下），Beta 標籤留著。
  */
-import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useRef } from "react";
-import { Button } from "@/components/ui/button";
 import { RefSaveButton } from "@/components/shared/RefSaveButton";
+import { GuidedChatSheet } from "@/components/shared/guided-chat/GuidedChatSheet";
 import ScenarioDialoguePanel, {
   type ScenarioDialoguePanelHandle,
 } from "@/components/ScenarioDialoguePanel";
@@ -57,39 +57,37 @@ export function ScenarioDialogueEditorSheet({
     editor.close();
   };
 
-  const header = (
-    <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold">
-          {/* #1013: 編輯既有內容時標題要說「編輯」，寫「新增」會讓老師以為自己
-              開錯地方、又建了一份新的 */}
-          {t(
-            editor.contentId
-              ? "scenarioDialogue.editTitle"
-              : "scenarioDialogue.dialogTitle",
-          )}
-        </h2>
-        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
-          {t("scenarioDialogue.badge")}
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <RefSaveButton panelRef={panelRef} />
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={editorBusy}
-          onClick={handleClose}
-          aria-label={t("common.close", "Close")}
-        >
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
-    </div>
-  );
-
-  const panel = (
-    <div className="flex-1 min-h-0 flex flex-col">
+  return (
+    <GuidedChatSheet
+      variant={variant}
+      sidebarWidth={sidebarWidth}
+      // #1013: 編輯既有內容時標題要說「編輯」，寫「新增」會讓老師以為自己
+      // 開錯地方、又建了一份新的
+      title={t(
+        editor.contentId
+          ? "scenarioDialogue.editTitle"
+          : "scenarioDialogue.dialogTitle",
+      )}
+      badges={
+        <>
+          <span className="inline-flex shrink-0 items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+            {t("scenarioDialogue.badge")}
+          </span>
+          <span
+            data-testid="scenario-beta-badge"
+            className="shrink-0 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-bold text-purple-600"
+          >
+            Beta
+          </span>
+          <span className="hidden truncate text-xs text-gray-500 lg:inline">
+            {t("scenarioDialogue.setup.betaNote")}
+          </span>
+        </>
+      }
+      actions={<RefSaveButton panelRef={panelRef} />}
+      onClose={handleClose}
+      closeDisabled={editorBusy}
+    >
       <ScenarioDialoguePanel
         /**
          * #1013: key 綁內容 id —— 面板把 initialData 當初值（lazy initializer），
@@ -104,28 +102,7 @@ export function ScenarioDialogueEditorSheet({
         onSave={editor.save}
         onCancel={editor.close}
       />
-    </div>
-  );
-
-  if (variant === "modal") {
-    return (
-      <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div className="relative w-full max-w-7xl h-[90vh] bg-white rounded-lg flex flex-col">
-          {header}
-          {panel}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="editor-panel fixed top-0 right-0 h-[100dvh] bg-white shadow-2xl border-l border-gray-200 z-50 flex flex-col animate-in slide-in-from-right duration-300"
-      style={{ left: `${sidebarWidth}px` }}
-    >
-      {header}
-      {panel}
-    </div>
+    </GuidedChatSheet>
   );
 }
 

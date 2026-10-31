@@ -12,6 +12,8 @@
  * 「學生介面語言」只傳給情境對話元件的 uiLanguage（決定翻譯鈕是否出現），不切換整頁 i18n；
  * 英文介面沒有翻譯鈕。日韓系統有預留但 sample 不示範。
  * 控制面板文字只寫中文（設計稿用，不進 i18n）。
+ * 對話元件的高度跟著外層（#1158 E 段），這裡用 h-[100dvh] 的外框撐滿整頁；上方放一列和
+ * 正式作答頁同規則的題號方格（ScenarioQuestionNav，#1158 E-1 修正）。
  */
 
 import { useMemo, useState } from "react";
@@ -20,6 +22,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ScenarioChatActivity } from "@/components/activities/scenario-dialogue/ScenarioChatActivity";
+import {
+  ScenarioQuestionNav,
+  useScenarioNavBridge,
+} from "@/components/activities/scenario-dialogue/ScenarioQuestionNav";
 import type {
   ReplyMode,
   TextRevealState,
@@ -109,6 +115,7 @@ export default function ScenarioDialogueSample() {
     [material, effectiveKind, ctxCount, imageMode, isPreview],
   );
   const adapters = useMemo(() => createMockAdapters(material), [material]);
+  const navBridge = useScenarioNavBridge();
 
   const runKey = [
     material,
@@ -139,27 +146,40 @@ export default function ScenarioDialogueSample() {
   };
 
   return (
-    <div className="relative">
-      <ScenarioChatActivity
-        key={runKey}
-        context={context}
-        items={items}
-        adapters={adapters}
-        settings={{
-          replyMode,
-          textDefaultHidden: textHidden,
-          showTranslation: translation,
-          isPreviewMode: isPreview,
-          maxAttempts: 3,
-        }}
-        onSubmit={handleSubmit}
-        onRevealChange={setReveal}
-        uiLanguage={uiLanguage}
+    <div className="relative flex h-[100dvh] flex-col">
+      <ScenarioQuestionNav
+        key={`nav-${runKey}`}
+        count={items.length}
+        nav={navBridge.nav}
+        answered={navBridge.answered}
+        navigateRef={navBridge.navigateRef}
+        className="shrink-0 border-b border-gray-200 bg-white px-4 py-2"
       />
+      <div className="min-h-0 flex-1">
+        <ScenarioChatActivity
+          key={runKey}
+          context={context}
+          items={items}
+          adapters={adapters}
+          settings={{
+            replyMode,
+            textDefaultHidden: textHidden,
+            showTranslation: translation,
+            isPreviewMode: isPreview,
+            maxAttempts: 3,
+          }}
+          onSubmit={handleSubmit}
+          onRevealChange={setReveal}
+          uiLanguage={uiLanguage}
+          onNavChange={navBridge.setNav}
+          onProgressChange={navBridge.setAnswered}
+          navigateRef={navBridge.navigateRef}
+        />
+      </div>
 
       {/* Sample 控制面板 */}
-      {/* 放在標題列（手機版含題號點點）下方，避免蓋住題號與徽章 */}
-      <div className="fixed right-2 top-[6.5rem] z-50 flex flex-col items-end lg:top-14">
+      {/* 放在標題列下方，避免蓋住徽章 */}
+      <div className="fixed right-2 top-14 z-50 flex flex-col items-end">
         <Button
           type="button"
           variant="outline"

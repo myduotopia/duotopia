@@ -5,6 +5,8 @@
  * tone（選用，#1133）：`onPrimary` 給放在主色藍底上的地方（例如情境對話的學生回答氣泡），
  * 只影響 compact 外觀：不鋪綠底、按鈕半透明白、進度條與文字白色。預設 `default` ＝原本綠色外觀，
  * 既有使用處不變。
+ * tone=`soft`（選用，#1158 E3）：只影響 minimal —— 48px 淺藍圓鈕＋白色外圈（情境對話錄音區的「試聽」）。
+ * ariaLabel（選用，#1158 E3）：minimal 播放鈕的 aria-label／title；不傳時照舊（title「播放錄音」）。
  * fallbackDuration（選用，秒，#1133）：音檔還讀不到時長時（例如 Chrome 錄音 webm 播放前常是
  * 未知）改顯示這個秒數，不顯示 `--:--`；讀到真正時長後以真正時長為準。不傳時行為不變。
  */
@@ -25,8 +27,13 @@ interface AudioPlayerProps {
   autoPlay?: boolean;
   showTitle?: boolean;
   variant?: "default" | "compact" | "minimal";
-  /** compact 專用配色：onPrimary＝放在主色藍底上（淺色按鈕）；預設綠色外觀 */
-  tone?: "default" | "onPrimary";
+  /**
+   * 配色：onPrimary＝compact 放在主色藍底上（淺色按鈕）；soft＝minimal 的淺藍大圓鈕
+   * （情境對話錄音區，#1158 E3）；預設＝原本綠色外觀
+   */
+  tone?: "default" | "onPrimary" | "soft";
+  /** minimal 播放鈕的 aria-label／title（不傳＝原本的 title） */
+  ariaLabel?: string;
   readOnly?: boolean;
   /** 讀不到音檔時長時改顯示的秒數（例如錄音當下記下的秒數）；不傳＝顯示 --:-- */
   fallbackDuration?: number;
@@ -46,6 +53,7 @@ export default function AudioPlayer({
   tone = "default",
   readOnly = false,
   fallbackDuration,
+  ariaLabel,
 }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -326,14 +334,27 @@ export default function AudioPlayer({
       <div className={cn("inline-flex", className)}>
         <audio ref={audioRef} preload="metadata" />
         <button
+          type="button"
           onClick={togglePlayback}
-          className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-700 transition-colors"
-          title={isPlaying ? "暫停播放" : "播放錄音"}
+          className={cn(
+            "rounded-full flex items-center justify-center transition-colors",
+            tone === "soft"
+              ? "w-12 h-12 bg-blue-100 text-blue-700 hover:bg-blue-200 border-[3px] border-white shadow"
+              : "w-8 h-8 bg-green-600 hover:bg-green-700 text-white",
+          )}
+          title={ariaLabel ?? (isPlaying ? "暫停播放" : "播放錄音")}
+          aria-label={ariaLabel}
+          aria-pressed={ariaLabel ? isPlaying : undefined}
         >
           {isPlaying ? (
-            <Pause className="w-4 h-4 text-white" />
+            <Pause className={tone === "soft" ? "w-5 h-5" : "w-4 h-4"} />
           ) : (
-            <Play className="w-4 h-4 text-white ml-0.5" />
+            <Play
+              className={cn(
+                "ml-0.5",
+                tone === "soft" ? "w-5 h-5 fill-current" : "w-4 h-4",
+              )}
+            />
           )}
         </button>
       </div>

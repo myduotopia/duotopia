@@ -10,11 +10,16 @@
  * - 點擊卡片/行其他區域 → gradable modes (reading / word_reading) 且狀態非 unassigned/NOT_STARTED 才開新分頁批改，不會影響 checkbox
  * - 狀態圖例說明
  * - 小考答對數顯示夾住 min(correct, total)，防止出現 31/30（#1045）
+ * - 批改 hub 列的「退回」：不能退回的作業類型（#1158 情境對話）停用並以 title 說明原因
  */
 import { useState, useMemo, useEffect, useCallback, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { isQuizMode, isGradableMode } from "@/lib/practiceMode";
+import {
+  isQuizMode,
+  isGradableMode,
+  canReturnForRevision,
+} from "@/lib/practiceMode";
 import {
   LayoutGrid,
   List,
@@ -687,6 +692,7 @@ function StudentRow({
   onGrade,
   resetLabel,
   returnLabel,
+  returnDisabledReason,
   gradeLabel,
   correctionLabel,
   rankClass = "",
@@ -705,6 +711,8 @@ function StudentRow({
   onGrade?: () => void;
   resetLabel?: string;
   returnLabel?: string;
+  /** #1158：有值時退回鈕停用，滑過顯示此原因（情境對話不能退回訂正）。 */
+  returnDisabledReason?: string;
   gradeLabel?: string;
   correctionLabel?: string;
   /** Issue #835 監考名次底色（金/銀/銅/淺紫）；空字串＝不上色。 */
@@ -716,7 +724,9 @@ function StudentRow({
   // 已是「未開始」/未派發 → 該列還原鈕 disable
   const resetDisabled = isUnassigned || student.status === "NOT_STARTED";
   // 已是「退回訂正」狀態 → 該列退回鈕 disable（不影響 Graded 鈕與批次退回）
-  const returnDisabled = student.status === "RETURNED";
+  // #1158：作業類型不能退回（情境對話）→ 一律停用，原因由 returnDisabledReason 說明
+  const returnDisabled =
+    student.status === "RETURNED" || !!returnDisabledReason;
   // 已是「批改完成」狀態 → 該列 Graded 鈕 disable（不影響退回鈕與批次 Graded）
   const gradeDisabled = student.status === "GRADED";
   const rowTooltip = tooltip && !isUnassigned ? tooltip : undefined;
@@ -837,21 +847,35 @@ function StudentRow({
               {resetLabel}
             </span>
           </button>
-          <button
-            type="button"
-            disabled={returnDisabled}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!returnDisabled) onReturn?.();
-            }}
-            title={returnLabel}
-            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          {/* #1158：停用的按鈕吃不到滑鼠，原因掛在外層 span；點 span 不觸發開批改頁 */}
+          <span
+            className="inline-flex"
+            title={returnDisabledReason}
+            onClick={
+              returnDisabledReason ? (e) => e.stopPropagation() : undefined
+            }
           >
-            <RotateCcw className="h-4 w-4 shrink-0" />
-            <span className="hidden sm:inline text-xs whitespace-nowrap">
-              {returnLabel}
-            </span>
-          </button>
+            <button
+              type="button"
+              disabled={returnDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!returnDisabled) onReturn?.();
+              }}
+              title={returnDisabledReason ?? returnLabel}
+              aria-label={
+                returnDisabledReason
+                  ? `${returnLabel}（${returnDisabledReason}）`
+                  : undefined
+              }
+              className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <RotateCcw className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline text-xs whitespace-nowrap">
+                {returnLabel}
+              </span>
+            </button>
+          </span>
           <button
             type="button"
             disabled={gradeDisabled}
@@ -904,6 +928,13 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
     const isRevision = mode === "revision";
     const rowResetLabel = t("gradingHub.resetShort", "還原");
     const rowReturnLabel = t("gradingHub.returnShort", "退回");
+    // #1158：情境對話作業不能退回訂正 → 每列退回鈕停用並說明原因
+    const rowReturnDisabledReason = canReturnForRevision(practiceMode)
+      ? undefined
+      : t(
+          "gradingHub.returnNotAllowedScenario",
+          "情境對話作業目前不能退回訂正",
+        );
     const rowGradeLabel = t("gradingHub.gradeShort", "完成");
     const correctionLabel = t("gradingHub.correctionDate", "訂正");
 
@@ -1495,6 +1526,7 @@ const StudentStatusPanel = forwardRef<HTMLDivElement, StudentStatusPanelProps>(
                   }
                   resetLabel={rowResetLabel}
                   returnLabel={rowReturnLabel}
+                  returnDisabledReason={rowReturnDisabledReason}
                   gradeLabel={rowGradeLabel}
                   correctionLabel={correctionLabel}
                   tooltip={

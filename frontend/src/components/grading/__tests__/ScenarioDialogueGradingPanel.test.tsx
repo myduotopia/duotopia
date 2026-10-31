@@ -5,7 +5,7 @@
  * 東西，而且 AI 建議按鈕不會去動通過／不通過。
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ScenarioDialogueGradingPanel } from "../ScenarioDialogueGradingPanel";
 import type {
@@ -18,6 +18,13 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => key,
     i18n: { language: "zh-TW" },
   }),
+}));
+
+const getContentDetail = vi.fn();
+vi.mock("@/lib/api", () => ({
+  apiClient: {
+    getContentDetail: (...args: unknown[]) => getContentDetail(...args),
+  },
 }));
 
 const ITEM: SubmissionItem = {
@@ -182,5 +189,47 @@ describe("ScenarioDialogueGradingPanel — 已完成批改", () => {
         name: /gradingPage.scenarioDialogue.aiGrade/,
       }),
     ).toBeDisabled();
+  });
+});
+
+describe("ScenarioDialogueGradingPanel — 情境卡（#1158 E5）", () => {
+  it("依 content_id 抓情境，顯示情境文章與情境圖", async () => {
+    getContentDetail.mockResolvedValue({
+      id: 77,
+      title: "週末去夜市",
+      items: [],
+      scenario_settings: {
+        scenario_content: "Amy went to the night market.",
+        scenario_images: ["https://example.com/s1.jpg"],
+      },
+    });
+    const submission = {
+      ...makeSubmission([]),
+      content_groups: [
+        {
+          content_id: 77,
+          content_title: "週末去夜市",
+          submissions: [ITEM],
+        },
+      ],
+    } as StudentSubmission;
+    renderPanel([ITEM], { submission });
+    await waitFor(() =>
+      expect(
+        screen.getByText("Amy went to the night market."),
+      ).toBeInTheDocument(),
+    );
+    expect(getContentDetail).toHaveBeenCalledWith(77);
+    const img = document.querySelector('img[src="https://example.com/s1.jpg"]');
+    expect(img).not.toBeNull();
+  });
+
+  it("沒有 content_groups 時不抓、不顯示情境卡", () => {
+    getContentDetail.mockClear();
+    renderPanel([ITEM]);
+    expect(getContentDetail).not.toHaveBeenCalled();
+    expect(
+      screen.queryByLabelText("scenarioDialogue.chat.scenario"),
+    ).toBeNull();
   });
 });
